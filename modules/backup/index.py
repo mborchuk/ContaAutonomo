@@ -19,11 +19,14 @@ logger = logging.getLogger(__name__)
 
 def _sanitize_for_log(value):
     """
-    Remove line break characters from values before logging to mitigate log injection.
+    Remove control characters (including line breaks) from values before logging
+    to mitigate log injection.
     """
+    # Ensure we are working with a string representation
     if not isinstance(value, str):
-        return value
-    return value.replace('\r', '').replace('\n', '')
+        value = str(value)
+    # Strip all ASCII control characters (0x00–0x1F and 0x7F)
+    return ''.join(ch for ch in value if ch >= ' ' and ch != '\x7f')
 
 
 FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf']
