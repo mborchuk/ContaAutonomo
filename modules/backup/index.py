@@ -653,7 +653,7 @@ class BackupModule(BaseModule):
                                 rd[k] = datetime.fromisoformat(v)
                             except (ValueError, TypeError) as exc:
                                 safe_v = repr(v).replace('\r', '\\r').replace('\n', '\\n')
-                                logger.debug(
+                                    k, _sanitize_for_log(v), exc
                                     "Skipping invalid datetime value for key '%s': %r (%s)",
                                     k, safe_v, exc
                                 )
