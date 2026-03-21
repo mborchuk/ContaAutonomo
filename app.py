@@ -4,7 +4,7 @@ Invoice Management Web Application
 Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 """
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, send_from_directory, Response
+from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from functools import wraps
