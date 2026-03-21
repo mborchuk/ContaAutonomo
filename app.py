@@ -669,7 +669,7 @@ def dashboard():
             upcoming = [h for h in all_holidays if datetime.strptime(h['date'], '%Y-%m-%d').date() >= today_date]
             holidays = upcoming[:3]
     except Exception:
-        pass
+        logger.exception("Failed to fetch public holidays from Nager.Date API")
 
     # Tax deadlines for Spanish Autónomo
     from datetime import date, timedelta
