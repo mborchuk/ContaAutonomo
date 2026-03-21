@@ -194,8 +194,8 @@ class BackupModule(BaseModule):
                         'ALTER TABLE backup_config '
                         'ADD COLUMN use_external_storage BOOLEAN DEFAULT 1'))
                     conn.commit()
-        except Exception:
-            pass  # table may not exist yet, will be created
+        except Exception as e:
+            logger.debug('backup_config migration: %s', e)  # table may not exist yet
 
         # Run startup backup immediately (first launch of the day)
         self._perform_startup_backup()
@@ -235,8 +235,8 @@ class BackupModule(BaseModule):
             mm = self.core.module_manager
             if mm and mm.is_enabled('external_storage'):
                 return 'external_storage' in mm.modules
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug('external_storage check: %s', e)
         return False
 
     # ── settings UI ─────────────────────────────────────────────────
@@ -500,7 +500,6 @@ class BackupModule(BaseModule):
     def _dump_db_json(self):
         """Dump ALL database tables to JSON dynamically (no hardcoded models)."""
         from sqlalchemy import text, inspect as sa_inspect
-        import re
         _SAFE_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
         data = {'version': '2.1', 'created_at': datetime.now().isoformat(),
                 'tables': {}}
@@ -568,7 +567,6 @@ class BackupModule(BaseModule):
         """Restore database tables from JSON dynamically.
         Handles foreign key order automatically."""
         from sqlalchemy import text, inspect as sa_inspect
-        import re
         _SAFE_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
 
         def _check_name(name):
@@ -617,8 +615,8 @@ class BackupModule(BaseModule):
                     try:
                         safe_t = _check_name(tname)
                         db.session.execute(text(f'DELETE FROM "{safe_t}"'))
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug('Could not clear table %s: %s', tname, e)
 
             # Insert in forward order (parents first)
             date_fields = {'invoice_date', 'due_date', 'expense_date'}
@@ -636,12 +634,12 @@ class BackupModule(BaseModule):
                         if v and k in date_fields:
                             try:
                                 rd[k] = datetime.fromisoformat(v).date()
-                            except Exception:
+                            except (ValueError, TypeError):
                                 pass
                         elif v and k in dt_fields:
                             try:
                                 rd[k] = datetime.fromisoformat(v)
-                            except Exception:
+                            except (ValueError, TypeError):
                                 pass
                     # Only insert columns that exist in current schema
                     row_cols = [_check_name(c) for c in rd if c in cols]
@@ -792,8 +790,8 @@ class BackupModule(BaseModule):
             if cfg.use_external_storage and self._is_external_storage_enabled():
                 try:
                     self.core.storage.delete(f'backups/{filename}')
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug('Could not delete remote backup %s: %s', filename, e)
             return True, f'Backup {filename} deleted'
         except Exception as e:
             return False, f'Error: {e}'

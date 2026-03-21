@@ -71,8 +71,8 @@ class S3StorageBackend(FileStorageBackend):
         key = self._s3_key(storage_key)
         try:
             client.delete_object(Bucket=self.bucket, Key=key)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug('S3 delete failed for %s: %s', key, e)
 
     def get(self, storage_key):
         client = self._get_client()
@@ -154,8 +154,8 @@ class GCSStorageBackend(FileStorageBackend):
         try:
             bucket = self._get_bucket()
             bucket.blob(self._blob_name(storage_key)).delete()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug('GCS delete failed for %s: %s', storage_key, e)
 
     def get(self, storage_key):
         try:
@@ -311,8 +311,8 @@ class GoogleDriveStorageBackend(FileStorageBackend):
         try:
             service = self._get_service()
             service.files().delete(fileId=storage_key).execute()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug('Google Drive delete failed for %s: %s', storage_key, e)
 
     def get(self, storage_key):
         try:

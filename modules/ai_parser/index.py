@@ -8,7 +8,6 @@ Supports multiple backends: OpenAI (GPT-4o), Google Document AI, Anthropic Claud
 from module_manager import BaseModule
 from flask import Blueprint, request, redirect, url_for, flash, jsonify, render_template
 import json
-import os
 import base64
 from datetime import datetime
 

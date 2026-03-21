@@ -7,8 +7,7 @@ Uses core.invoice_service for safe, controlled access.
 """
 
 from module_manager import BaseModule
-from flask import Blueprint, request, redirect, url_for, flash, render_template
-import os
+from flask import Blueprint, request, redirect, url_for, flash
 
 
 class InvoiceAttachmentsModule(BaseModule):

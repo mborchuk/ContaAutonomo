@@ -264,7 +264,6 @@ class TaxPolandModule(BaseModule):
     def get_tax_obligations(self, context):
         """Add ZUS social insurance to tax obligations panel."""
         cfg = self._get_config()
-        current_year = context.get('current_year', 2026)
         zus_annual = cfg.zus_monthly * 12
 
         return {

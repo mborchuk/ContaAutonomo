@@ -138,8 +138,8 @@ def security():
                 try:
                     from app import log_activity
                     log_activity('password_changed', 'auth')
-                except Exception:
-                    pass
+                except Exception as e:
+                    pass  # logging failure should not block password change
             except Exception as e:
                 flash(f'Error changing password: {str(e)}', 'danger')
 

@@ -13,13 +13,13 @@ from flask import Blueprint, request, jsonify, render_template, flash, redirect,
 
 # Graceful degradation: try importing optional dependencies
 try:
-    import PIL
+    import PIL  # noqa: F401 — availability check only
     PILLOW_AVAILABLE = True
 except ImportError:
     PILLOW_AVAILABLE = False
 
 try:
-    import pyhanko
+    import pyhanko  # noqa: F401 — availability check only
     PYHANKO_AVAILABLE = True
 except ImportError:
     PYHANKO_AVAILABLE = False
