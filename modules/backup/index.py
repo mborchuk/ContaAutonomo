@@ -645,7 +645,7 @@ class BackupModule(BaseModule):
                             except (ValueError, TypeError) as exc:
                                 logger.debug(
                                     "Skipping invalid date value for key '%s': %r (%s)",
-                                    k, v, exc
+                                    _sanitize_for_log(k), _sanitize_for_log(v), _sanitize_for_log(exc)
                                 )
                         elif v and k in dt_fields:
                             try:
@@ -653,7 +653,7 @@ class BackupModule(BaseModule):
                             except (ValueError, TypeError) as exc:
                                 logger.debug(
                                     "Skipping invalid datetime value for key '%s': %r (%s)",
-                                    k, v, exc
+                                    _sanitize_for_log(k), _sanitize_for_log(v), _sanitize_for_log(exc)
                                 )
                     # Only insert columns that exist in current schema
                     row_cols = [_check_name(c) for c in rd if c in cols]
