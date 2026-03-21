@@ -539,10 +539,10 @@ class FileActivityLogger(ActivityLogger):
                             try:
                                 cats.add(
                                     self._json.loads(line).get('cat', 'system'))
-                            except Exception:
-                                pass
-            except Exception:
-                pass
+                            except (ValueError, KeyError):
+                                continue
+            except OSError:
+                continue
         return sorted(cats)
 
     def cleanup(self, retention_days):
@@ -555,8 +555,8 @@ class FileActivityLogger(ActivityLogger):
             if fname.endswith('.log') and fname[:-4] < cutoff:
                 try:
                     os.remove(os.path.join(self._log_dir, fname))
-                except Exception:
-                    pass
+                except OSError:
+                    continue
 
     def clear(self, before=None):
         if before:
@@ -565,15 +565,15 @@ class FileActivityLogger(ActivityLogger):
                 if fname.endswith('.log') and fname[:-4] < cutoff:
                     try:
                         os.remove(os.path.join(self._log_dir, fname))
-                    except Exception:
-                        pass
+                    except OSError:
+                        continue
         else:
             for fname in os.listdir(self._log_dir):
                 if fname.endswith('.log'):
                     try:
                         os.remove(os.path.join(self._log_dir, fname))
-                    except Exception:
-                        pass
+                    except OSError:
+                        continue
 
 
 class DbActivityLogger(ActivityLogger):
@@ -659,7 +659,8 @@ class DbActivityLogger(ActivityLogger):
                 rows = conn.execute(text(
                     'SELECT DISTINCT category FROM activity_log ORDER BY category')).fetchall()
             return [r[0] for r in rows if r[0]]
-        except Exception:
+        except Exception as e:
+            logger.error('DbLogger get_categories error: %s', e)
             return []
 
     def cleanup(self, retention_days):
@@ -685,8 +686,8 @@ class DbActivityLogger(ActivityLogger):
                 else:
                     conn.execute(text('DELETE FROM activity_log'))
                 conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error('DbLogger clear error: %s', e)
 
 
 class TaskScheduler:

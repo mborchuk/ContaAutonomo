@@ -9,7 +9,6 @@ from module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash)
 from datetime import datetime
-import os
 
 
 class DocumentsModule(BaseModule):
