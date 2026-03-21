@@ -4,8 +4,6 @@ Docker entrypoint — initializes DB, runs migrations, loads modules,
 then starts gunicorn.
 """
 import os
-import subprocess
-import sys
 
 def init():
     """Run the same init that app.py does under __main__."""

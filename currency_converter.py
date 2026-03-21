@@ -6,7 +6,6 @@ Converts salary amounts using rates from a specified date or the last day of pre
 
 import requests
 from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
 import sys
 
 

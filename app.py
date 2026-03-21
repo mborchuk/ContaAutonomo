@@ -4,18 +4,13 @@ Invoice Management Web Application
 Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 """
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from functools import wraps
 import io
-import re
 import os
 import hashlib
-from reportlab.lib.pagesizes import letter
-from reportlab.lib import colors
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from currency_converter import get_exchange_rate, convert_usd_to_eur, get_currency_symbol
 import logging
 
@@ -553,10 +548,6 @@ def dashboard():
     # Income for current year
     current_year_income = sum(inv.amount_base for inv in current_year_invoices)
 
-    # Get expenses for current year — delegated to modules via get_tax_obligations
-    current_year_expenses = 0
-    vat_paid = 0
-
     # VAT collected — let modules override, fallback to configured rate
     vat_label = 'VAT'
     vat_rate = (app_settings.default_vat_rate or 21.0) / 100.0 if app_settings else 0.21
@@ -579,7 +570,6 @@ def dashboard():
                 vat_collected += inv.amount_base * vat_rate
 
     # Collect tax obligation contributions from enabled modules
-    module_tax_items = []
     module_deductions = 0
     module_tax_total = 0
     module_summary_columns = []
@@ -602,8 +592,6 @@ def dashboard():
             module_summary_columns.extend(item.get('summary_columns', []))
             module_breakdown_rows.extend(item.get('breakdown_rows', []))
             module_notes.extend(item.get('notes', []))
-
-    current_year_expenses = module_deductions
 
     # Calculate taxable income (income - deductions from modules)
     taxable_income = current_year_income - module_deductions
@@ -680,8 +668,8 @@ def dashboard():
             today_date = datetime.now().date()
             upcoming = [h for h in all_holidays if datetime.strptime(h['date'], '%Y-%m-%d').date() >= today_date]
             holidays = upcoming[:3]
-    except:
-        pass
+    except Exception:
+        logger.exception("Failed to fetch public holidays from Nager.Date API")
 
     # Tax deadlines for Spanish Autónomo
     from datetime import date, timedelta
@@ -1202,8 +1190,8 @@ def delete_invoice(id):
                 module_manager.core.storage.delete(key)
                 log_activity('invoice_pdf_deleted', 'invoice',
                              f'PDF deleted for #{invoice.invoice_number}')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error('Failed to delete PDF for #%s: %s', invoice.invoice_number, e)
 
     db.session.delete(invoice)
     db.session.commit()

@@ -5,7 +5,6 @@ This template generates a professional invoice PDF with sender/recipient info an
 """
 
 import io
-import hashlib
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from currency_converter import get_currency_symbol
@@ -33,19 +32,9 @@ def generate_invoice_pdf(invoice, customer, settings, Bank):
     elements = []
     styles = getSampleStyleSheet()
 
-    # Register font (Helvetica is built-in, Arial as fallback)
-    try:
-        # Helvetica is built-in to ReportLab, so we use it directly
-        font_name = 'Helvetica'
-        font_bold = 'Helvetica-Bold'
-    except:
-        # Fallback to Arial if needed (though Helvetica should always work)
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
-        pdfmetrics.registerFont(TTFont('Arial', 'Arial.ttf'))
-        pdfmetrics.registerFont(TTFont('Arial-Bold', 'Arial Bold.ttf'))
-        font_name = 'Arial'
-        font_bold = 'Arial-Bold'
+    # Helvetica is built-in to ReportLab
+    font_name = 'Helvetica'
+    font_bold = 'Helvetica-Bold'
 
     # Custom styles
     title_style = styles['Normal'].clone('title_style')

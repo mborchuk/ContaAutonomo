@@ -92,10 +92,6 @@ class TaxManagementModule(BaseModule):
         )
 
         login_required = self.core.login_required
-        db = self._db
-        TaxForm = self.TaxForm
-        SSPayment = self.SSPayment
-        core = self.core
 
         @bp.route('/')
         @login_required

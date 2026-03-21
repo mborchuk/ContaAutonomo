@@ -10,7 +10,6 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from currency_converter import get_currency_symbol
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.units import inch
 
 
 def generate_invoice_pdf(invoice, customer, settings):
@@ -407,7 +406,7 @@ def generate_invoice_pdf(invoice, customer, settings):
         [
             '',
             '',
-            Paragraph(f'<b>{vat_pct:g}% IVA</b>', totals_label_style),
+            Paragraph(f'<b>{tax_label}</b>', totals_label_style),
             Paragraph(f'<b>{currency_symbol}{tax_amount:,.2f}</b>', totals_value_style)
         ],
         [

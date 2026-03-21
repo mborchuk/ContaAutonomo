@@ -7,22 +7,22 @@ Integrates via BaseModule hooks without modifying core models.
 
 import io
 from datetime import datetime
+import importlib.util
 
 from module_manager import BaseModule
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
 
 # Graceful degradation: try importing optional dependencies
 try:
-    import PIL
-    PILLOW_AVAILABLE = True
-except ImportError:
+    PILLOW_AVAILABLE = importlib.util.find_spec("PIL") is not None
+except (ImportError, AttributeError):
     PILLOW_AVAILABLE = False
 
 try:
-    import pyhanko
-    PYHANKO_AVAILABLE = True
-except ImportError:
+    PYHANKO_AVAILABLE = importlib.util.find_spec("pyhanko") is not None
+except (ImportError, AttributeError):
     PYHANKO_AVAILABLE = False
+
 
 
 class PDFSignatureModule(BaseModule):
