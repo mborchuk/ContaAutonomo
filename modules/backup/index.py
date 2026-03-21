@@ -634,29 +634,27 @@ class BackupModule(BaseModule):
             for tname in ordered:
                 if tname not in tables:
                     continue
+                safe_t = _check_name(tname)
+                cols = [c['name'] for c in inspector.get_columns(tname)]
+                for rd in tables[tname]:
+                    # Normalize date and datetime fields if present
+                    for k, v in list(rd.items()):
+                        if v and k in date_fields:
+                            try:
+                                rd[k] = datetime.fromisoformat(v).date()
                             except (ValueError, TypeError) as exc:
                                 logger.debug(
                                     "Skipping invalid date value for key '%s': %r (%s)",
                                     k, v, exc
                                 )
-                safe_t = _check_name(tname)
-                cols = [c['name'] for c in inspector.get_columns(tname)]
-                for rd in tables[tname]:
+                        elif v and k in dt_fields:
+                            try:
+                                rd[k] = datetime.fromisoformat(v)
                             except (ValueError, TypeError) as exc:
                                 logger.debug(
                                     "Skipping invalid datetime value for key '%s': %r (%s)",
                                     k, v, exc
                                 )
-                        if v and k in date_fields:
-                            try:
-                                rd[k] = datetime.fromisoformat(v).date()
-                            except (ValueError, TypeError):
-                                pass
-                        elif v and k in dt_fields:
-                            try:
-                                rd[k] = datetime.fromisoformat(v)
-                            except (ValueError, TypeError):
-                                pass
                     # Only insert columns that exist in current schema
                     row_cols = [_check_name(c) for c in rd if c in cols]
                     if not row_cols:
