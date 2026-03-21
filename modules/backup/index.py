@@ -29,8 +29,10 @@ def _sanitize_for_log(value, max_length=200):
     # Ensure we are working with a string representation
     if not isinstance(value, str):
         value = str(value)
-    # Strip all ASCII control characters (0x00–0x1F and 0x7F)
-    cleaned = ''.join(ch for ch in value if ch >= ' ' and ch != '\x7f')
+    # Strip all ASCII control characters (U+0000–U+001F and U+007F), including CR/LF
+    control_chars = ''.join(chr(i) for i in range(32)) + chr(127)
+    translation_table = str.maketrans('', '', control_chars)
+    cleaned = value.translate(translation_table)
     if len(cleaned) > max_length:
         cleaned = cleaned[:max_length] + '…'
     return cleaned
