@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DATABASE_URL=sqlite:///invoices.db
+      - FLASK_DEBUG=0
+      - GUNICORN_WORKERS=2
+    volumes:
+      - app_data:/app/instance
+      - app_backups:/app/backups
+      - app_logs:/app/logs
+      - app_invoices:/app/invoices_pdf
+      - app_expenses:/app/expenses_files
+      - app_documents:/app/documents_files
+      - app_taxforms:/app/tax_forms
+    restart: unless-stopped
+
+volumes:
+  app_data:
+  app_backups:
+  app_logs:
+  app_invoices:
+  app_expenses:
+  app_documents:
+  app_taxforms:

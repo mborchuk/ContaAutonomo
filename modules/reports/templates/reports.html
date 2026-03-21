@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<style>
+    .report-form .check-label {
+        display: flex !important;
+        align-items: center;
+        gap: 8px;
+        font-weight: normal !important;
+        cursor: pointer;
+        width: auto !important;
+        margin: 0;
+    }
+    .report-form .check-label input[type="checkbox"],
+    .report-form .check-label input[type="radio"] {
+        width: auto !important;
+        padding: 0 !important;
+        margin: 0;
+    }
+    .report-form .check-label strong { font-weight: 600; }
+</style>
+
+<h1>Financial Reports</h1>
+
+<p style="color: #666; margin-bottom: 30px;">
+    Generate professional reports for tax authorities or banks. Select the sections and period below.
+</p>
+
+<form method="POST" action="{{ url_for('reports.reports_generate') }}" target="_blank" class="report-form">
+    <div style="background: #f5f5f5; padding: 30px; border-radius: 8px; max-width: 800px;">
+
+        <h3 style="margin-bottom: 20px; color: #333;">Report Configuration</h3>
+
+        <!-- Report Sections -->
+        <div class="form-group">
+            <label>Include in Report *</label>
+            {% for section in available_sections %}
+            <div style="margin: 10px 0 10px 2px;">
+                <label class="check-label">
+                    <input type="checkbox" name="sections" value="{{ section.id }}" checked>
+                    <strong>{{ section.title }}</strong>
+                </label>
+                {% if section.description %}
+                <div style="color: #666; font-size: 13px; margin-left: 26px;">{{ section.description }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+            <div style="margin-left: 2px; font-size: 12px;">
+                <a href="#" onclick="toggleAll(true); return false;">Select all</a> ·
+                <a href="#" onclick="toggleAll(false); return false;">Deselect all</a>
+            </div>
+        </div>
+
+        <!-- Year Selection -->
+        <div class="form-group">
+            <label for="year">Year *</label>
+            <select id="year" name="year" required>
+                {% for year in range(2023, 2028) %}
+                <option value="{{ year }}" {% if year == current_year %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Period Type -->
+        <div class="form-group">
+            <label for="period_type">Period Type *</label>
+            <select id="period_type" name="period_type" required onchange="updatePeriodOptions()">
+                <option value="quarter">Single Quarter</option>
+                <option value="quarters">Multiple Quarters</option>
+                <option value="year">Full Year</option>
+            </select>
+        </div>
+
+        <!-- Quarter Selection (for single quarter) -->
+        <div class="form-group" id="quarter-single" style="display: block;">
+            <label for="quarter">Quarter *</label>
+            <select id="quarter" name="quarter">
+                <option value="1">Q1 (January - March)</option>
+                <option value="2">Q2 (April - June)</option>
+                <option value="3">Q3 (July - September)</option>
+                <option value="4">Q4 (October - December)</option>
+            </select>
+        </div>
+
+        <!-- Multiple Quarters Selection -->
+        <div class="form-group" id="quarters-multiple" style="display: none;">
+            <label>Select Quarters *</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                <label class="check-label"><input type="checkbox" name="quarters" value="1"> Q1 (January - March)</label>
+                <label class="check-label"><input type="checkbox" name="quarters" value="2"> Q2 (April - June)</label>
+                <label class="check-label"><input type="checkbox" name="quarters" value="3"> Q3 (July - September)</label>
+                <label class="check-label"><input type="checkbox" name="quarters" value="4"> Q4 (October - December)</label>
+            </div>
+        </div>
+
+        <!-- Report Options -->
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 2px solid #ddd;">
+            <h4 style="margin-bottom: 15px; color: #333;">Additional Options</h4>
+
+            <!-- Currency Mode -->
+            <div style="margin-bottom: 15px;">
+                <label style="margin-bottom: 8px;">Amounts Currency</label>
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-left: 2px;">
+                    <label class="check-label"><input type="radio" name="currency_mode" value="base" checked> Convert all to base currency ({{ base_currency }})</label>
+                    <label class="check-label"><input type="radio" name="currency_mode" value="original"> Keep original invoice currency</label>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label class="check-label"><input type="checkbox" name="include_cancelled" value="1"> Include cancelled invoices</label>
+                <label class="check-label"><input type="checkbox" name="detailed_view" value="1" checked> Detailed view (show all transactions)</label>
+            </div>
+        </div>
+
+        <!-- Submit Button -->
+        <div style="margin-top: 30px;">
+            <button type="submit" class="btn btn-success" style="font-size: 16px; padding: 12px 30px;">
+                📄 Generate Report (PDF)
+            </button>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Cancel</a>
+        </div>
+    </div>
+</form>
+
+<script>
+function updatePeriodOptions() {
+    const periodType = document.getElementById('period_type').value;
+    const quarterSingle = document.getElementById('quarter-single');
+    const quartersMultiple = document.getElementById('quarters-multiple');
+
+    if (periodType === 'quarter') {
+        quarterSingle.style.display = 'block';
+        quartersMultiple.style.display = 'none';
+        document.getElementById('quarter').required = true;
+    } else if (periodType === 'quarters') {
+        quarterSingle.style.display = 'none';
+        quartersMultiple.style.display = 'block';
+        document.getElementById('quarter').required = false;
+    } else {
+        quarterSingle.style.display = 'none';
+        quartersMultiple.style.display = 'none';
+        document.getElementById('quarter').required = false;
+    }
+}
+
+function toggleAll(state) {
+    document.querySelectorAll('input[name="sections"]').forEach(function(cb) {
+        cb.checked = state;
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    updatePeriodOptions();
+});
+</script>
+
+{% endblock %}

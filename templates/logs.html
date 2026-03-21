@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}System Logs{% endblock %}
+{% block content %}
+<h1>System Logs</h1>
+
+<div class="filter-form" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+    <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;width:100%;">
+        <div>
+            <label style="font-size:13px;display:block;margin-bottom:4px;">Category</label>
+            <select name="category" style="padding:8px;border:1px solid #ddd;border-radius:4px;">
+                <option value="">All</option>
+                {% for c in categories %}
+                <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label style="font-size:13px;display:block;margin-bottom:4px;">From</label>
+            <input type="date" name="date_from" value="{{ filters.date_from }}"
+                   style="padding:8px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+        <div>
+            <label style="font-size:13px;display:block;margin-bottom:4px;">To</label>
+            <input type="date" name="date_to" value="{{ filters.date_to }}"
+                   style="padding:8px;border:1px solid #ddd;border-radius:4px;">
+        </div>
+        <div style="flex:1;min-width:200px;">
+            <label style="font-size:13px;display:block;margin-bottom:4px;">Search</label>
+            <input type="text" name="search" value="{{ filters.search }}" placeholder="Search logs..."
+                   style="padding:8px;border:1px solid #ddd;border-radius:4px;width:100%;">
+        </div>
+        <div>
+            <button type="submit" class="btn btn-primary" style="padding:8px 16px;">Filter</button>
+            <a href="{{ url_for('system_logs') }}" class="btn btn-secondary" style="padding:8px 16px;">Reset</a>
+        </div>
+    </form>
+</div>
+
+{% if entries %}
+<table style="table-layout:fixed;width:100%;">
+    <thead>
+        <tr>
+            <th style="width:170px;">Timestamp</th>
+            <th style="width:100px;">Category</th>
+            <th style="width:160px;">Action</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for e in entries %}
+        <tr>
+            <td style="font-size:13px;color:#666;white-space:nowrap;">
+                {{ e.timestamp[:19] | replace('T', ' ') if e.timestamp else '-' }}
+            </td>
+            <td>
+                {% set bg = '#6c757d' %}
+                {% if e.category == 'auth' %}{% set bg = '#007bff' %}
+                {% elif e.category == 'invoice' %}{% set bg = '#28a745' %}
+                {% elif e.category == 'backup' %}{% set bg = '#6f42c1' %}
+                {% elif e.category == 'settings' %}{% set bg = '#fd7e14' %}
+                {% elif e.category == 'expense' %}{% set bg = '#e83e8c' %}
+                {% endif %}
+                <span style="padding:3px 8px;border-radius:3px;font-size:12px;background:{{ bg }};color:white;">
+                    {{ e.category }}
+                </span>
+            </td>
+            <td style="font-weight:500;">{{ e.action }}</td>
+            <td style="font-size:13px;color:#666;word-break:break-all;white-space:normal;">{{ e.details or '' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top:20px;display:flex;gap:10px;justify-content:center;">
+    {% if page > 1 %}
+    <a href="{{ url_for('system_logs', page=page-1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
+       class="btn btn-secondary">&laquo; Previous</a>
+    {% endif %}
+    <span style="padding:8px 16px;color:#666;">Page {{ page }}</span>
+    {% if entries|length == per_page %}
+    <a href="{{ url_for('system_logs', page=page+1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
+       class="btn btn-secondary">Next &raquo;</a>
+    {% endif %}
+</div>
+
+{% else %}
+<div style="text-align:center;padding:40px;color:#999;">
+    <p style="font-size:16px;">No log entries found.</p>
+    <p style="font-size:14px;">Activity will appear here as you use the application.</p>
+</div>
+{% endif %}
+
+{% endblock %}

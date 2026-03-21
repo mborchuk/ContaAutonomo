@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Invoice Manager{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+
+        /* Top Navigation Bar */
+        .top-nav {
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 30px;
+            height: 70px;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            text-decoration: none;
+        }
+
+        .nav-logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .nav-logo-text {
+            color: #333;
+        }
+
+        .nav-logo-text span {
+            color: #ff6b35;
+        }
+
+        .nav-menu {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .nav-menu a {
+            padding: 10px 20px;
+            color: #666;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .nav-menu a:hover {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .nav-menu a.active {
+            color: #007bff;
+            background: #e7f3ff;
+        }
+
+        /* Dropdown menus */
+        .nav-dropdown {
+            position: relative;
+        }
+        .nav-dropdown-toggle {
+            padding: 10px 20px;
+            color: #666;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 6px;
+            transition: all 0.2s;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-family: inherit;
+        }
+        .nav-dropdown-toggle:hover {
+            background: #f5f5f5;
+            color: #333;
+        }
+        .nav-dropdown-toggle::after {
+            content: ' ▾';
+            font-size: 11px;
+            opacity: 0.5;
+        }
+        .nav-dropdown-menu {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            min-width: 180px;
+            z-index: 200;
+            padding: 4px 0;
+        }
+        .nav-dropdown:hover .nav-dropdown-menu {
+            display: block;
+        }
+        .nav-dropdown-menu a {
+            display: block;
+            padding: 8px 16px;
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+            border-radius: 0;
+        }
+        .nav-dropdown-menu a:hover {
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .nav-btn-outline {
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+
+        .nav-btn-outline:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+
+        .nav-btn-primary {
+            background: #ff6b35;
+            color: white;
+            border: none;
+        }
+
+        .nav-btn-primary:hover {
+            background: #e55a2b;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 { color: #333; margin-bottom: 20px; }
+        .alert { padding: 12px; margin-bottom: 20px; border-radius: 4px; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        tr:hover { background: #f8f9fa; }
+        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; font-size: 14px; display: inline-block; margin-right: 5px; border: none; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .btn:hover { opacity: 0.9; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .form-group textarea { min-height: 100px; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+        .filter-form { background: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 20px; }
+        .filter-form input, .filter-form select { width: auto; margin-right: 10px; }
+        .status-badge { padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
+        .status-pending { background: #ffc107; color: #000; }
+        .status-paid { background: #28a745; color: white; }
+        .status-cancelled { background: #dc3545; color: white; }
+        .sortable { cursor: pointer; user-select: none; position: relative; }
+        .sortable:hover { background: #e9ecef; }
+        .sortable::after { content: ' ⇅'; opacity: 0.3; font-size: 12px; }
+        .sortable.asc::after { content: ' ↑'; opacity: 1; }
+        .sortable.desc::after { content: ' ↓'; opacity: 1; }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation -->
+    <div class="top-nav">
+        <div class="nav-container">
+            <a href="{{ url_for('dashboard') }}" class="nav-logo">
+                <div class="nav-logo-icon">CA</div>
+                <div class="nav-logo-text">Conta<span>Autónomo</span></div>
+            </a>
+
+            <div class="nav-menu">
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <div class="nav-dropdown">
+                    <button class="nav-dropdown-toggle">Invoices</button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('index') }}">All Invoices</a>
+                        <a href="{{ url_for('create_invoice') }}">Create Invoice</a>
+                    </div>
+                </div>
+                {% if module_manager %}
+                    {% set ungrouped, groups = module_manager.get_grouped_nav_items() %}
+                    {% for item in ungrouped %}
+                    <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+                    {% endfor %}
+                    {% for group_name, items in groups.items() %}
+                    <div class="nav-dropdown">
+                        <button class="nav-dropdown-toggle">{{ group_name }}</button>
+                        <div class="nav-dropdown-menu">
+                            {% for item in items %}
+                            <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% endif %}
+                <div class="nav-dropdown">
+                    <button class="nav-dropdown-toggle">System</button>
+                    <div class="nav-dropdown-menu">
+                        <a href="{{ url_for('system_logs') }}">Logs</a>
+                        <a href="{{ url_for('scheduled_tasks') }}">Scheduled Tasks</a>
+                    </div>
+                </div>
+                <a href="{{ url_for('settings') }}">Settings</a>
+            </div>
+
+            <div class="nav-actions">
+                <a href="{{ url_for('auth.logout') }}" class="nav-btn nav-btn-primary">Logout</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <footer style="text-align: center; padding: 20px 0; color: #999; font-size: 13px;">
+        ContaAutónomo v{{ app_version }} · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" style="color: #999; text-decoration: underline;">Mykola Borchuk</a>
+    </footer>
+</body>
+</html>

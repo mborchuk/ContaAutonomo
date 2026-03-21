@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if contractor else 'Add' }} Contractor{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if contractor else 'Add New' }} Contractor</h1>
+
+<form method="POST">
+    <div class="form-group">
+        <label for="name">Contractor Name *</label>
+        <input type="text" id="name" name="name" value="{{ contractor.name if contractor else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="vat_number">VAT Number</label>
+        <input type="text" id="vat_number" name="vat_number" value="{{ contractor.vat_number if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="address">Street Address</label>
+        <input type="text" id="address" name="address" value="{{ contractor.address if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="city">City</label>
+        <input type="text" id="city" name="city" value="{{ contractor.city if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="postal_code">Postal Code</label>
+        <input type="text" id="postal_code" name="postal_code" value="{{ contractor.postal_code if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="country">Country</label>
+        <input type="text" id="country" name="country" value="{{ contractor.country if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input type="text" id="email" name="email" value="{{ contractor.email if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ contractor.phone if contractor else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3">{{ contractor.notes if contractor else '' }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn-success">{{ 'Update' if contractor else 'Create' }} Contractor</button>
+    <a href="{{ url_for('settings') }}#contractors" class="btn btn-primary">Cancel</a>
+</form>
+{% endblock %}

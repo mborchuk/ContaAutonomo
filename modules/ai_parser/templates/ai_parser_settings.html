@@ -1,0 +1,97 @@
+<h3 style="margin-bottom: 15px; color: #333;">🤖 AI Document Parser</h3>
+<p style="color: #666; margin-bottom: 20px;">Configure AI provider for automatic invoice and expense parsing.</p>
+
+<div class="form-group">
+    <label style="font-weight: 600; margin-bottom: 10px; display: block;">Active Provider</label>
+    {% for p in providers %}
+    <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
+        <input type="radio" name="ai_provider" value="{{ p.id }}"
+               {% if cfg.provider == p.id %}checked{% endif %}
+               style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+               onchange="showAIProviderConfig('{{ p.id }}')">
+        <span>{{ p.name }}
+            {% if p.configured %}
+            <span style="color: #2e7d32; font-size: 12px; margin-left: 5px;">✓ configured</span>
+            {% endif %}
+        </span>
+    </label>
+    {% endfor %}
+</div>
+
+<!-- OpenAI config -->
+<div id="ai_config_openai" class="ai-provider-config"
+     style="{% if cfg.provider != 'openai' %}display:none;{% endif %}
+            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">OpenAI Settings</h4>
+    <div class="form-group">
+        <label for="ai_openai_api_key">API Key</label>
+        <input type="password" id="ai_openai_api_key" name="ai_openai_api_key"
+               value="{{ cfg.openai_api_key }}" placeholder="sk-...">
+    </div>
+    <div class="form-group">
+        <label for="ai_openai_model">Model</label>
+        <select id="ai_openai_model" name="ai_openai_model">
+            <option value="gpt-4o" {% if cfg.openai_model == 'gpt-4o' %}selected{% endif %}>GPT-4o</option>
+            <option value="gpt-4o-mini" {% if cfg.openai_model == 'gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini (cheaper)</option>
+            <option value="gpt-4.1" {% if cfg.openai_model == 'gpt-4.1' %}selected{% endif %}>GPT-4.1</option>
+        </select>
+    </div>
+</div>
+
+<!-- Anthropic config -->
+<div id="ai_config_anthropic" class="ai-provider-config"
+     style="{% if cfg.provider != 'anthropic' %}display:none;{% endif %}
+            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">Anthropic Settings</h4>
+    <div class="form-group">
+        <label for="ai_anthropic_api_key">API Key</label>
+        <input type="password" id="ai_anthropic_api_key" name="ai_anthropic_api_key"
+               value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
+    </div>
+    <div class="form-group">
+        <label for="ai_anthropic_model">Model</label>
+        <select id="ai_anthropic_model" name="ai_anthropic_model">
+            <option value="claude-sonnet-4-20250514" {% if cfg.anthropic_model == 'claude-sonnet-4-20250514' %}selected{% endif %}>Claude Sonnet 4</option>
+            <option value="claude-3-5-sonnet-20241022" {% if cfg.anthropic_model == 'claude-3-5-sonnet-20241022' %}selected{% endif %}>Claude 3.5 Sonnet</option>
+            <option value="claude-3-5-haiku-20241022" {% if cfg.anthropic_model == 'claude-3-5-haiku-20241022' %}selected{% endif %}>Claude 3.5 Haiku (cheaper)</option>
+        </select>
+    </div>
+</div>
+
+<!-- Google Document AI config -->
+<div id="ai_config_google_docai" class="ai-provider-config"
+     style="{% if cfg.provider != 'google_docai' %}display:none;{% endif %}
+            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">Google Document AI Settings</h4>
+    <div class="form-group">
+        <label for="ai_google_project_id">GCP Project ID</label>
+        <input type="text" id="ai_google_project_id" name="ai_google_project_id"
+               value="{{ cfg.google_project_id }}" placeholder="my-project-123">
+    </div>
+    <div class="form-group">
+        <label for="ai_google_processor_id">Processor ID</label>
+        <input type="text" id="ai_google_processor_id" name="ai_google_processor_id"
+               value="{{ cfg.google_processor_id }}" placeholder="abc123def456">
+        <small style="display: block; margin-top: 5px; color: #666;">
+            Create an Invoice Parser processor in <a href="https://console.cloud.google.com/ai/document-ai" target="_blank">Document AI Console</a>.
+        </small>
+    </div>
+    <div class="form-group">
+        <label for="ai_google_location">Location</label>
+        <select id="ai_google_location" name="ai_google_location">
+            <option value="eu" {% if cfg.google_location == 'eu' %}selected{% endif %}>EU</option>
+            <option value="us" {% if cfg.google_location == 'us' %}selected{% endif %}>US</option>
+        </select>
+    </div>
+    <small style="color: #666;">
+        Authentication: uses Application Default Credentials or GOOGLE_APPLICATION_CREDENTIALS env var.
+    </small>
+</div>
+
+<script>
+function showAIProviderConfig(provider) {
+    document.querySelectorAll('.ai-provider-config').forEach(el => el.style.display = 'none');
+    const panel = document.getElementById('ai_config_' + provider);
+    if (panel) panel.style.display = 'block';
+}
+</script>

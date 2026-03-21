@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm PDF Regeneration{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 50px auto;">
+    <div style="background: #fff3cd; border: 2px solid #ffc107; padding: 30px; border-radius: 8px; text-align: center;">
+        <h2 style="color: #856404; margin-top: 0;">⚠️ Warning</h2>
+
+        <p style="font-size: 16px; color: #856404; margin: 20px 0;">
+            The PDF file for invoice <strong>{{ invoice.invoice_number }}</strong> has been modified and is not the original version.
+        </p>
+
+        <p style="font-size: 14px; color: #856404; margin: 20px 0;">
+            Do you want to regenerate and overwrite the existing PDF file?
+        </p>
+
+        <div style="margin-top: 30px;">
+            <a href="{{ url_for('generate_pdf', id=invoice.id, force='true') }}"
+               class="btn btn-danger"
+               style="padding: 12px 30px; font-size: 16px; margin-right: 10px;">
+                Yes, Regenerate PDF
+            </a>
+
+            <a href="{{ url_for('index') }}"
+               class="btn btn-secondary"
+               style="padding: 12px 30px; font-size: 16px;">
+                Cancel
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

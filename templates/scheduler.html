@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Scheduled Tasks - Invoice Manager{% endblock %}
+
+{% block content %}
+<h1>Scheduled Tasks</h1>
+<p style="color: #666; margin-bottom: 25px;">Periodic tasks registered by core and modules. The scheduler checks every 30 seconds.</p>
+
+{% if jobs %}
+<table>
+    <thead>
+        <tr>
+            <th>Job ID</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Schedule</th>
+            <th>Last Run</th>
+            <th>Next Run</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for job in jobs %}
+        <tr>
+            <td><code>{{ job.id }}</code></td>
+            <td>{{ job.description }}</td>
+            <td>{{ job.type }}</td>
+            <td>
+                {% if job.type == 'daily' %}
+                    Daily at {{ job.time_str }}
+                {% else %}
+                    Every {{ (job.interval // 3600) }}h {{ ((job.interval % 3600) // 60) }}m
+                {% endif %}
+            </td>
+            <td>{{ job.last_run[:19] if job.last_run else '—' }}</td>
+            <td>{{ job.next_run[:19] if job.next_run else '—' }}</td>
+            <td>
+                {% if job.running %}
+                    <span style="color: #007bff; font-weight: 500;">⏳ Running</span>
+                {% elif job.last_error %}
+                    <span style="color: #dc3545;" title="{{ job.last_error }}">✗ Error</span>
+                {% else %}
+                    <span style="color: #28a745;">✓ OK</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div style="text-align: center; padding: 60px 20px; color: #999;">
+    <p style="font-size: 16px;">No scheduled tasks registered.</p>
+    <p style="font-size: 14px;">Modules can register periodic tasks (e.g. daily backups, DB optimization).</p>
+</div>
+{% endif %}
+{% endblock %}

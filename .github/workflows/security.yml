@@ -1,0 +1,148 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 8 * * 1" # Every Monday at 08:00 UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  # Pin Trivy version explicitly — do NOT use trivy-action (compromised March 2026)
+  TRIVY_VERSION: "0.69.3"
+
+jobs:
+  dependency-audit:
+    name: Dependency Vulnerability Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit safety
+
+      - name: pip-audit (PyPI advisory DB)
+        run: pip-audit -r requirements.txt --desc --output pip-audit-results.txt || true
+
+      - name: safety check (Safety DB)
+        run: safety check -r requirements.txt --output text || true
+
+      - name: Upload audit results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: dependency-audit
+          path: pip-audit-results.txt
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: python
+          queries: security-and-quality
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:python"
+
+  bandit:
+    name: Bandit Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install bandit
+        run: pip install bandit[toml]
+
+      - name: Run bandit
+        run: bandit -r . -x ./.venv,./instance,./backups,./__pycache__ -f json -o bandit-results.json || true
+
+      - name: Show results
+        if: always()
+        run: bandit -r . -x ./.venv,./instance,./backups,./__pycache__ -ll || true
+
+      - name: Upload bandit results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bandit-results
+          path: bandit-results.json
+
+  trivy-fs:
+    name: Trivy Filesystem Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Install Trivy CLI directly — trivy-action was compromised (March 2026)
+      # See: https://github.com/aquasecurity/trivy/discussions/10265
+      - name: Install Trivy CLI
+        run: |
+          wget -qO- "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" -O trivy.deb
+          sudo dpkg -i trivy.deb
+          rm trivy.deb
+          trivy --version
+
+      - name: Run Trivy (filesystem)
+        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format table .
+
+      - name: Trivy SARIF output
+        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-fs.sarif .
+
+      - name: Upload to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-filesystem
+
+  trivy-docker:
+    name: Trivy Docker Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Install Trivy CLI directly — trivy-action was compromised (March 2026)
+      - name: Install Trivy CLI
+        run: |
+          wget -qO- "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" -O trivy.deb
+          sudo dpkg -i trivy.deb
+          rm trivy.deb
+          trivy --version
+
+      - name: Build image
+        run: docker build -t contaautonomo:scan .
+
+      - name: Run Trivy (image)
+        run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format table contaautonomo:scan
+
+      - name: Trivy SARIF output
+        run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-image.sarif contaautonomo:scan
+
+      - name: Upload to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-docker

@@ -1,0 +1,799 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Invoice Manager{% endblock %}
+
+{% block content %}
+<style>
+    .tabs {
+        display: flex;
+        border-bottom: 2px solid #007bff;
+        margin-bottom: 30px;
+    }
+    .tab {
+        padding: 12px 24px;
+        cursor: pointer;
+        background: #f8f9fa;
+        border: none;
+        border-bottom: 3px solid transparent;
+        font-size: 16px;
+        transition: all 0.3s;
+    }
+    .tab:hover {
+        background: #e9ecef;
+    }
+    .tab.active {
+        background: white;
+        border-bottom: 3px solid #007bff;
+        font-weight: bold;
+    }
+    .tab-content {
+        display: none;
+    }
+    .tab-content.active {
+        display: block;
+    }
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    .form-row-full {
+        grid-column: 1 / -1;
+    }
+    .bank-card, .customer-card {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+        border-left: 4px solid #007bff;
+    }
+    .bank-card.default {
+        border-left-color: #28a745;
+        background: #d4edda;
+    }
+    .bank-card h4, .customer-card h4 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    .bank-card p, .customer-card p {
+        margin: 5px 0;
+        color: #666;
+        font-size: 14px;
+    }
+    .bank-actions, .customer-actions {
+        margin-top: 10px;
+    }
+    .badge-default {
+        background: #28a745;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 3px;
+        font-size: 12px;
+        margin-left: 10px;
+    }
+</style>
+
+<h1>Settings</h1>
+
+<div class="tabs">
+    <button class="tab active" onclick="showTab('general')">General Settings</button>
+    <button class="tab" onclick="showTab('business')">Business Information</button>
+    <button class="tab" onclick="showTab('customers')">Customers</button>
+    <button class="tab" onclick="showTab('contractors')">Contractors</button>
+    <button class="tab" onclick="showTab('banks')">Bank Accounts</button>
+    <button class="tab" onclick="showTab('defaults')">Default Settings</button>
+    <button class="tab" onclick="showTab('modules')">Modules</button>
+    <button class="tab" onclick="showTab('security')">Security</button>
+    {% if module_settings_panels %}
+    {% for panel in module_settings_panels %}
+    {% if panel.tab not in ('general', 'security') %}
+    <button class="tab" onclick="showTab('mod_{{ panel.tab }}')">{{ panel.tab_label|default(panel.tab) }}</button>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+</div>
+
+<!-- General Settings Tab -->
+<div id="general" class="tab-content active">
+    <h2>General Settings</h2>
+    <p style="margin-bottom: 20px;">Configure general application settings including base currency and tracked currencies.</p>
+
+    <form method="POST">
+        <input type="hidden" name="_settings_tab" value="general">
+
+        <div class="form-group">
+            <label for="tracked_currencies">Tracked Currencies</label>
+            <input type="text" id="tracked_currencies" name="tracked_currencies"
+                   value="{{ (settings.tracked_currencies or 'USD,EUR,GBP,CZK') if settings else 'USD,EUR,GBP,CZK' }}"
+                   placeholder="USD,EUR,GBP,CZK"
+                   oninput="updateBaseCurrencyOptions()">
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Enter currency codes separated by commas (e.g., USD,EUR,GBP,CZK). These currencies will also appear in the Base Currency dropdown.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="base_currency">Base Currency *</label>
+            <select id="base_currency" name="base_currency" required>
+                <option value="EUR" selected>EUR (€)</option>
+            </select>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                This is your main currency. All exchange rates, conversions, and reports will use this as the base currency.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="report_template">Report Template</label>
+            <select id="report_template" name="report_template">
+                <option value="official_template" {% if not settings or settings.report_template == 'official_template' %}selected{% endif %}>
+                    Official Template (Default)
+                </option>
+            </select>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Select the template to use for generating financial reports. Custom templates go in modules/reports/report_templates/.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="invoice_template">Invoice PDF Template</label>
+            <select id="invoice_template" name="invoice_template">
+                {% set current_template = settings.invoice_template if settings and settings.invoice_template else 'default_template' %}
+                {% if module_manager %}
+                    {% for tpl in module_manager.get_invoice_templates() %}
+                    <option value="{{ tpl.id }}" {% if tpl.id == current_template %}selected{% endif %}>
+                        {{ tpl.name }}
+                    </option>
+                    {% endfor %}
+                {% else %}
+                    <option value="default_template" {% if current_template == 'default_template' %}selected{% endif %}>
+                        Default Template
+                    </option>
+                {% endif %}
+            </select>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Select the template to use for generating invoice PDFs. Modules can provide additional templates.
+            </small>
+        </div>
+
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+
+        <h3 style="margin-bottom: 15px; color: #333;">Dashboard Display Settings</h3>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="show_currency_panel" name="show_currency_panel"
+                       {% if not settings or settings.show_currency_panel %}checked{% endif %}
+                       style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                <span>Show Currency & Holidays Panel</span>
+            </label>
+            <small style="display: block; margin-top: 5px; margin-left: 28px; color: #666;">
+                Display the panel with current date, exchange rates, currency converter, and upcoming holidays on the dashboard.
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="show_tax_panel" name="show_tax_panel"
+                       {% if not settings or settings.show_tax_panel %}checked{% endif %}
+                       style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                <span>Show Tax Obligations Panel</span>
+            </label>
+            <small style="display: block; margin-top: 5px; margin-left: 28px; color: #666;">
+                Display the panel with current year tax calculations including IRPF, VAT, and Social Security on the dashboard.
+            </small>
+        </div>
+
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+        <h3 style="margin-bottom: 15px; color: #333;">Tax Rates</h3>
+        <p style="color: #666; margin-bottom: 20px;">Default tax rates used for invoices and tax calculations. Adjust for your country.</p>
+
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+            <div class="form-group">
+                <label for="default_vat_rate">{{ field_labels.get('default_vat_rate', 'VAT / IVA Rate (%)') if field_labels else 'VAT / IVA Rate (%)' }}</label>
+                <input type="number" id="default_vat_rate" name="default_vat_rate"
+                       value="{{ settings.default_vat_rate if settings and settings.default_vat_rate is not none else 21 }}"
+                       step="0.1" min="0" max="100" style="width: 120px;">
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Standard VAT rate applied to invoices (e.g. 21% for Spain, 20% for UK, 19% for Germany).
+                </small>
+            </div>
+            <div class="form-group">
+                <label for="default_irpf_rate">{{ field_labels.get('default_irpf_rate', 'Quarterly Tax Advance Rate (%)') if field_labels else 'Quarterly Tax Advance Rate (%)' }}</label>
+                <input type="number" id="default_irpf_rate" name="default_irpf_rate"
+                       value="{{ settings.default_irpf_rate if settings and settings.default_irpf_rate is not none else 20 }}"
+                       step="0.1" min="0" max="100" style="width: 120px;">
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    Rate applied to invoices for quarterly tax advance calculation (e.g. 20% Modelo 130 in Spain, 19% flat PIT in Poland).
+                </small>
+            </div>
+        </div>
+
+        {% if module_settings_panels %}
+        {% for panel in module_settings_panels %}
+        {% if panel.tab == 'general' %}
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+        {{ panel.html|safe }}
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e0e0e0;">
+        <h3 style="margin-bottom: 15px; color: #333;">System Logs</h3>
+        <p style="color: #666; margin-bottom: 20px;">Configure how activity logs are stored and retained.</p>
+
+        <div class="form-group">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Log Storage</label>
+            <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
+                <input type="radio" name="log_storage" value="file"
+                       {% if not settings or not settings.log_storage or settings.log_storage == 'file' %}checked{% endif %}
+                       style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                       onchange="document.getElementById('log_file_options').style.display='block'">
+                <span>File system (daily JSON-lines files)</span>
+            </label>
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="radio" name="log_storage" value="db"
+                       {% if settings and settings.log_storage == 'db' %}checked{% endif %}
+                       style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+                       onchange="document.getElementById('log_file_options').style.display='none'">
+                <span>Database (activity_log table)</span>
+            </label>
+        </div>
+
+        <div id="log_file_options" style="{% if settings and settings.log_storage == 'db' %}display:none{% endif %}">
+        </div>
+
+        <div class="form-group">
+            <label for="log_retention_days">Log Retention (days)</label>
+            <input type="number" id="log_retention_days" name="log_retention_days"
+                   value="{{ settings.log_retention_days if settings and settings.log_retention_days is not none else 30 }}"
+                   min="0" style="max-width: 120px;">
+            <small style="display: block; margin-top: 4px; color: #666;">0 = keep forever.</small>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save General Settings</button>
+    </form>
+</div>
+
+<!-- Business Information Tab -->
+<div id="business" class="tab-content">
+    <h2>Business & Personal Information</h2>
+    <form method="POST">
+        <input type="hidden" name="_settings_tab" value="business">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="business_name">Business Name</label>
+                <input type="text" id="business_name" name="business_name"
+                       value="{{ (settings.business_name or '') if settings else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="owner_name">Owner Name</label>
+                <input type="text" id="owner_name" name="owner_name"
+                       value="{{ (settings.owner_name or '') if settings else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="vat_number">{{ field_labels.get('vat_number', 'VAT Number') if field_labels else 'VAT Number' }}</label>
+                <input type="text" id="vat_number" name="vat_number"
+                       value="{{ (settings.vat_number or '') if settings else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="nie_number">{{ field_labels.get('nie_number', 'NIE Number') if field_labels else 'NIE Number' }}</label>
+                <input type="text" id="nie_number" name="nie_number"
+                       value="{{ (settings.nie_number or '') if settings else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="phone">Phone</label>
+                <input type="text" id="phone" name="phone"
+                       value="{{ (settings.phone or '') if settings else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email"
+                       value="{{ (settings.email or '') if settings else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="address">Address</label>
+                <input type="text" id="address" name="address"
+                       value="{{ (settings.address or '') if settings else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="city">City</label>
+                <input type="text" id="city" name="city"
+                       value="{{ (settings.city or '') if settings else '' }}">
+            </div>
+            <div class="form-group">
+                <label for="postal_code">Postal Code</label>
+                <input type="text" id="postal_code" name="postal_code"
+                       value="{{ (settings.postal_code or '') if settings else '' }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label for="country">Country</label>
+            <input type="text" id="country" name="country"
+                   value="{{ (settings.country or '') if settings else '' }}">
+        </div>
+
+        <!-- Copy hidden fields to preserve other data -->
+        <input type="hidden" name="default_payment_terms" value="{{ (settings.default_payment_terms or '') if settings else '' }}">
+        <input type="hidden" name="default_description" value="{{ (settings.default_description or '') if settings else '' }}">
+        <input type="hidden" name="default_notes" value="{{ (settings.default_notes or '') if settings else '' }}">
+        <input type="hidden" name="default_currency" value="{{ (settings.default_currency or 'USD') if settings else 'USD' }}">
+        <input type="hidden" name="tracked_currencies" value="{{ (settings.tracked_currencies or 'USD,EUR,GBP,CZK') if settings else 'USD,EUR,GBP,CZK' }}">
+        <input type="hidden" name="base_currency" value="{{ (settings.base_currency or 'EUR') if settings else 'EUR' }}">
+        <input type="hidden" name="report_template" value="{{ (settings.report_template or 'official_template') if settings else 'official_template' }}">
+        <input type="hidden" name="invoice_template" value="{{ (settings.invoice_template or 'default_template') if settings else 'default_template' }}">
+        <input type="hidden" name="social_security_monthly" value="{{ settings.social_security_monthly if settings and settings.social_security_monthly else '0' }}">
+
+        <button type="submit" class="btn btn-primary">Save Business Information</button>
+    </form>
+</div>
+
+<!-- Customers Tab -->
+<div id="customers" class="tab-content">
+    <h2>Customer Management</h2>
+    <p style="margin-bottom: 20px;">Manage your customers. Click on a customer to view their invoices.</p>
+
+    <a href="{{ url_for('create_customer') }}" class="btn btn-success" style="margin-bottom: 20px;">Add New Customer</a>
+
+    {% if customers %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+            {% for customer in customers %}
+            <div class="customer-card {% if customer.is_default %}default{% endif %}" style="{% if customer.is_default %}border-left-color: #28a745; background: #d4edda;{% endif %}">
+                <h4>
+                    {{ customer.name }}
+                    {% if customer.is_default %}
+                    <span class="badge-default">DEFAULT</span>
+                    {% endif %}
+                </h4>
+                {% if customer.vat_number %}
+                <p><strong>VAT:</strong> {{ customer.vat_number }}</p>
+                {% endif %}
+                {% if customer.email %}
+                <p><strong>Email:</strong> {{ customer.email }}</p>
+                {% endif %}
+                {% if customer.phone %}
+                <p><strong>Phone:</strong> {{ customer.phone }}</p>
+                {% endif %}
+                {% if customer.address %}
+                <p><strong>Address:</strong> {{ customer.address }}</p>
+                {% endif %}
+                {% if customer.city or customer.country %}
+                <p><strong>Location:</strong>
+                    {% if customer.city %}{{ customer.city }}{% endif %}
+                    {% if customer.city and customer.country %}, {% endif %}
+                    {% if customer.country %}{{ customer.country }}{% endif %}
+                </p>
+                {% endif %}
+                <div class="customer-actions">
+                    <a href="{{ url_for('view_customer', id=customer.id) }}" class="btn btn-primary">View</a>
+                    <a href="{{ url_for('edit_customer', id=customer.id) }}" class="btn btn-success">Edit</a>
+                    {% if not customer.is_default %}
+                    <a href="{{ url_for('set_default_customer', id=customer.id) }}" class="btn btn-success">Set as Default</a>
+                    {% endif %}
+                    <a href="{{ url_for('delete_customer', id=customer.id) }}"
+                       class="btn btn-danger"
+                       onclick="return confirm('Delete this customer?')">Delete</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No customers yet. Add your first customer to get started.</p>
+    {% endif %}
+</div>
+
+<!-- Contractors Tab -->
+<div id="contractors" class="tab-content">
+    <h2>Contractor Management</h2>
+    <p style="margin-bottom: 20px;">Manage contractors for expense tracking.</p>
+
+    <a href="{{ url_for('create_contractor') }}" class="btn btn-success" style="margin-bottom: 20px;">Add New Contractor</a>
+
+    {% if contractors %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+            {% for contractor in contractors %}
+            <div class="customer-card">
+                <h4>{{ contractor.name }}</h4>
+                {% if contractor.vat_number %}
+                <p><strong>VAT:</strong> {{ contractor.vat_number }}</p>
+                {% endif %}
+                {% if contractor.email %}
+                <p><strong>Email:</strong> {{ contractor.email }}</p>
+                {% endif %}
+                {% if contractor.phone %}
+                <p><strong>Phone:</strong> {{ contractor.phone }}</p>
+                {% endif %}
+                {% if contractor.address %}
+                <p><strong>Address:</strong> {{ contractor.address }}</p>
+                {% endif %}
+                {% if contractor.city or contractor.country %}
+                <p><strong>Location:</strong>
+                    {% if contractor.city %}{{ contractor.city }}{% endif %}
+                    {% if contractor.city and contractor.country %}, {% endif %}
+                    {% if contractor.country %}{{ contractor.country }}{% endif %}
+                </p>
+                {% endif %}
+                {% if contractor.notes %}
+                <p><strong>Notes:</strong> {{ contractor.notes }}</p>
+                {% endif %}
+                <div class="customer-actions">
+                    <a href="{{ url_for('edit_contractor', id=contractor.id) }}" class="btn btn-success">Edit</a>
+                    <form method="POST" action="{{ url_for('delete_contractor', id=contractor.id) }}" style="display: inline;" onsubmit="return confirm('Delete this contractor?');">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No contractors yet. Add your first contractor to track expenses.</p>
+    {% endif %}
+</div>
+
+<!-- Bank Accounts Tab -->
+<div id="banks" class="tab-content">
+    <h2>Bank Account Management</h2>
+    <p style="margin-bottom: 20px;">Manage your bank accounts. Each invoice can use a different bank account.</p>
+
+    <a href="{{ url_for('add_bank') }}" class="btn btn-success" style="margin-bottom: 20px;">Add New Bank Account</a>
+
+    {% if banks %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+            {% for bank in banks %}
+            <div class="bank-card {% if bank.is_default %}default{% endif %}" style="{% if bank.is_default %}border-left-color: #28a745; background: #d4edda;{% endif %}">
+                <h4>
+                    {{ bank.name }}
+                    {% if bank.is_default %}
+                    <span class="badge-default">DEFAULT</span>
+                    {% endif %}
+                </h4>
+                <p><strong>IBAN:</strong> {{ bank.iban }}</p>
+                {% if bank.swift %}
+                <p><strong>SWIFT/BIC:</strong> {{ bank.swift }}</p>
+                {% endif %}
+                {% if bank.bank_name %}
+                <p><strong>Bank:</strong> {{ bank.bank_name }}</p>
+                {% endif %}
+                <div class="bank-actions">
+                    <a href="{{ url_for('edit_bank', id=bank.id) }}" class="btn btn-success">Edit</a>
+                    {% if not bank.is_default %}
+                    <a href="{{ url_for('set_default_bank', id=bank.id) }}" class="btn btn-success">Set as Default</a>
+                    {% endif %}
+                    <a href="{{ url_for('delete_bank', id=bank.id) }}"
+                       class="btn btn-danger"
+                       onclick="return confirm('Delete this bank account? This will fail if any invoices use it.')">Delete</a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No bank accounts yet. Add your first bank account to get started.</p>
+    {% endif %}
+</div>
+
+<!-- Default Settings Tab -->
+<div id="defaults" class="tab-content">
+    <h2>Default Invoice Settings</h2>
+    <p style="margin-bottom: 20px;">Set default values that will be pre-filled when creating new invoices.</p>
+
+    <form method="POST">
+        <input type="hidden" name="_settings_tab" value="defaults">
+
+        <div class="form-group">
+            <label for="default_description">Default Description</label>
+            <input type="text" id="default_description" name="default_description"
+                   value="{{ (settings.default_description or '') if settings else '' }}"
+                   placeholder="e.g., Software Development Services">
+        </div>
+
+        <div class="form-group">
+            <label for="default_currency">Default Currency</label>
+            <select id="default_currency" name="default_currency">
+                {% set currencies_list = settings.tracked_currencies.split(',') if settings and settings.tracked_currencies else ['USD', 'EUR', 'GBP', 'CZK'] %}
+                {% for curr in currencies_list %}
+                {% set curr_clean = curr.strip() %}
+                <option value="{{ curr_clean }}" {% if settings and settings.default_currency == curr_clean %}selected{% elif not settings and curr_clean == 'USD' %}selected{% endif %}>
+                    {{ curr_clean }}
+                    {% if curr_clean == 'USD' %}($){% elif curr_clean == 'EUR' %}(€){% elif curr_clean == 'GBP' %}(£){% elif curr_clean == 'CZK' %}(Kč){% elif curr_clean == 'UAH' %}(₴){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            <small style="display: block; margin-top: 5px; color: #666;">
+                This currency will be pre-selected when creating new invoices
+            </small>
+        </div>
+
+        <div class="form-group">
+            <label for="default_payment_terms">Default Payment Terms</label>
+            <textarea id="default_payment_terms" name="default_payment_terms"
+                      placeholder="e.g., Payment due within 30 days">{{ (settings.default_payment_terms or '') if settings else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="default_notes">Default Notes</label>
+            <textarea id="default_notes" name="default_notes"
+                      placeholder="e.g., Thank you for your business">{{ (settings.default_notes or '') if settings else '' }}</textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Save Default Settings</button>
+    </form>
+</div>
+
+<!-- Modules Tab -->
+<div id="modules" class="tab-content">
+    <h2>Modules</h2>
+    <p style="margin-bottom: 20px;">Enable or disable application modules. Changes require an application restart to take effect.</p>
+
+    {% if module_states %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px;">
+            {% for mod in module_states %}
+            <div style="background: {% if mod.enabled %}#d4edda{% else %}#f8f9fa{% endif %}; padding: 20px; border-radius: 8px; border-left: 4px solid {% if mod.enabled %}#28a745{% else %}#ccc{% endif %};">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div>
+                        <h4 style="margin: 0 0 5px 0; color: #333;">{{ mod.name }}</h4>
+                        <p style="margin: 0 0 8px 0; color: #666; font-size: 13px;">{{ mod.description }}</p>
+                        <span style="font-size: 11px; color: #999;">v{{ mod.version }}</span>
+                    </div>
+                    <form method="POST" action="{{ url_for('toggle_module', module_id=mod.module_id) }}">
+                        {% if mod.enabled %}
+                        <input type="hidden" name="action" value="disable">
+                        <button type="submit" class="btn btn-danger" style="padding: 6px 16px; font-size: 13px;"
+                                onclick="return confirm('Disable this module? You will need to restart the app.')">
+                            Disable
+                        </button>
+                        {% else %}
+                        <input type="hidden" name="action" value="enable">
+                        <button type="submit" class="btn btn-success" style="padding: 6px 16px; font-size: 13px;">
+                            Enable
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+                {% if mod.enabled %}
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+                    <span style="color: #155724; font-size: 12px; font-weight: 500;">✓ Active</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div style="text-align: center; padding: 40px; color: #999;">
+            <p style="font-size: 16px;">No modules found</p>
+            <p style="font-size: 14px;">Place modules in the <code>modules/</code> directory to get started.</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Custom Module Settings Tabs -->
+{% if module_settings_panels %}
+{% for panel in module_settings_panels %}
+{% if panel.tab not in ('general', 'security') %}
+<div id="mod_{{ panel.tab }}" class="tab-content">
+    <form method="POST">
+        <input type="hidden" name="_settings_tab" value="{{ panel.tab }}">
+
+        {{ panel.html|safe }}
+
+        <button type="submit" class="btn btn-primary" style="margin-top: 20px;">Save Settings</button>
+    </form>
+</div>
+{% endif %}
+{% endfor %}
+{% endif %}
+
+<!-- Security Tab -->
+<div id="security" class="tab-content">
+    <h2>Security</h2>
+
+    <!-- Change Password Section -->
+    <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px;">
+        <h3 style="margin-top: 0;">Change Password</h3>
+        <div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;">
+            <strong>⚠️ Important:</strong> Your password encrypts your backups. Don't forget it!
+        </div>
+
+        <form method="POST" action="{{ url_for('auth.security') }}" onsubmit="return validatePasswordChange()">
+            <input type="hidden" name="action" value="change_password">
+
+            <div class="form-group">
+                <label for="current_password">Current Password</label>
+                <input type="password" id="current_password" name="current_password" required>
+            </div>
+
+            <div class="form-group">
+                <label for="new_password">New Password</label>
+                <input type="password" id="new_password" name="new_password" required minlength="8"
+                       oninput="checkPasswordStrength()">
+                <div class="strength-bar">
+                    <div class="strength-fill" id="strengthFill"></div>
+                </div>
+                <div class="password-strength" id="strengthText"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm New Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
+            </div>
+
+            <button type="submit" class="btn btn-primary">Change Password</button>
+        </form>
+    </div>
+
+    <!-- Session Info -->
+    <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="margin-top: 0;">Session</h3>
+
+        {% if module_settings_panels %}
+        {% for panel in module_settings_panels %}
+        {% if panel.tab == 'security' %}
+        <div style="margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0;">
+            {{ panel.html|safe }}
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endif %}
+
+        <p style="color: #666; margin-bottom: 20px;">Manage your current session.</p>
+
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-danger"
+           onclick="return confirm('Are you sure you want to logout?')">
+            Logout
+        </a>
+    </div>
+</div>
+
+<style>
+    .strength-bar {
+        height: 4px;
+        background: #ddd;
+        border-radius: 2px;
+        margin-top: 5px;
+        overflow: hidden;
+    }
+    .strength-fill {
+        height: 100%;
+        width: 0%;
+        transition: width 0.3s, background 0.3s;
+    }
+    .strength-weak { width: 33%; background: #f44336; }
+    .strength-medium { width: 66%; background: #ff9800; }
+    .strength-strong { width: 100%; background: #4caf50; }
+    .password-strength {
+        margin-top: 5px;
+        font-size: 12px;
+        color: #666;
+    }
+</style>
+
+<script>
+function checkPasswordStrength() {
+    const password = document.getElementById('new_password').value;
+    const strengthFill = document.getElementById('strengthFill');
+    const strengthText = document.getElementById('strengthText');
+
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (password.length >= 12) strength++;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+    if (/\d/.test(password)) strength++;
+    if (/[^a-zA-Z0-9]/.test(password)) strength++;
+
+    strengthFill.className = 'strength-fill';
+    if (strength <= 2) {
+        strengthFill.classList.add('strength-weak');
+        strengthText.textContent = 'Weak password';
+        strengthText.style.color = '#f44336';
+    } else if (strength <= 4) {
+        strengthFill.classList.add('strength-medium');
+        strengthText.textContent = 'Medium password';
+        strengthText.style.color = '#ff9800';
+    } else {
+        strengthFill.classList.add('strength-strong');
+        strengthText.textContent = 'Strong password';
+        strengthText.style.color = '#4caf50';
+    }
+}
+
+function validatePasswordChange() {
+    const newPassword = document.getElementById('new_password').value;
+    const confirm = document.getElementById('confirm_password').value;
+
+    if (newPassword !== confirm) {
+        alert('New passwords do not match!');
+        return false;
+    }
+
+    if (newPassword.length < 8) {
+        alert('New password must be at least 8 characters long!');
+        return false;
+    }
+
+    return true;
+}
+
+var CURRENCY_SYMBOLS = {
+    'USD': '$', 'EUR': '€', 'GBP': '£', 'JPY': '¥', 'CNY': '¥',
+    'CHF': 'Fr', 'CAD': 'C$', 'AUD': 'A$', 'NZD': 'NZ$', 'HKD': 'HK$',
+    'SGD': 'S$', 'SEK': 'kr', 'NOK': 'kr', 'DKK': 'kr', 'ISK': 'kr',
+    'CZK': 'Kč', 'PLN': 'zł', 'HUF': 'Ft', 'RON': 'lei', 'BGN': 'лв',
+    'HRK': 'kn', 'UAH': '₴', 'RUB': '₽', 'TRY': '₺', 'BRL': 'R$',
+    'MXN': 'Mex$', 'ARS': 'AR$', 'CLP': 'CL$', 'COP': 'COL$',
+    'INR': '₹', 'KRW': '₩', 'THB': '฿', 'IDR': 'Rp', 'MYR': 'RM',
+    'PHP': '₱', 'VND': '₫', 'ZAR': 'R', 'EGP': 'E£', 'NGN': '₦',
+    'KES': 'KSh', 'GHS': 'GH₵', 'ILS': '₪', 'SAR': '﷼', 'AED': 'د.إ',
+    'TWD': 'NT$', 'PKR': '₨', 'LKR': '₨', 'BDT': '৳',
+};
+
+function updateBaseCurrencyOptions() {
+    var input = document.getElementById('tracked_currencies');
+    var select = document.getElementById('base_currency');
+    var current = select.value || '{{ (settings.base_currency or "EUR") if settings else "EUR" }}';
+    var codes = input.value.split(',').map(function(c) { return c.trim().toUpperCase(); }).filter(function(c) { return c.length > 0; });
+    if (codes.length === 0) codes = ['EUR'];
+    select.innerHTML = '';
+    codes.forEach(function(code) {
+        var opt = document.createElement('option');
+        opt.value = code;
+        var sym = CURRENCY_SYMBOLS[code];
+        opt.textContent = sym ? code + ' (' + sym + ')' : code;
+        if (code === current) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
+function showTab(tabName) {
+    // Hide all tab contents
+    const contents = document.querySelectorAll('.tab-content');
+    contents.forEach(content => content.classList.remove('active'));
+
+    // Remove active class from all tabs
+    const tabs = document.querySelectorAll('.tab');
+    tabs.forEach(tab => tab.classList.remove('active'));
+
+    // Show selected tab content
+    document.getElementById(tabName).classList.add('active');
+
+    // Add active class to clicked tab
+    if (event && event.target) {
+        event.target.classList.add('active');
+    } else {
+        // If called programmatically, find and activate the correct tab button
+        const tabButtons = document.querySelectorAll('.tab');
+        tabButtons.forEach(button => {
+            if (button.textContent.toLowerCase().includes(tabName)) {
+                button.classList.add('active');
+            }
+        });
+    }
+
+    // Update URL hash without scrolling
+    history.replaceState(null, null, '#' + tabName);
+}
+
+// On page load, check for hash in URL and show that tab
+window.addEventListener('DOMContentLoaded', function() {
+    var hash = window.location.hash.substring(1);
+    if (hash && document.getElementById(hash)) {
+        showTab(hash);
+    }
+    // Populate base currency dropdown from tracked currencies
+    if (document.getElementById('tracked_currencies')) {
+        updateBaseCurrencyOptions();
+    }
+});
+</script>
+
+{% endblock %}

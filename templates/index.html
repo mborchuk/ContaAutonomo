@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}All Invoices{% endblock %}
+
+{% block content %}
+<style>
+    table th a {
+        cursor: pointer;
+        user-select: none;
+    }
+</style>
+
+<h1>Invoice Management</h1>
+
+<div class="filter-form">
+    <form method="GET" action="{{ url_for('index') }}" id="filter-form">
+        <label>Filter by:</label>
+        <input type="text" name="invoice_number" placeholder="Invoice #" value="{{ request.args.get('invoice_number', '') }}">
+        <input type="text" name="client" placeholder="Client name" value="{{ request.args.get('client', '') }}" list="client-list" autocomplete="off">
+        <datalist id="client-list">
+            {% for customer in customers %}
+            <option value="{{ customer.name }}">
+            {% endfor %}
+        </datalist>
+        <select name="status">
+            <option value="">All Status</option>
+            <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="paid" {% if request.args.get('status') == 'paid' %}selected{% endif %}>Paid</option>
+            <option value="cancelled" {% if request.args.get('status') == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+        <input type="date" name="date_from" placeholder="From" value="{{ request.args.get('date_from', '') }}">
+        <input type="date" name="date_to" placeholder="To" value="{{ request.args.get('date_to', '') }}">
+        <select name="per_page" onchange="document.getElementById('filter-form').submit()">
+            <option value="10" {% if request.args.get('per_page', '20') == '10' %}selected{% endif %}>10 per page</option>
+            <option value="20" {% if request.args.get('per_page', '20') == '20' %}selected{% endif %}>20 per page</option>
+            <option value="50" {% if request.args.get('per_page', '20') == '50' %}selected{% endif %}>50 per page</option>
+            <option value="100" {% if request.args.get('per_page', '20') == '100' %}selected{% endif %}>100 per page</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Apply Filters</button>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Clear</a>
+    </form>
+</div>
+
+{% if invoices %}
+<table class="invoiceTable">
+    <thead>
+        <tr>
+            <th>
+                <a href="{{ url_for('index', sort_by='invoice_number', sort_order='asc' if sort_by == 'invoice_number' and sort_order == 'desc' else 'desc', invoice_number=request.args.get('invoice_number', ''), client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20)) }}">
+                    Invoice #
+                    {% if sort_by == 'invoice_number' %}
+                        {% if sort_order == 'asc' %}▲{% else %}▼{% endif %}
+                    {% endif %}
+                </a>
+            </th>
+            <th>Client</th>
+            <th>
+                <a href="{{ url_for('index', sort_by='invoice_date', sort_order='asc' if sort_by == 'invoice_date' and sort_order == 'desc' else 'desc', invoice_number=request.args.get('invoice_number', ''), client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20)) }}">
+                    Date
+                    {% if sort_by == 'invoice_date' %}
+                        {% if sort_order == 'asc' %}▲{% else %}▼{% endif %}
+                    {% endif %}
+                </a>
+            </th>
+            <th>Status</th>
+            <th>
+                <a href="{{ url_for('index', sort_by='amount_usd', sort_order='asc' if sort_by == 'amount_usd' and sort_order == 'desc' else 'desc', invoice_number=request.args.get('invoice_number', ''), client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20)) }}">
+                    Amount
+                    {% if sort_by == 'amount_usd' %}
+                        {% if sort_order == 'asc' %}▲{% else %}▼{% endif %}
+                    {% endif %}
+                </a>
+            </th>
+            <th>
+                <a href="{{ url_for('index', sort_by='amount_eur', sort_order='asc' if sort_by == 'amount_eur' and sort_order == 'desc' else 'desc', invoice_number=request.args.get('invoice_number', ''), client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20)) }}">
+                    Amount ({{ base_currency }})
+                    {% if sort_by == 'amount_eur' %}
+                        {% if sort_order == 'asc' %}▲{% else %}▼{% endif %}
+                    {% endif %}
+                </a>
+            </th>
+            <th>
+                <a href="{{ url_for('index', sort_by='exchange_rate', sort_order='asc' if sort_by == 'exchange_rate' and sort_order == 'desc' else 'desc', invoice_number=request.args.get('invoice_number', ''), client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20)) }}">
+                    Rate
+                    {% if sort_by == 'exchange_rate' %}
+                        {% if sort_order == 'asc' %}▲{% else %}▼{% endif %}
+                    {% endif %}
+                </a>
+            </th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+        <tr>
+            <td>{{ invoice.invoice_number }}</td>
+            <td>{{ invoice.client_name }}</td>
+            <td>{{ invoice.invoice_date.strftime('%d/%m/%Y') if invoice.invoice_date else 'N/A' }}</td>
+            <td><span class="status-badge status-{{ invoice.status }}">{{ invoice.status.upper() }}</span></td>
+            <td>
+                {% if invoice.currency == 'EUR' %}
+                    €{{ "%.2f"|format(invoice.amount_eur) }}
+                {% elif invoice.currency == 'USD' %}
+                    ${{ "%.2f"|format(invoice.amount_usd) }}
+                {% elif invoice.currency == 'GBP' %}
+                    £{{ "%.2f"|format(invoice.amount_usd) }}
+                {% elif invoice.currency == 'CZK' %}
+                    {{ "%.2f"|format(invoice.amount_usd) }} Kč
+                {% else %}
+                    ${{ "%.2f"|format(invoice.amount_usd) }}
+                {% endif %}
+            </td>
+            <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.amount_eur) }}</td>
+            <td>{{ "%.4f"|format(invoice.exchange_rate) }}</td>
+            <td>
+                <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">PDF</a>
+                {% if invoice.status == 'paid' %}
+                <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">View</a>
+                {% else %}
+                <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                <a href="{{ url_for('delete_invoice', id=invoice.id) }}" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="return confirm('Delete this invoice?')">Delete</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+.invoiceTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0;
+    font-size: 13px;
+    table-layout: fixed;
+}
+
+.invoiceTable th,
+.invoiceTable td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.invoiceTable th {
+    background: #f8f9fa;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 12px;
+}
+
+.invoiceTable tr:hover {
+    background: #f8f9fa;
+}
+
+/* Column widths */
+.invoiceTable th:nth-child(1),
+.invoiceTable td:nth-child(1) {
+    width: 8%;
+}
+
+.invoiceTable th:nth-child(2),
+.invoiceTable td:nth-child(2) {
+    width: 20%;
+}
+
+.invoiceTable th:nth-child(3),
+.invoiceTable td:nth-child(3) {
+    width: 10%;
+}
+
+.invoiceTable th:nth-child(4),
+.invoiceTable td:nth-child(4) {
+    width: 8%;
+    text-align: center;
+}
+
+.invoiceTable th:nth-child(5),
+.invoiceTable td:nth-child(5) {
+    width: 12%;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(6),
+.invoiceTable td:nth-child(6) {
+    width: 12%;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(7),
+.invoiceTable td:nth-child(7) {
+    width: 8%;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(8),
+.invoiceTable td:nth-child(8) {
+    width: 12%;
+    text-align: center;
+}
+
+.invoiceTable th a {
+    color: inherit;
+    text-decoration: none;
+    display: inline;
+}
+</style>
+
+<!-- Pagination -->
+{% if pagination.pages > 1 %}
+<div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        Showing {{ ((pagination.page - 1) * pagination.per_page) + 1 }} to {{ [pagination.page * pagination.per_page, pagination.total]|min }} of {{ pagination.total }} invoices
+    </div>
+    <div style="display: flex; gap: 5px;">
+        {% if pagination.has_prev %}
+        <a href="{{ url_for('index', page=1, client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20), sort_by=sort_by, sort_order=sort_order) }}" class="btn btn-primary">First</a>
+        <a href="{{ url_for('index', page=pagination.prev_num, client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20), sort_by=sort_by, sort_order=sort_order) }}" class="btn btn-primary">Previous</a>
+        {% endif %}
+
+        {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if page_num %}
+                {% if page_num == pagination.page %}
+                <span class="btn btn-success">{{ page_num }}</span>
+                {% else %}
+                <a href="{{ url_for('index', page=page_num, client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20), sort_by=sort_by, sort_order=sort_order) }}" class="btn btn-primary">{{ page_num }}</a>
+                {% endif %}
+            {% else %}
+                <span style="padding: 0 5px;">...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <a href="{{ url_for('index', page=pagination.next_num, client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20), sort_by=sort_by, sort_order=sort_order) }}" class="btn btn-primary">Next</a>
+        <a href="{{ url_for('index', page=pagination.pages, client=request.args.get('client', ''), status=request.args.get('status', ''), date_from=request.args.get('date_from', ''), date_to=request.args.get('date_to', ''), per_page=request.args.get('per_page', 20), sort_by=sort_by, sort_order=sort_order) }}" class="btn btn-primary">Last</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<p>No invoices found. <a href="{{ url_for('create_invoice') }}">Create your first invoice</a></p>
+{% endif %}
+{% endblock %}

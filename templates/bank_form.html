@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if bank else 'Add' }} Bank Account{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if bank else 'Add New' }} Bank Account</h1>
+
+<form method="POST">
+    <div class="form-group">
+        <label for="name">Account Name *</label>
+        <input type="text" id="name" name="name" value="{{ bank.name if bank else '' }}" required>
+        <small style="display: block; margin-top: 5px; color: #666;">
+            A friendly name for this account (e.g., "Business Account EUR")
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label for="iban">IBAN *</label>
+        <input type="text" id="iban" name="iban" value="{{ bank.iban if bank else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="swift">SWIFT/BIC</label>
+        <input type="text" id="swift" name="swift" value="{{ bank.swift if bank else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="bank_name">Bank Institution</label>
+        <input type="text" id="bank_name" name="bank_name" value="{{ bank.bank_name if bank else '' }}">
+        <small style="display: block; margin-top: 5px; color: #666;">
+            Name of the bank (e.g., "BBVA", "Santander")
+        </small>
+    </div>
+
+    <div class="form-group">
+        <label>
+            <input type="checkbox" name="is_default" {% if bank and bank.is_default %}checked{% endif %}>
+            Set as default bank account
+        </label>
+    </div>
+
+    <button type="submit" class="btn btn-success">{{ 'Update' if bank else 'Create' }} Bank Account</button>
+    <a href="{{ url_for('settings') }}#banks" class="btn btn-primary">Cancel</a>
+</form>
+{% endblock %}

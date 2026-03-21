@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if customer else 'Add' }} Customer{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if customer else 'Add New' }} Customer</h1>
+
+<form method="POST">
+    <div class="form-group">
+        <label for="name">Company Name *</label>
+        <input type="text" id="name" name="name" value="{{ customer.name if customer else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label for="vat_number">VAT Number</label>
+        <input type="text" id="vat_number" name="vat_number" value="{{ customer.vat_number if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="address">Street Address</label>
+        <input type="text" id="address" name="address" value="{{ customer.address if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="city">City</label>
+        <input type="text" id="city" name="city" value="{{ customer.city if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="postal_code">Postal Code</label>
+        <input type="text" id="postal_code" name="postal_code" value="{{ customer.postal_code if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="country">Country</label>
+        <input type="text" id="country" name="country" value="{{ customer.country if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <input type="text" id="email" name="email" value="{{ customer.email if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ customer.phone if customer else '' }}">
+    </div>
+
+    <div class="form-group">
+        <label for="tax_type">Tax Type *</label>
+        <select id="tax_type" name="tax_type" required>
+            <option value="non_eu" {% if customer and customer.tax_type == 'non_eu' %}selected{% endif %}>Outside EU (VAT 0%)</option>
+            <option value="eu_b2b" {% if not customer or customer.tax_type == 'eu_b2b' %}selected{% endif %}>EU B2B (Reverse charge - intra-EU B2B, VAT 0%)</option>
+            <option value="standard" {% if customer and customer.tax_type == 'standard' %}selected{% endif %}>Standard (VAT 21%)</option>
+        </select>
+        <small style="display: block; margin-top: 5px; color: #666;">
+            Select the tax treatment for this customer
+        </small>
+    </div>
+
+    <button type="submit" class="btn btn-success">{{ 'Update' if customer else 'Create' }} Customer</button>
+    <a href="{{ url_for('settings') }}#customers" class="btn btn-primary">Cancel</a>
+</form>
+{% endblock %}

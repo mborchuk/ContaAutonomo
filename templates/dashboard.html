@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1>Invoice Dashboard</h1>
+
+<!-- Info Panel: Date, Exchange Rates, Currency Converter, Holidays -->
+{% if not settings or settings.show_currency_panel %}
+<div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 20px; overflow: hidden;">
+    <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #e0e0e0;">
+        <h3 style="margin: 0; font-size: 16px; color: #333;">Currency & Information</h3>
+    </div>
+    <div style="padding: 20px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 15%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 5px;">Current Date</div>
+                    <div style="font-size: 18px; font-weight: bold; color: #333;">{{ current_date }}</div>
+                </td>
+                <td style="width: 25%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 10px;">Exchange Rates ({{ base_currency }} base)</div>
+                    <table style="width: 100%; font-size: 13px;">
+                        {% for currency in tracked_currencies %}
+                        {% if currency != base_currency %}
+                        <tr>
+                            <td style="padding: 3px 0; color: #333; font-weight: 500;">{{ currency }}:</td>
+                            <td style="padding: 3px 0; text-align: right; color: #666;">{{ "%.4f"|format(exchange_rates.get(currency, 0)) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </table>
+                </td>
+                <td style="width: 25%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 10px;">Currency Converter</div>
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                        <input type="number" id="converter-amount" value="100" step="0.01"
+                               style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px;"
+                               oninput="convertCurrency()">
+                        <select id="converter-from" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 13px;"
+                                onchange="convertCurrency()">
+                            {% for currency in tracked_currencies %}
+                            <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="converter-result" readonly
+                               style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; background: #f5f5f5;">
+                        <select id="converter-to" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 13px;"
+                                onchange="convertCurrency()">
+                            {% for currency in tracked_currencies %}
+                            <option value="{{ currency }}" {% if currency == base_currency %}selected{% endif %}>{{ currency }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </td>
+                <td style="width: 20%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 10px;">Tax Deadlines</div>
+                    {% if tax_deadlines %}
+                    <div style="font-size: 11px;">
+                        {% for deadline in tax_deadlines %}
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-weight: 500; color: #333;">Mod. {{ deadline.forms[0][0] }} — {{ deadline.forms[0][1] }}</div>
+                            <div style="color: #999;">{{ deadline.date }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div style="color: #999; font-size: 11px;">No upcoming deadlines</div>
+                    {% endif %}
+                </td>
+                <td style="width: 15%; padding: 15px; vertical-align: top;">
+                    <div style="color: #666; font-size: 12px; margin-bottom: 10px;">Upcoming Holidays</div>
+                    {% if holidays %}
+                    <div style="font-size: 11px;">
+                        {% for holiday in holidays %}
+                        <div style="margin-bottom: 8px;">
+                            <div style="font-weight: 500; color: #333;">{{ holiday.localName }}</div>
+                            <div style="color: #999;">{{ holiday.date }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div style="color: #999; font-size: 11px;">No upcoming holidays</div>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<div style="background: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 30px;">
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+        <div>
+            <h3 style="margin: 0; color: #666; font-size: 14px;">Total Invoices</h3>
+            <p style="margin: 10px 0 0 0; font-size: 28px; font-weight: bold;">{{ stats.total_count }}</p>
+        </div>
+        <div>
+            <h3 style="margin: 0; color: #666; font-size: 14px;">Total Revenue ({{ base_currency }})</h3>
+            <p style="margin: 10px 0 0 0; font-size: 28px; font-weight: bold;">{{ base_currency_symbol }}{{ "%.2f"|format(stats.total_base) }}</p>
+        </div>
+        <div>
+            <h3 style="margin: 0; color: #666; font-size: 14px;">Pending Invoices</h3>
+            <p style="margin: 10px 0 0 0; font-size: 28px; font-weight: bold;">{{ stats.pending_count }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- Tax Obligations for Current Year -->
+{% if not settings or settings.show_tax_panel %}
+<div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 20px; overflow: hidden;">
+    <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #e0e0e0;">
+        <h3 style="margin: 0; font-size: 16px; color: #333;">Tax Obligations {{ tax_breakdown.current_year }} ({{ base_currency }})</h3>
+    </div>
+    <div style="padding: 20px;">
+        <!-- Summary Table -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+                <tr style="background: #f8f9fa;">
+                    <th style="padding: 12px; text-align: left; border: 1px solid #e0e0e0; font-size: 13px; color: #666;">Income (Paid)</th>
+                    {% for col in tax_breakdown.summary_columns %}
+                    <th style="padding: 12px; text-align: left; border: 1px solid #e0e0e0; font-size: 13px; color: #666;">{{ col.label }}</th>
+                    {% endfor %}
+                    <th style="padding: 12px; text-align: left; border: 1px solid #e0e0e0; font-size: 13px; color: #666;">Taxable Income</th>
+                    <th style="padding: 12px; text-align: left; border: 1px solid #e0e0e0; font-size: 13px; color: #666; background: #fff3cd;">Total Tax Due</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px; font-weight: bold; color: #333;">{{ base_currency_symbol }}{{ "%.2f"|format(tax_breakdown.income) }}</td>
+                    {% for col in tax_breakdown.summary_columns %}
+                    <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px; font-weight: bold; color: #333;">{{ base_currency_symbol }}{{ "%.2f"|format(col.value) }}</td>
+                    {% endfor %}
+                    <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 16px; font-weight: bold; color: #333;">{{ base_currency_symbol }}{{ "%.2f"|format(tax_breakdown.taxable_income) }}</td>
+                    <td style="padding: 12px; border: 1px solid #e0e0e0; font-size: 18px; font-weight: bold; color: #d9534f; background: #fff3cd;">{{ base_currency_symbol }}{{ "%.2f"|format(tax_breakdown.total_obligations) }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Tax Breakdown -->
+        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+            <thead>
+                <tr style="background: #f8f9fa;">
+                    <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0; font-size: 13px; color: #666;">Tax Type</th>
+                    <th style="padding: 10px; text-align: right; border: 1px solid #e0e0e0; font-size: 13px; color: #666;">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{{ tax_breakdown.income_tax_label|default('Income Tax (IRPF)') }}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right; font-weight: 500; color: #333;">{{ base_currency_symbol }}{{ "%.2f"|format(tax_breakdown.income_tax) }}</td>
+                </tr>
+                {% for row in tax_breakdown.breakdown_rows %}
+                <tr>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; color: #333;">{{ row.label }}</td>
+                    <td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right; font-weight: 500; color: #333;">{{ base_currency_symbol }}{{ "%.2f"|format(row.amount) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- IRPF Detailed Breakdown -->
+        {% if tax_breakdown.irpf_breakdown %}
+        <details style="margin-top: 15px;">
+            <summary style="cursor: pointer; padding: 10px; background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 3px; font-weight: 500; color: #333;">
+                IRPF Calculation Details
+            </summary>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                <thead>
+                    <tr style="background: #f8f9fa;">
+                        <th style="padding: 8px; text-align: left; border: 1px solid #e0e0e0; font-size: 12px; color: #666;">Bracket</th>
+                        <th style="padding: 8px; text-align: center; border: 1px solid #e0e0e0; font-size: 12px; color: #666;">Rate</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #e0e0e0; font-size: 12px; color: #666;">Amount</th>
+                        <th style="padding: 8px; text-align: right; border: 1px solid #e0e0e0; font-size: 12px; color: #666;">Tax</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for bracket in tax_breakdown.irpf_breakdown %}
+                    <tr {% if bracket.active %}style="background: #fffbea;"{% endif %}>
+                        <td style="padding: 8px; border: 1px solid #e0e0e0; font-size: 12px; {% if bracket.active %}font-weight: bold;{% endif %}">{{ bracket.bracket }}</td>
+                        <td style="padding: 8px; border: 1px solid #e0e0e0; text-align: center; font-size: 12px; {% if bracket.active %}font-weight: bold;{% endif %}">{{ bracket.rate }}%</td>
+                        <td style="padding: 8px; border: 1px solid #e0e0e0; text-align: right; font-size: 12px; {% if bracket.active %}font-weight: bold;{% endif %}">{{ base_currency_symbol }}{{ "%.2f"|format(bracket.amount) }}</td>
+                        <td style="padding: 8px; border: 1px solid #e0e0e0; text-align: right; font-size: 12px; {% if bracket.active %}font-weight: bold;{% endif %}">{{ base_currency_symbol }}{{ "%.2f"|format(bracket.tax) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        {% endif %}
+
+        <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 3px; font-size: 11px; color: #666;">
+            <strong>Note:</strong> Tax calculations are approximate.
+            {% for note in tax_breakdown.notes %}
+            {{ note }}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Year Tabs -->
+<div class="tabs">
+    {% for year in sorted_years %}
+    <button class="tab-button {% if loop.first %}active{% endif %}" onclick="showYear({{ year }})">
+        {{ year }}
+    </button>
+    {% endfor %}
+</div>
+
+<!-- Year Content -->
+{% for year in sorted_years %}
+<div id="year-{{ year }}" class="year-content" style="{% if not loop.first %}display: none;{% endif %}">
+
+    <!-- Year Total (shown under tabs) -->
+    <div style="margin-bottom: 20px; background: #f8f9fa; padding: 20px; border-radius: 4px; border: 2px solid #007bff;">
+        <h2 style="margin: 0 0 15px 0; color: #007bff;">Grand Total ({{ year }})</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+            <div>
+                <h3 style="margin: 0; color: #666; font-size: 14px;">Total Revenue ({{ base_currency }})</h3>
+                <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold;">{{ base_currency_symbol }}{{ "%.2f"|format(year_totals[year].sum_base) }}</p>
+            </div>
+            <div>
+                <h3 style="margin: 0; color: #666; font-size: 14px;">Total Tax {{ "%.4g"|format(tax_rate_pct) }}% ({{ base_currency }})</h3>
+                <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold;">{{ base_currency_symbol }}{{ "%.2f"|format(year_totals[year].tax_base) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <table class="invoiceTable">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>File</th>
+                <th>Company</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Sum</th>
+                <th>Sum ({{ base_currency_symbol }})</th>
+                <th>Tax {{ "%.4g"|format(tax_rate_pct) }}% ({{ base_currency_symbol }})</th>
+                <th>Rate</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Loop through quarters -->
+            {% for quarter in [1, 2, 3, 4] if quarter in invoices_by_year[year] %}
+                <!-- Quarter header -->
+                <tr style="background: #f0f0f0; font-weight: bold;">
+                    <td colspan="10" style="padding: 8px; font-size: 14px;">Q{{ quarter }} {{ year }}</td>
+                </tr>
+
+                <!-- Invoices for this quarter -->
+                {% for invoice in invoices_by_year[year][quarter] %}
+                <tr>
+                    <td>{{ invoice.invoice_number }}</td>
+                    <td>
+                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
+                            {{ invoice.invoice_number }}.pdf
+                        </a>
+                    </td>
+                    <td>{{ invoice.client_name }}</td>
+                    <td>{{ invoice.invoice_date.strftime('%d/%m/%Y') }}</td>
+                    <td><span class="status-badge status-{{ invoice.status }}">{{ invoice.status.upper() }}</span></td>
+                    <td>
+                        {% if invoice.currency == 'EUR' %}
+                            €{{ "%.2f"|format(invoice.amount_eur) }}
+                        {% elif invoice.currency == 'USD' %}
+                            ${{ "%.2f"|format(invoice.amount_usd) }}
+                        {% elif invoice.currency == 'GBP' %}
+                            £{{ "%.2f"|format(invoice.amount_usd) }}
+                        {% elif invoice.currency == 'CZK' %}
+                            {{ "%.2f"|format(invoice.amount_usd) }} Kč
+                        {% else %}
+                            ${{ "%.2f"|format(invoice.amount_usd) }}
+                        {% endif %}
+                    </td>
+                    <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.amount_base) }}</td>
+                    <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.tax_base) }}</td>
+                    <td>{{ "%.4f"|format(invoice.display_rate) }}</td>
+                    <td>
+                        {% if invoice.status == 'paid' %}
+                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">View</a>
+                        {% else %}
+                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+
+                <!-- Quarter subtotal row -->
+                <tr style="background: #fff3cd; font-weight: bold;">
+                    <td colspan="5" style="text-align: right;">Q{{ quarter }} {{ year }} SUBTOTAL:</td>
+                    <td></td>
+                    <td style="text-align: right;">{{ base_currency_symbol }}{{ "%.2f"|format(quarter_totals[year][quarter].sum_base) }}</td>
+                    <td style="text-align: right;">{{ base_currency_symbol }}{{ "%.2f"|format(quarter_totals[year][quarter].tax_base) }}</td>
+                    <td></td>
+                    <td></td>
+                </tr>
+            {% endfor %}
+
+            <!-- Year total row -->
+            <tr style="background: #e3f2fd; font-weight: bold; border-top: 2px solid #2196f3;">
+                <td colspan="5" style="text-align: right; font-size: 16px;">{{ year }} TOTAL:</td>
+                <td></td>
+                <td style="font-size: 16px; text-align: right;">{{ base_currency_symbol }}{{ "%.2f"|format(year_totals[year].sum_base) }}</td>
+                <td style="font-size: 16px; text-align: right;">{{ base_currency_symbol }}{{ "%.2f"|format(year_totals[year].tax_base) }}</td>
+                <td></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endfor %}
+
+<style>
+.tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+}
+
+.tab-button {
+    padding: 12px 24px;
+    background: #f5f5f5;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    color: #666;
+    transition: all 0.3s;
+}
+
+.tab-button:hover {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.tab-button.active {
+    background: white;
+    color: #007bff;
+    border-bottom: 3px solid #007bff;
+}
+
+.year-content {
+    animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.invoiceTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0;
+    font-size: 13px;
+}
+
+.invoiceTable th,
+.invoiceTable td {
+    padding: 8px 6px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+    white-space: nowrap;
+}
+
+.invoiceTable th {
+    background: #f8f9fa;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    font-size: 12px;
+}
+
+.invoiceTable tr:hover {
+    background: #f8f9fa;
+}
+
+/* Compact columns */
+.invoiceTable th:nth-child(1),
+.invoiceTable td:nth-child(1) {
+    width: 60px;
+}
+
+.invoiceTable th:nth-child(2),
+.invoiceTable td:nth-child(2) {
+    width: 80px;
+}
+
+.invoiceTable th:nth-child(3),
+.invoiceTable td:nth-child(3) {
+    width: 140px;
+}
+
+.invoiceTable th:nth-child(4),
+.invoiceTable td:nth-child(4) {
+    width: 90px;
+}
+
+.invoiceTable th:nth-child(5),
+.invoiceTable td:nth-child(5) {
+    width: 80px;
+    text-align: center;
+}
+
+/* Sum, Sum (base), Tax (base), Rate - рівномірно */
+.invoiceTable th:nth-child(6),
+.invoiceTable td:nth-child(6) {
+    width: 100px;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(7),
+.invoiceTable td:nth-child(7) {
+    width: 100px;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(8),
+.invoiceTable td:nth-child(8) {
+    width: 100px;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(9),
+.invoiceTable td:nth-child(9) {
+    width: 80px;
+    text-align: right;
+}
+
+.invoiceTable th:nth-child(10),
+.invoiceTable td:nth-child(10) {
+    width: 70px;
+    text-align: center;
+}
+</style>
+
+<script>
+function showYear(year) {
+    // Hide all year contents
+    const allYearContents = document.querySelectorAll('.year-content');
+    allYearContents.forEach(content => {
+        content.style.display = 'none';
+    });
+
+    // Remove active class from all tabs
+    const allTabs = document.querySelectorAll('.tab-button');
+    allTabs.forEach(tab => {
+        tab.classList.remove('active');
+    });
+
+    // Show selected year content
+    document.getElementById('year-' + year).style.display = 'block';
+
+    // Add active class to clicked tab
+    event.target.classList.add('active');
+}
+
+// Currency converter
+const exchangeRates = {
+    {% for currency in tracked_currencies %}
+    '{{ currency }}': {{ exchange_rates.get(currency, 1.0) }},
+    {% endfor %}
+};
+
+const currencySymbols = {
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£',
+    'CZK': 'Kč',
+    'UAH': '₴',
+    'JPY': '¥',
+    'CNY': '¥',
+    'CHF': 'Fr',
+    'CAD': 'C$',
+    'AUD': 'A$'
+};
+
+function convertCurrency() {
+    const amount = parseFloat(document.getElementById('converter-amount').value) || 0;
+    const fromCurrency = document.getElementById('converter-from').value;
+    const toCurrency = document.getElementById('converter-to').value;
+
+    // Convert to EUR first (base currency)
+    let amountInEUR = amount;
+    if (fromCurrency !== 'EUR') {
+        amountInEUR = amount / exchangeRates[fromCurrency];
+    }
+
+    // Convert from EUR to target currency
+    let result = amountInEUR;
+    if (toCurrency !== 'EUR') {
+        result = amountInEUR * exchangeRates[toCurrency];
+    }
+
+    document.getElementById('converter-result').value = result.toFixed(2);
+}
+
+// Initialize converter on page load
+document.addEventListener('DOMContentLoaded', function() {
+    convertCurrency();
+});
+</script>
+
+{% endblock %}

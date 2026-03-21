@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Restore Database from Backup</h2>
+
+    <div class="alert alert-info">
+        <h5>How it works:</h5>
+        <ul>
+            <li>Upload a JSON backup file created by the Export function</li>
+            <li>Existing customers will be matched by name and updated</li>
+            <li>Existing invoices will be matched by invoice number and updated</li>
+            <li>New customers and invoices will be created</li>
+            <li>The backup format is compatible with future database schema changes</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="backup_file" class="form-label">Select Backup File (JSON)</label>
+                    <input type="file" class="form-control" id="backup_file" name="backup_file" accept=".json" required>
+                    <div class="form-text">Choose a JSON backup file to restore</div>
+                </div>
+
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This will update existing records and create new ones. Make sure to create a backup before restoring.
+                </div>
+
+                <button type="submit" class="btn btn-primary">Restore Backup</button>
+                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

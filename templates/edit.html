@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Invoice{% endblock %}
+
+{% block content %}
+<h1>Edit Invoice</h1>
+
+<form method="POST" action="{{ url_for('edit_invoice', id=invoice.id) }}" enctype="multipart/form-data">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <!-- Left Column -->
+        <div>
+            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Invoice Details</h2>
+
+            <div class="form-group">
+                <label for="invoice_number">Invoice Number *</label>
+                <input type="text" id="invoice_number" name="invoice_number" value="{{ invoice.invoice_number }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="invoice_date">Invoice Date *</label>
+                <input type="date" id="invoice_date" name="invoice_date" value="{{ invoice.invoice_date.strftime('%Y-%m-%d') }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="due_date">Due Date</label>
+                <input type="date" id="due_date" name="due_date" value="{% if invoice.due_date %}{{ invoice.due_date.strftime('%Y-%m-%d') }}{% endif %}">
+            </div>
+
+            <div class="form-group">
+                <label for="status">Status *</label>
+                <select id="status" name="status" required>
+                    <option value="pending" {% if invoice.status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>Paid</option>
+                    <option value="cancelled" {% if invoice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="currency">Currency *</label>
+                <select id="currency" name="currency" required onchange="updateCurrencyLabels()">
+                    {% for curr in tracked_currencies %}
+                    <option value="{{ curr }}" {% if invoice.currency == curr %}selected{% elif not invoice.currency and curr == 'USD' %}selected{% endif %}>
+                        {{ curr }}
+                        {% if curr == 'USD' %}($){% elif curr == 'EUR' %}(€){% elif curr == 'GBP' %}(£){% elif curr == 'CZK' %}(Kč){% elif curr == 'UAH' %}(₴){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="bank_id">Bank Account</label>
+                <select id="bank_id" name="bank_id">
+                    <option value="">-- Select Bank Account --</option>
+                    {% for bank in banks %}
+                    <option value="{{ bank.id }}" {% if invoice.bank_id == bank.id %}selected{% endif %}>
+                        {{ bank.name }} ({{ bank.iban[-4:] }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    <a href="{{ url_for('settings') }}#banks" target="_blank">Manage bank accounts in Settings</a>
+                </small>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div>
+            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Client Information</h2>
+
+            <div class="form-group">
+                <label for="customer_select">Select Existing Customer</label>
+                <select id="customer_select" name="customer_id" style="margin-bottom: 10px;">
+                    <option value="">-- Create New Customer --</option>
+                    {% for customer in customers %}
+                    <option value="{{ customer.id }}"
+                            {% if invoice.customer_id == customer.id %}selected{% endif %}
+                            data-name="{{ customer.name }}"
+                            data-vat="{{ customer.vat_number or '' }}"
+                            data-address="{{ customer.address or '' }}"
+                            data-city="{{ customer.city or '' }}"
+                            data-postal="{{ customer.postal_code or '' }}"
+                            data-country="{{ customer.country or '' }}">
+                        {{ customer.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="client_name">Client Name *</label>
+                <input type="text" id="client_name" name="client_name" value="{{ invoice.client_name }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="client_vat">Client VAT Number</label>
+                <input type="text" id="client_vat" name="client_vat" value="{% if invoice.customer %}{{ invoice.customer.vat_number }}{% endif %}">
+            </div>
+
+            <div class="form-group">
+                <label for="client_address">Client Address</label>
+                <textarea id="client_address" name="client_address" rows="3">{% if invoice.customer %}{{ invoice.customer.address }}{% if invoice.customer.city %}, {{ invoice.customer.city }}{% endif %}{% if invoice.customer.postal_code %} {{ invoice.customer.postal_code }}{% endif %}{% if invoice.customer.country %}, {{ invoice.customer.country }}{% endif %}{% endif %}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+
+    <h2 style="margin-bottom: 20px; color: #5b6bc0;">Service Details</h2>
+
+    <div id="items-container">
+        <!-- Item rows will be added here -->
+    </div>
+
+    <button type="button" class="btn btn-primary" onclick="addItem()" style="margin-bottom: 20px;">
+        + Add Item
+    </button>
+
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong>Total:</strong>
+            <strong id="grand-total" style="font-size: 18px;" data-currency="{{ invoice.currency or 'USD' }}">$0.00</strong>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="2">{{ invoice.notes }}</textarea>
+    </div>
+
+    {% if module_manager %}
+        {% for html in module_manager.get_edit_form_html(invoice) %}
+            {{ html|safe }}
+        {% endfor %}
+    {% endif %}
+
+    <div style="margin-top: 30px;">
+        <button type="submit" class="btn btn-success">Update Invoice</button>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Cancel</a>
+    </div>
+</form>
+
+<script>
+let itemCounter = 0;
+
+function addItem(description = '', quantity = 1, unitPrice = 0) {
+    itemCounter++;
+    const container = document.getElementById('items-container');
+
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'item-row';
+    itemDiv.id = `item-${itemCounter}`;
+    itemDiv.style.cssText = 'border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fafafa;';
+
+    const subtotal = quantity * unitPrice;
+
+    itemDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <strong>Item ${itemCounter}</strong>
+            <button type="button" class="btn btn-danger" onclick="removeItem(${itemCounter})" style="padding: 5px 10px; font-size: 12px;">Remove</button>
+        </div>
+
+        <div class="form-group">
+            <label>Description *</label>
+            <textarea name="items[${itemCounter}][description]" rows="2" placeholder="e.g., DevOps professional services (month)" required>${description}</textarea>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>Quantity *</label>
+                <input type="number" name="items[${itemCounter}][quantity]" value="${quantity}" min="0" step="0.01" required onchange="updateItemTotal(${itemCounter})">
+            </div>
+
+            <div class="form-group">
+                <label>Unit Price *</label>
+                <input type="number" name="items[${itemCounter}][unit_price]" value="${unitPrice}" step="0.01" placeholder="0.00" required onchange="updateItemTotal(${itemCounter})">
+            </div>
+
+            <div class="form-group">
+                <label>Subtotal</label>
+                <input type="number" id="subtotal-${itemCounter}" readonly style="background: #f5f5f5;" value="${subtotal.toFixed(2)}">
+            </div>
+        </div>
+    `;
+
+    container.appendChild(itemDiv);
+    updateGrandTotal();
+}
+
+function removeItem(id) {
+    const item = document.getElementById(`item-${id}`);
+    if (item) {
+        item.remove();
+        updateGrandTotal();
+    }
+}
+
+function updateItemTotal(id) {
+    const itemDiv = document.getElementById(`item-${id}`);
+    const quantity = parseFloat(itemDiv.querySelector(`input[name="items[${id}][quantity]"]`).value) || 0;
+    const unitPrice = parseFloat(itemDiv.querySelector(`input[name="items[${id}][unit_price]"]`).value) || 0;
+    const subtotal = quantity * unitPrice;
+
+    itemDiv.querySelector(`#subtotal-${id}`).value = subtotal.toFixed(2);
+    updateGrandTotal();
+}
+
+function updateGrandTotal() {
+    let total = 0;
+    document.querySelectorAll('.item-row').forEach(item => {
+        const subtotalInput = item.querySelector('input[id^="subtotal-"]');
+        if (subtotalInput) {
+            total += parseFloat(subtotalInput.value) || 0;
+        }
+    });
+
+    const currencySelect = document.getElementById('currency');
+    const currency = currencySelect ? currencySelect.value : '{{ invoice.currency or "USD" }}';
+    const currencySymbols = {
+        'USD': '$',
+        'EUR': '€',
+        'GBP': '£',
+        'CZK': 'Kč',
+        'UAH': '₴',
+        'JPY': '¥',
+        'CNY': '¥',
+        'CHF': 'Fr',
+        'CAD': 'C$',
+        'AUD': 'A$'
+    };
+    const symbol = currencySymbols[currency] || currency + ' ';
+
+    const grandTotalEl = document.getElementById('grand-total');
+    grandTotalEl.textContent = `${symbol}${total.toFixed(2)}`;
+    grandTotalEl.setAttribute('data-currency', currency);
+}
+
+function updateCurrencyLabels() {
+    updateGrandTotal();
+}
+
+// Load existing items on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Load existing items from invoice
+    {% if invoice.items and invoice.items|length > 0 %}
+        {% for item in invoice.items %}
+            addItem(
+                {{ item.description|tojson }},
+                {{ item.quantity }},
+                {{ item.unit_price_usd }}
+            );
+        {% endfor %}
+    {% else %}
+        // Fall back to old single-item structure
+        addItem(
+            {{ invoice.description|tojson }},
+            {{ invoice.quantity or 1 }},
+            {{ invoice.unit_price_usd or invoice.amount_usd }}
+        );
+    {% endif %}
+});
+
+// Auto-fill customer details when selected
+document.getElementById('customer_select').addEventListener('change', function() {
+    const selectedOption = this.options[this.selectedIndex];
+
+    if (this.value) {
+        // Fill in customer details
+        document.getElementById('client_name').value = selectedOption.dataset.name || '';
+        document.getElementById('client_vat').value = selectedOption.dataset.vat || '';
+
+        // Combine address fields
+        let fullAddress = selectedOption.dataset.address || '';
+        if (selectedOption.dataset.city) {
+            fullAddress += (fullAddress ? ', ' : '') + selectedOption.dataset.city;
+        }
+        if (selectedOption.dataset.postal) {
+            fullAddress += (fullAddress ? ' ' : '') + selectedOption.dataset.postal;
+        }
+        if (selectedOption.dataset.country) {
+            fullAddress += (fullAddress ? ', ' : '') + selectedOption.dataset.country;
+        }
+        document.getElementById('client_address').value = fullAddress;
+
+        // Make fields readonly when customer is selected
+        document.getElementById('client_name').readOnly = true;
+        document.getElementById('client_vat').readOnly = true;
+        document.getElementById('client_address').readOnly = true;
+    } else {
+        // Make fields editable for new customer
+        document.getElementById('client_name').readOnly = false;
+        document.getElementById('client_vat').readOnly = false;
+        document.getElementById('client_address').readOnly = false;
+    }
+});
+
+// Set initial readonly state based on selection
+window.addEventListener('DOMContentLoaded', function() {
+    const customerSelect = document.getElementById('customer_select');
+    if (customerSelect.value) {
+        document.getElementById('client_name').readOnly = true;
+        document.getElementById('client_vat').readOnly = true;
+        document.getElementById('client_address').readOnly = true;
+    }
+});
+</script>
+{% endblock %}

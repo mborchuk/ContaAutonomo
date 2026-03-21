@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if document else 'Add' }} Document{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if document else 'Add' }} Document</h1>
+
+<form method="POST" enctype="multipart/form-data">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <div class="form-group">
+                <label for="name">Document Name *</label>
+                <input type="text" id="name" name="name"
+                       value="{{ document.name if document else '' }}"
+                       placeholder="e.g., Regularización cuotas 2024" required>
+            </div>
+
+            <div class="form-group">
+                <label for="source">Source</label>
+                <input type="text" id="source" name="source"
+                       value="{{ document.source if document else '' }}"
+                       placeholder="e.g., Seguridad Social"
+                       list="source-suggestions">
+                <datalist id="source-suggestions">
+                    <option value="Agencia Tributaria">
+                    <option value="Seguridad Social">
+                    <option value="Ayuntamiento">
+                    <option value="Banco">
+                    <option value="Gestoría">
+                    <option value="Other">
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="document_date">Document Date</label>
+                <input type="date" id="document_date" name="document_date"
+                       value="{{ document.document_date.strftime('%Y-%m-%d') if document and document.document_date else '' }}">
+            </div>
+        </div>
+
+        <div>
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="3"
+                          placeholder="Brief description of the document">{{ document.description if document else '' }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="file">File (PDF, JPG, PNG) {% if not document %}*{% endif %}</label>
+                <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png"
+                       {% if not document %}required{% endif %}>
+                {% if document and document.original_filename %}
+                <small style="display: block; margin-top: 5px; color: #4CAF50;">
+                    Current file: <a href="{{ url_for('documents.documents_download', id=document.id) }}" target="_blank">{{ document.original_filename }}</a>
+                </small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <button type="submit" class="btn btn-success">{{ 'Update' if document else 'Add' }} Document</button>
+        <a href="{{ url_for('documents.documents_index') }}" class="btn btn-primary">Cancel</a>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dateField = document.getElementById('document_date');
+    if (!dateField.value) {
+        dateField.value = new Date().toISOString().split('T')[0];
+    }
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block title %}AI Document Parser{% endblock %}
+
+{% block content %}
+<h1>🤖 AI Document Parser</h1>
+<p style="color: #666; margin-bottom: 25px;">Upload an invoice or expense document — AI will extract the data for you.</p>
+
+<div style="max-width: 600px;">
+    <div class="form-group">
+        <label for="doc_type">Document Type</label>
+        <select id="doc_type" style="max-width: 300px;">
+            <option value="expense">Expense / Receipt</option>
+            <option value="invoice">Invoice</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="parse_file">Upload Document (PDF, JPG, PNG)</label>
+        <input type="file" id="parse_file" accept=".pdf,.jpg,.jpeg,.png"
+               style="padding: 10px; border: 2px dashed #90caf9; border-radius: 8px; background: #f0f7ff; width: 100%;">
+    </div>
+
+    <button type="button" onclick="parseDoc()" class="btn btn-primary" id="parse_btn"
+            style="font-size: 16px; padding: 12px 30px;">
+        🔍 Parse Document
+    </button>
+
+    <div id="parse_status" style="margin-top: 15px; display: none;"></div>
+
+    <div id="parse_result" style="display: none; margin-top: 25px;">
+        <h2 style="color: #1565c0;">Parsed Data</h2>
+        <pre id="parse_json" style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;"></pre>
+        <div style="margin-top: 15px; display: flex; gap: 10px;">
+            <button type="button" onclick="createFromParsed()" class="btn btn-success" id="create_btn">
+                Create from parsed data →
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let parsedData = null;
+
+function parseDoc() {
+    const fileInput = document.getElementById('parse_file');
+    const statusDiv = document.getElementById('parse_status');
+    const resultDiv = document.getElementById('parse_result');
+    const btn = document.getElementById('parse_btn');
+    const docType = document.getElementById('doc_type').value;
+
+    if (!fileInput.files.length) {
+        statusDiv.style.display = 'block';
+        statusDiv.innerHTML = '<span style="color: #d32f2f;">Please select a file.</span>';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('doc_type', docType);
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Parsing...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<span style="color: #1565c0;">Sending to AI provider...</span>';
+    resultDiv.style.display = 'none';
+
+    fetch('/ai-parser/parse', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.textContent = '🔍 Parse Document';
+            if (data.error) {
+                statusDiv.innerHTML = '<span style="color: #d32f2f;">Error: ' + data.error + '</span>';
+                return;
+            }
+            parsedData = data;
+            parsedData._doc_type = docType;
+            statusDiv.innerHTML = '<span style="color: #2e7d32;">✓ Parsed successfully!</span>';
+            document.getElementById('parse_json').textContent = JSON.stringify(data, null, 2);
+            resultDiv.style.display = 'block';
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.textContent = '🔍 Parse Document';
+            statusDiv.innerHTML = '<span style="color: #d32f2f;">Request failed: ' + err + '</span>';
+        });
+}
+
+function createFromParsed() {
+    if (!parsedData) return;
+    // Store in sessionStorage so the target form can pick it up
+    sessionStorage.setItem('ai_parsed_data', JSON.stringify(parsedData));
+    if (parsedData._doc_type === 'expense') {
+        window.location.href = '/expenses/create?ai_prefill=1';
+    } else {
+        window.location.href = '/create?ai_prefill=1';
+    }
+}
+</script>
+{% endblock %}

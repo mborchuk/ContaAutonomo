@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Documents{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Documents</h1>
+    <a href="{{ url_for('documents.documents_create') }}" class="btn btn-success">+ Add Document</a>
+</div>
+
+<!-- Filters -->
+<div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+    <form method="GET" action="{{ url_for('documents.documents_index') }}">
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div>
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Search</label>
+                <input type="text" name="q" class="form-control" placeholder="Search by name or description..."
+                       value="{{ request.args.get('q', '') }}">
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Source</label>
+                <select name="source" class="form-control">
+                    <option value="">All Sources</option>
+                    {% for src in sources %}
+                    <option value="{{ src }}" {% if request.args.get('source') == src %}selected{% endif %}>{{ src }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Year</label>
+                <select name="year" class="form-control">
+                    <option value="">All Years</option>
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if request.args.get('year')|int == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div style="margin-top: 15px;">
+            <button type="submit" class="btn btn-primary">Apply Filters</button>
+            <a href="{{ url_for('documents.documents_index') }}" class="btn btn-secondary">Clear</a>
+        </div>
+    </form>
+</div>
+
+<!-- Documents Table -->
+{% if documents %}
+<table class="expenseTable">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Source</th>
+            <th>Description</th>
+            <th>File</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% set current_year = namespace(value=0) %}
+        {% for doc in documents %}
+            {% if doc.document_date and doc.document_date.year != current_year.value %}
+                {% set current_year.value = doc.document_date.year %}
+                <tr style="background: #e3f2fd;">
+                    <td colspan="6" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                        {{ current_year.value }}
+                    </td>
+                </tr>
+            {% endif %}
+            <tr>
+                <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
+                <td style="font-weight: 500;">{{ doc.name }}</td>
+                <td>
+                    {% if doc.source %}
+                    <span style="padding: 2px 8px; border-radius: 3px; font-size: 11px; background:
+                        {% if doc.source == 'Agencia Tributaria' %}#fff3cd; color: #856404;
+                        {% elif doc.source == 'Seguridad Social' %}#d4edda; color: #155724;
+                        {% elif doc.source == 'Ayuntamiento' %}#d1ecf1; color: #0c5460;
+                        {% else %}#e2e3e5; color: #383d41;
+                        {% endif %}">
+                        {{ doc.source }}
+                    </span>
+                    {% else %}-{% endif %}
+                </td>
+                <td style="white-space: normal; max-width: 300px;">{{ doc.description or '-' }}</td>
+                <td>
+                    <a href="{{ url_for('documents.documents_download', id=doc.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
+                        📥 {{ doc.original_filename or 'Download' }}
+                    </a>
+                </td>
+                <td>
+                    <a href="{{ url_for('documents.documents_edit', id=doc.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                    <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="display: inline;" onsubmit="return confirm('Delete this document?');">
+                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="text-align: center; color: #666; padding: 40px;">No documents found. <a href="{{ url_for('documents.documents_create') }}">Add your first document</a></p>
+{% endif %}
+
+{% endblock %}

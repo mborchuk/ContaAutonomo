@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}View Invoice{% endblock %}
+
+{% block content %}
+<h1>View Invoice</h1>
+
+{% if hash_mismatch %}
+<div style="background: #ffebee; border: 2px solid #f44336; padding: 15px; margin-bottom: 20px; border-radius: 5px; color: #c62828;">
+    <strong>⚠️ Warning:</strong> This invoice has been modified after being marked as paid! The PDF file hash does not match the original.
+</div>
+{% endif %}
+
+<div style="background: #f5f5f5; padding: 20px; border-radius: 5px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <!-- Left Column -->
+        <div>
+            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Invoice Details</h2>
+
+            <div class="form-group">
+                <label>Invoice Number</label>
+                <input type="text" value="{{ invoice.invoice_number }}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Invoice Date</label>
+                <input type="date" value="{{ invoice.invoice_date.strftime('%Y-%m-%d') }}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Due Date</label>
+                <input type="date" value="{% if invoice.due_date %}{{ invoice.due_date.strftime('%Y-%m-%d') }}{% endif %}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Status</label>
+                <input type="text" value="{{ invoice.status.upper() }}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Bank Account</label>
+                <input type="text" value="{% if invoice.bank %}{{ invoice.bank.name }} ({{ invoice.bank.iban[-4:] }}){% else %}Not selected{% endif %}" readonly style="background: #e0e0e0;">
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div>
+            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Client Information</h2>
+
+            <div class="form-group">
+                <label>Client Name</label>
+                <input type="text" value="{{ invoice.client_name }}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Client VAT Number</label>
+                <input type="text" value="{% if invoice.customer %}{{ invoice.customer.vat_number or 'N/A' }}{% else %}N/A{% endif %}" readonly style="background: #e0e0e0;">
+            </div>
+
+            <div class="form-group">
+                <label>Client Address</label>
+                <textarea rows="3" readonly style="background: #e0e0e0;">{% if invoice.customer %}{{ invoice.customer.address or '' }}{% if invoice.customer.city %}, {{ invoice.customer.city }}{% endif %}{% if invoice.customer.postal_code %} {{ invoice.customer.postal_code }}{% endif %}{% if invoice.customer.country %}, {{ invoice.customer.country }}{% endif %}{% endif %}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+
+    <h2 style="margin-bottom: 20px; color: #5b6bc0;">Service Details</h2>
+
+    {% if invoice.items and invoice.items|length > 0 %}
+        {% for item in invoice.items %}
+        <div style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fafafa;">
+            <strong>Item {{ loop.index }}</strong>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label>Description</label>
+                <textarea rows="2" readonly style="background: #e0e0e0;">{{ item.description }}</textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" value="{{ item.quantity }}" readonly style="background: #e0e0e0;">
+                </div>
+
+                <div class="form-group">
+                    <label>Unit Price (USD)</label>
+                    <input type="number" value="{{ item.unit_price_usd }}" readonly style="background: #e0e0e0;">
+                </div>
+
+                <div class="form-group">
+                    <label>Subtotal (USD)</label>
+                    <input type="number" value="{{ item.subtotal_usd }}" readonly style="background: #e0e0e0;">
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fafafa;">
+            <div class="form-group">
+                <label>Description</label>
+                <textarea rows="2" readonly style="background: #e0e0e0;">{{ invoice.description }}</textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label>Quantity</label>
+                    <input type="number" value="{{ invoice.quantity or 1 }}" readonly style="background: #e0e0e0;">
+                </div>
+
+                <div class="form-group">
+                    <label>Unit Price (USD)</label>
+                    <input type="number" value="{{ invoice.unit_price_usd or invoice.amount_usd }}" readonly style="background: #e0e0e0;">
+                </div>
+
+                <div class="form-group">
+                    <label>Total (USD)</label>
+                    <input type="number" value="{{ invoice.amount_usd }}" readonly style="background: #e0e0e0;">
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <strong>Total (USD):</strong>
+            <strong style="font-size: 18px;">${{ "%.2f"|format(invoice.amount_usd) }}</strong>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Notes</label>
+        <textarea rows="2" readonly style="background: #e0e0e0;">{{ invoice.notes or '' }}</textarea>
+    </div>
+</div>
+
+<div style="margin-top: 30px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Back to List</a>
+    <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success">Download PDF</a>
+    {% if module_manager %}
+        {% for action_html in module_manager.get_invoice_actions(invoice) %}
+            {{ action_html|safe }}
+        {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

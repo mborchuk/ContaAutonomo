@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}{{ customer.name }}{% endblock %}
+
+{% block content %}
+<h1>{{ customer.name }}</h1>
+
+<div style="background: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 30px;">
+    <p><strong>VAT Number:</strong> {{ customer.vat_number or 'N/A' }}</p>
+    <p><strong>Address:</strong> {{ customer.address or 'N/A' }}</p>
+    <p><strong>City:</strong> {{ customer.city or 'N/A' }}</p>
+    <p><strong>Postal Code:</strong> {{ customer.postal_code or 'N/A' }}</p>
+    <p><strong>Country:</strong> {{ customer.country or 'N/A' }}</p>
+    <p><strong>Email:</strong> {{ customer.email or 'N/A' }}</p>
+    <p><strong>Phone:</strong> {{ customer.phone or 'N/A' }}</p>
+    <p><strong>Tax Type:</strong>
+        {% if customer.tax_type == 'non_eu' %}
+            Outside EU (VAT 0%)
+        {% elif customer.tax_type == 'standard' %}
+            Standard (VAT 21%)
+        {% else %}
+            EU B2B (Reverse charge - intra-EU B2B, VAT 0%)
+        {% endif %}
+    </p>
+</div>
+
+<div style="margin-bottom: 20px;">
+    <a href="{{ url_for('edit_customer', id=customer.id) }}" class="btn btn-primary">Edit Customer</a>
+    <a href="{{ url_for('settings') }}#customers" class="btn btn-primary">Back to Customers</a>
+</div>
+
+<h2>Invoices for {{ customer.name }}</h2>
+
+{% if customer.invoices %}
+<table>
+    <thead>
+        <tr>
+            <th>Invoice #</th>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Amount ({{ base_currency }})</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in customer.invoices %}
+        <tr>
+            <td>{{ invoice.invoice_number }}</td>
+            <td>{{ invoice.invoice_date.strftime('%Y-%m-%d') }}</td>
+            <td>
+                {% if invoice.currency == 'EUR' %}
+                    €{{ "%.2f"|format(invoice.amount_eur) }}
+                {% elif invoice.currency == 'USD' %}
+                    ${{ "%.2f"|format(invoice.amount_usd) }}
+                {% elif invoice.currency == 'GBP' %}
+                    £{{ "%.2f"|format(invoice.amount_usd) }}
+                {% elif invoice.currency == 'CZK' %}
+                    {{ "%.2f"|format(invoice.amount_usd) }} Kč
+                {% else %}
+                    ${{ "%.2f"|format(invoice.amount_usd) }}
+                {% endif %}
+            </td>
+            <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.amount_eur) }}</td>
+            <td><span class="status-badge status-{{ invoice.status }}">{{ invoice.status.upper() }}</span></td>
+            <td>
+                <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success">PDF</a>
+                {% if invoice.status == 'paid' %}
+                <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary">View</a>
+                {% else %}
+                <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary">Edit</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No invoices for this customer yet.</p>
+{% endif %}
+{% endblock %}

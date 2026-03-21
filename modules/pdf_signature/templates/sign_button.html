@@ -1,0 +1,25 @@
+<!-- PDF Signature status/action (injected by pdf_signature module) -->
+{% if is_signed %}
+    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 14px;">
+        ✓ Signed
+        {% if has_visual and has_digital %}
+            <small style="opacity: 0.8;">(visual + digital)</small>
+        {% elif has_visual %}
+            <small style="opacity: 0.8;">(visual)</small>
+        {% elif has_digital %}
+            <small style="opacity: 0.8;">(digital)</small>
+        {% endif %}
+    </span>
+{% elif can_sign %}
+    <form method="POST"
+          action="{{ url_for('pdf_signature.sign_invoice', invoice_id=invoice.id) }}"
+          style="display: inline;">
+        <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">
+            ✍️ Sign PDF
+        </button>
+    </form>
+{% else %}
+    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; background: #f8f9fa; color: #6c757d; border-radius: 4px; font-size: 14px;">
+        Not signed
+    </span>
+{% endif %}

@@ -1,0 +1,17 @@
+<!-- Attach Invoice PDF button (injected by invoice_attachments module) -->
+<form method="POST"
+      action="{{ url_for('invoice_attachments.attach_pdf', invoice_id=invoice.id) }}"
+      enctype="multipart/form-data"
+      style="display: inline-flex; align-items: center; gap: 8px;">
+    {% if is_locked %}
+        <span class="btn btn-secondary" style="opacity: 0.6; cursor: not-allowed;"
+              title="PAID invoice with sealed PDF cannot be replaced">📎 PDF Sealed</span>
+    {% else %}
+        <label class="btn btn-success" style="cursor: pointer; margin: 0;">
+            📎 {{ 'Replace PDF' if has_pdf else 'Attach Invoice' }}
+            <input type="file" name="invoice_pdf" accept=".pdf"
+                   style="display: none;"
+                   onchange="this.form.submit();">
+        </label>
+    {% endif %}
+</form>

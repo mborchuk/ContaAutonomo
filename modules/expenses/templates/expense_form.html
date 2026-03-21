@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if expense else 'Create' }} Expense{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if expense else 'Create' }} Expense</h1>
+
+<form method="POST" enctype="multipart/form-data">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <!-- Left Column -->
+        <div>
+            <div class="form-group">
+                <label for="expense_date">Expense Date *</label>
+                <input type="date" id="expense_date" name="expense_date"
+                       value="{{ expense.expense_date.strftime('%Y-%m-%d') if expense else '' }}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="contractor_id">Contractor</label>
+                <select id="contractor_id" name="contractor_id">
+                    <option value="">-- No Contractor --</option>
+                    {% for contractor in contractors %}
+                    <option value="{{ contractor.id }}"
+                            {% if expense and expense.contractor_id == contractor.id %}selected{% endif %}>
+                        {{ contractor.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small style="display: block; margin-top: 5px; color: #666;">
+                    <a href="{{ url_for('settings') }}#contractors" target="_blank">Manage contractors in Settings</a>
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="category">Category</label>
+                <input type="text" id="category" name="category"
+                       value="{{ expense.category if expense else '' }}"
+                       placeholder="e.g., Office Supplies, Software, Travel"
+                       list="category-suggestions">
+                <datalist id="category-suggestions">
+                    <option value="Social Security">
+                    <option value="Office Supplies">
+                    <option value="Software">
+                    <option value="Travel">
+                    <option value="Equipment">
+                    <option value="Services">
+                    <option value="Utilities">
+                    <option value="Insurance">
+                    <option value="Professional Services">
+                    <option value="Telecommunications">
+                </datalist>
+            </div>
+
+            <div class="form-group">
+                <label for="invoice_number">Invoice Number</label>
+                <input type="text" id="invoice_number" name="invoice_number"
+                       value="{{ expense.invoice_number if expense else '' }}"
+                       placeholder="e.g., INV-2026-001">
+            </div>
+
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="3"
+                          placeholder="Brief description of the expense">{{ expense.description if expense else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div>
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label for="amount">Amount *</label>
+                    <input type="number" id="amount" name="amount" step="0.01"
+                           value="{{ expense.amount if expense else '' }}"
+                           placeholder="0.00" required>
+                </div>
+                <div class="form-group">
+                    <label for="currency">Currency *</label>
+                    <select id="currency" name="currency" required>
+                        {% for curr in tracked_currencies %}
+                        <option value="{{ curr }}" {% if expense and expense.currency == curr %}selected{% elif not expense and curr == 'EUR' %}selected{% endif %}>
+                            {{ curr }}
+                            {% if curr == 'USD' %}($){% elif curr == 'EUR' %}(€){% elif curr == 'GBP' %}(£){% elif curr == 'CZK' %}(Kč){% elif curr == 'UAH' %}(₴){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="file">Upload File (Invoice/Receipt)</label>
+                <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png">
+                {% if expense and expense.file_path %}
+                <small style="display: block; margin-top: 5px; color: #4CAF50;">
+                    Current file: <a href="{{ url_for('expenses.expenses_file', filename=expense.file_path.split('/')[-1]) }}" target="_blank">View</a>
+                </small>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" rows="4"
+                          placeholder="Additional notes">{{ expense.notes if expense else '' }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <button type="submit" class="btn btn-success">{{ 'Update' if expense else 'Create' }} Expense</button>
+        <a href="{{ url_for('expenses.expenses_index') }}" class="btn btn-primary">Cancel</a>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const dateField = document.getElementById('expense_date');
+    if (!dateField.value) {
+        const today = new Date();
+        dateField.value = today.toISOString().split('T')[0];
+    }
+
+    // AI prefill support
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('ai_prefill') === '1') {
+        try {
+            const data = JSON.parse(sessionStorage.getItem('ai_parsed_data'));
+            if (data) {
+                if (data.expense_date) document.getElementById('expense_date').value = data.expense_date;
+                if (data.amount) document.getElementById('amount').value = data.amount;
+                if (data.currency) document.getElementById('currency').value = data.currency;
+                if (data.category) document.getElementById('category').value = data.category;
+                if (data.description) document.getElementById('description').value = data.description;
+                if (data.invoice_number) document.getElementById('invoice_number').value = data.invoice_number;
+                if (data.contractor_name) {
+                    document.getElementById('notes').value =
+                        (document.getElementById('notes').value || '') +
+                        'Contractor: ' + data.contractor_name;
+                }
+                sessionStorage.removeItem('ai_parsed_data');
+            }
+        } catch(e) { console.warn('AI prefill failed:', e); }
+    }
+});
+</script>
+
+{% endblock %}
