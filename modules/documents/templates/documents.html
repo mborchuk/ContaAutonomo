@@ -14,15 +14,15 @@
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
             <div>
                 <label style="display: block; margin-bottom: 5px; font-size: 14px;">Search</label>
-                <input type="text" name="q" class="form-control" placeholder="Search by name or description..."
+                <input type="text" name="q" class="form-control" placeholder="Name, description, tags..."
                        value="{{ request.args.get('q', '') }}">
             </div>
             <div>
-                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Source</label>
-                <select name="source" class="form-control">
-                    <option value="">All Sources</option>
-                    {% for src in sources %}
-                    <option value="{{ src }}" {% if request.args.get('source') == src %}selected{% endif %}>{{ src }}</option>
+                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Category</label>
+                <select name="category" class="form-control">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if request.args.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -43,6 +43,22 @@
     </form>
 </div>
 
+<!-- Tags quick filter -->
+{% if all_tags %}
+<div style="margin-bottom: 15px;">
+    <span style="font-size: 13px; color: #666; margin-right: 8px;">Tags:</span>
+    {% for t in all_tags %}
+    <a href="{{ url_for('documents.documents_index', tag=t) }}"
+       style="display: inline-block; padding: 2px 10px; margin: 2px; border-radius: 12px; font-size: 12px;
+              background: {{ '#e3f2fd' if request.args.get('tag') == t else '#f0f0f0' }};
+              color: {{ '#1565c0' if request.args.get('tag') == t else '#555' }};
+              text-decoration: none; border: 1px solid {{ '#90caf9' if request.args.get('tag') == t else '#ddd' }};">
+        {{ t }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <!-- Documents Table -->
 {% if documents %}
 <table class="expenseTable">
@@ -50,8 +66,9 @@
         <tr>
             <th>Date</th>
             <th>Name</th>
-            <th>Source</th>
-            <th>Description</th>
+            <th>Category</th>
+            <th>Amount</th>
+            <th>Tags</th>
             <th>File</th>
             <th>Actions</th>
         </tr>
@@ -62,34 +79,79 @@
             {% if doc.document_date and doc.document_date.year != current_year.value %}
                 {% set current_year.value = doc.document_date.year %}
                 <tr style="background: #e3f2fd;">
-                    <td colspan="6" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                    <td colspan="7" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
                         {{ current_year.value }}
                     </td>
                 </tr>
             {% endif %}
-            <tr>
+            <tr{% if fill_row_color and doc.category and category_colors.get(doc.category) %} style="background: {{ category_colors.get(doc.category) }};"{% endif %}>
                 <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
-                <td style="font-weight: 500;">{{ doc.name }}</td>
+                <td style="font-weight: 500;">
+                    {{ doc.name }}
+                    {% if doc.expiry_date %}
+                    <br><span style="font-size: 11px; color: #999;">Expires: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
+                    {% endif %}
+                </td>
                 <td>
-                    {% if doc.source %}
-                    <span style="padding: 2px 8px; border-radius: 3px; font-size: 11px; background:
-                        {% if doc.source == 'Agencia Tributaria' %}#fff3cd; color: #856404;
-                        {% elif doc.source == 'Seguridad Social' %}#d4edda; color: #155724;
-                        {% elif doc.source == 'Ayuntamiento' %}#d1ecf1; color: #0c5460;
-                        {% else %}#e2e3e5; color: #383d41;
-                        {% endif %}">
-                        {{ doc.source }}
+                    {% if doc.category %}
+                    {% set cat_color = category_colors.get(doc.category, '#e2e3e5') %}
+                    <span style="padding: 2px 8px; border-radius: 3px; font-size: 11px; background: {{ cat_color }};">
+                        {{ doc.category }}
                     </span>
                     {% else %}-{% endif %}
                 </td>
-                <td style="white-space: normal; max-width: 300px;">{{ doc.description or '-' }}</td>
+                <td>{{ '%.2f'|format(doc.amount) if doc.amount else '-' }}</td>
                 <td>
-                    <a href="{{ url_for('documents.documents_download', id=doc.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
-                        📥 {{ doc.original_filename or 'Download' }}
-                    </a>
+                    {% if doc.tags %}
+                        {% for t in doc.tags.split(',') %}
+                        <span style="display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #555;">{{ t.strip() }}</span>
+                        {% endfor %}
+                    {% else %}-{% endif %}
                 </td>
-                <td>
-                    <a href="{{ url_for('documents.documents_edit', id=doc.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                <td style="white-space: nowrap;">
+                    {% set doc_files = files_by_doc.get(doc.id, []) %}
+                    {% if doc_files %}
+                        <span style="font-size: 11px; color: #888;">
+                            {{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}
+                        </span>
+                    {% elif doc.file_format %}
+                        <span style="font-size: 11px; color: #888;">
+                            {{ (doc.file_format or '')|upper }}
+                            {% if doc.file_size %}
+                                · {{ '%.1f'|format(doc.file_size / 1024) }} KB
+                            {% endif %}
+                        </span>
+                    {% else %}-{% endif %}
+                </td>
+                <td style="white-space: nowrap;">
+                    {% set doc_files = files_by_doc.get(doc.id, []) %}
+                    {% if doc_files %}
+                        <div class="doc-dropdown" style="display: inline-block; position: relative;">
+                            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;"
+                                    onclick="docToggleDropdown(this)">📎 {{ doc_files|length }} ▾</button>
+                            <div class="doc-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; z-index:100; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); min-width:220px; padding:4px 0; margin-top:2px;">
+                                {% for df in doc_files %}
+                                <div style="padding:6px 12px; border-bottom:{% if not loop.last %}1px solid #f0f0f0{% else %}none{% endif %}; display:flex; align-items:center; gap:6px;">
+                                    <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ df.original_filename }}">{{ df.original_filename or 'file' }}</span>
+                                    <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
+                                       style="padding:2px 5px; font-size:11px; text-decoration:none;" title="Preview">👁</a>
+                                    <a href="{{ url_for('documents.file_download', file_id=df.id) }}"
+                                       style="padding:2px 5px; font-size:11px; text-decoration:none;" title="Download">📥</a>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% else %}
+                        {% set fmt = (doc.file_format or '')|lower %}
+                        {% if fmt in ['pdf', 'jpg', 'jpeg', 'png'] %}
+                        <a href="{{ url_for('documents.documents_preview', id=doc.id) }}" target="_blank"
+                           class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
+                        {% endif %}
+                        <a href="{{ url_for('documents.documents_download', id=doc.id) }}"
+                           class="btn btn-success" style="padding: 4px 8px; font-size: 12px;" title="Download">📥</a>
+                    {% endif %}
+                    <a href="{{ url_for('documents.documents_edit', id=doc.id) }}"
+                       class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
                     <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="display: inline;" onsubmit="return confirm('Delete this document?');">
                         <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
                     </form>
@@ -101,5 +163,20 @@
 {% else %}
 <p style="text-align: center; color: #666; padding: 40px;">No documents found. <a href="{{ url_for('documents.documents_create') }}">Add your first document</a></p>
 {% endif %}
+
+<script>
+function docToggleDropdown(btn) {
+    var menu = btn.nextElementSibling;
+    var isOpen = menu.style.display !== 'none';
+    // Close all open dropdowns first
+    document.querySelectorAll('.doc-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+    if (!isOpen) menu.style.display = 'block';
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.doc-dropdown')) {
+        document.querySelectorAll('.doc-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+    }
+});
+</script>
 
 {% endblock %}

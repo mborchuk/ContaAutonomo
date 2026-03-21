@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Document Categories{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Document Categories</h1>
+    <a href="{{ url_for('documents.documents_index') }}" class="btn btn-primary">← Back to Documents</a>
+</div>
+
+<!-- Settings -->
+<div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <span style="font-size: 14px; font-weight: 500;">Fill whole row with category color</span>
+        <br><span style="font-size: 12px; color: #888;">Color entire table rows in the documents list based on category color</span>
+    </div>
+    <form method="POST" action="{{ url_for('documents.categories_toggle_row_color') }}">
+        <button type="submit" class="btn {{ 'btn-success' if fill_row_color else 'btn-secondary' }}" style="min-width: 70px;">
+            {{ 'ON' if fill_row_color else 'OFF' }}
+        </button>
+    </form>
+</div>
+
+<!-- Add Category -->
+<div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 25px;">
+    <form method="POST" action="{{ url_for('documents.categories_add') }}" style="display: flex; gap: 10px; align-items: end;">
+        <div style="flex: 1;">
+            <label style="display: block; margin-bottom: 5px; font-size: 14px;">Category Name</label>
+            <input type="text" name="name" class="form-control" placeholder="e.g., Car, Medical" required>
+        </div>
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-size: 14px;">Color</label>
+            <input type="color" name="color" value="#e2e3e5" style="height: 38px; width: 60px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+        </div>
+        <button type="submit" class="btn btn-success" style="height: 38px;">+ Add</button>
+    </form>
+</div>
+
+<!-- Categories List -->
+{% if categories %}
+<table class="expenseTable">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Documents</th>
+            <th style="width: 100px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for cat in categories %}
+        <tr>
+            <td>
+                <form method="POST" action="{{ url_for('documents.categories_update_color', id=cat.id) }}" style="display: inline;">
+                    <input type="color" name="color" value="{{ cat.color }}"
+                           style="width: 22px; height: 22px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; vertical-align: middle; margin-right: 8px; padding: 0;"
+                           onchange="this.form.submit()">
+                </form>
+                {{ cat.name }}
+            </td>
+            <td>{{ counts.get(cat.name, 0) }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('documents.categories_delete', id=cat.id) }}"
+                      style="display: inline;"
+                      onsubmit="return confirm('Remove category «{{ cat.name }}» from the list? Documents with this category will not be affected.');">
+                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p style="text-align: center; color: #666; padding: 40px;">No categories yet. Add one above.</p>
+{% endif %}
+
+<p style="margin-top: 20px; font-size: 13px; color: #888;">
+    💡 New categories are also auto-added when you type a new category name in the document form.
+    Use this page to clean up or remove incorrect categories.
+</p>
+
+{% endblock %}

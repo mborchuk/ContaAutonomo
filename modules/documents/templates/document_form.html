@@ -12,23 +12,21 @@
                 <label for="name">Document Name *</label>
                 <input type="text" id="name" name="name"
                        value="{{ document.name if document else '' }}"
-                       placeholder="e.g., Regularización cuotas 2024" required>
+                       placeholder="e.g., Electricity bill March 2024" required>
             </div>
 
             <div class="form-group">
-                <label for="source">Source</label>
-                <input type="text" id="source" name="source"
-                       value="{{ document.source if document else '' }}"
-                       placeholder="e.g., Seguridad Social"
-                       list="source-suggestions">
-                <datalist id="source-suggestions">
-                    <option value="Agencia Tributaria">
-                    <option value="Seguridad Social">
-                    <option value="Ayuntamiento">
-                    <option value="Banco">
-                    <option value="Gestoría">
-                    <option value="Other">
+                <label for="category">Category</label>
+                <input type="text" id="category" name="category"
+                       value="{{ document.category if document else '' }}"
+                       placeholder="e.g., Utilities, Tax, Insurance"
+                       list="category-suggestions">
+                <datalist id="category-suggestions">
+                    {% for cat in categories %}
+                    <option value="{{ cat }}">
+                    {% endfor %}
                 </datalist>
+                <small style="color: #999;">Type a new category to auto-add it, or pick from the list</small>
             </div>
 
             <div class="form-group">
@@ -36,24 +34,72 @@
                 <input type="date" id="document_date" name="document_date"
                        value="{{ document.document_date.strftime('%Y-%m-%d') if document and document.document_date else '' }}">
             </div>
+
+            <div class="form-group">
+                <label for="expiry_date">Expiry Date</label>
+                <input type="date" id="expiry_date" name="expiry_date"
+                       value="{{ document.expiry_date.strftime('%Y-%m-%d') if document and document.expiry_date else '' }}">
+                <small style="color: #999;">Optional. For certificates, contracts, etc.</small>
+            </div>
         </div>
 
         <div>
+            <div class="form-group">
+                <label for="amount">Amount</label>
+                <input type="number" id="amount" name="amount" step="0.01"
+                       value="{{ '%.2f'|format(document.amount) if document and document.amount else '' }}"
+                       placeholder="0.00">
+            </div>
+
+            <div class="form-group">
+                <label for="tags">Tags</label>
+                <input type="text" id="tags" name="tags"
+                       value="{{ document.tags if document and document.tags else '' }}"
+                       placeholder="e.g., home, march, 2024 (comma-separated)">
+                <small style="color: #999;">Comma-separated tags for quick filtering</small>
+            </div>
+
             <div class="form-group">
                 <label for="description">Description</label>
                 <textarea id="description" name="description" rows="3"
                           placeholder="Brief description of the document">{{ document.description if document else '' }}</textarea>
             </div>
 
+            <!-- Existing files (edit mode) -->
+            {% if document and doc_files %}
             <div class="form-group">
-                <label for="file">File (PDF, JPG, PNG) {% if not document %}*{% endif %}</label>
-                <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png"
-                       {% if not document %}required{% endif %}>
-                {% if document and document.original_filename %}
-                <small style="display: block; margin-top: 5px; color: #4CAF50;">
-                    Current file: <a href="{{ url_for('documents.documents_download', id=document.id) }}" target="_blank">{{ document.original_filename }}</a>
-                </small>
-                {% endif %}
+                <label>Attached Files</label>
+                <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; background: #fafafa;">
+                    {% for df in doc_files %}
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; {% if not loop.last %}border-bottom: 1px solid #eee;{% endif %}">
+                        <div style="flex: 1; min-width: 0;">
+                            <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
+                               style="font-size: 13px; text-decoration: none; color: #1976d2;">
+                                📄 {{ df.original_filename or 'file' }}
+                            </a>
+                            {% if df.file_size %}
+                            <span style="font-size: 11px; color: #999; margin-left: 6px;">
+                                {{ '%.1f'|format(df.file_size / 1024) }} KB
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                            <a href="{{ url_for('documents.file_download', file_id=df.id) }}"
+                               class="btn btn-success" style="padding: 2px 8px; font-size: 11px;">📥</a>
+                            <button type="button" class="btn btn-danger" style="padding: 2px 8px; font-size: 11px;"
+                                    onclick="if(confirm('Remove this file?')){var f=document.createElement('form');f.method='POST';f.action='{{ url_for('documents.file_delete', file_id=df.id) }}';document.body.appendChild(f);f.submit();}">✕</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="files">{{ 'Add More Files' if document and doc_files else 'Files (PDF, JPG, PNG)' }} {% if not document %}*{% endif %}</label>
+                <input type="file" id="files" name="files" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
+                       multiple {% if not document %}required{% endif %}>
+                <small style="color: #999; display: block; margin-top: 4px;">You can select multiple files at once</small>
             </div>
         </div>
     </div>

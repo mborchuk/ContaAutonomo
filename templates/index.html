@@ -113,6 +113,7 @@
             <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.amount_eur) }}</td>
             <td>{{ "%.4f"|format(invoice.exchange_rate) }}</td>
             <td>
+                <a href="{{ url_for('preview_invoice_pdf', id=invoice.id) }}" target="_blank" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
                 <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">PDF</a>
                 {% if invoice.status == 'paid' %}
                 <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">View</a>
