@@ -17,16 +17,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _sanitize_for_log(value):
+def _sanitize_for_log(value, max_length=200):
     """
-    Remove control characters (including line breaks) from values before logging
-    to mitigate log injection.
+    Sanitize potentially user-controlled values before logging.
+
+    - Coerces the value to a string.
+    - Removes ASCII control characters (including line breaks) to prevent
+      log injection via forged line breaks or terminal control sequences.
+    - Truncates overly long values to avoid log flooding.
     """
     # Ensure we are working with a string representation
     if not isinstance(value, str):
         value = str(value)
     # Strip all ASCII control characters (0x00–0x1F and 0x7F)
-    return ''.join(ch for ch in value if ch >= ' ' and ch != '\x7f')
+    cleaned = ''.join(ch for ch in value if ch >= ' ' and ch != '\x7f')
+    if len(cleaned) > max_length:
+        cleaned = cleaned[:max_length] + '…'
+    return cleaned
 
 
 FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf']
@@ -659,7 +666,7 @@ class BackupModule(BaseModule):
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
                                 logger.debug(
-                                    "Skipping invalid datetime value for key '%s': %r (%s)",
+                                    "Skipping invalid datetime value for user key [%s]: %r (%s)",
                                     safe_k, safe_v, exc
                                 )
                     # Only insert columns that exist in current schema
