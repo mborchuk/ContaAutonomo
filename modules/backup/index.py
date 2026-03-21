@@ -643,17 +643,19 @@ class BackupModule(BaseModule):
                             try:
                                 rd[k] = datetime.fromisoformat(v).date()
                             except (ValueError, TypeError) as exc:
+                                safe_v = repr(v).replace('\r', '\\r').replace('\n', '\\n')
                                 logger.debug(
                                     "Skipping invalid date value for key '%s': %r (%s)",
-                                    _sanitize_for_log(k), _sanitize_for_log(v), _sanitize_for_log(exc)
+                                    k, safe_v, exc
                                 )
                         elif v and k in dt_fields:
                             try:
                                 rd[k] = datetime.fromisoformat(v)
                             except (ValueError, TypeError) as exc:
+                                safe_v = repr(v).replace('\r', '\\r').replace('\n', '\\n')
                                 logger.debug(
                                     "Skipping invalid datetime value for key '%s': %r (%s)",
-                                    _sanitize_for_log(k), _sanitize_for_log(v), _sanitize_for_log(exc)
+                                    k, safe_v, exc
                                 )
                     # Only insert columns that exist in current schema
                     row_cols = [_check_name(c) for c in rd if c in cols]
