@@ -16,6 +16,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value):
+    """
+    Remove line break characters from values before logging to mitigate log injection.
+    """
+    if not isinstance(value, str):
+        return value
+    return value.replace('\r', '').replace('\n', '')
+
+
 FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf']
 
 
@@ -791,7 +801,8 @@ class BackupModule(BaseModule):
                 try:
                     self.core.storage.delete(f'backups/{filename}')
                 except Exception as e:
-                    logger.debug('Could not delete remote backup %s: %s', filename, e)
+                    logger.debug('Could not delete remote backup %s: %s',
+                                 _sanitize_for_log(filename), e)
             return True, f'Backup {filename} deleted'
         except Exception as e:
             return False, f'Error: {e}'
