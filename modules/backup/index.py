@@ -644,9 +644,10 @@ class BackupModule(BaseModule):
                     for k, v in list(rd.items()):
                         if v and k in date_fields:
                             try:
+                                safe_k = _sanitize_for_log(k)
                                 rd[k] = datetime.fromisoformat(v).date()
                             except (ValueError, TypeError) as exc:
-                                safe_v = repr(v).replace('\r', '\\r').replace('\n', '\\n')
+                                    safe_k, safe_v, exc
                                 logger.debug(
                                     "Skipping invalid date value for key '%s': %r (%s)",
                                     k, safe_v, exc
