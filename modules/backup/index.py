@@ -634,13 +634,19 @@ class BackupModule(BaseModule):
             for tname in ordered:
                 if tname not in tables:
                     continue
-                if tname not in existing:
-                    continue
+                            except (ValueError, TypeError) as exc:
+                                logger.debug(
+                                    "Skipping invalid date value for key '%s': %r (%s)",
+                                    k, v, exc
+                                )
                 safe_t = _check_name(tname)
                 cols = [c['name'] for c in inspector.get_columns(tname)]
                 for rd in tables[tname]:
-                    # Parse date/datetime strings
-                    for k, v in list(rd.items()):
+                            except (ValueError, TypeError) as exc:
+                                logger.debug(
+                                    "Skipping invalid datetime value for key '%s': %r (%s)",
+                                    k, v, exc
+                                )
                         if v and k in date_fields:
                             try:
                                 rd[k] = datetime.fromisoformat(v).date()
