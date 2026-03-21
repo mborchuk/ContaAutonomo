@@ -19,10 +19,10 @@ except (ImportError, AttributeError):
     PILLOW_AVAILABLE = False
 
 try:
-    import pyhanko  # noqa: F401 — availability check only
-    PYHANKO_AVAILABLE = True
-except ImportError:
+    PYHANKO_AVAILABLE = importlib.util.find_spec("pyhanko") is not None
+except (ImportError, AttributeError):
     PYHANKO_AVAILABLE = False
+
 
 
 class PDFSignatureModule(BaseModule):
