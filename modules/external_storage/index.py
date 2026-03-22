@@ -213,21 +213,26 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             from google.oauth2 import service_account
             from googleapiclient.discovery import build
 
+            scope = 'https://www.googleapis.com/auth/drive'
             if self._credentials_json and os.path.isfile(self._credentials_json):
                 creds = service_account.Credentials.from_service_account_file(
                     self._credentials_json,
-                    scopes=['https://www.googleapis.com/auth/drive.file'])
+                    scopes=[scope])
+                logger.info('[GDrive] auth via service account file: %s, scope=%s',
+                            self._credentials_json, scope)
             else:
                 import google.auth
-                creds, _ = google.auth.default(
-                    scopes=['https://www.googleapis.com/auth/drive.file'])
+                creds, _ = google.auth.default(scopes=[scope])
+                logger.info('[GDrive] auth via default credentials, scope=%s', scope)
 
             self._service = build('drive', 'v3', credentials=creds,
                                   cache_discovery=False)
+            logger.info('[GDrive] service built, folder_id=%s', self.folder_id)
         return self._service
 
     def _get_or_create_folder(self, folder_name, parent_id):
-        """Get existing subfolder or create it. Returns folder ID."""
+        """Get existing subfolder or create it. Returns folder ID.
+        If multiple folders with the same name exist, picks the one with files."""
         cache_key = f'{parent_id}/{folder_name}'
         if cache_key in self._folder_cache:
             return self._folder_cache[cache_key]
@@ -236,11 +241,30 @@ class GoogleDriveStorageBackend(FileStorageBackend):
         q = (f"name='{folder_name}' and '{parent_id}' in parents "
              f"and mimeType='application/vnd.google-apps.folder' "
              f"and trashed=false")
-        resp = service.files().list(q=q, fields='files(id)',
-                                    pageSize=1).execute()
+        resp = service.files().list(
+            q=q, fields='files(id)',
+            pageSize=10, supportsAllDrives=True,
+            includeItemsFromAllDrives=True).execute()
         files = resp.get('files', [])
         if files:
-            fid = files[0]['id']
+            if len(files) == 1:
+                fid = files[0]['id']
+            else:
+                # Multiple folders with same name — pick the one that has files
+                fid = files[0]['id']
+                for f in files:
+                    check_q = (f"'{f['id']}' in parents "
+                               f"and mimeType!='application/vnd.google-apps.folder' "
+                               f"and trashed=false")
+                    check_resp = service.files().list(
+                        q=check_q, fields='files(id)',
+                        pageSize=1, supportsAllDrives=True,
+                        includeItemsFromAllDrives=True).execute()
+                    if check_resp.get('files'):
+                        fid = f['id']
+                        break
+                logger.info('[GDrive._get_or_create_folder] %d folders named "%s", picked %s',
+                            len(files), folder_name, fid)
         else:
             metadata = {
                 'name': folder_name,
@@ -267,15 +291,105 @@ class GoogleDriveStorageBackend(FileStorageBackend):
                 parent_id = self._get_or_create_folder(part, parent_id)
         return parent_id, filename
 
+    def _resolve_existing(self, relative_path):
+        """Walk the directory parts of relative_path WITHOUT creating folders.
+        Returns list of (parent_folder_id, filename) for ALL matching folder paths."""
+        parts = relative_path.replace('\\', '/').split('/')
+        filename = parts[-1]
+        folder_parts = parts[:-1]
+
+        current_parents = [self.folder_id]
+        service = self._get_service()
+        for part in folder_parts:
+            if not part:
+                continue
+            next_parents = []
+            for pid in current_parents:
+                q = (f"name='{part}' and '{pid}' in parents "
+                     f"and mimeType='application/vnd.google-apps.folder' "
+                     f"and trashed=false")
+                resp = service.files().list(
+                    q=q, fields='files(id)',
+                    pageSize=10, supportsAllDrives=True,
+                    includeItemsFromAllDrives=True).execute()
+                for f in resp.get('files', []):
+                    next_parents.append(f['id'])
+            if not next_parents:
+                logger.info('[GDrive._resolve_existing] folder "%s" NOT FOUND', part)
+                return [], filename
+            logger.info('[GDrive._resolve_existing] folder "%s" -> %d match(es): %s',
+                        part, len(next_parents), next_parents)
+            current_parents = next_parents
+        return current_parents, filename
+
+    def _resolve_file_id(self, relative_path):
+        """Resolve a relative path to a GDrive file ID.
+        Checks ALL duplicate-named folders, then falls back to global search."""
+        parts = relative_path.replace('\\', '/').split('/')
+        filename = parts[-1]
+
+        # Try 1: check all matching folder paths
+        parent_ids, _ = self._resolve_existing(relative_path)
+        for parent_id in parent_ids:
+            fid = self._find_file(filename, parent_id)
+            if fid:
+                logger.info('[GDrive._resolve_file_id] found %s in folder %s',
+                            filename, parent_id)
+                return fid
+
+        # Try 2: search by filename anywhere
+        try:
+            service = self._get_service()
+            q = (f"name='{filename}' "
+                 f"and mimeType!='application/vnd.google-apps.folder' "
+                 f"and trashed=false")
+            resp = service.files().list(
+                q=q, fields='files(id,name,parents)',
+                pageSize=10, supportsAllDrives=True,
+                includeItemsFromAllDrives=True).execute()
+            found = resp.get('files', [])
+            logger.info('[GDrive._resolve_file_id] fallback found %d files', len(found))
+            for f in found:
+                return f['id']
+        except Exception as e:
+            logger.error('[GDrive._resolve_file_id] fallback failed: %s', e)
+
+        return None
+
+    def _to_file_id(self, storage_key):
+        """Convert a storage key to a GDrive file ID.
+
+        If storage_key contains '/' it's treated as a relative path and resolved.
+        Otherwise it's assumed to be a GDrive file ID already.
+        """
+        if not storage_key:
+            return None
+        if '/' in storage_key:
+            return self._resolve_file_id(storage_key)
+        # Looks like a raw GDrive file ID — verify it exists
+        try:
+            service = self._get_service()
+            service.files().get(fileId=storage_key, fields='id',
+                                supportsAllDrives=True).execute()
+            return storage_key
+        except Exception:
+            logger.info('[GDrive._to_file_id] ID %s not accessible', storage_key)
+            return None
+
     def _find_file(self, filename, parent_id):
         """Find a file by name inside a folder. Returns file ID or None."""
         service = self._get_service()
         q = (f"name='{filename}' and '{parent_id}' in parents "
              f"and mimeType!='application/vnd.google-apps.folder' "
              f"and trashed=false")
-        resp = service.files().list(q=q, fields='files(id,name)',
-                                    pageSize=1).execute()
+        logger.info('[GDrive._find_file] query: %s', q)
+        resp = service.files().list(
+            q=q, fields='files(id,name)',
+            pageSize=1, supportsAllDrives=True,
+            includeItemsFromAllDrives=True).execute()
         files = resp.get('files', [])
+        logger.info('[GDrive._find_file] found %d files: %s',
+                    len(files), files)
         return files[0]['id'] if files else None
 
     def save(self, file_data, relative_path):
@@ -290,6 +404,8 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             content = file_data
 
         parent_id, filename = self._resolve_parent(relative_path)
+        logger.info('[GDrive.save] parent_id=%s, filename=%s, path=%s',
+                    parent_id, filename, relative_path)
         media = MediaInMemoryUpload(content, resumable=False)
 
         # Check if file already exists — update instead of duplicate
@@ -297,6 +413,7 @@ class GoogleDriveStorageBackend(FileStorageBackend):
         if existing_id:
             service.files().update(
                 fileId=existing_id, media_body=media).execute()
+            logger.info('[GDrive.save] updated existing file %s', existing_id)
             return existing_id
 
         metadata = {
@@ -305,23 +422,37 @@ class GoogleDriveStorageBackend(FileStorageBackend):
         }
         created = service.files().create(
             body=metadata, media_body=media, fields='id').execute()
-        return created['id']
+        file_id = created['id']
+        logger.info('[GDrive.save] created new file %s', file_id)
+        return file_id
 
     def delete(self, storage_key):
         try:
             service = self._get_service()
-            service.files().delete(fileId=storage_key).execute()
+            file_id = self._to_file_id(storage_key)
+            if not file_id:
+                logger.info('[GDrive.delete] could not resolve key: %s', storage_key)
+                return
+            service.files().delete(fileId=file_id,
+                                   supportsAllDrives=True).execute()
         except Exception as e:
             logger.debug('Google Drive delete failed for %s: %s', storage_key, e)
 
     def get(self, storage_key):
         try:
             service = self._get_service()
-            meta = service.files().get(fileId=storage_key,
+            file_id = self._to_file_id(storage_key)
+            if not file_id:
+                logger.info('[GDrive.get] could not resolve key: %s', storage_key)
+                return None
+            meta = service.files().get(fileId=file_id,
                                        fields='name').execute()
-            content = service.files().get_media(fileId=storage_key).execute()
+            content = service.files().get_media(fileId=file_id).execute()
+            logger.info('[GDrive.get] key=%s -> fileId=%s, name=%s, %d bytes',
+                        storage_key, file_id, meta.get('name'), len(content))
             return content, meta.get('name', 'file')
-        except Exception:
+        except Exception as e:
+            logger.info('[GDrive.get] failed for %s: %s', storage_key, e)
             return None
 
     def send(self, storage_key, download_name=None):
@@ -338,10 +469,20 @@ class GoogleDriveStorageBackend(FileStorageBackend):
 
     def exists(self, storage_key):
         try:
+            if not storage_key:
+                return False
+            if '/' in storage_key:
+                fid = self._resolve_file_id(storage_key)
+                logger.info('[GDrive.exists] path=%s -> resolved=%s', storage_key, fid)
+                return fid is not None
+            # Raw GDrive file ID — check directly
             service = self._get_service()
-            service.files().get(fileId=storage_key, fields='id').execute()
+            service.files().get(fileId=storage_key, fields='id',
+                                supportsAllDrives=True).execute()
+            logger.info('[GDrive.exists] fileId=%s -> True', storage_key)
             return True
-        except Exception:
+        except Exception as e:
+            logger.info('[GDrive.exists] key=%s -> False (%s)', storage_key, e)
             return False
 
 

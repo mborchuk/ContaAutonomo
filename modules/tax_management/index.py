@@ -108,6 +108,11 @@ class TaxManagementModule(BaseModule):
         def tax_forms_download(id):
             return self._download_tax_form(id)
 
+        @bp.route('/preview/<int:id>')
+        @login_required
+        def tax_forms_preview(id):
+            return self._preview_tax_form(id)
+
         @bp.route('/delete/<int:id>', methods=['POST'])
         @login_required
         def tax_forms_delete(id):
@@ -246,6 +251,15 @@ class TaxManagementModule(BaseModule):
             flash('File not found', 'danger')
             return redirect(url_for('tax_management.tax_forms_index'))
         return self.core.send_file(tax_form.file_path, tax_form.original_filename)
+
+    def _preview_tax_form(self, id):
+        """Preview a tax form inline in the browser"""
+        tax_form = self.TaxForm.query.get_or_404(id)
+        resp = self.core.preview_file(tax_form.file_path, tax_form.original_filename)
+        if not resp:
+            flash('File not found', 'danger')
+            return redirect(url_for('tax_management.tax_forms_index'))
+        return resp
 
     def _delete_tax_form(self, id):
         """Delete a tax form"""

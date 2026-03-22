@@ -112,6 +112,16 @@ class ExpensesModule(BaseModule):
         def expenses_file(filename):
             return module._serve_file(filename)
 
+        @bp.route('/download/<int:id>')
+        @login_required
+        def expenses_download(id):
+            return module._download_expense(id)
+
+        @bp.route('/preview/<int:id>')
+        @login_required
+        def expenses_preview(id):
+            return module._preview_expense(id)
+
         app.register_blueprint(bp)
 
     # --- Business Logic ---
@@ -226,9 +236,41 @@ class ExpensesModule(BaseModule):
         return redirect(url_for('expenses.expenses_index'))
 
     def _serve_file(self, filename):
-        """Serve expense files"""
+        """Serve expense files (legacy route, kept for backward compat).
+        If filename looks like a GDrive file ID (no extension, no path separators),
+        try using it directly as a storage key."""
+        if '.' not in filename and '/' not in filename:
+            # Likely a GDrive file ID stored in file_path
+            if self.core.file_exists(filename):
+                return self.core.send_file(filename)
         storage_key = os.path.join('expenses_files', filename)
         return self.core.send_file(storage_key)
+
+    def _download_expense(self, id):
+        """Download expense file using storage key from DB"""
+        expense = self.Expense.query.get_or_404(id)
+        if not expense.file_path:
+            flash('No file attached to this expense.', 'danger')
+            return redirect(url_for('expenses.expenses_index'))
+        if not self.core.file_exists(expense.file_path):
+            flash('File not found.', 'danger')
+            return redirect(url_for('expenses.expenses_index'))
+        name = expense.file_path.split('/')[-1] if '/' in expense.file_path else None
+        return self.core.send_file(expense.file_path, download_name=name)
+
+    def _preview_expense(self, id):
+        """Preview expense file inline in the browser"""
+        expense = self.Expense.query.get_or_404(id)
+        if not expense.file_path:
+            flash('No file attached to this expense.', 'danger')
+            return redirect(url_for('expenses.expenses_index'))
+        # For GDrive IDs (no '/'), pass None as filename — backend will resolve it
+        filename = expense.file_path.split('/')[-1] if '/' in expense.file_path else None
+        resp = self.core.preview_file(expense.file_path, filename)
+        if not resp:
+            flash('File not found.', 'danger')
+            return redirect(url_for('expenses.expenses_index'))
+        return resp
 
     # --- Report Integration ---
 

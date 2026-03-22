@@ -4,7 +4,7 @@ Invoice Management Web Application
 Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 """
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session
+from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from functools import wraps
@@ -1293,6 +1293,63 @@ def generate_pdf(id):
 
     except Exception as e:
         flash(f'Error generating PDF: {str(e)}', 'danger')
+        return redirect(url_for('index'))
+
+
+@app.route('/preview-pdf/<int:id>')
+@login_required
+def preview_invoice_pdf(id):
+    """Preview invoice PDF inline in the browser"""
+    invoice = Invoice.query.get_or_404(id)
+    if not module_manager:
+        flash('Module manager not available.', 'danger')
+        return redirect(url_for('index'))
+
+    svc = module_manager.core.invoice_service
+    result = svc.get_pdf(invoice)
+
+    if result:
+        file_bytes, _ = result
+        return Response(file_bytes, mimetype='application/pdf',
+                        headers={'Content-Disposition': 'inline'})
+
+    # PDF not in storage — generate on the fly for preview
+    try:
+        import importlib.util
+        from pathlib import Path
+
+        app_settings = Settings.query.first()
+        customer = invoice.customer
+        template_name = (app_settings.invoice_template
+                         if app_settings and app_settings.invoice_template
+                         else 'default_template')
+
+        template_path = None
+        for tpl in module_manager.get_invoice_templates():
+            if tpl['id'] == template_name:
+                template_path = Path(tpl['path'])
+                break
+        if not template_path or not template_path.exists():
+            template_path = Path('invoice_templates') / f'{template_name}.py'
+        if not template_path.exists():
+            template_path = Path('invoice_templates') / 'default_template.py'
+
+        spec = importlib.util.spec_from_file_location(template_name, template_path)
+        tmpl = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tmpl)
+
+        import inspect
+        sig = inspect.signature(tmpl.generate_invoice_pdf)
+        if 'Bank' in sig.parameters:
+            buf = tmpl.generate_invoice_pdf(invoice, customer, app_settings, Bank)
+        else:
+            buf = tmpl.generate_invoice_pdf(invoice, customer, app_settings)
+
+        pdf_content = buf.read()
+        return Response(pdf_content, mimetype='application/pdf',
+                        headers={'Content-Disposition': 'inline'})
+    except Exception as e:
+        flash(f'Error generating PDF preview: {e}', 'danger')
         return redirect(url_for('index'))
 
 

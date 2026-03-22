@@ -111,6 +111,13 @@
                             {{ form.notes if form.notes else '-' }}
                         </td>
                         <td>
+                            {% set tf_ext = (form.original_filename or '')|lower %}
+                            {% if tf_ext.endswith('.pdf') or tf_ext.endswith('.jpg') or tf_ext.endswith('.png') %}
+                            <a href="{{ url_for('tax_management.tax_forms_preview', id=form.id) }}" target="_blank"
+                               class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;" title="Preview">
+                                👁
+                            </a>
+                            {% endif %}
                             <a href="{{ url_for('tax_management.tax_forms_download', id=form.id) }}"
                                class="btn btn-success" style="padding: 4px 8px; font-size: 12px; margin-right: 5px;">
                                 Download

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Documents Module
-Store and manage documents from various sources (tax authority, social security, etc.)
-with search, filtering, and file download.
+Store and manage documents with categories, tags, file preview, and download.
+Categories are auto-collected from documents + managed via a dedicated page.
 """
 
 from module_manager import BaseModule
@@ -23,16 +23,19 @@ class DocumentsModule(BaseModule):
 
     @property
     def description(self):
-        return 'Store and manage documents from tax authority, social security, bank, and other sources'
+        return 'Store and manage documents with categories, tags, preview, and download'
 
     @property
     def version(self):
-        return '0.1.0'
+        return '0.4.0'
 
     @property
     def nav_items(self):
         return [
-            {'label': 'Documents', 'endpoint': 'documents.documents_index', 'icon': '📁'}
+            {'label': 'All Documents', 'endpoint': 'documents.documents_index', 'icon': '📁',
+             'group': 'Documents'},
+            {'label': 'Categories', 'endpoint': 'documents.categories_index', 'icon': '🏷️',
+             'group': 'Documents'},
         ]
 
     def register_models(self, db):
@@ -43,20 +46,121 @@ class DocumentsModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
             name = db.Column(db.String(300), nullable=False)
-            source = db.Column(db.String(100))
+            source = db.Column(db.String(100))       # kept for backward compat, hidden from UI
+            category = db.Column(db.String(100))
             document_date = db.Column(db.Date)
+            expiry_date = db.Column(db.Date)
+            amount = db.Column(db.Float)
+            tags = db.Column(db.String(500))
             description = db.Column(db.Text)
             file_path = db.Column(db.String(500), nullable=False)
             original_filename = db.Column(db.String(300))
+            file_size = db.Column(db.Integer)
+            file_format = db.Column(db.String(10))
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+        class DocumentCategory(db.Model):
+            __tablename__ = 'document_category'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            name = db.Column(db.String(100), unique=True, nullable=False)
+            color = db.Column(db.String(7), default='#e2e3e5')
+
+        class DocumentFile(db.Model):
+            __tablename__ = 'document_file'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
+            file_path = db.Column(db.String(500), nullable=False)
+            original_filename = db.Column(db.String(300))
+            file_size = db.Column(db.Integer)
+            file_format = db.Column(db.String(10))
+            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+        class DocumentConfig(db.Model):
+            __tablename__ = 'document_config'
+            __table_args__ = {'extend_existing': True}
+            key = db.Column(db.String(50), primary_key=True)
+            value = db.Column(db.String(200))
+
         self.Document = Document
-        return {}  # Table exists in core
+        self.DocumentCategory = DocumentCategory
+        self.DocumentFile = DocumentFile
+        self.DocumentConfig = DocumentConfig
+        return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
+                'DocumentConfig': DocumentConfig}
+
+    def on_enable(self):
+        """Migrate: add new columns if missing + seed default categories + migrate files."""
+        try:
+            from sqlalchemy import inspect as sa_inspect, text
+            inspector = sa_inspect(self._db.engine)
+
+            if 'document' in inspector.get_table_names():
+                cols = [c['name'] for c in inspector.get_columns('document')]
+                migrations = [
+                    ('category', "VARCHAR(100)"),
+                    ('expiry_date', "DATE"),
+                    ('amount', "FLOAT"),
+                    ('tags', "VARCHAR(500)"),
+                    ('file_size', "INTEGER"),
+                    ('file_format', "VARCHAR(10)"),
+                ]
+                for col, typedef in migrations:
+                    if col not in cols:
+                        with self._db.engine.connect() as conn:
+                            conn.execute(text(
+                                f'ALTER TABLE document ADD COLUMN {col} {typedef}'))
+                            conn.commit()
+
+            # Create document_file table if not exists
+            if 'document_file' not in inspector.get_table_names():
+                self.DocumentFile.__table__.create(self._db.engine)
+
+            # Migrate existing file_path from Document to DocumentFile
+            self._migrate_files_to_multi()
+
+            if self.DocumentCategory.query.count() == 0:
+                defaults = [
+                    ('Tax', '#fff3cd'),
+                    ('Insurance', '#d4edda'),
+                    ('Bank', '#d1ecf1'),
+                    ('Contract', '#e2d5f1'),
+                    ('Certificate', '#fde2e4'),
+                    ('Utilities', '#d6e9f8'),
+                    ('Social Security', '#d4edda'),
+                    ('Other', '#e2e3e5'),
+                ]
+                for name, color in defaults:
+                    self._db.session.add(self.DocumentCategory(name=name, color=color))
+                self._db.session.commit()
+        except Exception as e:
+            self.logger.debug('document migration: %s', e)
+
+    def _migrate_files_to_multi(self):
+        """Move file_path from Document rows into DocumentFile table (one-time migration)."""
+        docs = self.Document.query.filter(
+            self.Document.file_path.isnot(None),
+            self.Document.file_path != ''
+        ).all()
+        for doc in docs:
+            existing = self.DocumentFile.query.filter_by(
+                document_id=doc.id).first()
+            if existing:
+                continue
+            df = self.DocumentFile(
+                document_id=doc.id,
+                file_path=doc.file_path,
+                original_filename=doc.original_filename,
+                file_size=doc.file_size,
+                file_format=doc.file_format,
+            )
+            self._db.session.add(df)
+        self._db.session.commit()
 
     def register_routes(self, app):
         bp = Blueprint('documents', __name__,
-                       template_folder='templates',
-                       url_prefix='/documents')
+                       template_folder='templates', url_prefix='/documents')
         login_required = self.core.login_required
         module = self
 
@@ -70,142 +174,429 @@ class DocumentsModule(BaseModule):
         def documents_create():
             return module._create_document()
 
-        @bp.route('/<int:id>/edit', methods=['GET', 'POST'])
+        @bp.route('/edit/<int:id>', methods=['GET', 'POST'])
         @login_required
         def documents_edit(id):
             return module._edit_document(id)
 
-        @bp.route('/<int:id>/download')
-        @login_required
-        def documents_download(id):
-            return module._download_document(id)
-
-        @bp.route('/<int:id>/delete', methods=['POST'])
+        @bp.route('/delete/<int:id>', methods=['POST'])
         @login_required
         def documents_delete(id):
             return module._delete_document(id)
 
+        @bp.route('/download/<int:id>')
+        @login_required
+        def documents_download(id):
+            return module._download_document(id)
+
+        @bp.route('/preview/<int:id>')
+        @login_required
+        def documents_preview(id):
+            return module._preview_document(id)
+
+        @bp.route('/file/<int:file_id>/download')
+        @login_required
+        def file_download(file_id):
+            return module._download_file(file_id)
+
+        @bp.route('/file/<int:file_id>/preview')
+        @login_required
+        def file_preview(file_id):
+            return module._preview_file(file_id)
+
+        @bp.route('/file/<int:file_id>/delete', methods=['POST'])
+        @login_required
+        def file_delete(file_id):
+            return module._delete_file(file_id)
+
+        @bp.route('/categories')
+        @login_required
+        def categories_index():
+            return module._categories_index()
+
+        @bp.route('/categories/add', methods=['POST'])
+        @login_required
+        def categories_add():
+            return module._add_category()
+
+        @bp.route('/categories/<int:id>/delete', methods=['POST'])
+        @login_required
+        def categories_delete(id):
+            return module._delete_category(id)
+
+        @bp.route('/categories/<int:id>/color', methods=['POST'])
+        @login_required
+        def categories_update_color(id):
+            return module._update_category_color(id)
+
+        @bp.route('/categories/toggle-row-color', methods=['POST'])
+        @login_required
+        def categories_toggle_row_color():
+            return module._toggle_row_color()
+
         app.register_blueprint(bp)
 
-    # --- Business Logic ---
+    # ---- helpers ----
+
+    def _get_config(self, key, default=''):
+        row = self.DocumentConfig.query.get(key)
+        return row.value if row else default
+
+    def _set_config(self, key, value):
+        row = self.DocumentConfig.query.get(key)
+        if row:
+            row.value = value
+        else:
+            self._db.session.add(self.DocumentConfig(key=key, value=value))
+        self._db.session.commit()
+
+    def _get_all_categories(self):
+        """Merge managed categories + distinct categories from documents."""
+        managed = {c.name for c in self.DocumentCategory.query.all()}
+        doc_cats = self._db.session.query(self.Document.category).distinct().all()
+        for (cat,) in doc_cats:
+            if cat:
+                managed.add(cat)
+        return sorted(managed)
+
+    def _get_category_colors(self):
+        """Return dict name->color from DocumentCategory table."""
+        return {c.name: c.color for c in self.DocumentCategory.query.all()}
+
+    def _get_file_meta(self, file):
+        """Extract file size and format from uploaded file."""
+        file.seek(0, 2)
+        size = file.tell()
+        file.seek(0)
+        ext = ''
+        if file.filename:
+            ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+        return size, ext
+
+    def _auto_add_category(self, name):
+        """Auto-add category to DocumentCategory if it doesn't exist."""
+        if not name:
+            return
+        existing = self.DocumentCategory.query.filter_by(name=name).first()
+        if not existing:
+            self._db.session.add(self.DocumentCategory(name=name))
+            self._db.session.commit()
+
+    # ---- document CRUD ----
 
     def _list_documents(self):
-        q = request.args.get('q', '').strip()
-        source = request.args.get('source', '').strip()
-        year = request.args.get('year', type=int)
-
         query = self.Document.query
+
+        q = request.args.get('q', '').strip()
         if q:
+            like = f'%{q}%'
             query = query.filter(
-                self._db.or_(
-                    self.Document.name.ilike(f'%{q}%'),
-                    self.Document.description.ilike(f'%{q}%')
-                )
+                self.Document.name.ilike(like) |
+                self.Document.description.ilike(like) |
+                self.Document.tags.ilike(like)
             )
-        if source:
-            query = query.filter_by(source=source)
+
+        cat = request.args.get('category', '').strip()
+        if cat:
+            query = query.filter(self.Document.category == cat)
+
+        year = request.args.get('year', type=int)
         if year:
             query = query.filter(
-                self._db.extract('year', self.Document.document_date) == year
-            )
+                self._db.func.strftime('%Y', self.Document.document_date) == str(year))
+
+        tag = request.args.get('tag', '').strip()
+        if tag:
+            query = query.filter(self.Document.tags.ilike(f'%{tag}%'))
 
         documents = query.order_by(self.Document.document_date.desc()).all()
 
-        sources = [r[0] for r in self._db.session.query(
-            self.Document.source
-        ).distinct().filter(self.Document.source.isnot(None)).all()]
+        # Load attached files for each document
+        doc_ids = [d.id for d in documents]
+        files_by_doc = {}
+        if doc_ids:
+            all_files = self.DocumentFile.query.filter(
+                self.DocumentFile.document_id.in_(doc_ids)
+            ).order_by(self.DocumentFile.created_at).all()
+            for f in all_files:
+                files_by_doc.setdefault(f.document_id, []).append(f)
 
-        years_query = self._db.session.query(
-            self._db.extract('year', self.Document.document_date)
-        ).distinct().filter(self.Document.document_date.isnot(None)).all()
-        years = sorted([int(y[0]) for y in years_query if y[0]], reverse=True)
+        categories = self._get_all_categories()
+        category_colors = self._get_category_colors()
+
+        all_tags = set()
+        years = set()
+        for doc in self.Document.query.all():
+            if doc.tags:
+                for t in doc.tags.split(','):
+                    t = t.strip()
+                    if t:
+                        all_tags.add(t)
+            if doc.document_date:
+                years.add(doc.document_date.year)
 
         return render_template('documents.html',
-                             documents=documents, sources=sources, years=years)
+                               documents=documents,
+                               files_by_doc=files_by_doc,
+                               categories=categories,
+                               category_colors=category_colors,
+                               fill_row_color=(self._get_config('fill_row_color', '0') == '1'),
+                               all_tags=sorted(all_tags),
+                               years=sorted(years, reverse=True))
 
     def _create_document(self):
         if request.method == 'POST':
             try:
-                file = request.files.get('file')
-                if not file or not file.filename:
-                    flash('Please select a file to upload.', 'danger')
+                files = request.files.getlist('files')
+                has_files = any(f and f.filename for f in files)
+                if not has_files:
+                    flash('At least one file is required.', 'danger')
                     return redirect(url_for('documents.documents_create'))
 
-                from werkzeug.utils import secure_filename
-                original_filename = file.filename
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                safe_name = secure_filename(original_filename)
-                filename = f"{timestamp}_{safe_name}"
-                file_path = self.core.save_file(file, 'documents_files', filename)
-
                 doc_date = None
-                date_str = request.form.get('document_date')
-                if date_str:
-                    doc_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                if request.form.get('document_date'):
+                    doc_date = datetime.strptime(
+                        request.form['document_date'], '%Y-%m-%d').date()
+
+                expiry = None
+                if request.form.get('expiry_date'):
+                    expiry = datetime.strptime(
+                        request.form['expiry_date'], '%Y-%m-%d').date()
+
+                amount = None
+                if request.form.get('amount'):
+                    amount = float(request.form['amount'])
+
+                category = request.form.get('category', '').strip() or None
+                self._auto_add_category(category)
+
+                # Use first file info for backward-compat columns on Document
+                first = next(f for f in files if f and f.filename)
+                first_size, first_fmt = self._get_file_meta(first)
 
                 doc = self.Document(
                     name=request.form['name'],
-                    source=request.form.get('source') or None,
+                    category=category,
                     document_date=doc_date,
-                    description=request.form.get('description') or None,
-                    file_path=file_path,
-                    original_filename=original_filename
+                    expiry_date=expiry,
+                    amount=amount,
+                    tags=request.form.get('tags', '').strip() or None,
+                    description=request.form.get('description', '').strip() or None,
+                    file_path='_multi_',
+                    original_filename=first.filename,
+                    file_size=first_size,
+                    file_format=first_fmt,
                 )
                 self._db.session.add(doc)
+                self._db.session.flush()  # get doc.id
+
+                for f in files:
+                    if not f or not f.filename:
+                        continue
+                    self._save_document_file(doc.id, f)
+
                 self._db.session.commit()
-                flash('Document added successfully!', 'success')
+                flash('Document added.', 'success')
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error adding document: {str(e)}', 'danger')
+                flash(f'Error: {e}', 'danger')
 
-        return render_template('document_form.html', document=None)
+        categories = self._get_all_categories()
+        return render_template('document_form.html', document=None,
+                               categories=categories, doc_files=[])
 
     def _edit_document(self, id):
         doc = self.Document.query.get_or_404(id)
         if request.method == 'POST':
             try:
                 doc.name = request.form['name']
-                doc.source = request.form.get('source') or None
-                doc.description = request.form.get('description') or None
-                date_str = request.form.get('document_date')
-                doc.document_date = (
-                    datetime.strptime(date_str, '%Y-%m-%d').date() if date_str else None
-                )
+                doc.category = request.form.get('category', '').strip() or None
+                self._auto_add_category(doc.category)
 
-                file = request.files.get('file')
-                if file and file.filename:
-                    from werkzeug.utils import secure_filename
-                    original_filename = file.filename
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    safe_name = secure_filename(original_filename)
-                    filename = f"{timestamp}_{safe_name}"
-                    new_path = self.core.save_file(file, 'documents_files', filename)
-                    self.core.delete_file(doc.file_path)
-                    doc.file_path = new_path
-                    doc.original_filename = original_filename
+                if request.form.get('document_date'):
+                    doc.document_date = datetime.strptime(
+                        request.form['document_date'], '%Y-%m-%d').date()
+                else:
+                    doc.document_date = None
+
+                if request.form.get('expiry_date'):
+                    doc.expiry_date = datetime.strptime(
+                        request.form['expiry_date'], '%Y-%m-%d').date()
+                else:
+                    doc.expiry_date = None
+
+                doc.amount = float(request.form['amount']) if request.form.get('amount') else None
+                doc.tags = request.form.get('tags', '').strip() or None
+                doc.description = request.form.get('description', '').strip() or None
+
+                # Add new files
+                files = request.files.getlist('files')
+                for f in files:
+                    if f and f.filename:
+                        self._save_document_file(doc.id, f)
 
                 self._db.session.commit()
-                flash('Document updated successfully!', 'success')
+                flash('Document updated.', 'success')
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error updating document: {str(e)}', 'danger')
+                flash(f'Error: {e}', 'danger')
 
-        return render_template('document_form.html', document=doc)
-
-    def _download_document(self, id):
-        doc = self.Document.query.get_or_404(id)
-        return self.core.send_file(doc.file_path, doc.original_filename)
+        categories = self._get_all_categories()
+        doc_files = self.DocumentFile.query.filter_by(
+            document_id=doc.id).order_by(self.DocumentFile.created_at).all()
+        return render_template('document_form.html', document=doc,
+                               categories=categories, doc_files=doc_files)
 
     def _delete_document(self, id):
         doc = self.Document.query.get_or_404(id)
         try:
-            self.core.delete_file(doc.file_path)
+            # Delete all attached files from storage
+            doc_files = self.DocumentFile.query.filter_by(document_id=doc.id).all()
+            for df in doc_files:
+                self.core.storage.delete(df.file_path)
+                self._db.session.delete(df)
+            # Also delete legacy file_path if it's a real key
+            if doc.file_path and doc.file_path != '_multi_':
+                self.core.storage.delete(doc.file_path)
             self._db.session.delete(doc)
             self._db.session.commit()
-            flash('Document deleted successfully!', 'success')
+            flash('Document deleted.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error deleting document: {str(e)}', 'danger')
+            flash(f'Error: {e}', 'danger')
         return redirect(url_for('documents.documents_index'))
+
+    def _download_document(self, id):
+        doc = self.Document.query.get_or_404(id)
+        # Try first attached file
+        df = self.DocumentFile.query.filter_by(document_id=doc.id).first()
+        if df:
+            return self._download_file(df.id)
+        # Fallback to legacy file_path
+        if not doc.file_path or not self.core.storage.exists(doc.file_path):
+            flash(f'File not found: {doc.original_filename or doc.file_path}.', 'danger')
+            return redirect(url_for('documents.documents_index'))
+        return self.core.storage.send(doc.file_path,
+                                      download_name=doc.original_filename)
+
+    def _preview_document(self, id):
+        doc = self.Document.query.get_or_404(id)
+        # Try first attached file
+        df = self.DocumentFile.query.filter_by(document_id=doc.id).first()
+        if df:
+            return self._preview_file(df.id)
+        # Fallback to legacy file_path
+        resp = self.core.preview_file(doc.file_path, doc.original_filename)
+        if not resp:
+            flash(f'File not found: {doc.original_filename or doc.file_path}. '
+                  'It may have been deleted or not yet uploaded.', 'danger')
+            return redirect(url_for('documents.documents_index'))
+        return resp
+
+    # ---- individual file operations ----
+
+    def _save_document_file(self, document_id, file):
+        """Save an uploaded file and create a DocumentFile record."""
+        file_size, file_format = self._get_file_meta(file)
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_name = file.filename.replace(' ', '_')
+        relative_path = os.path.join('documents_files',
+                                     f'{timestamp}_{safe_name}')
+        storage_key = self.core.storage.save(file, relative_path)
+        df = self.DocumentFile(
+            document_id=document_id,
+            file_path=storage_key,
+            original_filename=file.filename,
+            file_size=file_size,
+            file_format=file_format,
+        )
+        self._db.session.add(df)
+        return df
+
+    def _download_file(self, file_id):
+        """Download a single attached file."""
+        df = self.DocumentFile.query.get_or_404(file_id)
+        if not self.core.storage.exists(df.file_path):
+            flash('File not found.', 'danger')
+            return redirect(url_for('documents.documents_edit', id=df.document_id))
+        return self.core.storage.send(df.file_path,
+                                      download_name=df.original_filename)
+
+    def _preview_file(self, file_id):
+        """Preview a single attached file inline."""
+        df = self.DocumentFile.query.get_or_404(file_id)
+        resp = self.core.preview_file(df.file_path, df.original_filename)
+        if not resp:
+            flash('File not found.', 'danger')
+            return redirect(url_for('documents.documents_edit', id=df.document_id))
+        return resp
+
+    def _delete_file(self, file_id):
+        """Delete a single attached file."""
+        df = self.DocumentFile.query.get_or_404(file_id)
+        doc_id = df.document_id
+        try:
+            self.core.storage.delete(df.file_path)
+            self._db.session.delete(df)
+            self._db.session.commit()
+            flash('File removed.', 'success')
+        except Exception as e:
+            self._db.session.rollback()
+            flash(f'Error: {e}', 'danger')
+        return redirect(url_for('documents.documents_edit', id=doc_id))
+
+    # ---- category management ----
+
+    def _categories_index(self):
+        managed = self.DocumentCategory.query.order_by(
+            self.DocumentCategory.name).all()
+        # count documents per category
+        counts = {}
+        for (cat, cnt) in (self._db.session.query(
+                self.Document.category, self._db.func.count(self.Document.id))
+                .group_by(self.Document.category).all()):
+            if cat:
+                counts[cat] = cnt
+        return render_template('categories.html',
+                               categories=managed, counts=counts,
+                               fill_row_color=(self._get_config('fill_row_color', '0') == '1'))
+
+    def _add_category(self):
+        name = request.form.get('name', '').strip()
+        color = request.form.get('color', '#e2e3e5').strip()
+        if not name:
+            flash('Category name is required.', 'danger')
+            return redirect(url_for('documents.categories_index'))
+        existing = self.DocumentCategory.query.filter_by(name=name).first()
+        if existing:
+            existing.color = color
+            self._db.session.commit()
+            flash(f'Category "{name}" color updated.', 'success')
+            return redirect(url_for('documents.categories_index'))
+        self._db.session.add(self.DocumentCategory(name=name, color=color))
+        self._db.session.commit()
+        flash(f'Category "{name}" added.', 'success')
+        return redirect(url_for('documents.categories_index'))
+
+    def _update_category_color(self, id):
+        cat = self.DocumentCategory.query.get_or_404(id)
+        color = request.form.get('color', '').strip()
+        if color:
+            cat.color = color
+            self._db.session.commit()
+        return redirect(url_for('documents.categories_index'))
+
+    def _delete_category(self, id):
+        cat = self.DocumentCategory.query.get_or_404(id)
+        name = cat.name
+        self._db.session.delete(cat)
+        self._db.session.commit()
+        flash(f'Category "{name}" removed from list. Documents with this category are not affected.', 'info')
+        return redirect(url_for('documents.categories_index'))
+
+    def _toggle_row_color(self):
+        current = self._get_config('fill_row_color', '0')
+        self._set_config('fill_row_color', '0' if current == '1' else '1')
+        return redirect(url_for('documents.categories_index'))

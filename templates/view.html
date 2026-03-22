@@ -137,6 +137,7 @@
 
 <div style="margin-top: 30px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
     <a href="{{ url_for('index') }}" class="btn btn-primary">Back to List</a>
+    <a href="{{ url_for('preview_invoice_pdf', id=invoice.id) }}" target="_blank" class="btn btn-secondary">Preview PDF</a>
     <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success">Download PDF</a>
     {% if module_manager %}
         {% for action_html in module_manager.get_invoice_actions(invoice) %}

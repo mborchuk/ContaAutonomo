@@ -86,9 +86,8 @@
                     <td>{{ "%.2f"|format(expense.amount) }} {{ expense.currency }}</td>
                     <td>
                         {% if expense.file_path %}
-                        <a href="{{ url_for('expenses.expenses_file', filename=expense.file_path.split('/')[-1]) }}" target="_blank" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
-                            📎 View
-                        </a>
+                        <a href="{{ url_for('expenses.expenses_preview', id=expense.id) }}" target="_blank" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
+                        <a href="{{ url_for('expenses.expenses_download', id=expense.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;" title="Download">📥</a>
                         {% else %}
                         -
                         {% endif %}

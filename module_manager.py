@@ -920,6 +920,51 @@ class CoreServices:
         """Check if a file exists in the active storage"""
         return self._storage_backend.exists(storage_key) if storage_key else False
 
+    def preview_file(self, storage_key, filename=None):
+        """
+        Return a Flask Response that displays the file inline in the browser.
+        Works with any storage backend (local, S3, GCS, Google Drive).
+
+        Args:
+            storage_key: the key returned by save_file / storage.save
+            filename: optional original filename (used to detect MIME type)
+
+        Returns:
+            Flask Response or None if file not found
+        """
+        from flask import Response as _Response
+        backend_name = type(self._storage_backend).__name__
+        logger.info('[preview_file] key=%s, filename=%s, backend=%s',
+                    storage_key, filename, backend_name)
+        if not storage_key:
+            logger.info('[preview_file] storage_key is empty/None')
+            return None
+        exists = self.file_exists(storage_key)
+        logger.info('[preview_file] file_exists(%s) = %s', storage_key, exists)
+        if not exists:
+            return None
+        result = self._storage_backend.get(storage_key)
+        logger.info('[preview_file] backend.get() returned %s',
+                    'data' if result else 'None')
+        if not result:
+            return None
+        file_bytes, stored_name = result
+        name = filename or stored_name or ''
+        ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+        mime_map = {
+            'pdf': 'application/pdf',
+            'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+            'png': 'image/png', 'gif': 'image/gif',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls': 'application/vnd.ms-excel',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        }
+        mime = mime_map.get(ext, 'application/octet-stream')
+        logger.info('[preview_file] serving %d bytes as %s', len(file_bytes), mime)
+        return _Response(file_bytes, mimetype=mime,
+                         headers={'Content-Disposition': 'inline'})
+
     # --- Activity Logging ---
 
     @property
