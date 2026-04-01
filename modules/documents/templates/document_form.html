@@ -60,6 +60,32 @@
             </div>
 
             <div class="form-group">
+                <label for="reference_number">Reference / Contract #</label>
+                <input type="text" id="reference_number" name="reference_number"
+                       value="{{ document.reference_number if document else '' }}"
+                       placeholder="e.g., CTR-2026-001">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label for="counterparty">Counterparty</label>
+                    <input type="text" id="counterparty" name="counterparty"
+                           value="{{ document.counterparty if document else '' }}"
+                           placeholder="e.g., Insurance Co.">
+                </div>
+                <div class="form-group">
+                    <label for="status">Status</label>
+                    <select id="status" name="status" class="form-control">
+                        {% set current_status = document.status if document and document.status else 'active' %}
+                        <option value="active" {{ 'selected' if current_status == 'active' }}>Active</option>
+                        <option value="pending" {{ 'selected' if current_status == 'pending' }}>Pending</option>
+                        <option value="archived" {{ 'selected' if current_status == 'archived' }}>Archived</option>
+                        <option value="expired" {{ 'selected' if current_status == 'expired' }}>Expired</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
                 <label for="description">Description</label>
                 <textarea id="description" name="description" rows="3"
                           placeholder="Brief description of the document">{{ document.description if document else '' }}</textarea>

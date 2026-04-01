@@ -521,4 +521,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<!-- Module Dashboard Panels -->
+{% if module_panels %}
+{% for panel in module_panels %}
+    {% if panel.template %}
+        {% set data = panel.data %}
+        {% include panel.template ignore missing %}
+    {% endif %}
+{% endfor %}
+{% endif %}
+
 {% endblock %}
