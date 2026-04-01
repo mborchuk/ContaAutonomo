@@ -357,7 +357,7 @@ def generate_invoice_pdf(invoice, customer, settings):
             tax_label = 'REVERSE CHARGE'
         elif customer.tax_type == 'standard':
             tax_rate = vat_pct / 100.0
-            tax_label = f'VAT {vat_pct:g}%'
+            tax_label = f'IVA {vat_pct:g}%'
     else:
         tax_rate = 0.0
         tax_label = 'REVERSE CHARGE'

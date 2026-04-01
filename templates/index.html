@@ -113,14 +113,18 @@
             <td>{{ base_currency_symbol }}{{ "%.2f"|format(invoice.amount_eur) }}</td>
             <td>{{ "%.4f"|format(invoice.exchange_rate) }}</td>
             <td>
-                <a href="{{ url_for('preview_invoice_pdf', id=invoice.id) }}" target="_blank" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
-                <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">PDF</a>
-                {% if invoice.status == 'paid' %}
-                <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">View</a>
-                {% else %}
-                <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
-                <a href="{{ url_for('delete_invoice', id=invoice.id) }}" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="return confirm('Delete this invoice?')">Delete</a>
-                {% endif %}
+                <div class="action-dropdown" style="position: relative; display: inline-block;">
+                    <button class="btn btn-secondary action-dropdown-toggle" style="padding: 4px 10px; font-size: 12px;">⋮</button>
+                    <div class="action-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:100; min-width:140px; padding:4px 0;">
+                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">👁 View</a>
+                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">📄 PDF</a>
+                        {% if invoice.status != 'paid' %}
+                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">✏️ Edit</a>
+                        <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
+                        <a href="{{ url_for('delete_invoice', id=invoice.id) }}" onclick="return confirm('Delete this invoice?')" style="display:block; padding:6px 14px; font-size:13px; color:#d9534f; text-decoration:none;">🗑 Delete</a>
+                        {% endif %}
+                    </div>
+                </div>
             </td>
         </tr>
         {% endfor %}
@@ -144,6 +148,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.invoiceTable td:last-child {
+    overflow: visible;
+    text-overflow: unset;
 }
 
 .invoiceTable th {
@@ -247,4 +256,20 @@
 {% else %}
 <p>No invoices found. <a href="{{ url_for('create_invoice') }}">Create your first invoice</a></p>
 {% endif %}
+
+<script>
+document.addEventListener('click', function(e) {
+    var toggle = e.target.closest('.action-dropdown-toggle');
+    var allMenus = document.querySelectorAll('.action-dropdown-menu');
+    if (toggle) {
+        e.stopPropagation();
+        var menu = toggle.nextElementSibling;
+        var wasOpen = menu.style.display === 'block';
+        allMenus.forEach(function(m) { m.style.display = 'none'; });
+        if (!wasOpen) menu.style.display = 'block';
+    } else {
+        allMenus.forEach(function(m) { m.style.display = 'none'; });
+    }
+});
+</script>
 {% endblock %}

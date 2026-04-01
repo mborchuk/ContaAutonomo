@@ -309,6 +309,28 @@ Parse invoice data from PDFs and images using AI providers.
 - Supported providers: OpenAI (GPT-4), Anthropic (Claude), Google (Gemini)
 - Settings: dedicated "AI Parser" tab with provider selection, API key, model config
 
+### Invoice Designer (`invoice_designer`)
+
+Visual UI for creating custom invoice PDF templates with configurable block positioning, colors, fonts, and labels.
+
+- Routes: `/invoice-designer/` (list), `/invoice-designer/create`, `/invoice-designer/edit/<id>`, `/invoice-designer/delete/<id>`, `/invoice-designer/duplicate/<id>`, `/invoice-designer/preview/<id>`, `/invoice-designer/import` (POST), `/invoice-designer/export/<id>`
+- Models: `InvoiceTemplate` (`invoice_template_config` table — name, config_json, logo_storage_key)
+- Nav: Invoice Designer (grouped under Invoices dropdown)
+- Features:
+  - Grid-based layout: 5 zones (top, header, body, bottom, footer) × 3 columns (left, center, right)
+  - 8 placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, bank_details, notes, payment_terms
+  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`)
+  - Fine-tune X/Y offsets per block in points
+  - 6 layout presets (Standard, Classic Right, Modern Center, Minimal Left, Compact Header, Bottom Bank)
+  - Configurable: accent/text/header/page background colors, font, title size, layout style
+  - Toggle sections: logo, bank details, notes, payment terms, due date, VAT breakdown, accent line, separator lines
+  - Customizable labels for all invoice text (Invoice #, Bill To, Subtotal, etc.)
+  - JSON import/export for sharing templates
+  - Edit as JSON toggle with live sync to visual editor
+  - Preview generates PDF with real settings data (sender, bank, customer from DB)
+  - Templates appear in Settings → Invoice PDF Template dropdown with `🎨` prefix
+  - `app.py` patched in 3 locations (create, download, preview) to handle `__designer__` template path
+
 ### Tax Poland IT (`tax_poland`)
 
 Polish tax rules for IT freelancers (JDG/B2B).
@@ -392,8 +414,23 @@ class MyModule(BaseModule):
 | `name` | Yes | — | Human-readable name |
 | `description` | No | `''` | Shown in Modules settings |
 | `version` | No | `'1.0.0'` | Semantic version |
-| `nav_items` | No | `[]` | Navigation menu entries |
+| `nav_items` | No | `[]` | Navigation menu entries (supports `group` key for dropdown placement) |
 | `settings_tab` | No | `'general'` | Which settings tab to place module settings in |
+
+### Navigation Grouping
+
+Module nav items support a `group` key to place them inside existing or new dropdown menus:
+
+```python
+@property
+def nav_items(self):
+    return [
+        {'label': 'My Tool', 'endpoint': 'my_mod.index', 'icon': '🔧', 'group': 'Invoices'}
+    ]
+```
+
+Core dropdown groups: `Invoices`, `System`. Any other group name creates a new dropdown.
+Items without `group` appear as top-level links. The full menu is built by `ModuleManager.get_full_nav()`.
 
 ### BaseModule Methods
 

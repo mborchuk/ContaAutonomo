@@ -236,6 +236,22 @@
 
             <div class="nav-menu">
                 <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                {% if module_manager %}
+                    {% for entry in module_manager.get_full_nav() %}
+                        {% if entry.type == 'link' %}
+                        <a href="{{ url_for(entry.endpoint) }}">{{ entry.icon ~ ' ' if entry.icon }}{{ entry.label }}</a>
+                        {% elif entry.type == 'dropdown' %}
+                        <div class="nav-dropdown">
+                            <button class="nav-dropdown-toggle">{{ entry.label }}</button>
+                            <div class="nav-dropdown-menu">
+                                {% for item in entry['items'] %}
+                                <a href="{{ url_for(item.endpoint) }}">{{ item.icon ~ ' ' if item.icon }}{{ item.label }}</a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% else %}
                 <div class="nav-dropdown">
                     <button class="nav-dropdown-toggle">Invoices</button>
                     <div class="nav-dropdown-menu">
@@ -243,22 +259,6 @@
                         <a href="{{ url_for('create_invoice') }}">Create Invoice</a>
                     </div>
                 </div>
-                {% if module_manager %}
-                    {% set ungrouped, groups = module_manager.get_grouped_nav_items() %}
-                    {% for item in ungrouped %}
-                    <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
-                    {% endfor %}
-                    {% for group_name, items in groups.items() %}
-                    <div class="nav-dropdown">
-                        <button class="nav-dropdown-toggle">{{ group_name }}</button>
-                        <div class="nav-dropdown-menu">
-                            {% for item in items %}
-                            <a href="{{ url_for(item.endpoint) }}">{{ item.label }}</a>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% endif %}
                 <div class="nav-dropdown">
                     <button class="nav-dropdown-toggle">System</button>
                     <div class="nav-dropdown-menu">
@@ -267,6 +267,7 @@
                     </div>
                 </div>
                 <a href="{{ url_for('settings') }}">Settings</a>
+                {% endif %}
             </div>
 
             <div class="nav-actions">

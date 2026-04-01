@@ -903,34 +903,62 @@ def create_invoice():
         # Let modules process their custom fields
         if module_manager:
             module_manager.on_invoice_created(invoice, request)
+            # Refresh to pick up any PDF attached by modules (e.g. invoice_attachments)
+            db.session.refresh(invoice)
 
-        # Auto-generate PDF and save via core.storage
-        if module_manager:
+        # Auto-generate PDF and save via core.storage (skip if module already attached a PDF)
+        if module_manager and not getattr(invoice, 'pdf_hash', None):
             try:
                 import importlib.util
                 from pathlib import Path
                 app_settings_obj = Settings.query.first()
                 template_name = app_settings_obj.invoice_template if app_settings_obj and app_settings_obj.invoice_template else 'default_template'
                 template_path = None
+                designer_id = None
                 for tpl in module_manager.get_invoice_templates():
                     if tpl['id'] == template_name:
-                        template_path = Path(tpl['path'])
+                        if tpl.get('path') == '__designer__':
+                            designer_id = tpl.get('_designer_id')
+                        else:
+                            template_path = Path(tpl['path'])
                         break
-                if not template_path or not template_path.exists():
-                    template_path = Path('invoice_templates') / f'{template_name}.py'
-                if not template_path.exists():
-                    template_path = Path('invoice_templates') / 'default_template.py'
-                spec = importlib.util.spec_from_file_location(template_name, template_path)
-                tmpl = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(tmpl)
-                import inspect
-                sig = inspect.signature(tmpl.generate_invoice_pdf)
+
                 cust = invoice.customer
-                if 'Bank' in sig.parameters:
-                    buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj, Bank)
-                else:
-                    buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj)
-                pdf_content = buf.read()
+                if designer_id:
+                    from modules.invoice_designer.index import generate_pdf_from_config, DEFAULT_CONFIG
+                    import json as _json
+                    from sqlalchemy import text as _text
+                    row = db.session.execute(
+                        _text('SELECT config_json FROM invoice_template_config WHERE id = :id'),
+                        {'id': designer_id}).fetchone()
+                    if row:
+                        cfg = _json.loads(row[0])
+                        merged = dict(DEFAULT_CONFIG)
+                        merged.update(cfg)
+                        if 'labels' in cfg:
+                            merged['labels'] = dict(DEFAULT_CONFIG['labels'])
+                            merged['labels'].update(cfg['labels'])
+                        pdf_content = generate_pdf_from_config(
+                            invoice, cust, app_settings_obj, merged,
+                            storage=module_manager.core.storage)
+                    else:
+                        designer_id = None  # fall through
+
+                if not designer_id:
+                    if not template_path or not template_path.exists():
+                        template_path = Path('invoice_templates') / f'{template_name}.py'
+                    if not template_path.exists():
+                        template_path = Path('invoice_templates') / 'default_template.py'
+                    spec = importlib.util.spec_from_file_location(template_name, template_path)
+                    tmpl = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(tmpl)
+                    import inspect
+                    sig = inspect.signature(tmpl.generate_invoice_pdf)
+                    if 'Bank' in sig.parameters:
+                        buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj, Bank)
+                    else:
+                        buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj)
+                    pdf_content = buf.read()
                 pdf_filename = f'invoice_{invoice.invoice_number}.pdf'
                 relative_path = os.path.join('invoices_pdf', pdf_filename)
                 new_key = module_manager.core.storage.save(pdf_content, relative_path)
@@ -1241,11 +1269,54 @@ def generate_pdf(id):
 
     # Resolve template path: check module_manager registry first, then core directory
     template_path = None
+    designer_id = None
     if module_manager:
         for tpl in module_manager.get_invoice_templates():
             if tpl['id'] == template_name:
-                template_path = Path(tpl['path'])
+                if tpl.get('path') == '__designer__':
+                    designer_id = tpl.get('_designer_id')
+                else:
+                    template_path = Path(tpl['path'])
                 break
+
+    if designer_id:
+        # Use designer template generator
+        try:
+            from modules.invoice_designer.index import generate_pdf_from_config, DEFAULT_CONFIG
+            import json as _json
+            from sqlalchemy import text as _text
+            row = db.session.execute(
+                _text('SELECT config_json FROM invoice_template_config WHERE id = :id'),
+                {'id': designer_id}).fetchone()
+            if not row:
+                flash('Designer template not found. Using default.', 'warning')
+                raise ValueError('not found')
+            cfg = _json.loads(row[0])
+            merged = dict(DEFAULT_CONFIG)
+            merged.update(cfg)
+            if 'labels' in cfg:
+                merged['labels'] = dict(DEFAULT_CONFIG['labels'])
+                merged['labels'].update(cfg['labels'])
+            pdf_content = generate_pdf_from_config(
+                invoice, customer, app_settings, merged,
+                storage=module_manager.core.storage if module_manager else None)
+            pdf_hash = hashlib.sha256(pdf_content).hexdigest()
+            if storage:
+                relative_path = os.path.join('invoices_pdf', pdf_filename)
+                new_key = storage.save(pdf_content, relative_path)
+                if hasattr(invoice, 'pdf_storage_key'):
+                    invoice.pdf_storage_key = new_key
+            if invoice.status == 'paid':
+                invoice.pdf_hash = pdf_hash
+            db.session.commit()
+            return send_file(io.BytesIO(pdf_content), as_attachment=True,
+                             download_name=pdf_filename, mimetype='application/pdf')
+        except Exception as e:
+            if 'not found' not in str(e):
+                flash(f'Error generating PDF: {e}', 'danger')
+                return redirect(url_for('view_invoice', id=invoice.id))
+            # Fall through to default template
+            template_path = None
 
     if not template_path or not template_path.exists():
         template_path = Path('invoice_templates') / f'{template_name}.py'
@@ -1325,10 +1396,35 @@ def preview_invoice_pdf(id):
                          else 'default_template')
 
         template_path = None
+        designer_id = None
         for tpl in module_manager.get_invoice_templates():
             if tpl['id'] == template_name:
-                template_path = Path(tpl['path'])
+                if tpl.get('path') == '__designer__':
+                    designer_id = tpl.get('_designer_id')
+                else:
+                    template_path = Path(tpl['path'])
                 break
+
+        if designer_id:
+            from modules.invoice_designer.index import generate_pdf_from_config, DEFAULT_CONFIG
+            import json as _json
+            from sqlalchemy import text as _text
+            row = db.session.execute(
+                _text('SELECT config_json FROM invoice_template_config WHERE id = :id'),
+                {'id': designer_id}).fetchone()
+            if row:
+                cfg = _json.loads(row[0])
+                merged = dict(DEFAULT_CONFIG)
+                merged.update(cfg)
+                if 'labels' in cfg:
+                    merged['labels'] = dict(DEFAULT_CONFIG['labels'])
+                    merged['labels'].update(cfg['labels'])
+                pdf_content = generate_pdf_from_config(
+                    invoice, customer, app_settings, merged,
+                    storage=module_manager.core.storage if module_manager else None)
+                return Response(pdf_content, mimetype='application/pdf',
+                                headers={'Content-Disposition': 'inline'})
+
         if not template_path or not template_path.exists():
             template_path = Path('invoice_templates') / f'{template_name}.py'
         if not template_path.exists():
@@ -1772,6 +1868,9 @@ def init_module_manager():
     app.jinja_env.globals['module_manager'] = module_manager
     app.jinja_env.globals['app_version'] = APP_VERSION
     app.jinja_env.globals['current_year'] = datetime.now().year
+
+    import json as _json
+    app.jinja_env.filters['from_json'] = lambda s: _json.loads(s) if s else {}
 
     return module_manager
 
