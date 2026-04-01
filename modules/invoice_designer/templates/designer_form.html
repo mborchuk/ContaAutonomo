@@ -1,0 +1,473 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if template else 'Create' }} Invoice Template{% endblock %}
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>{{ 'Edit' if template else 'Create' }} Invoice Template</h1>
+    <div style="display: flex; gap: 8px;">
+        {% if template %}
+        <a href="{{ url_for('invoice_designer.designer_preview', id=template.id) }}" target="_blank"
+           class="btn btn-secondary">👁 Preview PDF</a>
+        {% endif %}
+        <a href="{{ url_for('invoice_designer.designer_index') }}" class="btn btn-primary">← Back</a>
+    </div>
+</div>
+
+<form method="POST" enctype="multipart/form-data" id="designerForm">
+    <!-- Template Name -->
+    <div class="form-group" style="margin-bottom: 20px;">
+        <label for="name" style="font-weight: bold; font-size: 14px;">Template Name *</label>
+        <input type="text" id="name" name="name" required
+               value="{{ template.name if template else '' }}"
+               placeholder="e.g., My Blue Invoice" style="max-width: 400px;">
+    </div>
+
+    <div id="visualEditor" style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+        <!-- Left column: Colors, Layout, Sections -->
+        <div>
+            <h3 style="margin-bottom: 15px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px;">🎨 Appearance</h3>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+                <div class="form-group">
+                    <label style="font-size: 13px;">Accent Color</label>
+                    <input type="color" name="accent_color" value="{{ config.accent_color }}"
+                           style="width: 100%; height: 40px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Text Color</label>
+                    <input type="color" name="text_color" value="{{ config.text_color }}"
+                           style="width: 100%; height: 40px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Header BG</label>
+                    <input type="color" name="header_bg" value="{{ config.header_bg }}"
+                           style="width: 100%; height: 40px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Page BG</label>
+                    <input type="color" name="page_bg" value="{{ config.page_bg or '#FFFFFF' }}"
+                           style="width: 100%; height: 40px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;">
+                    <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; margin-top: 4px; cursor: pointer;">
+                        <input type="checkbox" name="page_bg_enabled" id="page_bg_enabled" {% if config.page_bg %}checked{% endif %}
+                               onchange="document.querySelector('input[name=page_bg]').disabled = !this.checked;"
+                               style="width: 13px; height: 13px;">
+                        Enable
+                    </label>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                <div class="form-group">
+                    <label style="font-size: 13px;">Font</label>
+                    <select name="font" class="form-control">
+                        {% for f in ['Helvetica', 'Courier', 'Times-Roman'] %}
+                        <option value="{{ f }}" {% if config.font == f %}selected{% endif %}>{{ f }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Layout Style</label>
+                    <select name="layout" class="form-control">
+                        {% for val, lbl in [('modern', 'Modern'), ('classic', 'Classic'), ('minimal', 'Minimal')] %}
+                        <option value="{{ val }}" {% if config.layout == val %}selected{% endif %}>{{ lbl }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Title Size (pt)</label>
+                    <input type="number" name="title_font_size" min="12" max="60" step="1"
+                           value="{{ config.title_font_size or 28 }}"
+                           style="padding: 5px 8px;">
+                </div>
+                <div class="form-group">
+                    <label style="font-size: 13px;">Meta Gap (pt)</label>
+                    <input type="number" name="meta_gap" min="0" max="100" step="1"
+                           value="{{ config.meta_gap if config.meta_gap is not none else 10 }}"
+                           style="padding: 5px 8px;">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="font-size: 13px;">Logo</label>
+                <input type="file" name="logo" accept=".png,.jpg,.jpeg">
+                {% if config.logo_path %}
+                <small style="color: #4CAF50; display: block; margin-top: 4px;">✓ Logo uploaded</small>
+                {% endif %}
+            </div>
+
+            <h3 style="margin-top: 25px; margin-bottom: 15px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px;">📋 Sections</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                {% for key, lbl in [
+                    ('show_logo', 'Show Logo'),
+                    ('show_bank_details', 'Bank Details'),
+                    ('show_notes', 'Notes Section'),
+                    ('show_payment_terms', 'Payment Terms'),
+                    ('show_due_date', 'Due Date'),
+                    ('show_vat_breakdown', 'VAT Breakdown'),
+                    ('show_accent_line', 'Accent Line'),
+                    ('show_separator_lines', 'Separator Lines'),
+                ] %}
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; padding: 6px 0;">
+                    <input type="checkbox" name="{{ key }}" {% if config.get(key) %}checked{% endif %}
+                           style="width: 16px; height: 16px;">
+                    {{ lbl }}
+                </label>
+                {% endfor %}
+            </div>
+
+            <!-- Block Positioning -->
+            <h3 style="margin-top: 25px; margin-bottom: 10px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px;">📐 Block Positions</h3>
+
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label style="font-size: 13px; font-weight: bold;">Layout Preset</label>
+                <select id="presetSelect" class="form-control" style="max-width: 100%;"
+                        onchange="applyPreset(this.value)">
+                    <option value="">— Custom —</option>
+                    {% for key, preset in layout_presets.items() %}
+                    <option value="{{ key }}">{{ preset.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <p style="font-size: 12px; color: #888; margin-bottom: 12px;">
+                Place each block in a zone slot. Zones: top → header → <i>body (items+totals)</i> → bottom → footer.<br>
+                Each zone has left | center | right columns. Use "hidden" to hide a block.
+            </p>
+
+            {% set block_labels = {
+                'logo': '🖼 Logo',
+                'title': '📄 Invoice Title',
+                'sender_info': '🏢 Sender Info',
+                'recipient_info': '👤 Recipient (Bill To)',
+                'invoice_meta': '🔢 Invoice # / Dates',
+                'bank_details': '🏦 Bank Details',
+                'notes': '📝 Notes',
+                'payment_terms': '💳 Payment Terms',
+            } %}
+
+            {% for bid in block_ids %}
+            <div style="display: grid; grid-template-columns: 140px 1fr 60px 60px; gap: 6px; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 12px; white-space: nowrap;">{{ block_labels.get(bid, bid) }}</label>
+                <select name="pos_{{ bid }}" class="form-control" style="font-size: 12px; padding: 3px 6px;">
+                    {% for slot in slot_choices %}
+                    <option value="{{ slot }}"
+                        {% if config.block_positions.get(bid) == slot %}selected{% endif %}>{{ slot }}</option>
+                    {% endfor %}
+                </select>
+                <input type="number" name="offset_x_{{ bid }}" step="0.5" placeholder="X pt"
+                       value="{{ config.block_offsets.get(bid, {}).get('x', '') or '' }}"
+                       title="Horizontal offset (points)"
+                       style="font-size: 11px; padding: 3px 4px; width: 58px;">
+                <input type="number" name="offset_y_{{ bid }}" step="0.5" placeholder="Y pt"
+                       value="{{ config.block_offsets.get(bid, {}).get('y', '') or '' }}"
+                       title="Vertical offset (points)"
+                       style="font-size: 11px; padding: 3px 4px; width: 58px;">
+            </div>
+            {% endfor %}
+            <small style="color: #999; display: block; margin-top: 6px;">
+                X/Y offsets fine-tune position in points (1 pt ≈ 0.35 mm). Positive X → right, positive Y → down.
+            </small>
+
+            <!-- Zone Column Widths -->
+            <div style="margin-top: 18px; margin-bottom: 12px;">
+                <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 6px;">Zone Column Widths (pt)</label>
+                <small style="color: #999; display: block; margin-bottom: 8px;">
+                    Set custom column widths per zone. Use 2 values for left:right or 3 for left:center:right. Total ≈ 512. Leave empty for equal split.
+                </small>
+                {% set zc = config.get('zone_columns', {}) %}
+                {% for zone in ['top', 'header', 'bottom', 'footer'] %}
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="width: 60px; font-size: 12px; font-weight: bold; color: #666;">{{ zone }}</span>
+                    <input type="text" name="zone_col_{{ zone }}" placeholder="e.g. 250:162:100"
+                           value="{{ ':'.join(zc[zone]|map('string')|list) if zc.get(zone) else '' }}"
+                           style="padding: 4px 8px; font-size: 12px; width: 180px;">
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Visual zone preview -->
+            <div style="margin-top: 18px; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; font-size: 11px;">
+                <div style="background: #f9f9f9; padding: 4px 8px; font-weight: bold; border-bottom: 1px solid #ddd;">Zone Map</div>
+                {% for zone in ['top', 'header', 'body', 'bottom', 'footer'] %}
+                <div style="display: grid; grid-template-columns: 60px 1fr 1fr 1fr; border-bottom: 1px solid #eee;">
+                    <div style="padding: 6px 8px; background: #f5f5f5; font-weight: bold; color: #666;">{{ zone }}</div>
+                    {% if zone == 'body' %}
+                    <div style="padding: 6px 8px; grid-column: span 3; color: #999; font-style: italic;">
+                        Items table + Totals (auto)
+                    </div>
+                    {% else %}
+                    <div style="padding: 6px 8px; color: #aaa;" id="map_{{ zone }}_left">left</div>
+                    <div style="padding: 6px 8px; color: #aaa; text-align: center;" id="map_{{ zone }}_center">center</div>
+                    <div style="padding: 6px 8px; color: #aaa; text-align: right;" id="map_{{ zone }}_right">right</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Right column: Labels -->
+        <div>
+            <h3 style="margin-bottom: 15px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 8px;">🏷️ Labels</h3>
+            <p style="font-size: 12px; color: #888; margin-bottom: 15px;">
+                Customize text labels on the invoice. Leave empty to use defaults.
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                {% for key, default in [
+                    ('invoice_title', 'Invoice'),
+                    ('bill_to', 'Bill To'),
+                    ('invoice_number', 'Invoice #'),
+                    ('issue_date', 'Issue Date'),
+                    ('due_date', 'Due Date'),
+                    ('payment_terms', 'Payment Terms'),
+                    ('description', 'Description'),
+                    ('quantity', 'Qty'),
+                    ('unit_price', 'Unit Price'),
+                    ('total', 'Total'),
+                    ('subtotal', 'Subtotal'),
+                    ('tax', 'IVA'),
+                    ('total', 'Total'),
+                    ('notes', 'Notes'),
+                    ('bank_details', 'Bank Details'),
+                ] %}
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 2px;">{{ default }}</label>
+                    <input type="text" name="label_{{ key }}"
+                           value="{{ config.labels.get(key, '') }}"
+                           placeholder="{{ default }}"
+                           style="font-size: 13px; padding: 4px 8px;">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+        <button type="submit" class="btn btn-success">{{ 'Update' if template else 'Create' }} Template</button>
+        <a href="{{ url_for('invoice_designer.designer_index') }}" class="btn btn-secondary">Cancel</a>
+        <button type="button" id="toggleJsonBtn" class="btn btn-secondary" style="float: right;"
+                onclick="toggleJsonEditor()">{ } Edit as JSON</button>
+    </div>
+
+    <!-- JSON Editor (hidden by default) -->
+    <div id="jsonEditorWrap" style="display: none; margin-top: 20px;">
+        <label style="font-weight: bold; font-size: 14px;">Config JSON</label>
+        <textarea id="jsonEditor" name="config_json_raw"
+                  style="width: 100%; height: 480px; font-family: monospace; font-size: 13px;
+                         border: 1px solid #ccc; border-radius: 4px; padding: 10px;
+                         background: #1e1e1e; color: #d4d4d4; tab-size: 2;"
+                  spellcheck="false"></textarea>
+        <small id="jsonError" style="color: #e74c3c; display: none; margin-top: 4px;"></small>
+    </div>
+</form>
+
+<script>
+(function(){
+    var jsonMode = false;
+    var editorEl = document.getElementById('jsonEditor');
+    var wrapEl = document.getElementById('jsonEditorWrap');
+    var visualEl = document.getElementById('visualEditor');
+    var btnEl = document.getElementById('toggleJsonBtn');
+    var errEl = document.getElementById('jsonError');
+
+    var blockLabels = {
+        logo: '🖼 Logo', title: '📄 Title', sender_info: '🏢 Sender',
+        recipient_info: '👤 Recipient', invoice_meta: '🔢 Meta',
+        bank_details: '🏦 Bank', notes: '📝 Notes', payment_terms: '💳 Pay'
+    };
+    var blockIds = {{ block_ids | tojson }};
+    var presets = {{ layout_presets | tojson }};
+
+    /* Apply a preset layout */
+    window.applyPreset = function(key) {
+        if (!key || !presets[key]) return;
+        var positions = presets[key].block_positions;
+        blockIds.forEach(function(bid){
+            var sel = document.querySelector('select[name="pos_' + bid + '"]');
+            if (sel && positions[bid]) sel.value = positions[bid];
+            else if (sel) sel.value = 'hidden';
+        });
+        updateZoneMap();
+    };
+
+    /* Update the zone map preview */
+    function updateZoneMap() {
+        // Clear all cells
+        ['top','header','bottom','footer'].forEach(function(z){
+            ['left','center','right'].forEach(function(col){
+                var el = document.getElementById('map_' + z + '_' + col);
+                if (el) { el.textContent = col; el.style.color = '#aaa'; }
+            });
+        });
+        // Fill from selects
+        blockIds.forEach(function(bid){
+            var sel = document.querySelector('select[name="pos_' + bid + '"]');
+            if (!sel) return;
+            var val = sel.value;
+            if (val === 'hidden') return;
+            var parts = val.split('-');
+            var el = document.getElementById('map_' + parts[0] + '_' + parts[1]);
+            if (!el) return;
+            var cur = (el.style.color === 'rgb(170, 170, 170)') ? '' : el.textContent + ' ';
+            el.textContent = (cur && cur.trim() !== parts[1]) ? cur + (blockLabels[bid] || bid) : (blockLabels[bid] || bid);
+            el.style.color = '#333';
+        });
+    }
+
+    // Bind change events on position selects
+    blockIds.forEach(function(bid){
+        var sel = document.querySelector('select[name="pos_' + bid + '"]');
+        if (sel) sel.addEventListener('change', updateZoneMap);
+    });
+    updateZoneMap();
+
+    /* Collect form → config object */
+    function formToConfig() {
+        var f = document.getElementById('designerForm');
+        var pageBgEnabled = document.getElementById('page_bg_enabled');
+        var cfg = {
+            accent_color: f.accent_color.value,
+            text_color: f.text_color.value,
+            header_bg: f.header_bg.value,
+            page_bg: (pageBgEnabled && pageBgEnabled.checked) ? f.page_bg.value : '',
+            font: f.font.value,
+            title_font_size: parseInt(f.title_font_size.value) || 28,
+            meta_gap: parseInt(f.meta_gap.value) || 10,
+            layout: f.layout.value,
+            show_logo: f.show_logo.checked,
+            show_bank_details: f.show_bank_details.checked,
+            show_notes: f.show_notes.checked,
+            show_payment_terms: f.show_payment_terms.checked,
+            show_due_date: f.show_due_date.checked,
+            show_vat_breakdown: f.show_vat_breakdown.checked,
+            show_accent_line: f.show_accent_line.checked,
+            show_separator_lines: f.show_separator_lines.checked,
+            labels: {},
+            block_positions: {},
+            block_offsets: {},
+            zone_columns: {}
+        };
+        document.querySelectorAll('input[name^="label_"]').forEach(function(inp){
+            var key = inp.name.replace('label_', '');
+            if (inp.value.trim()) cfg.labels[key] = inp.value.trim();
+        });
+        blockIds.forEach(function(bid){
+            var sel = f.querySelector('select[name="pos_' + bid + '"]');
+            if (sel) cfg.block_positions[bid] = sel.value;
+            var ox = f.querySelector('input[name="offset_x_' + bid + '"]');
+            var oy = f.querySelector('input[name="offset_y_' + bid + '"]');
+            if ((ox && ox.value) || (oy && oy.value)) {
+                cfg.block_offsets[bid] = {
+                    x: parseFloat(ox.value) || 0,
+                    y: parseFloat(oy.value) || 0
+                };
+            }
+        });
+        ['top','header','bottom','footer'].forEach(function(zone){
+            var inp = f.querySelector('input[name="zone_col_' + zone + '"]');
+            if (inp && inp.value.trim()) {
+                cfg.zone_columns[zone] = inp.value.trim().split(':').map(function(v){ return parseFloat(v.trim()) || 0; });
+            }
+        });
+        return cfg;
+    }
+
+    /* Push config → form fields */
+    function configToForm(cfg) {
+        var f = document.getElementById('designerForm');
+        if (cfg.accent_color) f.accent_color.value = cfg.accent_color;
+        if (cfg.text_color) f.text_color.value = cfg.text_color;
+        if (cfg.header_bg) f.header_bg.value = cfg.header_bg;
+        if (cfg.page_bg) {
+            f.page_bg.value = cfg.page_bg;
+            var pbe = document.getElementById('page_bg_enabled');
+            if (pbe) pbe.checked = true;
+        }
+        if (cfg.font) f.font.value = cfg.font;
+        if (cfg.title_font_size) f.title_font_size.value = cfg.title_font_size;
+        if (cfg.meta_gap !== undefined) f.meta_gap.value = cfg.meta_gap;
+        if (cfg.layout) f.layout.value = cfg.layout;
+        ['show_logo','show_bank_details','show_notes','show_payment_terms','show_due_date','show_vat_breakdown','show_accent_line','show_separator_lines'].forEach(function(k){
+            if (f[k]) f[k].checked = !!cfg[k];
+        });
+        document.querySelectorAll('input[name^="label_"]').forEach(function(inp){
+            var key = inp.name.replace('label_', '');
+            inp.value = (cfg.labels && cfg.labels[key]) ? cfg.labels[key] : '';
+        });
+        if (cfg.block_positions) {
+            blockIds.forEach(function(bid){
+                var sel = f.querySelector('select[name="pos_' + bid + '"]');
+                if (sel && cfg.block_positions[bid]) sel.value = cfg.block_positions[bid];
+            });
+        }
+        if (cfg.block_offsets) {
+            blockIds.forEach(function(bid){
+                var off = cfg.block_offsets[bid];
+                if (off) {
+                    var ox = f.querySelector('input[name="offset_x_' + bid + '"]');
+                    var oy = f.querySelector('input[name="offset_y_' + bid + '"]');
+                    if (ox) ox.value = off.x || '';
+                    if (oy) oy.value = off.y || '';
+                }
+            });
+        }
+        if (cfg.zone_columns) {
+            ['top','header','bottom','footer'].forEach(function(zone){
+                var inp = f.querySelector('input[name="zone_col_' + zone + '"]');
+                if (inp && cfg.zone_columns[zone]) {
+                    inp.value = cfg.zone_columns[zone].join(':');
+                }
+            });
+        }
+        updateZoneMap();
+    }
+
+    window.toggleJsonEditor = function() {
+        jsonMode = !jsonMode;
+        if (jsonMode) {
+            editorEl.value = JSON.stringify(formToConfig(), null, 2);
+            wrapEl.style.display = 'block';
+            visualEl.style.display = 'none';
+            btnEl.textContent = '← Visual Editor';
+            errEl.style.display = 'none';
+        } else {
+            try {
+                var cfg = JSON.parse(editorEl.value);
+                configToForm(cfg);
+                editorEl.removeAttribute('name');
+                wrapEl.style.display = 'none';
+                visualEl.style.display = '';
+                btnEl.textContent = '{ } Edit as JSON';
+                errEl.style.display = 'none';
+            } catch(e) {
+                errEl.textContent = 'Invalid JSON: ' + e.message;
+                errEl.style.display = 'block';
+            }
+        }
+    };
+
+    document.getElementById('designerForm').addEventListener('submit', function(e){
+        if (jsonMode) {
+            try {
+                JSON.parse(editorEl.value);
+                editorEl.setAttribute('name', 'config_json_raw');
+            } catch(err) {
+                e.preventDefault();
+                errEl.textContent = 'Fix JSON before saving: ' + err.message;
+                errEl.style.display = 'block';
+            }
+        } else {
+            editorEl.removeAttribute('name');
+        }
+    });
+
+    editorEl.addEventListener('keydown', function(e){
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            var s = this.selectionStart, end = this.selectionEnd;
+            this.value = this.value.substring(0, s) + '  ' + this.value.substring(end);
+            this.selectionStart = this.selectionEnd = s + 2;
+        }
+    });
+})();
+</script>
+{% endblock %}

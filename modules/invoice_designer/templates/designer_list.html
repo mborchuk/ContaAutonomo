@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Invoice Designer{% endblock %}
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Invoice Templates</h1>
+    <a href="{{ url_for('invoice_designer.designer_create') }}" class="btn btn-success">+ New Template</a>
+</div>
+
+{% if templates %}
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
+    {% for tpl in templates %}
+    <div style="border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fff;">
+        {% set cfg = tpl.config_json | tojson | safe %}
+        <div style="height: 8px; background: {{ (tpl.config_json | from_json).get('accent_color', '#5B6FD8') if tpl.config_json else '#5B6FD8' }};"></div>
+        <div style="padding: 16px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">{{ tpl.name }}</h3>
+            <div style="font-size: 12px; color: #888; margin-bottom: 12px;">
+                Layout: {{ (tpl.config_json | from_json).get('layout', 'modern') | title if tpl.config_json else 'Modern' }}
+                · Updated: {{ tpl.updated_at.strftime('%d/%m/%Y') if tpl.updated_at else '-' }}
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                <a href="{{ url_for('invoice_designer.designer_preview', id=tpl.id) }}" target="_blank"
+                   class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">👁 Preview</a>
+                <a href="{{ url_for('invoice_designer.designer_edit', id=tpl.id) }}"
+                   class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;">Edit</a>
+                <form method="POST" action="{{ url_for('invoice_designer.designer_duplicate', id=tpl.id) }}" style="display:inline;">
+                    <button type="submit" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">📋 Duplicate</button>
+                </form>
+                <a href="{{ url_for('invoice_designer.designer_export', id=tpl.id) }}"
+                   class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">⬇ JSON</a>
+                <form method="POST" action="{{ url_for('invoice_designer.designer_delete', id=tpl.id) }}" style="display:inline;"
+                      onsubmit="return confirm('Delete template «{{ tpl.name }}»?');">
+                    <button type="submit" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p style="text-align: center; color: #666; padding: 40px;">
+    No custom templates yet. <a href="{{ url_for('invoice_designer.designer_create') }}">Create your first template</a>
+</p>
+{% endif %}
+
+<p style="margin-top: 25px; font-size: 13px; color: #888;">
+    💡 After creating a template, select it in Settings → General Settings → Invoice PDF Template.
+</p>
+
+<div style="margin-top: 20px; padding: 16px; border: 1px dashed #ccc; border-radius: 8px; background: #fafafa;">
+    <form method="POST" action="{{ url_for('invoice_designer.designer_import') }}" enctype="multipart/form-data"
+          style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size: 13px; color: #666;">📥 Import template from JSON:</span>
+        <input type="text" name="import_name" placeholder="Template name (optional)" style="font-size: 13px; padding: 4px 8px; max-width: 200px;">
+        <input type="file" name="json_file" accept=".json" required style="font-size: 13px;">
+        <button type="submit" class="btn btn-secondary" style="padding: 4px 12px; font-size: 13px;">Import</button>
+    </form>
+</div>
+{% endblock %}
