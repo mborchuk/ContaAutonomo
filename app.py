@@ -26,6 +26,27 @@ app.config['SECRET_KEY'] = os.environ.get(
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+
+# --- Error handlers ---
+@app.errorhandler(404)
+def page_not_found(e):
+    flash('Page not found', 'danger')
+    return redirect(url_for('dashboard'))
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    db.session.rollback()
+    flash('Internal server error', 'danger')
+    return redirect(url_for('dashboard'))
+
+
+from jinja2.exceptions import TemplateNotFound
+@app.errorhandler(TemplateNotFound)
+def template_not_found(e):
+    flash('Page not found', 'danger')
+    return redirect(url_for('dashboard'))
+
 # Module Manager - initialized after models are defined (see bottom of file)
 module_manager = None
 
