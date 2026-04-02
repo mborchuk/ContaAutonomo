@@ -234,11 +234,28 @@ Spanish tax forms and Social Security payment tracking.
 
 ### Documents (`documents`)
 
-General document storage and management.
+Document management system with categories, tags, multi-file attachments, and change history.
 
-- Routes: `/documents/`, add, edit, delete, download
-- Models: `Document` (extends core model)
-- Nav: Documents
+- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/categories`
+- Models: `Document`, `DocumentCategory`, `DocumentFile`, `DocumentConfig`, `DocumentHistory`
+- Nav: All Documents, Categories (grouped under Documents dropdown)
+- Features:
+  - Multi-file attachments per document (PDF, JPG, PNG, DOC, XLSX)
+  - Document detail page with full info, files, and change history timeline
+  - New fields: reference number, counterparty, status (Active/Pending/Archived/Expired)
+  - Change history: automatic tracking of all field changes, file additions/removals
+  - Categories with custom colors, auto-add on first use
+  - Tags: comma-separated, clickable for quick filtering (in list and detail views)
+  - Sortable columns: Date, Name, Category, Amount (asc/desc)
+  - Pagination: 50 documents per page
+  - Bulk actions: select multiple documents → delete, set category, or add tag
+  - Duplicate: create a copy of any document with all metadata and file references
+  - Expiry tracking: documents with expiry dates shown with color-coded warnings
+  - Cross-module integration: "Sign PDF" button uses `pdf_signature` module when enabled
+  - Dashboard: expiry alerts panel (expiring within 30 days + already expired)
+  - Reports: contributes "Documents with Amounts" section to financial reports
+  - Dropdown action menu per document (⋮) with view files, edit, duplicate, delete
+  - Row coloring by category (toggleable in Categories page)
 
 ### Backup & Restore (`backup`)
 
@@ -460,5 +477,19 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 |-----------|------|-------------|
 | `self.core` | `CoreServices` | Core services interface |
 | `self.logger` | `logging.Logger` | Python logger named `module.<module_id>` for console/debug output |
+
+### Cross-Module Communication
+
+Modules can access other enabled modules via `self.core.module_manager.modules`:
+
+```python
+# Check if another module is enabled and call its methods
+pdf_sig = self.core.module_manager.modules.get('pdf_signature')
+if pdf_sig:
+    signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
+```
+
+This pattern is used by the Documents module to offer PDF signing via the PDF Signature module.
+Only access modules that are enabled — always check with `.get()` first.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.
