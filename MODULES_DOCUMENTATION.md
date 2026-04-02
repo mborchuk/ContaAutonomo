@@ -234,11 +234,28 @@ Spanish tax forms and Social Security payment tracking.
 
 ### Documents (`documents`)
 
-General document storage and management.
+Document management system with categories, tags, multi-file attachments, and change history.
 
-- Routes: `/documents/`, add, edit, delete, download
-- Models: `Document` (extends core model)
-- Nav: Documents
+- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/categories`
+- Models: `Document`, `DocumentCategory`, `DocumentFile`, `DocumentConfig`, `DocumentHistory`
+- Nav: All Documents, Categories (grouped under Documents dropdown)
+- Features:
+  - Multi-file attachments per document (PDF, JPG, PNG, DOC, XLSX)
+  - Document detail page with full info, files, and change history timeline
+  - New fields: reference number, counterparty, status (Active/Pending/Archived/Expired)
+  - Change history: automatic tracking of all field changes, file additions/removals
+  - Categories with custom colors, auto-add on first use
+  - Tags: comma-separated, clickable for quick filtering (in list and detail views)
+  - Sortable columns: Date, Name, Category, Amount (asc/desc)
+  - Pagination: 50 documents per page
+  - Bulk actions: select multiple documents → delete, set category, or add tag
+  - Duplicate: create a copy of any document with all metadata and file references
+  - Expiry tracking: documents with expiry dates shown with color-coded warnings
+  - Cross-module integration: "Sign PDF" button uses `pdf_signature` module when enabled
+  - Dashboard: expiry alerts panel (expiring within 30 days + already expired)
+  - Reports: contributes "Documents with Amounts" section to financial reports
+  - Dropdown action menu per document (⋮) with view files, edit, duplicate, delete
+  - Row coloring by category (toggleable in Categories page)
 
 ### Backup & Restore (`backup`)
 
@@ -308,6 +325,28 @@ Parse invoice data from PDFs and images using AI providers.
 - Models: `AIParserConfig` (provider, API key, model)
 - Supported providers: OpenAI (GPT-4), Anthropic (Claude), Google (Gemini)
 - Settings: dedicated "AI Parser" tab with provider selection, API key, model config
+
+### Invoice Designer (`invoice_designer`)
+
+Visual UI for creating custom invoice PDF templates with configurable block positioning, colors, fonts, and labels.
+
+- Routes: `/invoice-designer/` (list), `/invoice-designer/create`, `/invoice-designer/edit/<id>`, `/invoice-designer/delete/<id>`, `/invoice-designer/duplicate/<id>`, `/invoice-designer/preview/<id>`, `/invoice-designer/import` (POST), `/invoice-designer/export/<id>`
+- Models: `InvoiceTemplate` (`invoice_template_config` table — name, config_json, logo_storage_key)
+- Nav: Invoice Designer (grouped under Invoices dropdown)
+- Features:
+  - Grid-based layout: 5 zones (top, header, body, bottom, footer) × 3 columns (left, center, right)
+  - 8 placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, bank_details, notes, payment_terms
+  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`)
+  - Fine-tune X/Y offsets per block in points
+  - 6 layout presets (Standard, Classic Right, Modern Center, Minimal Left, Compact Header, Bottom Bank)
+  - Configurable: accent/text/header/page background colors, font, title size, layout style
+  - Toggle sections: logo, bank details, notes, payment terms, due date, VAT breakdown, accent line, separator lines
+  - Customizable labels for all invoice text (Invoice #, Bill To, Subtotal, etc.)
+  - JSON import/export for sharing templates
+  - Edit as JSON toggle with live sync to visual editor
+  - Preview generates PDF with real settings data (sender, bank, customer from DB)
+  - Templates appear in Settings → Invoice PDF Template dropdown with `🎨` prefix
+  - `app.py` patched in 3 locations (create, download, preview) to handle `__designer__` template path
 
 ### Tax Poland IT (`tax_poland`)
 
@@ -392,8 +431,23 @@ class MyModule(BaseModule):
 | `name` | Yes | — | Human-readable name |
 | `description` | No | `''` | Shown in Modules settings |
 | `version` | No | `'1.0.0'` | Semantic version |
-| `nav_items` | No | `[]` | Navigation menu entries |
+| `nav_items` | No | `[]` | Navigation menu entries (supports `group` key for dropdown placement) |
 | `settings_tab` | No | `'general'` | Which settings tab to place module settings in |
+
+### Navigation Grouping
+
+Module nav items support a `group` key to place them inside existing or new dropdown menus:
+
+```python
+@property
+def nav_items(self):
+    return [
+        {'label': 'My Tool', 'endpoint': 'my_mod.index', 'icon': '🔧', 'group': 'Invoices'}
+    ]
+```
+
+Core dropdown groups: `Invoices`, `System`. Any other group name creates a new dropdown.
+Items without `group` appear as top-level links. The full menu is built by `ModuleManager.get_full_nav()`.
 
 ### BaseModule Methods
 
@@ -423,5 +477,19 @@ class MyModule(BaseModule):
 |-----------|------|-------------|
 | `self.core` | `CoreServices` | Core services interface |
 | `self.logger` | `logging.Logger` | Python logger named `module.<module_id>` for console/debug output |
+
+### Cross-Module Communication
+
+Modules can access other enabled modules via `self.core.module_manager.modules`:
+
+```python
+# Check if another module is enabled and call its methods
+pdf_sig = self.core.module_manager.modules.get('pdf_signature')
+if pdf_sig:
+    signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
+```
+
+This pattern is used by the Documents module to offer PDF signing via the PDF Signature module.
+Only access modules that are enabled — always check with `.get()` first.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.

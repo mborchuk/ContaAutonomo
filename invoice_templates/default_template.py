@@ -220,21 +220,21 @@ def generate_invoice_pdf(invoice, customer, settings, Bank):
     # Calculate tax
     vat_pct = settings.default_vat_rate if settings and settings.default_vat_rate is not None else 21.0
     tax_rate = 0.0
-    tax_label = 'Tax 0%'
+    tax_label = 'IVA 0%'
 
     if customer and customer.tax_type:
         if customer.tax_type == 'non_eu':
             tax_rate = 0.0
-            tax_label = 'Tax 0%'
+            tax_label = 'IVA 0%'
         elif customer.tax_type == 'eu_b2b':
             tax_rate = 0.0
-            tax_label = f'Tax {vat_pct:g}%'
+            tax_label = f'IVA {vat_pct:g}%'
         elif customer.tax_type == 'standard':
             tax_rate = vat_pct / 100.0
-            tax_label = f'Tax {vat_pct:g}%'
+            tax_label = f'IVA {vat_pct:g}%'
     else:
         tax_rate = 0.0
-        tax_label = f'Tax {vat_pct:g}%'
+        tax_label = f'IVA {vat_pct:g}%'
 
     tax_amount = invoice_amount * tax_rate
     total_with_tax = invoice_amount + tax_amount

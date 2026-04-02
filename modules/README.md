@@ -582,8 +582,39 @@ def nav_items(self):
     ]
 ```
 
-Nav items appear between core items (Invoices, Create Invoice) and (Documents, Reports, Settings).
-Order follows module discovery order.
+### Grouping into Dropdowns
+
+Use the `group` key to place items inside an existing or new dropdown menu.
+Core dropdowns (`Invoices`, `System`) are defined in `ModuleManager.get_full_nav()`.
+Module items with a matching `group` are appended to that dropdown automatically.
+
+```python
+@property
+def nav_items(self):
+    return [
+        {
+            'label': 'Invoice Designer',
+            'endpoint': 'invoice_designer.designer_index',
+            'icon': '🎨',
+            'group': 'Invoices'    # Appears inside the Invoices dropdown
+        }
+    ]
+```
+
+Available core groups: `Invoices`, `System`. Using any other group name creates a new dropdown.
+Items without `group` appear as top-level links.
+
+### Dynamic Navigation (`get_full_nav`)
+
+The navigation is fully dynamic. `ModuleManager.get_full_nav()` builds the complete menu structure:
+
+1. Core dropdowns (Invoices, System) with their hardcoded items
+2. Module items with matching `group` are injected into core dropdowns
+3. Ungrouped module items become top-level links
+4. Module items with new group names create new dropdowns
+5. Settings link at the end
+
+The template (`base.html`) iterates `get_full_nav()` and renders links and dropdowns uniformly.
 
 ---
 

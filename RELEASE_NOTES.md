@@ -1,5 +1,23 @@
 # Release Notes
 
+## v1.1.0 — Documents Overhaul
+
+### Documents Module (v0.5.0)
+
+- Document detail page (`/documents/view/<id>`) with full info, files, and change history
+- New fields: Reference Number, Counterparty, Status (Active/Pending/Archived/Expired)
+- Change history: automatic tracking of all field changes, file additions/removals with timestamps
+- Sortable table columns (Date, Name, Category, Amount) with asc/desc toggle
+- Pagination: 50 documents per page with Prev/Next navigation
+- Bulk actions: select multiple documents via checkboxes → Delete, Set Category, Add Tag
+- Duplicate document: creates a copy with all metadata and file references
+- Dashboard integration: expiry alerts panel (documents expiring within 30 days + already expired)
+- Report integration: "Documents with Amounts" section in financial reports
+- Cross-module: "Sign PDF" button on document files when PDF Signature module is enabled
+- Dropdown action menu (⋮) per document replacing separate Edit/Delete buttons
+- Document names are clickable links to detail page
+- Tags in table rows are clickable for quick filtering
+
 ## v1.0.1 — Initial Public Release
 
 Self-hosted invoicing and tax management app for freelancers and small businesses.

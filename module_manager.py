@@ -1636,7 +1636,8 @@ class ModuleManager:
 
     def get_grouped_nav_items(self):
         """Get nav items split into ungrouped list and grouped dict.
-        Returns (ungrouped_list, groups_dict)"""
+        Returns (ungrouped_list, groups_dict).
+        groups_dict preserves insertion order; core groups come first."""
         ungrouped = []
         groups = {}
         for item in self.get_nav_items():
@@ -1646,6 +1647,86 @@ class ModuleManager:
             else:
                 ungrouped.append(item)
         return ungrouped, groups
+
+    def get_full_nav(self):
+        """Build the complete navigation structure.
+
+        Returns a list of nav entries, each is either:
+          {'type': 'link', 'label': ..., 'endpoint': ..., 'icon': ...}
+          {'type': 'dropdown', 'label': ..., 'items': [{'label':..., 'endpoint':..., 'icon':...}, ...]}
+
+        Core menus (Invoices, System) are defined here with their
+        hardcoded items.  Module nav_items with a matching ``group``
+        are appended into the corresponding dropdown.  Modules that
+        define a ``group`` not present in core menus get their own
+        dropdown.  Ungrouped module items become top-level links.
+        """
+        ungrouped, groups = self.get_grouped_nav_items()
+
+        # Core menu definitions — order matters
+        core = [
+            {
+                'type': 'dropdown',
+                'label': 'Invoices',
+                'items': [
+                    {'label': 'All Invoices', 'endpoint': 'index'},
+                    {'label': 'Create Invoice', 'endpoint': 'create_invoice'},
+                ],
+            },
+            # placeholder — ungrouped module links will be inserted here
+            '__ungrouped__',
+            # placeholder — extra module groups inserted here
+            '__extra_groups__',
+            {
+                'type': 'dropdown',
+                'label': 'System',
+                'items': [
+                    {'label': 'Logs', 'endpoint': 'system_logs'},
+                    {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'},
+                ],
+            },
+            {'type': 'link', 'label': 'Settings', 'endpoint': 'settings'},
+        ]
+
+        # Inject module items into core dropdowns
+        seen_groups = set()
+        for entry in core:
+            if isinstance(entry, dict) and entry.get('type') == 'dropdown':
+                label = entry['label']
+                if label in groups:
+                    for item in groups[label]:
+                        entry['items'].append({
+                            'label': item.get('label', ''),
+                            'endpoint': item.get('endpoint', ''),
+                            'icon': item.get('icon', ''),
+                        })
+                    seen_groups.add(label)
+
+        # Build final list, expanding placeholders
+        result = []
+        for entry in core:
+            if entry == '__ungrouped__':
+                for item in ungrouped:
+                    result.append({
+                        'type': 'link',
+                        'label': item.get('label', ''),
+                        'endpoint': item.get('endpoint', ''),
+                        'icon': item.get('icon', ''),
+                    })
+            elif entry == '__extra_groups__':
+                for gname, gitems in groups.items():
+                    if gname not in seen_groups:
+                        result.append({
+                            'type': 'dropdown',
+                            'label': gname,
+                            'items': [{'label': i.get('label', ''),
+                                       'endpoint': i.get('endpoint', ''),
+                                       'icon': i.get('icon', '')} for i in gitems],
+                        })
+            else:
+                result.append(entry)
+
+        return result
 
     def get_settings_panels(self):
         """Get settings panels from all active modules"""
