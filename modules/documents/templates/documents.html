@@ -87,7 +87,7 @@
             <tr{% if fill_row_color and doc.category and category_colors.get(doc.category) %} style="background: {{ category_colors.get(doc.category) }};"{% endif %}>
                 <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
                 <td style="font-weight: 500;">
-                    {{ doc.name }}
+                    <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration:none; color:#333;">{{ doc.name }}</a>
                     {% if doc.expiry_date %}
                     <br><span style="font-size: 11px; color: #999;">Expires: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
                     {% endif %}
