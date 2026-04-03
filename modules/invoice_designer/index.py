@@ -391,7 +391,12 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_gaps'][bid] = int(raw)
                         except ValueError:
-                            pass  # ignore non-integer input
+                            raw_sanitized = raw.replace('\r', '').replace('\n', '')
+                            logger.debug(
+                                "Ignoring invalid integer for block_gap_%s: %r",
+                                bid,
+                                raw_sanitized,
+                            )
 
                 # Parse per-block label widths
                 config['block_label_widths'] = {}
@@ -401,7 +406,12 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_label_widths'][bid] = int(raw)
                         except ValueError:
-                            pass  # ignore non-integer input
+                            raw_sanitized = raw.replace('\r', '').replace('\n', '')
+                            logger.debug(
+                                "Ignoring invalid integer for block_lw_%s: %r",
+                                bid,
+                                raw_sanitized,
+                            )
 
                 # Parse per-block styles (color, bg, show_label)
                 config['block_styles'] = {}
@@ -690,36 +700,8 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     # ---- Styles ----
     s_title = ParagraphStyle('dt', fontSize=title_fs, fontName=font_b,
                              textColor=accent, spaceAfter=4)
-    s_section = ParagraphStyle('ds', fontSize=10, fontName=font_b,
-                               textColor=accent, spaceAfter=4)
-    s_normal = ParagraphStyle('dn', fontSize=10, fontName=font,
-                              textColor=text_c, leading=13)
     s_small = ParagraphStyle('dsm', fontSize=9, fontName=font,
                              textColor=text_c, leading=12)
-    s_small_r = ParagraphStyle('dsmr', fontSize=9, fontName=font,
-                               textColor=text_c, leading=12, alignment=2)
-    s_small_c = ParagraphStyle('dsmc', fontSize=9, fontName=font,
-                               textColor=text_c, leading=12, alignment=1)
-    s_right = ParagraphStyle('dr', fontSize=10, fontName=font_b,
-                             textColor=text_c, alignment=2)
-    s_right_accent = ParagraphStyle('dra', fontSize=10, fontName=font_b,
-                                    textColor=accent, alignment=0)
-    s_total_label = ParagraphStyle('dtl', fontSize=13, fontName=font_b,
-                                   textColor=accent, alignment=0)
-    s_total_val = ParagraphStyle('dtv', fontSize=13, fontName=font_b,
-                                 textColor=text_c, alignment=2)
-    s_meta_label = ParagraphStyle('dml', fontSize=8, fontName=font,
-                                  textColor=colors.HexColor('#999999'))
-    s_meta_val = ParagraphStyle('dmv', fontSize=10, fontName=font_b,
-                                textColor=text_c)
-
-    def _style_for_slot(slot):
-        """Return (text_style, alignment) based on slot position."""
-        if slot.endswith('-right'):
-            return s_small_r, 2
-        elif slot.endswith('-center'):
-            return s_small_c, 1
-        return s_small, 0
 
     def _make_block_flowables(block_id, title_text, kv_pairs, value_align='left'):
         """Build flowables for a key:value block.
@@ -796,7 +778,6 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
         slot = positions.get(block_id, 'hidden')
         if slot == 'hidden':
             return []
-        style, align = _style_for_slot(slot)
 
         if block_id == 'logo':
             if not (c.get('show_logo') and c.get('logo_path') and storage):
@@ -809,7 +790,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
                     img = Image(logo_buf, width=120, height=40)
                     img.hAlign = 'LEFT'
                     return [img]
-            except Exception:  # noqa: DB query may fail if table missing
+            except Exception:  # logo file may be missing or corrupted
                 pass
             return []
 
