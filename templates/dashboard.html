@@ -5,6 +5,19 @@
 {% block content %}
 <h1>Invoice Dashboard</h1>
 
+<!-- Setup hint for new installations -->
+{% if not settings or not settings.owner_name %}
+<div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 16px 20px; margin-bottom: 20px;">
+    <strong>👋 Welcome!</strong> To get started:
+    <ol style="margin: 8px 0 0 20px; font-size: 14px; color: #555;">
+        <li>Go to <a href="/settings">Settings → Business Information</a> and fill in your name, VAT, address</li>
+        <li>Add a <a href="/settings#banks">Bank Account</a> for payment details on invoices</li>
+        <li>Add your first <a href="/settings#customers">Customer</a></li>
+        <li><a href="/create">Create your first invoice</a></li>
+    </ol>
+</div>
+{% endif %}
+
 <!-- Info Panel: Date, Exchange Rates, Currency Converter, Holidays -->
 {% if not settings or settings.show_currency_panel %}
 <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 20px; overflow: hidden;">
