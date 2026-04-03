@@ -1930,8 +1930,8 @@ def _apply_log_settings(s, mgr):
         mgr.core.scheduler.remove_job('core.log_cleanup')
 
 
-# Auto-initialize modules when imported by gunicorn (not in __main__)
-if module_manager is None and not app.debug:
+# Auto-initialize modules when imported by gunicorn workers (not via python app.py)
+if module_manager is None and os.environ.get('GUNICORN_WORKERS'):
     try:
         with app.app_context():
             db.create_all()
