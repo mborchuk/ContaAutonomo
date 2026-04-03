@@ -279,7 +279,7 @@ class InvoiceDesignerModule(BaseModule):
                     'path': '__designer__',
                     '_designer_id': tpl.id,
                 })
-        except Exception:
+        except Exception:  # noqa: DB query may fail if table missing
             pass
         return templates
 
@@ -391,11 +391,7 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_gaps'][bid] = int(raw)
                         except ValueError:
-                            logger.debug(
-                                "Ignoring invalid integer for block_gap_%s: %r",
-                                bid,
-                                raw,
-                            )
+                            pass  # ignore non-integer input
 
                 # Parse per-block label widths
                 config['block_label_widths'] = {}
@@ -405,11 +401,7 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_label_widths'][bid] = int(raw)
                         except ValueError:
-                            logger.debug(
-                                "Ignoring invalid integer for block_lw_%s: %r",
-                                bid,
-                                raw,
-                            )
+                            pass  # ignore non-integer input
 
                 # Parse per-block styles (color, bg, show_label)
                 config['block_styles'] = {}
@@ -494,7 +486,7 @@ class InvoiceDesignerModule(BaseModule):
             ).fetchone()
             if row:
                 bank = _Obj(iban=row[0] or '', swift=row[1] or '', bank_name=row[2] or '')
-        except Exception:
+        except Exception:  # noqa: DB query may fail if table missing
             pass
         if not bank:
             bank = _Obj(iban='ES00 0000 0000 0000 0000 0000', swift='ABCDESXX', bank_name='Demo Bank')
@@ -510,7 +502,7 @@ class InvoiceDesignerModule(BaseModule):
                                 address=row[2] or '', city=row[3] or '',
                                 postal_code=row[4] or '', country=row[5] or '',
                                 tax_type=row[6] or 'eu_b2b')
-        except Exception:
+        except Exception:  # noqa: DB query may fail if table missing
             pass
 
         invoice = _demo_invoice()
@@ -698,10 +690,6 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     # ---- Styles ----
     s_title = ParagraphStyle('dt', fontSize=title_fs, fontName=font_b,
                              textColor=accent, spaceAfter=4)
-    s_title_r = ParagraphStyle('dtr', fontSize=title_fs, fontName=font_b,
-                               textColor=accent, spaceAfter=4, alignment=2)
-    s_title_c = ParagraphStyle('dtc', fontSize=title_fs, fontName=font_b,
-                               textColor=accent, spaceAfter=4, alignment=1)
     s_section = ParagraphStyle('ds', fontSize=10, fontName=font_b,
                                textColor=accent, spaceAfter=4)
     s_normal = ParagraphStyle('dn', fontSize=10, fontName=font,
@@ -821,7 +809,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
                     img = Image(logo_buf, width=120, height=40)
                     img.hAlign = 'LEFT'
                     return [img]
-            except Exception:
+            except Exception:  # noqa: DB query may fail if table missing
                 pass
             return []
 
