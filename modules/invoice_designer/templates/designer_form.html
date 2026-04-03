@@ -417,7 +417,6 @@
         }
         if (cfg.font) f.font.value = cfg.font;
         if (cfg.title_font_size) f.title_font_size.value = cfg.title_font_size;
-        if (cfg.meta_gap !== undefined) f.meta_gap.value = cfg.meta_gap;
         if (cfg.layout) f.layout.value = cfg.layout;
         ['show_logo','show_vat_breakdown','show_accent_line','show_separator_lines','show_vertical_lines'].forEach(function(k){
             if (f[k]) f[k].checked = !!cfg[k];
