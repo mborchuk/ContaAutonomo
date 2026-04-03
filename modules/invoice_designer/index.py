@@ -391,7 +391,11 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_gaps'][bid] = int(raw)
                         except ValueError:
-                            pass
+                            logger.debug(
+                                "Ignoring invalid integer for block_gap_%s: %r",
+                                bid,
+                                raw,
+                            )
 
                 # Parse per-block label widths
                 config['block_label_widths'] = {}
@@ -401,7 +405,11 @@ class InvoiceDesignerModule(BaseModule):
                         try:
                             config['block_label_widths'][bid] = int(raw)
                         except ValueError:
-                            pass
+                            logger.debug(
+                                "Ignoring invalid integer for block_lw_%s: %r",
+                                bid,
+                                raw,
+                            )
 
                 # Parse per-block styles (color, bg, show_label)
                 config['block_styles'] = {}
