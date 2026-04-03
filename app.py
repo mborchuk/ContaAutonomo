@@ -1877,6 +1877,7 @@ def init_module_manager():
     from module_manager import ModuleManager
 
     module_manager = ModuleManager(app, db)
+    module_manager.core._settings_model = Settings
     module_manager.init_db()
     module_manager.discover_modules()
     module_manager.load_enabled_modules()

@@ -29,13 +29,14 @@ logger = logging.getLogger(__name__)
 # All placeable blocks
 BLOCK_IDS = [
     'logo', 'title', 'sender_info', 'recipient_info',
-    'invoice_meta', 'bank_details', 'notes', 'payment_terms',
+    'invoice_meta', 'due_date', 'bank_details', 'notes', 'payment_terms',
 ]
 
 # Valid slot positions
 SLOT_CHOICES = [
     'top-left', 'top-center', 'top-right',
     'header-left', 'header-center', 'header-right',
+    'subtotal-left', 'subtotal-right',
     'bottom-left', 'bottom-center', 'bottom-right',
     'footer-left', 'footer-center', 'footer-right',
     'hidden',
@@ -50,21 +51,21 @@ DEFAULT_CONFIG = {
     'title_font_size': 28,
     'show_logo': False,
     'logo_path': '',
-    'layout': 'modern',          # modern | classic | minimal
-    'show_bank_details': True,
-    'show_notes': True,
-    'show_payment_terms': True,
-    'show_due_date': True,
+    'layout': 'modern',
     'show_vat_breakdown': True,
     'show_accent_line': True,
-    'show_separator_lines': False,  # thin lines between zones
-    'meta_gap': 10,                  # gap (pt) between label and value in invoice_meta block
+    'show_separator_lines': False,
+    'show_vertical_lines': False,
+    'block_gaps': {},                # per-block gap override: {block_id: pt}
+    'block_label_widths': {},        # per-block label column width override: {block_id: pt}
+    'block_styles': {},              # per-block: {block_id: {color: '#hex', bg: '#hex', show_label: true}}
     'labels': {
         'invoice_title': 'Invoice',
+        'sender_info': 'From',
         'description': 'Description',
         'quantity': 'Qty',
         'unit_price': 'Unit Price',
-        'total': 'Total',
+        'item_total': 'Total',
         'subtotal': 'Subtotal',
         'tax': 'IVA',
         'total': 'Total',
@@ -83,6 +84,7 @@ DEFAULT_CONFIG = {
         'sender_info':    'header-left',
         'recipient_info': 'header-right',
         'invoice_meta':   'header-left',
+        'due_date':       'subtotal-left',
         'bank_details':   'bottom-left',
         'notes':          'bottom-right',
         'payment_terms':  'bottom-center',
@@ -340,16 +342,12 @@ class InvoiceDesignerModule(BaseModule):
                     'page_bg': request.form.get('page_bg', '') if request.form.get('page_bg_enabled') or 'page_bg_enabled' in request.form else '',
                     'font': request.form.get('font', 'Helvetica'),
                     'title_font_size': int(request.form.get('title_font_size', 28) or 28),
-                    'meta_gap': int(request.form.get('meta_gap', 10) or 10),
                     'layout': request.form.get('layout', 'modern'),
                     'show_logo': 'show_logo' in request.form,
-                    'show_bank_details': 'show_bank_details' in request.form,
-                    'show_notes': 'show_notes' in request.form,
-                    'show_payment_terms': 'show_payment_terms' in request.form,
-                    'show_due_date': 'show_due_date' in request.form,
                     'show_vat_breakdown': 'show_vat_breakdown' in request.form,
                     'show_accent_line': 'show_accent_line' in request.form,
                     'show_separator_lines': 'show_separator_lines' in request.form,
+                    'show_vertical_lines': 'show_vertical_lines' in request.form,
                     'labels': {},
                     'block_positions': {},
                     'block_offsets': {},
@@ -375,12 +373,49 @@ class InvoiceDesignerModule(BaseModule):
 
                 # Parse zone column widths
                 config['zone_columns'] = {}
-                for zone in ('top', 'header', 'bottom', 'footer'):
-                    raw = request.form.get(f'zone_col_{zone}', '').strip()
-                    if raw:
-                        parts = [float(x.strip()) for x in raw.split(':') if x.strip()]
-                        if len(parts) in (2, 3):
-                            config['zone_columns'][zone] = parts
+                for zone in ('top', 'header', 'subtotal', 'bottom', 'footer'):
+                    vals = []
+                    for i in range(3):
+                        raw = request.form.get(f'zone_col_{zone}_{i}', '').strip()
+                        vals.append(float(raw) if raw else None)
+                    # Only save if at least 2 non-None values
+                    non_none = [v for v in vals if v is not None]
+                    if len(non_none) >= 2:
+                        config['zone_columns'][zone] = vals
+
+                # Parse per-block gaps
+                config['block_gaps'] = {}
+                for bid in BLOCK_IDS + ['totals']:
+                    raw = request.form.get(f'block_gap_{bid}', '').strip()
+                    if raw != '':
+                        try:
+                            config['block_gaps'][bid] = int(raw)
+                        except ValueError:
+                            pass
+
+                # Parse per-block label widths
+                config['block_label_widths'] = {}
+                for bid in BLOCK_IDS + ['totals']:
+                    raw = request.form.get(f'block_lw_{bid}', '').strip()
+                    if raw != '':
+                        try:
+                            config['block_label_widths'][bid] = int(raw)
+                        except ValueError:
+                            pass
+
+                # Parse per-block styles (color, bg, show_label)
+                config['block_styles'] = {}
+                for bid in BLOCK_IDS + ['totals']:
+                    bs = {}
+                    clr = request.form.get(f'bs_color_{bid}', '').strip()
+                    if clr:
+                        bs['color'] = clr
+                    bg = request.form.get(f'bs_bg_{bid}', '').strip()
+                    if bg:
+                        bs['bg'] = bg
+                    bs['show_label'] = f'bs_label_{bid}' in request.form
+                    if bs.get('color') or bs.get('bg') or not bs['show_label']:
+                        config['block_styles'][bid] = bs
 
                 # Handle logo upload
                 logo = request.files.get('logo')
@@ -541,6 +576,15 @@ def _merge_config(user_cfg):
         elif k == 'zone_columns':
             merged['zone_columns'] = dict(DEFAULT_CONFIG.get('zone_columns', {}))
             merged['zone_columns'].update(v)
+        elif k == 'block_gaps':
+            merged['block_gaps'] = dict(DEFAULT_CONFIG.get('block_gaps', {}))
+            merged['block_gaps'].update(v)
+        elif k == 'block_label_widths':
+            merged['block_label_widths'] = dict(DEFAULT_CONFIG.get('block_label_widths', {}))
+            merged['block_label_widths'].update(v)
+        elif k == 'block_styles':
+            merged['block_styles'] = dict(DEFAULT_CONFIG.get('block_styles', {}))
+            merged['block_styles'].update(v)
         else:
             merged[k] = v
     return merged
@@ -631,9 +675,11 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     layout = c.get('layout', 'modern')
     title_fs = c.get('title_font_size', 28)
     show_sep = c.get('show_separator_lines', False)
+    show_vert = c.get('show_vertical_lines', False)
 
     positions = c.get('block_positions', DEFAULT_CONFIG['block_positions'])
     offsets = c.get('block_offsets', {})
+    _block_label_widths = c.get('block_label_widths', {})
 
     buf = _io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=letter,
@@ -679,334 +725,309 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
             return s_small_c, 1
         return s_small, 0
 
+    def _make_block_flowables(block_id, title_text, kv_pairs, value_align='left'):
+        """Build flowables for a key:value block.
+        Reads per-block styles: font color, background, show_label.
+        """
+        lw = _block_label_widths.get(block_id, 0)
+        bs = c.get('block_styles', {}).get(block_id, {})
+        blk_color = colors.HexColor(bs['color']) if bs.get('color') else text_c
+        blk_bg = colors.HexColor(bs['bg']) if bs.get('bg') else None
+        show_label = bs.get('show_label', True)
+
+        result = []
+
+        if title_text and show_label:
+            s_t = ParagraphStyle('kv_title', parent=s_small, fontName=font_b,
+                                 leftIndent=lw, textColor=blk_color)
+            result.append(Paragraph(f'<b>{title_text}</b>', s_t))
+
+        if kv_pairs:
+            if value_align == 'right':
+                s_lbl = ParagraphStyle('kv_l2', parent=s_small, alignment=0,
+                                       fontName=font_b, textColor=blk_color)
+                s_val = ParagraphStyle('kv_v2', parent=s_small, alignment=2,
+                                       textColor=blk_color)
+                rows = []
+                for k, v in kv_pairs:
+                    rows.append([
+                        Paragraph(f'<b>{k}</b>', s_lbl) if k else Paragraph('', s_lbl),
+                        Paragraph(v, s_val)
+                    ])
+                t = Table(rows, colWidths=[None, None], spaceBefore=0, spaceAfter=0)
+                t.hAlign = 'LEFT'
+                tbl_style = [
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (0, -1), lw),
+                    ('LEFTPADDING', (1, 0), (1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 1),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+                ]
+                t.setStyle(TableStyle(tbl_style))
+                result.append(t)
+            else:
+                for k, v in kv_pairs:
+                    if k:
+                        line = f'<b>{k}</b>&nbsp;&nbsp;{v}'
+                    else:
+                        line = v
+                    s_kv = ParagraphStyle('kv_line', parent=s_small, leftIndent=lw,
+                                          textColor=blk_color)
+                    result.append(Paragraph(line, s_kv))
+
+        return result
+
+    # ---- Pre-calculate invoice amounts for totals block ----
+    inv_currency = invoice.currency or 'USD'
+    sym = get_currency_symbol(inv_currency)
+    inv_amount = invoice.amount_eur if inv_currency == 'EUR' else invoice.amount_usd
+    vat_pct = settings.default_vat_rate if settings and hasattr(settings, 'default_vat_rate') and settings.default_vat_rate is not None else 21.0
+    _tax_rate = 0.0
+    _tax_label = f'{L("tax")} 0%'
+    if customer and hasattr(customer, 'tax_type') and customer.tax_type:
+        if customer.tax_type == 'standard':
+            _tax_rate = vat_pct / 100.0
+        _tax_label = f'{L("tax")} {vat_pct:g}%'
+    _tax_amount = inv_amount * _tax_rate
+    _total = inv_amount + _tax_amount
+
     # ---- Build block content ----
     def _build_block(block_id):
-        """Return a Paragraph/Flowable for the given block, or None."""
+        """Return a list of flowables for the given block, or empty list."""
         slot = positions.get(block_id, 'hidden')
         if slot == 'hidden':
-            return None
+            return []
         style, align = _style_for_slot(slot)
 
         if block_id == 'logo':
             if not (c.get('show_logo') and c.get('logo_path') and storage):
-                return None
+                return []
             try:
                 result = storage.get(c['logo_path'])
                 if result:
                     logo_bytes, _ = result
                     logo_buf = _io.BytesIO(logo_bytes)
                     img = Image(logo_buf, width=120, height=40)
-                    if align == 2:
-                        img.hAlign = 'RIGHT'
-                    elif align == 1:
-                        img.hAlign = 'CENTER'
-                    else:
-                        img.hAlign = 'LEFT'
-                    return img
+                    img.hAlign = 'LEFT'
+                    return [img]
             except Exception:
                 pass
-            return None
+            return []
 
         if block_id == 'title':
-            ts = s_title if align == 0 else (s_title_r if align == 2 else s_title_c)
-            return Paragraph(f'<b>{L("invoice_title")}</b>', ts)
+            lw = _block_label_widths.get('title', 0)
+            ts = ParagraphStyle('dt_zone', parent=s_title, alignment=0, leftIndent=lw)
+            return [Paragraph(f'<b>{L("invoice_title")}</b>', ts)]
 
         if block_id == 'sender_info':
-            gap = c.get('meta_gap', 10)
             sender_name = ''
-            rows = []
+            kv = []
             if settings:
-                sender_name = getattr(settings, 'owner_name', '') or getattr(settings, 'business_name', '') or ''
-                vat = getattr(settings, 'vat_number', '') or ''
+                sender_name = getattr(settings, 'business_name', '') or getattr(settings, 'owner_name', '') or ''
+                owner = getattr(settings, 'owner_name', '') or ''
+                business = getattr(settings, 'business_name', '') or ''
+                # Show business name or owner name as first line (always)
+                display_name = business if business else owner
+                if display_name:
+                    kv.append(('', f'<b>{display_name}</b>'))
+                # If both exist and different, show owner on second line
+                if business and owner and business != owner:
+                    kv.append(('', f'<b>{owner}</b>'))
                 nie = getattr(settings, 'nie_number', '') or ''
+                vat = getattr(settings, 'vat_number', '') or ''
+                id_parts = []
                 if nie:
-                    rows.append(('NIE:', nie))
+                    id_parts.append(f'NIE: {nie}')
                 if vat:
-                    rows.append(('VAT:', vat))
-                for fld in ('address', 'city', 'postal_code', 'country', 'phone', 'email'):
-                    v = getattr(settings, fld, '') or ''
-                    if v:
-                        rows.append(('', v))
-            s_lbl = ParagraphStyle('si_l', parent=style, alignment=2, fontName=font_b)
-            s_val = ParagraphStyle('si_v', parent=style, alignment=0)
-            tbl_rows = [[Paragraph(f'<b>{sender_name}</b>', style), '', '']]
-            for lbl, val in rows:
-                tbl_rows.append([Paragraph(f'<b>{lbl}</b>', s_lbl) if lbl else Paragraph('', s_lbl),
-                                 '',
-                                 Paragraph(val, s_val)])
-            tbl = Table(tbl_rows, colWidths=[None, gap, None])
-            slot = positions.get('sender_info', 'header-left')
-            tbl.hAlign = 'RIGHT' if slot.endswith('-right') else ('CENTER' if slot.endswith('-center') else 'LEFT')
-            tbl.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                ('ALIGN', (2, 0), (2, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-                ('SPAN', (0, 0), (2, 0)),
-            ]))
-            return tbl
+                    id_parts.append(f'VAT: {vat}')
+                if id_parts:
+                    kv.append(('', '<b>' + ', '.join(id_parts) + '</b>'))
+                addr = getattr(settings, 'address', '') or ''
+                if addr:
+                    kv.append(('', addr))
+                postal = getattr(settings, 'postal_code', '') or ''
+                city = getattr(settings, 'city', '') or ''
+                country = getattr(settings, 'country', '') or ''
+                loc_parts = [p for p in [f'{postal} {city}'.strip(), country] if p]
+                if loc_parts:
+                    kv.append(('', ', '.join(loc_parts)))
+                phone = getattr(settings, 'phone', '') or ''
+                if phone:
+                    kv.append(('', phone))
+                email = getattr(settings, 'email', '') or ''
+                if email:
+                    kv.append(('', email))
+            bs_si = c.get('block_styles', {}).get('sender_info', {})
+            si_title = L("sender_info") if bs_si.get('show_label', True) else None
+            return _make_block_flowables('sender_info', si_title, kv)
 
         if block_id == 'recipient_info':
-            gap = c.get('meta_gap', 10)
             cust_name = customer.name if customer else getattr(invoice, 'client_name', '')
-            rows = []
+            kv = [('', f'<b>{cust_name}</b>')]
             if customer:
                 if customer.vat_number:
-                    rows.append(('VAT:', customer.vat_number))
-                for fld in ('address', 'city', 'postal_code', 'country'):
-                    v = getattr(customer, fld, '') or ''
-                    if v:
-                        rows.append(('', v))
-            s_lbl = ParagraphStyle('ri_l', parent=style, alignment=2, fontName=font_b)
-            s_val = ParagraphStyle('ri_v', parent=style, alignment=0)
-            tbl_rows = [
-                [Paragraph(f'<b>{L("bill_to")}:</b>', style), '', ''],
-                [Paragraph(f'<b>{cust_name}</b>', style), '', ''],
-            ]
-            for lbl, val in rows:
-                tbl_rows.append([Paragraph(f'<b>{lbl}</b>', s_lbl) if lbl else Paragraph('', s_lbl),
-                                 '',
-                                 Paragraph(val, s_val)])
-            tbl = Table(tbl_rows, colWidths=[None, gap, None])
-            slot = positions.get('recipient_info', 'header-right')
-            tbl.hAlign = 'RIGHT' if slot.endswith('-right') else ('CENTER' if slot.endswith('-center') else 'LEFT')
-            tbl.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                ('ALIGN', (2, 0), (2, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-                ('SPAN', (0, 0), (2, 0)),
-                ('SPAN', (0, 1), (2, 1)),
-            ]))
-            return tbl
+                    kv.append(('', f'<b>VAT: {customer.vat_number}</b>'))
+                addr = getattr(customer, 'address', '') or ''
+                if addr:
+                    kv.append(('', addr))
+                # postal_code + city on one line
+                postal = getattr(customer, 'postal_code', '') or ''
+                city = getattr(customer, 'city', '') or ''
+                city_line = f'{postal} {city}'.strip()
+                if city_line:
+                    kv.append(('', city_line))
+                country = getattr(customer, 'country', '') or ''
+                if country:
+                    kv.append(('', country))
+            return _make_block_flowables('recipient_info', L("bill_to"), kv)
 
         if block_id == 'invoice_meta':
             inv_num = str(invoice.invoice_number)
             issue = invoice.invoice_date.strftime('%d/%m/%Y')
-            gap = c.get('meta_gap', 10)
-            s_label = ParagraphStyle('meta_lbl', parent=style, alignment=2)
-            s_value = ParagraphStyle('meta_val', parent=style, alignment=0)
-            meta_rows = [
-                [Paragraph(f'<b>{L("invoice_number")}:</b>', s_label),
-                 '',
-                 Paragraph(inv_num, s_value)],
-                [Paragraph(f'<b>{L("issue_date")}:</b>', s_label),
-                 '',
-                 Paragraph(issue, s_value)],
+            kv = [
+                (f'{L("invoice_number")}:', inv_num),
+                (f'{L("issue_date")}:', issue),
             ]
-            if c.get('show_due_date'):
-                due = (invoice.due_date or invoice.invoice_date).strftime('%d/%m/%Y')
-                meta_rows.append(
-                    [Paragraph(f'<b>{L("due_date")}:</b>', s_label),
-                     '',
-                     Paragraph(due, s_value)])
-            meta_tbl = Table(meta_rows, colWidths=[None, gap, None])
-            slot = positions.get('invoice_meta', 'top-right')
-            if slot.endswith('-right'):
-                meta_tbl.hAlign = 'RIGHT'
-            elif slot.endswith('-center'):
-                meta_tbl.hAlign = 'CENTER'
-            else:
-                meta_tbl.hAlign = 'LEFT'
-            meta_tbl.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                ('ALIGN', (2, 0), (2, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-            ]))
-            return meta_tbl
+            return _make_block_flowables('invoice_meta', None, kv, value_align='right')
+
+        if block_id == 'due_date':
+            due = (invoice.due_date or invoice.invoice_date).strftime('%d/%m/%Y')
+            return _make_block_flowables('due_date', L("due_date"), [('', due)])
 
         if block_id == 'bank_details':
-            if not c.get('show_bank_details'):
-                return None
             if not invoice.bank:
-                return None
-            gap = c.get('meta_gap', 10)
-            s_lbl = ParagraphStyle('bd_l', parent=style, alignment=2, fontName=font_b)
-            s_val = ParagraphStyle('bd_v', parent=style, alignment=0)
-            tbl_rows = [[Paragraph(f'<b>{L("bank_details")}</b>', style), '', '']]
-            if invoice.bank.bank_name:
-                tbl_rows.append([Paragraph('<b>Bank:</b>', s_lbl), '', Paragraph(invoice.bank.bank_name, s_val)])
+                return []
+            kv = []
+            kv.append(('IBAN:', invoice.bank.iban))
             if invoice.bank.swift:
-                tbl_rows.append([Paragraph('<b>SWIFT:</b>', s_lbl), '', Paragraph(invoice.bank.swift, s_val)])
-            tbl_rows.append([Paragraph('<b>IBAN:</b>', s_lbl), '', Paragraph(invoice.bank.iban, s_val)])
-            tbl = Table(tbl_rows, colWidths=[None, gap, None])
-            slot = positions.get('bank_details', 'bottom-left')
-            tbl.hAlign = 'RIGHT' if slot.endswith('-right') else ('CENTER' if slot.endswith('-center') else 'LEFT')
-            tbl.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-                ('ALIGN', (2, 0), (2, -1), 'LEFT'),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-                ('SPAN', (0, 0), (2, 0)),
-            ]))
-            return tbl
+                kv.append(('SWIFT/BIC:', invoice.bank.swift))
+            if invoice.bank.bank_name:
+                kv.append(('Bank name:', invoice.bank.bank_name))
+            return _make_block_flowables('bank_details', L("bank_details"), kv, value_align='right')
 
         if block_id == 'notes':
-            if not c.get('show_notes'):
-                return None
             if not invoice.notes or not invoice.notes.strip() or invoice.notes == 'None':
-                return None
-            gap = c.get('meta_gap', 10)
-            s_lbl = ParagraphStyle('nt_l', parent=style, alignment=0, fontName=font_b)
-            s_val = ParagraphStyle('nt_v', parent=style, alignment=0)
-            notes_html = invoice.notes.replace('\n', '<br/>')
-            tbl_rows = [
-                [Paragraph(f'<b>{L("notes")}:</b>', s_lbl), '', Paragraph(notes_html, s_val)],
-            ]
-            tbl = Table(tbl_rows, colWidths=[None, gap, None])
-            slot = positions.get('notes', 'bottom-right')
-            tbl.hAlign = 'RIGHT' if slot.endswith('-right') else ('CENTER' if slot.endswith('-center') else 'LEFT')
-            tbl.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-            ]))
-            return tbl
+                return []
+            return _make_block_flowables('notes', L("notes"),
+                                         [('', invoice.notes.replace('\n', '<br/>'))])
 
         if block_id == 'payment_terms':
-            if not c.get('show_payment_terms'):
-                return None
             pt = ''
             if settings and hasattr(settings, 'default_payment_terms'):
                 pt = settings.default_payment_terms or ''
             if not pt:
                 pt = 'Bank Transfer'
-            gap = c.get('meta_gap', 10)
-            s_lbl = ParagraphStyle('pt_l', parent=style, alignment=0, fontName=font_b)
-            s_val = ParagraphStyle('pt_v', parent=style, alignment=0)
-            tbl_rows = [
-                [Paragraph(f'<b>{L("payment_terms")}:</b>', s_lbl), '', Paragraph(pt, s_val)],
-            ]
-            tbl = Table(tbl_rows, colWidths=[None, gap, None])
-            slot = positions.get('payment_terms', 'bottom-right')
-            tbl.hAlign = 'RIGHT' if slot.endswith('-right') else ('CENTER' if slot.endswith('-center') else 'LEFT')
-            tbl.setStyle(TableStyle([
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 1),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
-            ]))
-            return tbl
+            return _make_block_flowables('payment_terms', L("payment_terms"),
+                                         [('', pt)])
 
-        return None
+        return []
 
     # ---- Zone renderer ----
     def _render_zone(zone_name):
-        """Collect blocks assigned to zone_name and render as a 3-col table row."""
-        left_blocks = []
-        center_blocks = []
-        right_blocks = []
-
+        """Render a zone as a single Table. Returns True if anything was rendered."""
+        col_bids = {0: [], 1: [], 2: []}
         for bid in BLOCK_IDS:
             slot = positions.get(bid, 'hidden')
             if slot == 'hidden' or not slot.startswith(zone_name):
                 continue
-            flowable = _build_block(bid)
-            if flowable is None:
-                continue
             col = slot.split('-', 1)[1] if '-' in slot else 'left'
-            if col == 'left':
-                left_blocks.append(flowable)
-            elif col == 'center':
-                center_blocks.append(flowable)
+            idx = {'left': 0, 'center': 1, 'right': 2}.get(col, 0)
+            col_bids[idx].append(bid)
+
+        if not any(col_bids[i] for i in range(3)):
+            return False
+
+        # Determine columns from zone_columns or auto-detect
+        zc_raw = c.get('zone_columns', {}).get(zone_name, [None, None, None])
+        if not zc_raw or len(zc_raw) < 3:
+            zc_raw = list(zc_raw or []) + [None] * (3 - len(zc_raw or []))
+
+        active = [(i, float(zc_raw[i])) for i in range(3) if zc_raw[i] is not None]
+
+        if not active:
+            has_l, has_c, has_r = bool(col_bids[0]), bool(col_bids[1]), bool(col_bids[2])
+            if has_c:
+                active = [(0, CONTENT_W/3), (1, CONTENT_W/3), (2, CONTENT_W/3)]
+            elif has_l and has_r:
+                active = [(0, CONTENT_W/2), (2, CONTENT_W/2)]
+            elif has_l:
+                active = [(0, CONTENT_W)]
+            elif has_r:
+                active = [(2, CONTENT_W)]
             else:
-                right_blocks.append(flowable)
+                return False
 
-        if not left_blocks and not center_blocks and not right_blocks:
-            return  # nothing in this zone
+        # Build flowables per column
+        col_widths = []
+        cell_contents = []
+        col_bg_colors = []  # per-column background color
+        for idx, w in active:
+            col_widths.append(w)
+            flowables = []
+            col_bg = None
+            for bid in col_bids[idx]:
+                bid_offset = offsets.get(bid, {})
+                oy = bid_offset.get('y', 0)
+                if oy:
+                    flowables.append(Spacer(1, oy))
+                block_flows = _build_block(bid)
+                flowables.extend(block_flows)
+                # Collect bg color from block_styles (ignore white = no bg)
+                bs = c.get('block_styles', {}).get(bid, {})
+                bg_val = bs.get('bg', '')
+                if bg_val and bg_val.lower() not in ('', '#ffffff', '#fff') and not col_bg:
+                    col_bg = bg_val
+            if not flowables:
+                flowables = [Paragraph('', s_small)]
+            cell_contents.append(flowables)
+            col_bg_colors.append(col_bg)
 
-        # Determine column layout
-        has_center = len(center_blocks) > 0
-        has_right = len(right_blocks) > 0
-        has_left = len(left_blocks) > 0
-
-        # Build cell content — stack multiple blocks with spacers
-        def _stack(blocks):
-            if not blocks:
-                return Paragraph('', s_small)
-            if len(blocks) == 1:
-                return blocks[0]
-            # Use a nested table to stack blocks (KeepTogether breaks in cells)
-            rows = []
-            for b in blocks:
-                rows.append([b])
-            inner = Table(rows, colWidths=[None])
-            inner.setStyle(TableStyle([
-                ('LEFTPADDING', (0, 0), (-1, -1), 0),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-                ('TOPPADDING', (0, 0), (-1, -1), 0),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ]))
-            return inner
-
-        # Get custom column widths for this zone
-        zc = c.get('zone_columns', {}).get(zone_name)
-
-        if has_center:
-            # 3-column layout
-            if zc and len(zc) == 3:
-                col_widths = [float(zc[0]), float(zc[1]), float(zc[2])]
-            else:
-                w_each = CONTENT_W / 3
-                col_widths = [w_each, w_each, w_each]
-            data = [[_stack(left_blocks), _stack(center_blocks), _stack(right_blocks)]]
-            tbl = Table(data, colWidths=col_widths)
-        elif has_left and has_right:
-            # 2-column layout
-            if zc and len(zc) >= 2:
-                col_widths = [float(zc[0]), float(zc[-1])]
-            else:
-                col_widths = [CONTENT_W / 2, CONTENT_W / 2]
-            data = [[_stack(left_blocks), _stack(right_blocks)]]
-            tbl = Table(data, colWidths=col_widths)
-        elif has_left:
-            # Full width left
-            data = [[_stack(left_blocks)]]
-            tbl = Table(data, colWidths=[CONTENT_W])
-        elif has_right:
-            # Right only — push to right with empty left
-            data = [['', _stack(right_blocks)]]
-            tbl = Table(data, colWidths=[CONTENT_W / 2, CONTENT_W / 2])
-        else:
-            return
+        # Build zone table
+        data = [cell_contents]
+        tbl = Table(data, colWidths=col_widths)
 
         zone_style = [
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('LEFTPADDING', (0, 0), (-1, -1), 0),
             ('RIGHTPADDING', (0, 0), (-1, -1), 0),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]
 
-        # Apply header_bg to recipient column in classic layout
+        # Apply per-column background colors
+        for ci, bg in enumerate(col_bg_colors):
+            if bg:
+                zone_style.append(('BACKGROUND', (ci, 0), (ci, -1), colors.HexColor(bg)))
+                zone_style.append(('LEFTPADDING', (ci, 0), (ci, -1), 8))
+                zone_style.append(('RIGHTPADDING', (ci, 0), (ci, -1), 8))
+                zone_style.append(('TOPPADDING', (ci, 0), (ci, -1), 8))
+                zone_style.append(('BOTTOMPADDING', (ci, 0), (ci, -1), 8))
+
+        # Vertical lines between columns — skip if either adjacent column has bg
+        if show_vert and len(col_widths) > 1:
+            for ci in range(len(col_widths) - 1):
+                left_has_bg = col_bg_colors[ci] if ci < len(col_bg_colors) else None
+                right_has_bg = col_bg_colors[ci + 1] if ci + 1 < len(col_bg_colors) else None
+                if not left_has_bg and not right_has_bg:
+                    zone_style.append(('LINEAFTER', (ci, 0), (ci, -1), 0.5, colors.HexColor('#CCCCCC')))
+
         if zone_name == 'header' and layout == 'classic':
-            # shade the rightmost column
-            col_idx = 2 if has_center else (1 if has_right else 0)
-            zone_style.append(('BACKGROUND', (col_idx, 0), (col_idx, 0), hdr_bg))
-            zone_style.append(('LEFTPADDING', (col_idx, 0), (col_idx, 0), 10))
-            zone_style.append(('TOPPADDING', (col_idx, 0), (col_idx, 0), 8))
-            zone_style.append(('BOTTOMPADDING', (col_idx, 0), (col_idx, 0), 8))
+            ci = len(col_widths) - 1
+            zone_style += [
+                ('BACKGROUND', (ci, 0), (ci, 0), hdr_bg),
+                ('LEFTPADDING', (ci, 0), (ci, 0), 10),
+                ('TOPPADDING', (ci, 0), (ci, 0), 8),
+                ('BOTTOMPADDING', (ci, 0), (ci, 0), 8),
+            ]
 
         tbl.setStyle(TableStyle(zone_style))
         elements.append(tbl)
         elements.append(Spacer(1, 10))
+        return True
 
     def _separator():
         """Add a thin separator line if enabled."""
@@ -1025,7 +1046,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     # ================================================================
 
     # --- Accent line ---
-    if c.get('show_accent_line') and layout in ('modern', 'classic'):
+    if c.get('show_accent_line'):
         line = Table([['']], colWidths=[CONTENT_W])
         line.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, -1), accent),
@@ -1036,21 +1057,20 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
         elements.append(Spacer(1, 12))
 
     # --- TOP zone ---
-    _render_zone('top')
+    _has_top = _render_zone('top')
 
-    _separator()
+    if _has_top:
+        _separator()
 
     # --- HEADER zone ---
-    _render_zone('header')
+    _has_header = _render_zone('header')
 
-    _separator()
+    if _has_header:
+        _separator()
 
     elements.append(Spacer(1, 10))
 
     # --- BODY: Items table ---
-    inv_currency = invoice.currency or 'USD'
-    sym = get_currency_symbol(inv_currency)
-    inv_amount = invoice.amount_eur if inv_currency == 'EUR' else invoice.amount_usd
 
     hdr_style = ParagraphStyle('ih', fontSize=10, fontName=font_b, textColor=accent)
     cell_style = ParagraphStyle('ic', fontSize=9, fontName=font, textColor=text_c)
@@ -1059,7 +1079,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
         Paragraph(f'<b>{L("description")}</b>', hdr_style),
         Paragraph(f'<b>{L("quantity")}</b>', hdr_style),
         Paragraph(f'<b>{L("unit_price")}</b>', hdr_style),
-        Paragraph(f'<b>{L("total")}</b>', hdr_style),
+        Paragraph(f'<b>{L("item_total")}</b>', hdr_style),
     ]]
 
     if invoice.items and len(invoice.items) > 0:
@@ -1102,59 +1122,114 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     elements.append(items_tbl)
     elements.append(Spacer(1, 20))
 
-    # --- BODY: Totals ---
-    vat_pct = settings.default_vat_rate if settings and hasattr(settings, 'default_vat_rate') and settings.default_vat_rate is not None else 21.0
-    tax_rate = 0.0
-    tax_label = f'{L("tax")} 0%'
-    if customer and hasattr(customer, 'tax_type') and customer.tax_type:
-        if customer.tax_type == 'standard':
-            tax_rate = vat_pct / 100.0
-        tax_label = f'{L("tax")} {vat_pct:g}%'
-    tax_amount = inv_amount * tax_rate
-    total = inv_amount + tax_amount
+    # --- SUBTOTAL zone ---
+    # Totals always present; optional block can be placed in subtotal-left or subtotal-right
+    totals_bs = c.get('block_styles', {}).get('totals', {})
+    totals_color = colors.HexColor(totals_bs['color']) if totals_bs.get('color') else text_c
+    totals_bg_hex = totals_bs.get('bg', '')
+    totals_bg = colors.HexColor(totals_bg_hex) if totals_bg_hex and totals_bg_hex.lower() not in ('#ffffff', '#fff', '') else None
 
-    totals_gap = c.get('meta_gap', 10)
-    totals_data = [
-        [Paragraph(f'<b>{L("subtotal")}</b>', s_right_accent),
-         '', Paragraph(f'<b>{sym}{inv_amount:,.2f}</b>', s_right)],
+    s_totals_lbl = ParagraphStyle('stl', parent=s_small, fontName=font_b, alignment=0, textColor=totals_color)
+    s_totals_val = ParagraphStyle('stv', parent=s_small, fontName=font_b, alignment=2, textColor=totals_color)
+    s_totals_total_lbl = ParagraphStyle('sttl', fontSize=13, fontName=font_b, textColor=accent, alignment=0)
+    s_totals_total_val = ParagraphStyle('sttv', fontSize=13, fontName=font_b, textColor=totals_color, alignment=2)
+
+    totals_rows = [
+        [Paragraph(f'<b>{L("subtotal")}</b>', s_totals_lbl),
+         Paragraph(f'<b>{sym}{inv_amount:,.2f}</b>', s_totals_val)],
     ]
     if c.get('show_vat_breakdown'):
-        totals_data.append(
-            [Paragraph(f'<b>{tax_label}</b>', s_right_accent),
-             '', Paragraph(f'<b>{sym}{tax_amount:,.2f}</b>', s_right)])
-    totals_data.append(
-        [Paragraph(f'<b>{L("total")}</b>', s_total_label),
-         '', Paragraph(f'<b>{sym}{total:,.2f}</b>', s_total_val)])
+        totals_rows.append(
+            [Paragraph(f'<b>{_tax_label}</b>', s_totals_lbl),
+             Paragraph(f'<b>{sym}{_tax_amount:,.2f}</b>', s_totals_val)])
+    totals_rows.append(
+        [Paragraph(f'<b>{L("total")}</b>', s_totals_total_lbl),
+         Paragraph(f'<b>{sym}{_total:,.2f}</b>', s_totals_total_val)])
 
-    totals_tbl = Table(totals_data, colWidths=[None, totals_gap, None])
-    totals_tbl.hAlign = 'RIGHT'
-    totals_tbl.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), hdr_bg),
+    pad = 8 if totals_bg else 0
+    last_row = len(totals_rows) - 1
+    totals_tbl_style = [
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), pad),
+        ('RIGHTPADDING', (0, 0), (-1, -1), pad),
         ('TOPPADDING', (0, 0), (-1, -1), 6),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('LINEABOVE', (0, -1), (-1, -1), 1, accent),
-    ]))
-    # Wrap in outer table to push totals to the right
-    wrapper = Table([[totals_tbl]], colWidths=[512])
-    wrapper.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'RIGHT'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-    ]))
-    elements.append(wrapper)
+        ('LINEABOVE', (0, last_row), (-1, last_row), 0.5, colors.HexColor('#CCCCCC')),
+    ]
+    if totals_bg:
+        totals_tbl_style.append(('BACKGROUND', (0, 0), (-1, -1), totals_bg))
+
+    totals_tbl = Table(totals_rows, colWidths=[None, None])
+    totals_tbl.setStyle(TableStyle(totals_tbl_style))
+
+    # Check if any block is placed in subtotal zone
+    sub_left_bids = []
+    sub_right_bids = []
+    for bid in BLOCK_IDS:
+        slot = positions.get(bid, 'hidden')
+        if slot == 'subtotal-left':
+            sub_left_bids.append(bid)
+        elif slot == 'subtotal-right':
+            sub_right_bids.append(bid)
+
+    # Get subtotal zone column widths
+    sub_zc = c.get('zone_columns', {}).get('subtotal', [None, None, None])
+    if not sub_zc or len(sub_zc) < 3:
+        sub_zc = list(sub_zc or []) + [None] * (3 - len(sub_zc or []))
+
+    if sub_left_bids:
+        # Block on left, totals on right
+        left_flowables = []
+        for bid in sub_left_bids:
+            left_flowables.extend(_build_block(bid))
+        if not left_flowables:
+            left_flowables = [Paragraph('', s_small)]
+        left_w = float(sub_zc[0]) if sub_zc[0] is not None else CONTENT_W / 2
+        right_w = float(sub_zc[2]) if sub_zc[2] is not None else CONTENT_W - left_w
+        zone_tbl = Table([[left_flowables, totals_tbl]], colWidths=[left_w, right_w])
+        zone_tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(zone_tbl)
+    elif sub_right_bids:
+        # Totals on left, block on right
+        right_flowables = []
+        for bid in sub_right_bids:
+            right_flowables.extend(_build_block(bid))
+        if not right_flowables:
+            right_flowables = [Paragraph('', s_small)]
+        left_w = float(sub_zc[0]) if sub_zc[0] is not None else CONTENT_W / 2
+        right_w = float(sub_zc[2]) if sub_zc[2] is not None else CONTENT_W - left_w
+        zone_tbl = Table([[totals_tbl, right_flowables]], colWidths=[left_w, right_w])
+        zone_tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.append(zone_tbl)
+    else:
+        # Totals only, full width
+        elements.append(totals_tbl)
+
     elements.append(Spacer(1, 25))
 
     _separator()
 
     # --- BOTTOM zone ---
-    _render_zone('bottom')
+    _has_bottom = _render_zone('bottom')
 
-    _separator()
+    if _has_bottom:
+        _separator()
 
     # --- FOOTER zone ---
     _render_zone('footer')
