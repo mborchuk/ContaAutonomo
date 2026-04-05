@@ -18,7 +18,6 @@ References (content rephrased for compliance with licensing restrictions):
 """
 
 from module_manager import BaseModule
-from flask import render_template
 
 
 # Polish tax constants (2025/2026)
