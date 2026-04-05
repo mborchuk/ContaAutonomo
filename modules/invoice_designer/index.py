@@ -315,7 +315,9 @@ class InvoiceDesignerModule(BaseModule):
             name = request.form.get('name', '').strip()
             if not name:
                 flash('Template name is required.', 'danger')
-                return redirect(request.url)
+                if tpl:
+                    return redirect(url_for('invoice_designer.designer_edit', id=tpl.id))
+                return redirect(url_for('invoice_designer.designer_create'))
 
             # If submitted from JSON editor, use raw JSON directly
             raw_json = request.form.get('config_json_raw', '').strip()
@@ -457,8 +459,10 @@ class InvoiceDesignerModule(BaseModule):
             return redirect(url_for('invoice_designer.designer_index'))
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error: {e}', 'danger')
-            return redirect(request.url)
+            flash(f'Error saving template.', 'danger')
+            if tpl:
+                return redirect(url_for('invoice_designer.designer_edit', id=tpl.id))
+            return redirect(url_for('invoice_designer.designer_create'))
 
     def _delete_template(self, id):
         tpl = self.InvoiceTemplate.query.get_or_404(id)
@@ -710,7 +714,6 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
         lw = _block_label_widths.get(block_id, 0)
         bs = c.get('block_styles', {}).get(block_id, {})
         blk_color = colors.HexColor(bs['color']) if bs.get('color') else text_c
-        blk_bg = colors.HexColor(bs['bg']) if bs.get('bg') else None
         show_label = bs.get('show_label', True)
 
         result = []
@@ -800,10 +803,8 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
             return [Paragraph(f'<b>{L("invoice_title")}</b>', ts)]
 
         if block_id == 'sender_info':
-            sender_name = ''
             kv = []
             if settings:
-                sender_name = getattr(settings, 'business_name', '') or getattr(settings, 'owner_name', '') or ''
                 owner = getattr(settings, 'owner_name', '') or ''
                 business = getattr(settings, 'business_name', '') or ''
                 # Show business name or owner name as first line (always)

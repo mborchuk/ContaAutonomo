@@ -6,7 +6,7 @@ Supports: Local filesystem (default), AWS S3, Google Cloud Storage, Google Drive
 """
 
 from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
-from flask import Blueprint, redirect, url_for, flash, request
+from flask import Blueprint, redirect, url_for, flash
 from datetime import datetime
 import logging
 import os

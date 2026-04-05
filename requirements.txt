@@ -15,4 +15,4 @@ anthropic>=0.20.0
 google-cloud-documentai>=2.20.0
 pyhanko
 Pillow
-pypdf
+pypdf>=4.0.0

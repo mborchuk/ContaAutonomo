@@ -570,7 +570,6 @@ def dashboard():
     current_year_income = sum(inv.amount_base for inv in current_year_invoices)
 
     # VAT collected — let modules override, fallback to configured rate
-    vat_label = 'VAT'
     vat_rate = (app_settings.default_vat_rate or 21.0) / 100.0 if app_settings else 0.21
     vat_collected = 0
 
@@ -583,7 +582,6 @@ def dashboard():
         if vat_override:
             vat_collected = vat_override['vat_collected']
             vat_rate = vat_override.get('vat_rate', vat_rate)
-            vat_label = vat_override.get('label', 'VAT')
 
     if not vat_collected:
         for inv in current_year_invoices:

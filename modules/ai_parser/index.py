@@ -6,7 +6,7 @@ Supports multiple backends: OpenAI (GPT-4o), Google Document AI, Anthropic Claud
 """
 
 from module_manager import BaseModule
-from flask import Blueprint, request, redirect, url_for, flash, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template
 import json
 import base64
 from datetime import datetime
@@ -216,7 +216,7 @@ class GoogleDocAIProvider(BaseAIProvider):
                                 item['unit_price'] = float(
                                     prop.mention_text.replace(',', '.').replace('€', '').replace('$', '').strip())
                             except ValueError:
-                                pass
+                                pass  # non-numeric price, skip
                     if item.get('description'):
                         items.append(item)
 
@@ -390,7 +390,7 @@ class AIParserModule(BaseModule):
                 module.core.log_activity(
                     'ai_parse_failed', 'ai_parser',
                     f'Failed to parse {file.filename}: {e}')
-                return jsonify({'error': str(e)}), 500
+                return jsonify({'error': 'Parsing failed. Check server logs.'}), 500
 
         app.register_blueprint(bp)
 

@@ -21,7 +21,6 @@ def _sanitize_log(value):
 import importlib
 import importlib.util
 from abc import ABC, abstractmethod
-from flask import Blueprint
 
 
 class BaseModule(ABC):

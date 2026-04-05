@@ -683,7 +683,7 @@ class PDFSignatureModule(BaseModule):
                 return jsonify({'storage_key': storage_key})
             except Exception as e:
                 module.logger.error('PDF Signature upload failed: %s', e)
-                return jsonify({'error': f'Upload failed: {e}'}), 500
+                return jsonify({'error': 'Upload failed. Check server logs.'}), 500
 
         @bp.route('/preview-signature')
         @login_required
