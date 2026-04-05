@@ -4,7 +4,7 @@
 
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h1>Documents</h1>
+    <h1>Documents <span style="font-size: 14px; color: #999; font-weight: normal;">({{ total }})</span></h1>
     <a href="{{ url_for('documents.documents_create') }}" class="btn btn-success">+ Add Document</a>
 </div>
 
@@ -59,15 +59,40 @@
 </div>
 {% endif %}
 
+<!-- Bulk actions bar (hidden until checkboxes selected) -->
+<div id="bulkBar" style="display:none; background:#e3f2fd; padding:10px 15px; border-radius:5px; margin-bottom:12px; align-items:center; gap:10px;">
+    <span id="bulkCount" style="font-size:13px; font-weight:bold; color:#1565c0;">0 selected</span>
+    <form method="POST" action="{{ url_for('documents.documents_bulk') }}" id="bulkForm" style="display:inline-flex; gap:8px; align-items:center; margin-left:12px;">
+        <div id="bulkIdsContainer"></div>
+        <select name="bulk_action" id="bulkAction" class="form-control" style="width:auto; padding:4px 8px; font-size:12px;">
+            <option value="">— Action —</option>
+            <option value="delete">🗑 Delete</option>
+            <option value="set_category">🏷 Set Category</option>
+            <option value="add_tag">🔖 Add Tag</option>
+        </select>
+        <input type="text" name="bulk_category" id="bulkCategory" placeholder="Category" style="display:none; padding:4px 8px; font-size:12px; width:140px;">
+        <input type="text" name="bulk_tag" id="bulkTag" placeholder="Tag" style="display:none; padding:4px 8px; font-size:12px; width:140px;">
+        <button type="submit" class="btn btn-primary" style="padding:4px 12px; font-size:12px;">Apply</button>
+    </form>
+</div>
+
 <!-- Documents Table -->
 {% if documents %}
+{% macro sort_link(col, label) %}
+{% set new_dir = 'asc' if sort_by == col and sort_dir == 'desc' else 'desc' %}
+{% set arrow = '▼' if sort_by == col and sort_dir == 'desc' else ('▲' if sort_by == col else '') %}
+<a href="{{ url_for('documents.documents_index', sort=col, dir=new_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
+   style="text-decoration:none; color:inherit;">{{ label }} {{ arrow }}</a>
+{% endmacro %}
+
 <table class="expenseTable">
     <thead>
         <tr>
-            <th>Date</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Amount</th>
+            <th style="width:30px;"><input type="checkbox" id="selectAll" title="Select all"></th>
+            <th>{{ sort_link('document_date', 'Date') }}</th>
+            <th>{{ sort_link('name', 'Name') }}</th>
+            <th>{{ sort_link('category', 'Category') }}</th>
+            <th>{{ sort_link('amount', 'Amount') }}</th>
             <th>Tags</th>
             <th>File</th>
             <th>Actions</th>
@@ -79,17 +104,21 @@
             {% if doc.document_date and doc.document_date.year != current_year.value %}
                 {% set current_year.value = doc.document_date.year %}
                 <tr style="background: #e3f2fd;">
-                    <td colspan="7" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                    <td colspan="8" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
                         {{ current_year.value }}
                     </td>
                 </tr>
             {% endif %}
             <tr{% if fill_row_color and doc.category and category_colors.get(doc.category) %} style="background: {{ category_colors.get(doc.category) }};"{% endif %}>
+                <td><input type="checkbox" class="doc-check" value="{{ doc.id }}"></td>
                 <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
                 <td style="font-weight: 500;">
-                    <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration:none; color:#333;">{{ doc.name }}</a>
+                    <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration: none; color: #333;">
+                    {{ doc.name }}
+                    </a>
                     {% if doc.expiry_date %}
-                    <br><span style="font-size: 11px; color: #999;">Expires: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
+                    <br><span style="font-size: 11px; color: {{ '#d9534f' if doc.expiry_date < today else '#999' }};">
+                        {{ 'Expired' if doc.expiry_date < today else 'Expires' }}: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
                     {% endif %}
                 </td>
                 <td>
@@ -112,71 +141,117 @@
                 <td style="white-space: nowrap;">
                     {% set doc_files = files_by_doc.get(doc.id, []) %}
                     {% if doc_files %}
-                        <span style="font-size: 11px; color: #888;">
-                            {{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}
-                        </span>
+                        <span style="font-size: 11px; color: #888;">{{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}</span>
                     {% elif doc.file_format %}
-                        <span style="font-size: 11px; color: #888;">
-                            {{ (doc.file_format or '')|upper }}
-                            {% if doc.file_size %}
-                                · {{ '%.1f'|format(doc.file_size / 1024) }} KB
-                            {% endif %}
-                        </span>
+                        <span style="font-size: 11px; color: #888;">{{ (doc.file_format or '')|upper }}</span>
                     {% else %}-{% endif %}
                 </td>
-                <td style="white-space: nowrap;">
-                    {% set doc_files = files_by_doc.get(doc.id, []) %}
-                    {% if doc_files %}
-                        <div class="doc-dropdown" style="display: inline-block; position: relative;">
-                            <button type="button" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;"
-                                    onclick="docToggleDropdown(this)">📎 {{ doc_files|length }} ▾</button>
-                            <div class="doc-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; z-index:100; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); min-width:220px; padding:4px 0; margin-top:2px;">
+                <td style="white-space: nowrap; overflow: visible;">
+                    <div class="action-dropdown" style="position: relative; display: inline-block;">
+                        <button class="btn btn-secondary action-dropdown-toggle" style="padding: 4px 10px; font-size: 12px;">⋮</button>
+                        <div class="action-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:100; min-width:160px; padding:4px 0;">
+                            {% set doc_files = files_by_doc.get(doc.id, []) %}
+                            {% if doc_files %}
                                 {% for df in doc_files %}
-                                <div style="padding:6px 12px; border-bottom:{% if not loop.last %}1px solid #f0f0f0{% else %}none{% endif %}; display:flex; align-items:center; gap:6px;">
-                                    <span style="flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ df.original_filename }}">{{ df.original_filename or 'file' }}</span>
-                                    <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
-                                       style="padding:2px 5px; font-size:11px; text-decoration:none;" title="Preview">👁</a>
-                                    <a href="{{ url_for('documents.file_download', file_id=df.id) }}"
-                                       style="padding:2px 5px; font-size:11px; text-decoration:none;" title="Download">📥</a>
-                                </div>
+                                <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
+                                   style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">👁 {{ df.original_filename|truncate(25) }}</a>
                                 {% endfor %}
-                            </div>
+                                <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
+                            {% endif %}
+                            <a href="{{ url_for('documents.documents_edit', id=doc.id) }}"
+                               style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">✏️ Edit</a>
+                            <form method="POST" action="{{ url_for('documents.documents_duplicate', id=doc.id) }}" style="margin:0;">
+                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:#333; background:none; border:none; cursor:pointer;">📋 Duplicate</button>
+                            </form>
+                            <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
+                            <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="margin:0;" onsubmit="return confirm('Delete this document?');">
+                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:#d9534f; background:none; border:none; cursor:pointer;">🗑 Delete</button>
+                            </form>
                         </div>
-                    {% else %}
-                        {% set fmt = (doc.file_format or '')|lower %}
-                        {% if fmt in ['pdf', 'jpg', 'jpeg', 'png'] %}
-                        <a href="{{ url_for('documents.documents_preview', id=doc.id) }}" target="_blank"
-                           class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
-                        {% endif %}
-                        <a href="{{ url_for('documents.documents_download', id=doc.id) }}"
-                           class="btn btn-success" style="padding: 4px 8px; font-size: 12px;" title="Download">📥</a>
-                    {% endif %}
-                    <a href="{{ url_for('documents.documents_edit', id=doc.id) }}"
-                       class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
-                    <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="display: inline;" onsubmit="return confirm('Delete this document?');">
-                        <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
-                    </form>
+                    </div>
                 </td>
             </tr>
         {% endfor %}
     </tbody>
 </table>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div style="display:flex; justify-content:center; gap:6px; margin-top:20px;">
+    {% if page > 1 %}
+    <a href="{{ url_for('documents.documents_index', page=page-1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
+       class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">← Prev</a>
+    {% endif %}
+    <span style="padding:6px 12px; font-size:13px; color:#666;">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="{{ url_for('documents.documents_index', page=page+1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
+       class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">Next →</a>
+    {% endif %}
+</div>
+{% endif %}
+
 {% else %}
 <p style="text-align: center; color: #666; padding: 40px;">No documents found. <a href="{{ url_for('documents.documents_create') }}">Add your first document</a></p>
 {% endif %}
 
 <script>
-function docToggleDropdown(btn) {
-    var menu = btn.nextElementSibling;
-    var isOpen = menu.style.display !== 'none';
-    // Close all open dropdowns first
-    document.querySelectorAll('.doc-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
-    if (!isOpen) menu.style.display = 'block';
-}
+/* Dropdown toggle */
 document.addEventListener('click', function(e) {
-    if (!e.target.closest('.doc-dropdown')) {
-        document.querySelectorAll('.doc-dropdown-menu').forEach(function(m) { m.style.display = 'none'; });
+    var toggle = e.target.closest('.action-dropdown-toggle');
+    var allMenus = document.querySelectorAll('.action-dropdown-menu');
+    if (toggle) {
+        e.stopPropagation();
+        var menu = toggle.nextElementSibling;
+        var wasOpen = menu.style.display === 'block';
+        allMenus.forEach(function(m) { m.style.display = 'none'; });
+        if (!wasOpen) menu.style.display = 'block';
+    } else {
+        allMenus.forEach(function(m) { m.style.display = 'none'; });
     }
+});
+
+/* Bulk selection */
+var selectAll = document.getElementById('selectAll');
+var bulkBar = document.getElementById('bulkBar');
+var bulkCount = document.getElementById('bulkCount');
+var bulkAction = document.getElementById('bulkAction');
+var bulkCategory = document.getElementById('bulkCategory');
+var bulkTag = document.getElementById('bulkTag');
+var bulkIdsContainer = document.getElementById('bulkIdsContainer');
+
+function updateBulk() {
+    var checked = document.querySelectorAll('.doc-check:checked');
+    if (checked.length > 0) {
+        bulkBar.style.display = 'flex';
+        bulkCount.textContent = checked.length + ' selected';
+    } else {
+        bulkBar.style.display = 'none';
+    }
+    bulkIdsContainer.innerHTML = '';
+    checked.forEach(function(cb) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'doc_ids'; inp.value = cb.value;
+        bulkIdsContainer.appendChild(inp);
+    });
+}
+
+if (selectAll) {
+    selectAll.addEventListener('change', function() {
+        document.querySelectorAll('.doc-check').forEach(function(cb) { cb.checked = selectAll.checked; });
+        updateBulk();
+    });
+}
+document.querySelectorAll('.doc-check').forEach(function(cb) { cb.addEventListener('change', updateBulk); });
+
+if (bulkAction) {
+    bulkAction.addEventListener('change', function() {
+        bulkCategory.style.display = bulkAction.value === 'set_category' ? 'inline' : 'none';
+        bulkTag.style.display = bulkAction.value === 'add_tag' ? 'inline' : 'none';
+    });
+}
+
+document.getElementById('bulkForm').addEventListener('submit', function(e) {
+    if (bulkAction.value === 'delete' && !confirm('Delete selected documents?')) e.preventDefault();
 });
 </script>
 

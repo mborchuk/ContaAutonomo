@@ -694,6 +694,12 @@ def dashboard():
     from datetime import date, timedelta
     tax_deadlines = _get_upcoming_tax_deadlines()
 
+    # Collect module dashboard panels
+    module_panels = []
+    if module_manager:
+        module_panels = module_manager.get_dashboard_panels()
+        module_panels.sort(key=lambda p: p.get('order', 50))
+
     return render_template('dashboard.html',
                          invoices_by_year=invoices_by_year,
                          sorted_years=sorted_years,
@@ -710,7 +716,8 @@ def dashboard():
                          current_date=today,
                          holidays=holidays,
                          tax_deadlines=tax_deadlines,
-                         settings=app_settings)
+                         settings=app_settings,
+                         module_panels=module_panels)
 
 
 @app.route('/invoices')

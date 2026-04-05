@@ -17,56 +17,93 @@
 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
     <!-- Left: Details -->
     <div>
+        <!-- Info card -->
         <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
             <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">Document Details</h3>
             <table style="width: 100%; font-size: 14px;">
                 <tr>
                     <td style="padding: 6px 0; color: #888; width: 140px;">Status</td>
                     <td style="padding: 6px 0;">
-                        {% set sc = {'active': '#28a745', 'pending': '#ffc107', 'archived': '#6c757d', 'expired': '#dc3545'} %}
-                        <span style="padding: 2px 10px; border-radius: 12px; font-size: 12px; color: #fff; background: {{ sc.get(doc.status or 'active', '#6c757d') }};">
-                            {{ (doc.status or 'active')|capitalize }}</span>
+                        {% set status_colors = {'active': '#28a745', 'pending': '#ffc107', 'archived': '#6c757d', 'expired': '#dc3545'} %}
+                        <span style="padding: 2px 10px; border-radius: 12px; font-size: 12px; color: #fff; background: {{ status_colors.get(doc.status or 'active', '#6c757d') }};">
+                            {{ (doc.status or 'active')|capitalize }}
+                        </span>
                     </td>
                 </tr>
-                <tr><td style="padding: 6px 0; color: #888;">Category</td>
-                    <td style="padding: 6px 0;">{% if doc.category %}<span style="padding: 2px 8px; border-radius: 3px; font-size: 12px; background: {{ category_colors.get(doc.category, '#e2e3e5') }};">{{ doc.category }}</span>{% else %}—{% endif %}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Date</td>
-                    <td style="padding: 6px 0;">{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '—' }}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Expiry Date</td>
-                    <td style="padding: 6px 0;">{% if doc.expiry_date %}<span style="color: {{ '#dc3545' if doc.expiry_date < today else '#333' }};">{{ doc.expiry_date.strftime('%d/%m/%Y') }}{% if doc.expiry_date < today %} (expired){% endif %}</span>{% else %}—{% endif %}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Amount</td>
-                    <td style="padding: 6px 0;">{{ '%.2f'|format(doc.amount) if doc.amount else '—' }}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Reference #</td>
-                    <td style="padding: 6px 0;">{{ doc.reference_number or '—' }}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Counterparty</td>
-                    <td style="padding: 6px 0;">{{ doc.counterparty or '—' }}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Tags</td>
-                    <td style="padding: 6px 0;">{% if doc.tags %}{% for t in doc.tags.split(',') %}<a href="{{ url_for('documents.documents_index', tag=t.strip()) }}" style="display:inline-block; padding:1px 8px; margin:1px; border-radius:10px; font-size:12px; background:#f0f0f0; color:#555; text-decoration:none;">{{ t.strip() }}</a>{% endfor %}{% else %}—{% endif %}</td></tr>
-                <tr><td style="padding: 6px 0; color: #888;">Description</td>
-                    <td style="padding: 6px 0;">{{ doc.description or '—' }}</td></tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Category</td>
+                    <td style="padding: 6px 0;">
+                        {% if doc.category %}
+                        <span style="padding: 2px 8px; border-radius: 3px; font-size: 12px; background: {{ category_colors.get(doc.category, '#e2e3e5') }};">{{ doc.category }}</span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Date</td>
+                    <td style="padding: 6px 0;">{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Expiry Date</td>
+                    <td style="padding: 6px 0;">
+                        {% if doc.expiry_date %}
+                        <span style="color: {{ '#dc3545' if doc.expiry_date < today else '#333' }};">
+                            {{ doc.expiry_date.strftime('%d/%m/%Y') }}
+                            {% if doc.expiry_date < today %} (expired){% endif %}
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Amount</td>
+                    <td style="padding: 6px 0;">{{ '%.2f'|format(doc.amount) if doc.amount else '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Reference #</td>
+                    <td style="padding: 6px 0;">{{ doc.reference_number or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Counterparty</td>
+                    <td style="padding: 6px 0;">{{ doc.counterparty or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Tags</td>
+                    <td style="padding: 6px 0;">
+                        {% if doc.tags %}
+                            {% for t in doc.tags.split(',') %}
+                            <a href="{{ url_for('documents.documents_index', tag=t.strip()) }}"
+                               style="display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 10px; font-size: 12px; background: #f0f0f0; color: #555; text-decoration: none;">{{ t.strip() }}</a>
+                            {% endfor %}
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #888;">Description</td>
+                    <td style="padding: 6px 0;">{{ doc.description or '—' }}</td>
+                </tr>
             </table>
         </div>
 
         <!-- Files -->
         <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">📎 Files ({{ doc_files|length }})</h3>
+            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                📎 Files ({{ doc_files|length }})
+            </h3>
             {% if doc_files %}
             {% for df in doc_files %}
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid #f5f5f5;{% endif %}">
                 <div style="flex: 1; min-width: 0;">
                     <span style="font-size: 13px;">📄 {{ df.original_filename or 'file' }}</span>
-                    {% if df.file_size %}<span style="font-size: 11px; color: #999; margin-left: 8px;">{{ '%.1f'|format(df.file_size / 1024) }} KB</span>{% endif %}
-                    {% if df.file_format %}<span style="font-size: 10px; color: #999; margin-left: 4px;">{{ df.file_format|upper }}</span>{% endif %}
+                    {% if df.file_size %}
+                    <span style="font-size: 11px; color: #999; margin-left: 8px;">{{ '%.1f'|format(df.file_size / 1024) }} KB</span>
+                    {% endif %}
+                    {% if df.file_format %}
+                    <span style="font-size: 10px; color: #999; margin-left: 4px;">{{ df.file_format|upper }}</span>
+                    {% endif %}
                     <span style="font-size: 11px; color: #bbb; margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">👁 Preview</a>
                     <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success" style="padding: 3px 8px; font-size: 11px;">📥 Download</a>
-                    {% if df.file_format and df.file_format|lower == 'pdf' and module_manager and module_manager.modules.get('pdf_signature') %}
-                    <form method="POST" action="{{ url_for('documents.file_sign', file_id=df.id) }}" style="margin:0;" onsubmit="return confirm('Sign this PDF?');">
-                        <button type="submit" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ Sign</button>
-                    </form>
-                    {% endif %}
                 </div>
             </div>
             {% endfor %}
@@ -78,6 +115,7 @@
 
     <!-- Right: Meta + History -->
     <div>
+        <!-- Meta -->
         <div style="background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
             <div style="color: #888; margin-bottom: 6px;">Created</div>
             <div style="margin-bottom: 12px;">{{ doc.created_at.strftime('%d/%m/%Y %H:%M') if doc.created_at else '—' }}</div>
@@ -87,6 +125,7 @@
             <div>#{{ doc.id }}</div>
         </div>
 
+        <!-- History -->
         <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;">
             <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #666;">📜 History</h3>
             {% if history %}
@@ -94,11 +133,13 @@
                 {% for h in history %}
                 <div style="padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid #f5f5f5;{% endif %} font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        {% set icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑'} %}
-                        <span style="font-weight: 500;">{{ icons.get(h.action, '•') }} {{ h.action|replace('_', ' ')|capitalize }}</span>
+                        {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄'} %}
+                        <span style="font-weight: 500;">{{ action_icons.get(h.action, '•') }} {{ h.action|replace('_', ' ')|capitalize }}</span>
                         <span style="color: #999;">{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                     </div>
-                    {% if h.details %}<div style="color: #666; font-size: 11px; word-break: break-word;">{{ h.details }}</div>{% endif %}
+                    {% if h.details %}
+                    <div style="color: #666; font-size: 11px; word-break: break-word;">{{ h.details }}</div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -108,4 +149,5 @@
         </div>
     </div>
 </div>
+
 {% endblock %}

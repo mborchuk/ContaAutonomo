@@ -7,8 +7,9 @@ Categories are auto-collected from documents + managed via a dedicated page.
 
 from module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
-                   url_for, flash)
+                   url_for, flash, jsonify)
 from datetime import datetime, date, timedelta
+import os
 
 
 class DocumentsModule(BaseModule):
@@ -27,7 +28,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.4.0'
+        return '0.5.0'
 
     @property
     def nav_items(self):
@@ -53,15 +54,15 @@ class DocumentsModule(BaseModule):
             amount = db.Column(db.Float)
             tags = db.Column(db.String(500))
             description = db.Column(db.Text)
+            reference_number = db.Column(db.String(100))
+            counterparty = db.Column(db.String(200))
+            status = db.Column(db.String(20), default='active')  # active, archived, pending, expired
             file_path = db.Column(db.String(500), nullable=False)
             original_filename = db.Column(db.String(300))
             file_size = db.Column(db.Integer)
             file_format = db.Column(db.String(10))
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
             updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-            reference_number = db.Column(db.String(100))
-            counterparty = db.Column(db.String(200))
-            status = db.Column(db.String(20), default='active')
 
         class DocumentCategory(db.Model):
             __tablename__ = 'document_category'
@@ -87,20 +88,19 @@ class DocumentsModule(BaseModule):
             key = db.Column(db.String(50), primary_key=True)
             value = db.Column(db.String(200))
 
-        self.Document = Document
-        self.DocumentCategory = DocumentCategory
-        self.DocumentFile = DocumentFile
-        self.DocumentConfig = DocumentConfig
-
         class DocumentHistory(db.Model):
             __tablename__ = 'document_history'
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
             document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
-            action = db.Column(db.String(50), nullable=False)
+            action = db.Column(db.String(50), nullable=False)  # created, updated, file_added, file_removed, status_changed
             details = db.Column(db.Text)
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+        self.Document = Document
+        self.DocumentCategory = DocumentCategory
+        self.DocumentFile = DocumentFile
+        self.DocumentConfig = DocumentConfig
         self.DocumentHistory = DocumentHistory
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
                 'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory}
@@ -237,11 +237,6 @@ class DocumentsModule(BaseModule):
         def file_delete(file_id):
             return module._delete_file(file_id)
 
-        @bp.route('/file/<int:file_id>/sign', methods=['POST'])
-        @login_required
-        def file_sign(file_id):
-            return module._sign_file(file_id)
-
         @bp.route('/categories')
         @login_required
         def categories_index():
@@ -326,24 +321,31 @@ class DocumentsModule(BaseModule):
             self._db.session.commit()
 
     def _log_history(self, doc_id, action, details=''):
+        """Record a history entry for a document."""
         self._db.session.add(self.DocumentHistory(
             document_id=doc_id, action=action, details=details))
 
     def _track_changes(self, doc, form):
+        """Compare form data with current doc and log changes."""
         changes = []
-        for field, label in [('name', 'Name'), ('category', 'Category'), ('tags', 'Tags'),
-                              ('description', 'Description'), ('reference_number', 'Reference'),
-                              ('counterparty', 'Counterparty'), ('status', 'Status')]:
+        field_map = {
+            'name': 'Name', 'category': 'Category', 'tags': 'Tags',
+            'description': 'Description', 'reference_number': 'Reference',
+            'counterparty': 'Counterparty', 'status': 'Status',
+        }
+        for field, label in field_map.items():
             old = getattr(doc, field, '') or ''
             new = form.get(field, '').strip()
             if old != new:
                 changes.append(f'{label}: "{old}" → "{new}"')
+        # Date fields
         for field, label in [('document_date', 'Date'), ('expiry_date', 'Expiry')]:
             old = getattr(doc, field)
             old_str = old.strftime('%Y-%m-%d') if old else ''
             new_str = form.get(field, '').strip()
             if old_str != new_str:
                 changes.append(f'{label}: {old_str or "—"} → {new_str or "—"}')
+        # Amount
         old_amt = f'{doc.amount:.2f}' if doc.amount else ''
         new_amt = form.get('amount', '').strip()
         if old_amt != new_amt:
@@ -388,7 +390,18 @@ class DocumentsModule(BaseModule):
         if tag:
             query = query.filter(self.Document.tags.ilike(f'%{tag}%'))
 
-        documents = query.order_by(self.Document.document_date.desc()).all()
+        # Sorting
+        sort_by = request.args.get('sort', 'document_date')
+        sort_dir = request.args.get('dir', 'desc')
+        sort_col = getattr(self.Document, sort_by, self.Document.document_date)
+        query = query.order_by(sort_col.asc() if sort_dir == 'asc' else sort_col.desc())
+
+        # Pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = 50
+        total = query.count()
+        documents = query.offset((page - 1) * per_page).limit(per_page).all()
+        total_pages = (total + per_page - 1) // per_page
 
         # Load attached files for each document
         doc_ids = [d.id for d in documents]
@@ -421,7 +434,10 @@ class DocumentsModule(BaseModule):
                                category_colors=category_colors,
                                fill_row_color=(self._get_config('fill_row_color', '0') == '1'),
                                all_tags=sorted(all_tags),
-                               years=sorted(years, reverse=True))
+                               years=sorted(years, reverse=True),
+                               sort_by=sort_by, sort_dir=sort_dir,
+                               page=page, total_pages=total_pages, total=total,
+                               today=date.today())
 
     def _create_document(self):
         if request.method == 'POST':
@@ -461,6 +477,9 @@ class DocumentsModule(BaseModule):
                     amount=amount,
                     tags=request.form.get('tags', '').strip() or None,
                     description=request.form.get('description', '').strip() or None,
+                    reference_number=request.form.get('reference_number', '').strip() or None,
+                    counterparty=request.form.get('counterparty', '').strip() or None,
+                    status=request.form.get('status', 'active').strip(),
                     file_path='_multi_',
                     original_filename=first.filename,
                     file_size=first_size,
@@ -490,6 +509,7 @@ class DocumentsModule(BaseModule):
         doc = self.Document.query.get_or_404(id)
         if request.method == 'POST':
             try:
+                # Track changes before applying
                 changes = self._track_changes(doc, request.form)
 
                 doc.name = request.form['name']
@@ -517,17 +537,17 @@ class DocumentsModule(BaseModule):
                 doc.updated_at = datetime.utcnow()
 
                 # Add new files
-                added = []
                 files = request.files.getlist('files')
+                added_files = []
                 for f in files:
                     if f and f.filename:
                         self._save_document_file(doc.id, f)
-                        added.append(f.filename)
+                        added_files.append(f.filename)
 
                 if changes:
                     self._log_history(doc.id, 'updated', '; '.join(changes))
-                if added:
-                    self._log_history(doc.id, 'file_added', ', '.join(added))
+                if added_files:
+                    self._log_history(doc.id, 'file_added', ', '.join(added_files))
 
                 self._db.session.commit()
                 flash('Document updated.', 'success')
@@ -630,129 +650,17 @@ class DocumentsModule(BaseModule):
         """Delete a single attached file."""
         df = self.DocumentFile.query.get_or_404(file_id)
         doc_id = df.document_id
+        fname = df.original_filename or 'file'
         try:
             self.core.storage.delete(df.file_path)
             self._db.session.delete(df)
+            self._log_history(doc_id, 'file_removed', fname)
             self._db.session.commit()
             flash('File removed.', 'success')
         except Exception as e:
             self._db.session.rollback()
             flash(f'Error: {e}', 'danger')
         return redirect(url_for('documents.documents_edit', id=doc_id))
-
-    def _sign_file(self, file_id):
-        """Sign a PDF file using the pdf_signature module."""
-        df = self.DocumentFile.query.get_or_404(file_id)
-        doc_id = df.document_id
-
-        pdf_sig = self.core.module_manager.modules.get('pdf_signature')
-        if not pdf_sig:
-            flash('PDF Signature module is not enabled.', 'danger')
-            return redirect(url_for('documents.documents_view', id=doc_id))
-
-        fmt = (df.file_format or '').lower()
-        if fmt != 'pdf':
-            flash('Only PDF files can be signed.', 'danger')
-            return redirect(url_for('documents.documents_view', id=doc_id))
-
-        try:
-            result = self.core.storage.get(df.file_path)
-            if not result:
-                flash('File not found in storage.', 'danger')
-                return redirect(url_for('documents.documents_view', id=doc_id))
-            pdf_bytes, _ = result
-
-            cfg = pdf_sig._get_config()
-            signed = pdf_bytes
-
-            if cfg.enable_visual and cfg.signature_image_key:
-                signed = pdf_sig._apply_visual_signature(signed)
-            if cfg.enable_digital and cfg.pfx_key:
-                signed = pdf_sig._apply_digital_signature(signed)
-
-            if signed == pdf_bytes:
-                flash('No signature configured. Enable visual or digital signature in PDF Signature settings.', 'info')
-                return redirect(url_for('documents.documents_view', id=doc_id))
-
-            # Save signed PDF back
-            self.core.storage.save(signed, df.file_path)
-            self._log_history(doc_id, 'updated', f'File signed: {df.original_filename}')
-            self._db.session.commit()
-            flash(f'File "{df.original_filename}" signed.', 'success')
-        except Exception as e:
-            self.logger.error('Sign file error: %s', e)
-            flash(f'Signing failed: {e}', 'danger')
-
-        return redirect(url_for('documents.documents_view', id=doc_id))
-
-    def _duplicate_document(self, id):
-        doc = self.Document.query.get_or_404(id)
-        new_doc = self.Document(
-            name=f'{doc.name} (copy)',
-            category=doc.category,
-            document_date=date.today(),
-            expiry_date=doc.expiry_date,
-            amount=doc.amount,
-            tags=doc.tags,
-            description=doc.description,
-            reference_number=doc.reference_number,
-            counterparty=doc.counterparty,
-            status='active',
-            file_path='_multi_',
-            original_filename=doc.original_filename,
-            file_size=doc.file_size,
-            file_format=doc.file_format,
-        )
-        self._db.session.add(new_doc)
-        self._db.session.flush()
-        for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
-            self._db.session.add(self.DocumentFile(
-                document_id=new_doc.id, file_path=df.file_path,
-                original_filename=df.original_filename,
-                file_size=df.file_size, file_format=df.file_format))
-        self._log_history(new_doc.id, 'created', f'Duplicated from "{doc.name}"')
-        self._db.session.commit()
-        flash(f'Document duplicated as "{new_doc.name}".', 'success')
-        return redirect(url_for('documents.documents_edit', id=new_doc.id))
-
-    def _bulk_action(self):
-        action = request.form.get('bulk_action', '')
-        ids = request.form.getlist('doc_ids')
-        if not ids:
-            flash('No documents selected.', 'danger')
-            return redirect(url_for('documents.documents_index'))
-        ids = [int(i) for i in ids]
-        docs = self.Document.query.filter(self.Document.id.in_(ids)).all()
-
-        if action == 'delete':
-            for doc in docs:
-                for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
-                    self.core.storage.delete(df.file_path)
-                    self._db.session.delete(df)
-                if doc.file_path and doc.file_path != '_multi_':
-                    self.core.storage.delete(doc.file_path)
-                self._db.session.delete(doc)
-            self._db.session.commit()
-            flash(f'{len(docs)} document(s) deleted.', 'success')
-        elif action == 'set_category':
-            cat = request.form.get('bulk_category', '').strip()
-            if cat:
-                self._auto_add_category(cat)
-                for doc in docs:
-                    doc.category = cat
-                self._db.session.commit()
-                flash(f'Category set to "{cat}" for {len(docs)} document(s).', 'success')
-        elif action == 'add_tag':
-            tag = request.form.get('bulk_tag', '').strip()
-            if tag:
-                for doc in docs:
-                    existing = set(t.strip() for t in (doc.tags or '').split(',') if t.strip())
-                    existing.add(tag)
-                    doc.tags = ','.join(sorted(existing))
-                self._db.session.commit()
-                flash(f'Tag "{tag}" added to {len(docs)} document(s).', 'success')
-
-        return redirect(url_for('documents.documents_index'))
 
     # ---- category management ----
 
@@ -808,6 +716,81 @@ class DocumentsModule(BaseModule):
         self._set_config('fill_row_color', '0' if current == '1' else '1')
         return redirect(url_for('documents.categories_index'))
 
+    def _duplicate_document(self, id):
+        doc = self.Document.query.get_or_404(id)
+        new_doc = self.Document(
+            name=f'{doc.name} (copy)',
+            category=doc.category,
+            document_date=date.today(),
+            expiry_date=doc.expiry_date,
+            amount=doc.amount,
+            tags=doc.tags,
+            description=doc.description,
+            reference_number=doc.reference_number,
+            counterparty=doc.counterparty,
+            status='active',
+            file_path='_multi_',
+            original_filename=doc.original_filename,
+            file_size=doc.file_size,
+            file_format=doc.file_format,
+        )
+        self._db.session.add(new_doc)
+        self._db.session.flush()
+        # Copy attached files references (same storage keys, no file duplication)
+        for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
+            new_df = self.DocumentFile(
+                document_id=new_doc.id,
+                file_path=df.file_path,
+                original_filename=df.original_filename,
+                file_size=df.file_size,
+                file_format=df.file_format,
+            )
+            self._db.session.add(new_df)
+        self._db.session.commit()
+        flash(f'Document duplicated as "{new_doc.name}".', 'success')
+        return redirect(url_for('documents.documents_edit', id=new_doc.id))
+
+    def _bulk_action(self):
+        action = request.form.get('bulk_action', '')
+        ids = request.form.getlist('doc_ids')
+        if not ids:
+            flash('No documents selected.', 'danger')
+            return redirect(url_for('documents.documents_index'))
+        ids = [int(i) for i in ids]
+        docs = self.Document.query.filter(self.Document.id.in_(ids)).all()
+
+        if action == 'delete':
+            for doc in docs:
+                for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
+                    self.core.storage.delete(df.file_path)
+                    self._db.session.delete(df)
+                if doc.file_path and doc.file_path != '_multi_':
+                    self.core.storage.delete(doc.file_path)
+                self._db.session.delete(doc)
+            self._db.session.commit()
+            flash(f'{len(docs)} document(s) deleted.', 'success')
+
+        elif action == 'set_category':
+            cat = request.form.get('bulk_category', '').strip()
+            if cat:
+                self._auto_add_category(cat)
+                for doc in docs:
+                    doc.category = cat
+                self._db.session.commit()
+                flash(f'Category set to "{cat}" for {len(docs)} document(s).', 'success')
+
+        elif action == 'add_tag':
+            tag = request.form.get('bulk_tag', '').strip()
+            if tag:
+                for doc in docs:
+                    existing = set(t.strip() for t in (doc.tags or '').split(',') if t.strip())
+                    existing.add(tag)
+                    doc.tags = ','.join(sorted(existing))
+                self._db.session.commit()
+                flash(f'Tag "{tag}" added to {len(docs)} document(s).', 'success')
+
+        return redirect(url_for('documents.documents_index'))
+
     # ---- dashboard integration ----
 
     def get_dashboard_panels(self):
@@ -818,17 +801,24 @@ class DocumentsModule(BaseModule):
             self.Document.expiry_date >= today,
             self.Document.expiry_date <= soon,
         ).order_by(self.Document.expiry_date).all()
+
         expired = self.Document.query.filter(
             self.Document.expiry_date.isnot(None),
             self.Document.expiry_date < today,
         ).order_by(self.Document.expiry_date.desc()).limit(5).all()
+
         if not expiring and not expired:
             return []
+
         return [{
             'id': 'documents_expiry',
             'title': '📄 Document Alerts',
             'template': 'documents_dashboard.html',
-            'data': {'expiring': expiring, 'expired': expired, 'today': today},
+            'data': {
+                'expiring': expiring,
+                'expired': expired,
+                'today': today,
+            },
             'order': 15,
         }]
 
