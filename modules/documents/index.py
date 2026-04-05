@@ -541,7 +541,7 @@ class DocumentsModule(BaseModule):
                 added_files = []
                 for f in files:
                     if f and f.filename:
-                        df = self._save_document_file(doc.id, f)
+                        self._save_document_file(doc.id, f)
                         added_files.append(f.filename)
 
                 if changes:
