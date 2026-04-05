@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 app = Flask(__name__)
-APP_VERSION = '0.1.0'
+APP_VERSION = '1'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///invoices.db')
 app.config['SECRET_KEY'] = os.environ.get(
@@ -1928,6 +1928,19 @@ def _apply_log_settings(s, mgr):
         )
     else:
         mgr.core.scheduler.remove_job('core.log_cleanup')
+
+
+# Auto-initialize modules when imported by gunicorn workers (not via python app.py)
+if module_manager is None and os.environ.get('GUNICORN_WORKERS'):
+    try:
+        with app.app_context():
+            db.create_all()
+            init_module_manager()
+            s = Settings.query.first()
+            if s and module_manager:
+                _apply_log_settings(s, module_manager)
+    except Exception as e:
+        logging.getLogger(__name__).error('Auto-init failed: %s', e)
 
 
 if __name__ == '__main__':

@@ -2,7 +2,7 @@ services:
   app:
     build: .
     ports:
-      - "5000:5000"
+      - "4000:5000"
     environment:
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
       - DATABASE_URL=sqlite:///invoices.db
@@ -16,6 +16,8 @@ services:
       - app_expenses:/app/expenses_files
       - app_documents:/app/documents_files
       - app_taxforms:/app/tax_forms
+      - app_logos:/app/invoice_logos
+      - app_signatures:/app/pdf_signature_files
     restart: unless-stopped
 
 volumes:
@@ -26,3 +28,5 @@ volumes:
   app_expenses:
   app_documents:
   app_taxforms:
+  app_logos:
+  app_signatures:

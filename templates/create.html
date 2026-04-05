@@ -141,11 +141,12 @@
 
 <script>
 let itemCounter = 0;
+const _defaultDesc = {{ ((settings.default_description or '')|tojson) }};
 
 function addItem() {
     itemCounter++;
     const container = document.getElementById('items-container');
-    const defaultDescription = {{ (settings.default_description|tojson) if settings and settings.default_description else '""' }};
+    const defaultDescription = _defaultDesc;
 
     const itemDiv = document.createElement('div');
     itemDiv.className = 'item-row';
@@ -271,8 +272,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (params.get('ai_prefill') === '1') {
         try {
             const data = JSON.parse(sessionStorage.getItem('ai_parsed_data'));
-            if (data && typeof aiFillInvoiceForm === 'function') {
-                setTimeout(function() { aiFillInvoiceForm(data); }, 100);
+            if (data) {
+                if (typeof aiFillInvoiceForm === 'function') {
+                    setTimeout(function() { aiFillInvoiceForm(data); }, 100);
+                }
             }
             sessionStorage.removeItem('ai_parsed_data');
         } catch(e) { console.warn('AI prefill failed:', e); }
