@@ -327,3 +327,107 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Additional currency providers — can be registered with CurrencyService
+# ---------------------------------------------------------------------------
+
+def make_frankfurter_provider():
+    """
+    Frankfurter (api.frankfurter.app) — free, no API key, ECB data.
+    Returns a provider function compatible with CurrencyService.register_provider().
+    """
+    def provider(from_currency, to_currency, date_str):
+        try:
+            url = f"https://api.frankfurter.app/{date_str}"
+            resp = requests.get(url, params={'from': from_currency, 'to': to_currency}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            rate = data.get('rates', {}).get(to_currency)
+            actual_date = data.get('date', date_str)
+            if rate:
+                return float(rate), actual_date
+        except Exception as e:
+            print(f"Frankfurter provider failed: {e}")
+        return None, None
+    return provider
+
+
+def make_open_exchange_rates_provider(api_key):
+    """
+    Open Exchange Rates (openexchangerates.org) — free tier 1000 req/month, USD base.
+    Requires API key. Returns a provider function.
+    """
+    def provider(from_currency, to_currency, date_str):
+        try:
+            url = f"https://openexchangerates.org/api/historical/{date_str}.json"
+            resp = requests.get(url, params={'app_id': api_key, 'base': 'USD'}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            rates = data.get('rates', {})
+            # Convert: from_currency -> USD -> to_currency
+            if from_currency == 'USD':
+                rate = rates.get(to_currency)
+            elif to_currency == 'USD':
+                from_rate = rates.get(from_currency)
+                rate = 1.0 / from_rate if from_rate else None
+            else:
+                from_rate = rates.get(from_currency)
+                to_rate = rates.get(to_currency)
+                rate = (to_rate / from_rate) if from_rate and to_rate else None
+            if rate:
+                return float(rate), date_str
+        except Exception as e:
+            print(f"Open Exchange Rates provider failed: {e}")
+        return None, None
+    return provider
+
+
+def make_fixer_provider(api_key):
+    """
+    Fixer.io — free tier 100 req/month, EUR base.
+    Requires API key. Returns a provider function.
+    """
+    def provider(from_currency, to_currency, date_str):
+        try:
+            url = f"https://data.fixer.io/api/{date_str}"
+            resp = requests.get(url, params={'access_key': api_key, 'base': 'EUR',
+                                             'symbols': f'{from_currency},{to_currency}'}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get('success'):
+                return None, None
+            rates = data.get('rates', {})
+            if from_currency == 'EUR':
+                rate = rates.get(to_currency)
+            elif to_currency == 'EUR':
+                from_rate = rates.get(from_currency)
+                rate = 1.0 / from_rate if from_rate else None
+            else:
+                from_rate = rates.get(from_currency)
+                to_rate = rates.get(to_currency)
+                rate = (to_rate / from_rate) if from_rate and to_rate else None
+            actual_date = data.get('date', date_str)
+            if rate:
+                return float(rate), actual_date
+        except Exception as e:
+            print(f"Fixer provider failed: {e}")
+        return None, None
+    return provider
+
+
+# Registry of built-in providers (name -> factory or None for default)
+BUILTIN_PROVIDERS = {
+    'ecb': None,           # Default — no registration needed
+    'frankfurter': make_frankfurter_provider,
+    'open_exchange_rates': make_open_exchange_rates_provider,
+    'fixer': make_fixer_provider,
+}
+
+PROVIDER_LABELS = {
+    'ecb': 'ECB (European Central Bank) — default',
+    'frankfurter': 'Frankfurter — free, no API key',
+    'open_exchange_rates': 'Open Exchange Rates — API key required',
+    'fixer': 'Fixer.io — API key required',
+}

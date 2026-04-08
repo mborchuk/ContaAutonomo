@@ -183,6 +183,19 @@ Exchange rate API for modules. Default provider: ECB (European Central Bank) wit
 | `active_provider` | — | `str` or `None` | Name of the active provider. |
 | `available_providers` | — | `list[str]` | List of registered provider names. |
 
+#### Built-in Providers
+
+The following providers are available in `currency_converter.py` and can be registered by modules or selected in Settings → General → Exchange Rate Source:
+
+| Provider | Key | API Key | Notes |
+|----------|-----|---------|-------|
+| ECB (European Central Bank) | `ecb` | No | Default. Historical rates, EUR base. |
+| Frankfurter | `frankfurter` | No | Free, ECB data via REST API. |
+| Open Exchange Rates | `open_exchange_rates` | Yes | 1000 req/month free, USD base. |
+| Fixer.io | `fixer` | Yes | 100 req/month free, EUR base. |
+
+Modules can register additional providers using `register_provider()`. The active provider is persisted in Settings and applied on startup.
+
 #### Usage Example
 
 ```python

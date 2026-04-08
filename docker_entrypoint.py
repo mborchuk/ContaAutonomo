@@ -27,6 +27,8 @@ def init():
                 ('log_retention_days', 'INTEGER DEFAULT 30'),
                 ('log_use_external_storage', 'BOOLEAN DEFAULT 0'),
                 ('log_storage', "VARCHAR(10) DEFAULT 'file'"),
+                ('currency_provider', "VARCHAR(50) DEFAULT 'ecb'"),
+                ('currency_provider_api_key', "VARCHAR(200) DEFAULT ''"),
             ]
             for col, typedef in migrations:
                 if col not in columns:
