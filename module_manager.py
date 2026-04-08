@@ -115,6 +115,33 @@ class BaseModule(ABC):
         """
         return []
 
+    def get_capabilities(self):
+        """
+        Declare capabilities this module provides for cross-module interaction.
+
+        Returns a list of capability dicts. Each must have at least:
+          - 'type': capability type string (e.g. 'pdf_sign', 'ocr', 'email_send')
+          - 'action': callable(context) that performs the action
+
+        Optional keys for filtering:
+          - 'method': sub-type (e.g. 'visual', 'digital', 'x509')
+          - 'name': human-readable label
+          - 'accepts': list of file types (e.g. ['pdf', 'jpg'])
+          - any other keys for filtering
+
+        Example:
+            return [
+                {
+                    'type': 'pdf_sign',
+                    'method': 'visual',
+                    'name': 'Visual Signature',
+                    'accepts': ['pdf'],
+                    'action': self._sign_visual,
+                },
+            ]
+        """
+        return []
+
     def get_report_sections(self):
         """
         Return report section generators if module contributes to reports.
@@ -1646,6 +1673,41 @@ class ModuleManager:
             else:
                 ungrouped.append(item)
         return ungrouped, groups
+
+    def find_capabilities(self, cap_type, **filters):
+        """Find capabilities across all enabled modules.
+
+        Args:
+            cap_type: capability type to search for (e.g. 'pdf_sign')
+            **filters: optional key=value filters (e.g. method='digital')
+
+        Returns:
+            list of dicts, each with 'module', 'module_id', 'module_name' added:
+            [{'type': 'pdf_sign', 'method': 'visual', 'action': callable,
+              'module': <module_instance>, 'module_id': 'pdf_signature', 'module_name': 'PDF Signature'}, ...]
+        """
+        results = []
+        for mod_id, mod in self.modules.items():
+            try:
+                caps = mod.get_capabilities()
+            except Exception:
+                continue
+            for cap in caps:
+                if cap.get('type') != cap_type:
+                    continue
+                # Apply filters
+                match = True
+                for k, v in filters.items():
+                    if cap.get(k) != v:
+                        match = False
+                        break
+                if match:
+                    entry = dict(cap)
+                    entry['module'] = mod
+                    entry['module_id'] = mod_id
+                    entry['module_name'] = mod.name
+                    results.append(entry)
+        return results
 
     def get_full_nav(self):
         """Build the complete navigation structure.

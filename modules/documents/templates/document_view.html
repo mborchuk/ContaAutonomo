@@ -104,6 +104,14 @@
                 <div style="display: flex; gap: 6px;">
                     <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">👁 Preview</a>
                     <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success" style="padding: 3px 8px; font-size: 11px;">📥 Download</a>
+                    {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
+                        {% set signers = module_manager.find_capabilities('pdf_sign') %}
+                        {% for cap in signers %}
+                        <form method="POST" action="{{ url_for('documents.file_sign', file_id=df.id, cap_index=loop.index0) }}" style="margin:0;" onsubmit="return confirm('Sign with {{ cap.name }}?');">
+                            <button type="submit" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ {{ cap.name }}</button>
+                        </form>
+                        {% endfor %}
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}

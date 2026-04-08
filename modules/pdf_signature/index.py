@@ -170,16 +170,13 @@ class PDFSignatureModule(BaseModule):
         img_w, img_h = img.size
         self.logger.info('PDF Signature: image dimensions: %dx%d, mode=%s', img_w, img_h, img.mode)
 
-        # Save image to pdf_signature_files via core.storage for reportlab (needs file path)
-        import os
-        tmp_key = 'pdf_signature_files/_tmp_overlay.png'
+        # Save image to a local temp file for reportlab (needs a real file path on disk)
+        import os, tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix='_overlay.png', prefix='pdf_sig_')
         try:
             if img.mode != 'RGBA':
                 img = img.convert('RGBA')
-            img_buf = io.BytesIO()
-            img.save(img_buf, format='PNG')
-            self.core.storage.save(img_buf.getvalue(), tmp_key)
-            tmp_path = os.path.join(self.core.app_path, tmp_key)
+            img.save(tmp_path, format='PNG')
             self.logger.info('PDF Signature: saved temp image to %s', tmp_path)
 
             # Read the source PDF
@@ -245,9 +242,13 @@ class PDFSignatureModule(BaseModule):
             return result_bytes
         finally:
             try:
-                self.core.storage.delete(tmp_key)
+                os.close(tmp_fd)
             except Exception:
-                pass
+                pass  # fd may already be closed
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass  # temp file may already be removed
 
 
     def _apply_digital_signature(self, pdf_bytes):
@@ -273,12 +274,13 @@ class PDFSignatureModule(BaseModule):
 
         password = (cfg.certificate_password or '').encode('utf-8')
 
-        # Save PFX to pdf_signature_files via core.storage — pyHanko 0.34+ expects a file path
-        import os
-        tmp_key = 'pdf_signature_files/_tmp_certificate.p12'
+        # Save PFX to a local temp file — pyHanko 0.34+ expects a file path
+        import os, tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix='_certificate.p12', prefix='pdf_sig_')
         try:
-            self.core.storage.save(pfx_data, tmp_key)
-            tmp_path = os.path.join(self.core.app_path, tmp_key)
+            with os.fdopen(tmp_fd, 'wb') as f:
+                f.write(pfx_data)
+            tmp_fd = None  # fd is now closed
             self.logger.info('PDF Signature: saved PFX to %s', tmp_path)
 
             signer = signers.SimpleSigner.load_pkcs12(
@@ -297,10 +299,15 @@ class PDFSignatureModule(BaseModule):
             self.logger.info('PDF Signature: digital signature applied, result=%d bytes', len(signed_bytes))
             return signed_bytes
         finally:
+            if tmp_fd is not None:
+                try:
+                    os.close(tmp_fd)
+                except Exception:
+                    pass  # fd already closed by os.fdopen context manager
             try:
-                self.core.storage.delete(tmp_key)
+                os.unlink(tmp_path)
             except Exception:
-                pass
+                pass  # temp file may already be removed
 
     def _sign_invoice_pdf(self, invoice, visual=False, digital=False):
         """Orchestrate PDF signing: fetch PDF, apply requested signatures, save back.
@@ -576,6 +583,28 @@ class PDFSignatureModule(BaseModule):
             )
 
     # --- Settings integration ---
+
+    def get_capabilities(self):
+        """Declare PDF signing capabilities."""
+        caps = []
+        cfg = self._get_config()
+        if cfg.visual_enabled and cfg.signature_image_key:
+            caps.append({
+                'type': 'pdf_sign',
+                'method': 'visual',
+                'name': 'Visual Signature (image overlay)',
+                'accepts': ['pdf'],
+                'action': lambda pdf_bytes, **kw: self._apply_visual_signature(pdf_bytes),
+            })
+        if cfg.digital_enabled and cfg.certificate_key:
+            caps.append({
+                'type': 'pdf_sign',
+                'method': 'digital',
+                'name': 'Digital Signature (X.509/PFX)',
+                'accepts': ['pdf'],
+                'action': lambda pdf_bytes, **kw: self._apply_digital_signature(pdf_bytes),
+            })
+        return caps
 
     def get_settings_html(self, settings):
         cfg = self._get_config()

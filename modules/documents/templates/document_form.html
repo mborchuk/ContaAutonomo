@@ -127,6 +127,25 @@
                        multiple {% if not document %}required{% endif %}>
                 <small style="color: #999; display: block; margin-top: 4px;">You can select multiple files at once</small>
             </div>
+
+            {% set pdf_signers = module_manager.find_capabilities('pdf_sign') if module_manager else [] %}
+            {% set has_sign_module = module_manager and 'pdf_signature' in module_manager.modules %}
+            {% if pdf_signers %}
+            <div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 10px;">
+                <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">✍️ Sign PDF after upload</div>
+                {% for cap in pdf_signers %}
+                <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-right: 16px;">
+                    <input type="checkbox" name="sign_cap_{{ loop.index0 }}" value="1" style="width:15px; height:15px;">
+                    {{ cap.name }}
+                </label>
+                {% endfor %}
+                <div style="color: #888; font-size: 11px; margin-top: 6px;">PDF files will be signed automatically after saving.</div>
+            </div>
+            {% elif has_sign_module %}
+            <div style="background: #fff8e1; padding: 10px 12px; border-radius: 6px; border: 1px solid #ffe082; font-size: 12px; color: #666;">
+                ✍️ PDF signing available but not configured. <a href="/settings" style="color: #1565c0;">Configure in Settings → PDF Signature</a>
+            </div>
+            {% endif %}
         </div>
     </div>
 

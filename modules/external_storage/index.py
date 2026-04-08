@@ -403,10 +403,24 @@ class GoogleDriveStorageBackend(FileStorageBackend):
         else:
             content = file_data
 
+        media = MediaInMemoryUpload(content, resumable=False)
+
+        # If relative_path looks like a raw GDrive file ID (no '/'), update it directly
+        if '/' not in relative_path:
+            try:
+                service.files().get(fileId=relative_path, fields='id',
+                                    supportsAllDrives=True).execute()
+                service.files().update(
+                    fileId=relative_path, media_body=media).execute()
+                logger.info('[GDrive.save] updated by file ID %s', relative_path)
+                return relative_path
+            except Exception:
+                logger.info('[GDrive.save] %s is not a valid file ID, treating as filename',
+                            relative_path)
+
         parent_id, filename = self._resolve_parent(relative_path)
         logger.info('[GDrive.save] parent_id=%s, filename=%s, path=%s',
                     parent_id, filename, relative_path)
-        media = MediaInMemoryUpload(content, resumable=False)
 
         # Check if file already exists — update instead of duplicate
         existing_id = self._find_file(filename, parent_id)

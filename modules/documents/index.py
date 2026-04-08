@@ -237,6 +237,11 @@ class DocumentsModule(BaseModule):
         def file_delete(file_id):
             return module._delete_file(file_id)
 
+        @bp.route('/file/<int:file_id>/sign/<cap_index>', methods=['POST'])
+        @login_required
+        def file_sign(file_id, cap_index):
+            return module._sign_file(file_id, int(cap_index))
+
         @bp.route('/categories')
         @login_required
         def categories_index():
@@ -495,6 +500,10 @@ class DocumentsModule(BaseModule):
 
                 self._log_history(doc.id, 'created', f'Document "{doc.name}" created')
                 self._db.session.commit()
+
+                # Auto-sign PDF files if requested
+                self._auto_sign_files(doc.id, request.form)
+
                 flash('Document added.', 'success')
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
@@ -550,6 +559,11 @@ class DocumentsModule(BaseModule):
                     self._log_history(doc.id, 'file_added', ', '.join(added_files))
 
                 self._db.session.commit()
+
+                # Auto-sign new PDF files if requested
+                if added_files:
+                    self._auto_sign_files(doc.id, request.form)
+
                 flash('Document updated.', 'success')
                 return redirect(url_for('documents.documents_view', id=doc.id))
             except Exception as e:
@@ -661,6 +675,70 @@ class DocumentsModule(BaseModule):
             self._db.session.rollback()
             flash(f'Error: {e}', 'danger')
         return redirect(url_for('documents.documents_edit', id=doc_id))
+
+    def _auto_sign_files(self, doc_id, form):
+        """Auto-sign PDF files after upload if sign checkboxes were checked."""
+        signers = self.core.module_manager.find_capabilities('pdf_sign')
+        if not signers:
+            return
+        selected = [i for i in range(len(signers)) if form.get(f'sign_cap_{i}')]
+        if not selected:
+            return
+        doc_files = self.DocumentFile.query.filter_by(document_id=doc_id).all()
+        for df in doc_files:
+            if (df.file_format or '').lower() != 'pdf':
+                continue
+            try:
+                result = self.core.storage.get(df.file_path)
+                if not result:
+                    continue
+                pdf_bytes, _ = result
+                for idx in selected:
+                    cap = signers[idx]
+                    pdf_bytes = cap['action'](pdf_bytes)
+                self.core.storage.save(pdf_bytes, df.file_path)
+                names = [signers[i].get('name', '') for i in selected]
+                self._log_history(doc_id, 'updated',
+                                  f'Auto-signed: {df.original_filename} ({", ".join(names)})')
+            except Exception as e:
+                self.logger.error('Auto-sign failed for %s: %s', df.original_filename, e)
+        self._db.session.commit()
+
+    def _sign_file(self, file_id, cap_index):
+        """Sign a PDF file using a discovered capability."""
+        df = self.DocumentFile.query.get_or_404(file_id)
+        doc_id = df.document_id
+
+        fmt = (df.file_format or '').lower()
+        if fmt != 'pdf':
+            flash('Only PDF files can be signed.', 'danger')
+            return redirect(url_for('documents.documents_view', id=doc_id))
+
+        # Find signing capabilities
+        signers = self.core.module_manager.find_capabilities('pdf_sign')
+        if cap_index < 0 or cap_index >= len(signers):
+            flash('Signing method not available.', 'danger')
+            return redirect(url_for('documents.documents_view', id=doc_id))
+
+        cap = signers[cap_index]
+        try:
+            result = self.core.storage.get(df.file_path)
+            if not result:
+                flash('File not found in storage.', 'danger')
+                return redirect(url_for('documents.documents_view', id=doc_id))
+            pdf_bytes, _ = result
+
+            signed = cap['action'](pdf_bytes)
+            self.core.storage.save(signed, df.file_path)
+            self._log_history(doc_id, 'updated',
+                              f'File signed ({cap.get("name", "unknown")}): {df.original_filename}')
+            self._db.session.commit()
+            flash(f'File signed with {cap.get("name", "signer")}.', 'success')
+        except Exception as e:
+            self.logger.error('Sign file error: %s', e)
+            flash('Signing failed. Check server logs.', 'danger')
+
+        return redirect(url_for('documents.documents_view', id=doc_id))
 
     # ---- category management ----
 
