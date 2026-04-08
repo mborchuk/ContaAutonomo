@@ -244,11 +244,11 @@ class PDFSignatureModule(BaseModule):
             try:
                 os.close(tmp_fd)
             except Exception:
-                pass
+                pass  # fd may already be closed
             try:
                 os.unlink(tmp_path)
             except Exception:
-                pass
+                pass  # temp file may already be removed
 
 
     def _apply_digital_signature(self, pdf_bytes):
@@ -303,11 +303,11 @@ class PDFSignatureModule(BaseModule):
                 try:
                     os.close(tmp_fd)
                 except Exception:
-                    pass
+                    pass  # fd already closed by os.fdopen context manager
             try:
                 os.unlink(tmp_path)
             except Exception:
-                pass
+                pass  # temp file may already be removed
 
     def _sign_invoice_pdf(self, invoice, visual=False, digital=False):
         """Orchestrate PDF signing: fetch PDF, apply requested signatures, save back.
