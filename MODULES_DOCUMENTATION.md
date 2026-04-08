@@ -496,13 +496,41 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 Modules can access other enabled modules via `self.core.module_manager.modules`:
 
 ```python
-# Check if another module is enabled and call its methods
+# Direct access by module_id (simple but tightly coupled)
 pdf_sig = self.core.module_manager.modules.get('pdf_signature')
 if pdf_sig:
     signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
 ```
 
-This pattern is used by the Documents module to offer PDF signing via the PDF Signature module.
-Only access modules that are enabled — always check with `.get()` first.
+### Capabilities System
+
+For loose coupling, modules declare **capabilities** — what they can do — and other modules discover them by type:
+
+```python
+# In your module — declare what you can do:
+def get_capabilities(self):
+    return [
+        {
+            'type': 'pdf_sign',        # capability type
+            'method': 'visual',        # sub-type for filtering
+            'name': 'Visual Signature',
+            'accepts': ['pdf'],
+            'action': self._sign_visual,  # callable(pdf_bytes, **kw) -> bytes
+        },
+    ]
+
+# In another module — find capabilities:
+signers = self.core.module_manager.find_capabilities('pdf_sign')
+# → [{'type': 'pdf_sign', 'method': 'visual', 'action': callable, 'module': ..., 'module_id': ..., 'module_name': ...}]
+
+# Filter by sub-type:
+digital_signers = self.core.module_manager.find_capabilities('pdf_sign', method='digital')
+
+# Use it:
+for signer in signers:
+    signed_pdf = signer['action'](pdf_bytes)
+```
+
+Standard capability types: `pdf_sign`, `ocr`, `email_send`. Modules can define any custom types.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.
