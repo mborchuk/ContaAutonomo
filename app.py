@@ -190,6 +190,9 @@ class Settings(db.Model):
     # Tax rates (configurable per country)
     default_vat_rate = db.Column(db.Float, default=21.0)  # VAT/IVA rate in %
     default_irpf_rate = db.Column(db.Float, default=20.0)  # Income tax retention rate in %
+    # Currency provider settings
+    currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
+    currency_provider_api_key = db.Column(db.String(200), default='')  # API key for providers that need it
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
@@ -1521,6 +1524,8 @@ def settings():
                 'base_currency': 'base_currency',
                 'report_template': 'report_template',
                 'invoice_template': 'invoice_template',
+                'currency_provider': 'currency_provider',
+                'currency_provider_api_key': 'currency_provider_api_key',
             }
             for form_key, attr in field_map.items():
                 if form_key in request.form:
@@ -1562,6 +1567,9 @@ def settings():
         # Re-apply log settings BEFORE logging (so the correct logger is active)
         if module_manager and 'log_retention_days' in request.form:
             _apply_log_settings(app_settings, module_manager)
+        # Re-apply currency provider if changed
+        if module_manager and 'currency_provider' in request.form:
+            _apply_currency_provider(app_settings, module_manager)
         log_activity('settings_updated', 'settings')
         return redirect(url_for('settings'))
 
@@ -1935,6 +1943,31 @@ def _apply_log_settings(s, mgr):
         mgr.core.scheduler.remove_job('core.log_cleanup')
 
 
+def _apply_currency_provider(s, mgr):
+    """Apply currency provider from Settings to CurrencyService."""
+    if not s or not mgr:
+        return
+    from currency_converter import BUILTIN_PROVIDERS, make_frankfurter_provider, \
+        make_open_exchange_rates_provider, make_fixer_provider
+    provider_name = getattr(s, 'currency_provider', 'ecb') or 'ecb'
+    api_key = getattr(s, 'currency_provider_api_key', '') or ''
+    svc = mgr.core.currency_service
+
+    # Register built-in providers that need factory functions
+    if provider_name == 'frankfurter':
+        svc.register_provider('frankfurter', make_frankfurter_provider())
+        svc.set_active_provider('frankfurter')
+    elif provider_name == 'open_exchange_rates' and api_key:
+        svc.register_provider('open_exchange_rates', make_open_exchange_rates_provider(api_key))
+        svc.set_active_provider('open_exchange_rates')
+    elif provider_name == 'fixer' and api_key:
+        svc.register_provider('fixer', make_fixer_provider(api_key))
+        svc.set_active_provider('fixer')
+    else:
+        # Default ECB or unknown — reset to default
+        svc.set_active_provider(None)
+
+
 # Auto-initialize modules when imported by gunicorn workers (not via python app.py)
 if module_manager is None and os.environ.get('GUNICORN_WORKERS'):
     try:
@@ -1990,7 +2023,9 @@ if __name__ == '__main__':
         # Migrate: add tax rate columns if missing
         columns = [c['name'] for c in inspector.get_columns('settings')]
         for col, typedef in [('default_vat_rate', 'FLOAT DEFAULT 21.0'),
-                             ('default_irpf_rate', 'FLOAT DEFAULT 20.0')]:
+                             ('default_irpf_rate', 'FLOAT DEFAULT 20.0'),
+                             ('currency_provider', "VARCHAR(50) DEFAULT 'ecb'"),
+                             ('currency_provider_api_key', "VARCHAR(200) DEFAULT ''")]:
             if col not in columns:
                 with db.engine.connect() as conn:
                     conn.execute(text(f'ALTER TABLE settings ADD COLUMN {col} {typedef}'))
@@ -2016,5 +2051,6 @@ if __name__ == '__main__':
         # Apply log settings from DB
         if s and mgr:
             _apply_log_settings(s, mgr)
+            _apply_currency_provider(s, mgr)
 
     app.run(debug=os.environ.get('FLASK_DEBUG', '1') == '1')
