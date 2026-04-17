@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% if csrf_token is defined or csrf_token %}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    {% endif %}
     <title>{% block title %}Invoice Manager{% endblock %}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -291,5 +294,36 @@
     <footer style="text-align: center; padding: 20px 0; color: #999; font-size: 13px;">
         ContaAutónomo <a href="https://github.com/mborchuk/ContaAutonomo/releases" target="_blank" style="color: #999; text-decoration: underline;">v{{ app_version }}</a> · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" style="color: #999; text-decoration: underline;">Mykola Borchuk</a>
     </footer>
+
+<script>
+// Auto-inject CSRF token into all forms
+(function() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (!meta) return;
+    var token = meta.getAttribute('content');
+    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+        if (form.querySelector('input[name="csrf_token"]')) return;
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'csrf_token';
+        input.value = token;
+        form.appendChild(input);
+    });
+    // Also set header for fetch/AJAX requests
+    var origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+        opts = opts || {};
+        if (opts.method && opts.method.toUpperCase() === 'POST') {
+            opts.headers = opts.headers || {};
+            if (opts.headers instanceof Headers) {
+                if (!opts.headers.has('X-CSRFToken')) opts.headers.set('X-CSRFToken', token);
+            } else {
+                if (!opts.headers['X-CSRFToken']) opts.headers['X-CSRFToken'] = token;
+            }
+        }
+        return origFetch.call(this, url, opts);
+    };
+})();
+</script>
 </body>
 </html>

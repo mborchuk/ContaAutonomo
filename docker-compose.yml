@@ -4,10 +4,11 @@ services:
     ports:
       - "4000:5000"
     environment:
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env or environment}
       - DATABASE_URL=sqlite:///invoices.db
       - FLASK_DEBUG=0
       - GUNICORN_WORKERS=2
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
     volumes:
       - app_data:/app/instance
       - app_backups:/app/backups
@@ -19,6 +20,19 @@ services:
       - app_logos:/app/invoice_logos
       - app_signatures:/app/pdf_signature_files
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request;
+            urllib.request.urlopen('http://localhost:5000/auth/login')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 volumes:
   app_data:

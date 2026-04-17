@@ -114,7 +114,7 @@ class BackupModule(BaseModule):
                 elif cfg.encrypt_method == 'custom' and cfg.custom_password:
                     password = cfg.custom_password
                 else:
-                    password = session.get('_password')
+                    password = session.get('_enc_token') or session.get('_password')
                 if encrypt and cfg.encrypt_method != 'none' and not password:
                     flash('No password available for encryption.', 'danger')
                     return redirect(url_for('settings') + '#security')
@@ -144,7 +144,7 @@ class BackupModule(BaseModule):
             elif cfg.encrypt_method == 'custom' and cfg.custom_password:
                 password = cfg.custom_password
             else:
-                password = session.get('_password')
+                password = session.get('_enc_token') or session.get('_password')
             ok, msg = module._restore_full_backup(filename, password)
             if ok:
                 module.core.log_activity('backup_restored', 'backup', filename)
@@ -871,7 +871,7 @@ class BackupModule(BaseModule):
                 password = cfg.custom_password
             else:
                 try:
-                    password = session.get('_password')
+                    password = session.get('_enc_token') or session.get('_password')
                 except RuntimeError:
                     password = None
             if not password and cfg.encrypt_method != 'none':
