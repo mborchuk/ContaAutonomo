@@ -115,7 +115,7 @@ try:
                 referrer = None  # external referrer — ignore
         return redirect(referrer or url_for('dashboard'))
 except ImportError:
-    pass  # flask-wtf not installed — CSRF protection not available
+    pass  # flask-wtf not installed — CSRF error handler not registered
 
 # Module Manager - initialized after models are defined (see bottom of file)
 module_manager = None
