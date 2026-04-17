@@ -182,7 +182,8 @@ class ExpensesModule(BaseModule):
                 return redirect(url_for('expenses.expenses_index'))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error creating expense: {str(e)}', 'danger')
+                self.logger.error('Error creating expense: %s', e)
+                flash('Error creating record. Please try again.', 'danger')
 
         contractors = repo.get_all_contractors()
         tracked_currencies = settings_repo.get_tracked_currencies()
@@ -216,7 +217,8 @@ class ExpensesModule(BaseModule):
                 return redirect(url_for('expenses.expenses_index'))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error updating expense: {str(e)}', 'danger')
+                self.logger.error('Error updating expense: %s', e)
+                flash('Error processing form data. Please check your input.', 'danger')
 
         contractors = repo.get_all_contractors()
         tracked_currencies = settings_repo.get_tracked_currencies()
@@ -232,7 +234,8 @@ class ExpensesModule(BaseModule):
             flash('Expense deleted successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error deleting expense: {str(e)}', 'danger')
+            self.logger.error('Error deleting expense: %s', e)
+            flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('expenses.expenses_index'))
 
     def _serve_file(self, filename):

@@ -240,7 +240,8 @@ class TaxManagementModule(BaseModule):
 
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error uploading tax form: {str(e)}', 'danger')
+            self.logger.error('Error uploading tax form: %s', e)
+            flash('Error processing form data. Please check your input.', 'danger')
 
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -271,7 +272,8 @@ class TaxManagementModule(BaseModule):
             flash('Tax form deleted successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error deleting tax form: {str(e)}', 'danger')
+            self.logger.error('Error deleting tax form: %s', e)
+            flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
     # --- Social Security Logic ---
@@ -289,7 +291,8 @@ class TaxManagementModule(BaseModule):
             flash('SS payment added successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error adding SS payment: {str(e)}', 'danger')
+            self.logger.error('Error adding SS payment: %s', e)
+            flash('Error creating record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
     def _edit_ss_payment(self, id):
@@ -303,7 +306,8 @@ class TaxManagementModule(BaseModule):
             flash('SS payment updated!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error updating SS payment: {str(e)}', 'danger')
+            self.logger.error('Error updating SS payment: %s', e)
+            flash('Error processing form data. Please check your input.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
     def _delete_ss_payment(self, id):
@@ -315,7 +319,8 @@ class TaxManagementModule(BaseModule):
             flash('SS payment deleted!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error deleting SS payment: {str(e)}', 'danger')
+            self.logger.error('Error deleting SS payment: %s', e)
+            flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
     # --- Report & Dashboard Integration ---
