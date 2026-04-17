@@ -9,6 +9,7 @@ Technical reference for the Autónomos application architecture.
 3. [CoreServices API](#coreservices-api)
 4. [Existing Modules](#existing-modules)
 5. [Creating a Module](#creating-a-module)
+6. [Authentication Providers](#authentication-providers)
 
 ---
 
@@ -483,6 +484,9 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
+| `get_auth_providers()` | Return `AuthProvider` instances for pluggable auth |
+| `on_user_authenticated(identity)` | Called after successful login (any provider) |
+| `on_user_logout()` | Called when user logs out |
 
 ### Built-in Attributes
 
@@ -534,3 +538,171 @@ for signer in signers:
 Standard capability types: `pdf_sign`, `ocr`, `email_send`. Modules can define any custom types.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.
+
+---
+
+## Authentication Providers
+
+The application supports pluggable authentication via the `AuthProvider` interface. Modules can register external auth providers (Google OAuth, Azure AD, AWS Cognito, SAML, etc.) alongside the built-in password authentication.
+
+### Architecture
+
+```
+Login Request
+  └─ auth_routes.login()
+       └─ auth_service.authenticate(provider_id, request)
+            ├─ PasswordAuthProvider.authenticate()    # built-in
+            ├─ GoogleAuthProvider.authenticate()      # from module
+            └─ AzureADAuthProvider.authenticate()     # from module
+                 └─ AuthResult(success, identity, redirect_url)
+```
+
+### Key Classes (auth.py)
+
+| Class | Description |
+|-------|-------------|
+| `AuthProvider` | Abstract interface — implement to add a new auth method |
+| `AuthResult` | Result of authentication: success, identity dict, optional redirect URL |
+| `PasswordAuthProvider` | Built-in password auth (always registered) |
+| `AuthService` | Registry that manages providers and delegates authentication |
+
+### AuthProvider Interface
+
+```python
+from auth import AuthProvider, AuthResult
+
+class MyAuthProvider(AuthProvider):
+
+    @property
+    def provider_id(self) -> str:
+        """Unique ID, e.g. 'google', 'azure_ad', 'cognito'."""
+        return 'my_provider'
+
+    @property
+    def display_name(self) -> str:
+        """Shown on login page button."""
+        return 'My Provider'
+
+    @property
+    def icon(self) -> str:
+        """Emoji or icon for the login button."""
+        return '🔵'
+
+    @property
+    def is_external(self) -> bool:
+        """True for OAuth/SAML that redirect to external IdP."""
+        return True
+
+    def is_configured(self) -> bool:
+        """Return True if provider is ready (API keys set, etc.)."""
+        return True
+
+    def authenticate(self, request) -> AuthResult:
+        """Handle authentication from Flask request.
+
+        For OAuth: return AuthResult(False, redirect_url='https://...')
+        For callback: return AuthResult(True, identity={...})
+        """
+        ...
+
+    def get_callback_routes(self):
+        """Return OAuth callback routes: [(rule, endpoint, view_func)]."""
+        return [('/auth/my-provider/callback', 'my_callback', self._callback)]
+
+    def on_logout(self, session):
+        """Clean up provider-specific session data."""
+        pass
+```
+
+### AuthResult
+
+```python
+AuthResult(
+    success=True,
+    identity={
+        'name': 'John Doe',
+        'email': '[email]',
+        'avatar_url': 'https://...',
+        'provider': 'google',
+    },
+    error=None,          # error message if success=False
+    redirect_url=None,   # OAuth redirect URL (initiates external flow)
+)
+```
+
+### Module Integration
+
+Register auth providers from a module via `get_auth_providers()`:
+
+```python
+from module_manager import BaseModule
+from auth import AuthProvider, AuthResult
+
+class GoogleAuthProvider(AuthProvider):
+    provider_id = 'google'
+    display_name = 'Google Account'
+    icon = '🔵'
+    is_external = True
+
+    def __init__(self, core):
+        self._core = core
+
+    def authenticate(self, request):
+        # Handle OAuth callback or initiate redirect
+        ...
+
+class AuthGoogleModule(BaseModule):
+
+    @property
+    def module_id(self):
+        return 'auth_google'
+
+    @property
+    def name(self):
+        return 'Google Authentication'
+
+    def get_auth_providers(self):
+        return [GoogleAuthProvider(self.core)]
+
+    def register_models(self, db):
+        self._db = db
+
+    def register_routes(self, app):
+        # Register OAuth callback routes if needed
+        pass
+```
+
+### Auth Hooks in BaseModule
+
+| Method | Description |
+|--------|-------------|
+| `get_auth_providers()` | Return list of `AuthProvider` instances to register |
+| `on_user_authenticated(identity)` | Called after successful login (any provider) |
+| `on_user_logout()` | Called when user logs out |
+
+### Session Data
+
+After successful authentication, the session contains:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `session['authenticated']` | `bool` | Always `True` after login |
+| `session['auth_provider']` | `str` | Provider ID that authenticated the user |
+| `session['auth_identity']` | `dict` | User identity: name, email, avatar_url, provider |
+| `session['_enc_token']` | `str` | Encryption token (password provider only) |
+
+### Login Page
+
+The login page automatically renders:
+- Password form (always visible if password provider is configured)
+- "Sign in with X" buttons for each external provider (`is_external=True`)
+
+External provider buttons appear below a divider. Each button triggers a POST to `/auth/login` with `auth_provider=<provider_id>`.
+
+### OAuth Flow
+
+1. User clicks "Sign in with Google" → POST to `/auth/login` with `auth_provider=google`
+2. Provider returns `AuthResult(False, redirect_url='https://accounts.google.com/...')`
+3. User redirected to Google → authenticates → redirected back to callback URL
+4. Callback route calls provider again → returns `AuthResult(True, identity={...})`
+5. Session populated, user redirected to dashboard
