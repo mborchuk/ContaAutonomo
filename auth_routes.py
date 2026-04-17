@@ -138,6 +138,18 @@ def login():
     return render_template('login.html', auth_providers=providers)
 
 
+def _apply_rate_limits():
+    """Apply rate limits after app is fully initialized (avoids circular import)."""
+    global login, setup
+    try:
+        from app import limiter
+        if limiter:
+            login = limiter.limit('5/minute')(login)
+            setup = limiter.limit('3/minute')(setup)
+    except (ImportError, RuntimeError, AttributeError):
+        pass  # limiter not available or app not ready yet
+
+
 @auth_bp.route('/logout')
 def logout():
     """Logout — notify providers and modules."""
