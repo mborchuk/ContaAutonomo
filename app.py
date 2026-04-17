@@ -106,9 +106,16 @@ try:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash('Session expired or invalid request. Please try again.', 'danger')
-        return redirect(request.referrer or url_for('dashboard'))
+        # Only redirect to same-origin referrer to prevent open redirect
+        referrer = request.referrer
+        if referrer:
+            from urllib.parse import urlparse
+            ref_parsed = urlparse(referrer)
+            if ref_parsed.netloc and ref_parsed.netloc != request.host:
+                referrer = None  # external referrer — ignore
+        return redirect(referrer or url_for('dashboard'))
 except ImportError:
-    pass
+    pass  # flask-wtf not installed — CSRF protection not available
 
 # Module Manager - initialized after models are defined (see bottom of file)
 module_manager = None
@@ -1775,8 +1782,9 @@ def set_default_customer(id):
 # ============================================================================
 
 # Register Auth Blueprint (must be first)
-from auth_routes import auth_bp
+from auth_routes import auth_bp, _apply_rate_limits
 app.register_blueprint(auth_bp)
+_apply_rate_limits()  # apply rate limits after app is ready
 
 # Expenses are now handled by the expenses module
 # Legacy routes removed - functionality moved to modules/expenses/
