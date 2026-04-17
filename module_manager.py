@@ -327,6 +327,49 @@ class BaseModule(ABC):
         """
         return {}
 
+    def get_auth_providers(self):
+        """Return auth providers this module offers.
+
+        Modules can implement this to add external authentication methods
+        (Google, Azure AD, Cognito, SAML, etc.).
+
+        Returns:
+            list[AuthProvider]: provider instances to register with AuthService
+
+        Example:
+            from auth import AuthProvider, AuthResult
+
+            class GoogleAuthProvider(AuthProvider):
+                provider_id = 'google'
+                display_name = 'Google Account'
+                icon = '🔵'
+                is_external = True
+
+                def authenticate(self, request):
+                    # Handle OAuth callback
+                    ...
+
+                def get_login_form_html(self):
+                    return '<a href="/auth/google/start" class="btn">Sign in with Google</a>'
+
+            def get_auth_providers(self):
+                return [GoogleAuthProvider(self.core)]
+        """
+        return []
+
+    def on_user_authenticated(self, identity):
+        """Called after a user successfully authenticates (any provider).
+
+        Args:
+            identity: dict with user info — at minimum {'provider': '...'}
+                      May also include 'name', 'email', 'avatar_url', etc.
+        """
+        pass
+
+    def on_user_logout(self):
+        """Called when a user logs out."""
+        pass
+
 
 class FileStorageBackend:
     """
@@ -1643,6 +1686,19 @@ class ModuleManager:
 
             # Call on_enable
             instance.on_enable()
+
+            # Register auth providers from module
+            try:
+                providers = instance.get_auth_providers()
+                if providers:
+                    from auth import auth_service
+                    for provider in providers:
+                        auth_service.register(provider)
+                        logger.info("Auth provider '%s' registered from module '%s'",
+                                    provider.provider_id, module_id)
+            except Exception as e:
+                logger.debug("Module '%s' auth provider registration: %s",
+                             _sanitize_log(module_id), e)
 
             self.modules[module_id] = instance
             logger.info("Loaded module: %s v%s",

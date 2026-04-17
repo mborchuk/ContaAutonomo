@@ -1982,6 +1982,10 @@ def init_module_manager():
     app.jinja_env.globals['app_version'] = APP_VERSION
     app.jinja_env.globals['current_year'] = datetime.now().year
 
+    # Make auth_service available in templates
+    from auth import auth_service
+    app.jinja_env.globals['auth_service'] = auth_service
+
     import json as _json
     app.jinja_env.filters['from_json'] = lambda s: _json.loads(s) if s else {}
 
