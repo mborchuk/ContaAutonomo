@@ -508,7 +508,8 @@ class DocumentsModule(BaseModule):
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error: {e}', 'danger')
+                self.logger.error('Error creating document: %s', e)
+                flash('Error creating record. Please try again.', 'danger')
 
         categories = self._get_all_categories()
         return render_template('document_form.html', document=None,
@@ -568,7 +569,8 @@ class DocumentsModule(BaseModule):
                 return redirect(url_for('documents.documents_view', id=doc.id))
             except Exception as e:
                 self._db.session.rollback()
-                flash(f'Error: {e}', 'danger')
+                self.logger.error('Error updating document: %s', e)
+                flash('Error processing form data. Please check your input.', 'danger')
 
         categories = self._get_all_categories()
         doc_files = self.DocumentFile.query.filter_by(
@@ -592,7 +594,8 @@ class DocumentsModule(BaseModule):
             flash('Document deleted.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error: {e}', 'danger')
+            self.logger.error('Error deleting document: %s', e)
+            flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('documents.documents_index'))
 
     def _download_document(self, id):
@@ -673,7 +676,8 @@ class DocumentsModule(BaseModule):
             flash('File removed.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            flash(f'Error: {e}', 'danger')
+            self.logger.error('Error removing document file: %s', e)
+            flash('An error occurred. Please try again.', 'danger')
         return redirect(url_for('documents.documents_edit', id=doc_id))
 
     def _auto_sign_files(self, doc_id, form):

@@ -258,5 +258,6 @@ class ReportsModule(BaseModule):
             )
 
         except Exception as e:
-            flash(f'Error generating report: {str(e)}', 'danger')
+            self.logger.error('Error generating report: %s', e)
+            flash('Error generating PDF. Check server logs.', 'danger')
             return redirect(url_for('reports.reports_index'))

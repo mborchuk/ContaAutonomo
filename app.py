@@ -21,10 +21,63 @@ app = Flask(__name__)
 APP_VERSION = '1'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///invoices.db')
-app.config['SECRET_KEY'] = os.environ.get(
-    'SECRET_KEY', 'dev-secret-key-change-in-production')
+
+# --- SECRET_KEY: require in production, warn in dev ---
+_secret = os.environ.get('SECRET_KEY', '')
+if not _secret:
+    if os.environ.get('FLASK_DEBUG') == '1' or os.environ.get('FLASK_ENV') == 'development':
+        _secret = 'dev-only-insecure-key-' + hashlib.sha256(os.urandom(16)).hexdigest()
+        logger.warning('SECRET_KEY not set — using random dev key. Sessions will reset on restart.')
+    else:
+        _secret = hashlib.sha256(os.urandom(32)).hexdigest()
+        logger.critical('SECRET_KEY not set! Generated a random key. '
+                        'Set SECRET_KEY env var for persistent sessions.')
+app.config['SECRET_KEY'] = _secret
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# --- Session security ---
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+_force_https = os.environ.get('FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
+app.config['SESSION_COOKIE_SECURE'] = _force_https
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+
 db = SQLAlchemy(app)
+
+# --- CSRF protection ---
+try:
+    from flask_wtf.csrf import CSRFProtect, CSRFError
+    csrf = CSRFProtect(app)
+except ImportError:
+    csrf = None
+    logger.warning('flask-wtf not installed — CSRF protection disabled')
+
+# --- Rate limiting ---
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=[],
+        storage_uri='memory://',
+    )
+except ImportError:
+    limiter = None
+    logger.warning('flask-limiter not installed — rate limiting disabled')
+
+
+# --- Security headers ---
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if _force_https:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
 
 
 # --- Error handlers ---
@@ -46,6 +99,23 @@ from jinja2.exceptions import TemplateNotFound
 def template_not_found(e):
     flash('Page not found', 'danger')
     return redirect(url_for('dashboard'))
+
+# CSRF error handler
+try:
+    from flask_wtf.csrf import CSRFError
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(e):
+        flash('Session expired or invalid request. Please try again.', 'danger')
+        # Only redirect to same-origin referrer to prevent open redirect
+        referrer = request.referrer
+        if referrer:
+            from urllib.parse import urlparse
+            ref_parsed = urlparse(referrer)
+            if ref_parsed.netloc and ref_parsed.netloc != request.host:
+                referrer = None  # external referrer — ignore
+        return redirect(referrer or url_for('dashboard'))
+except ImportError:
+    pass  # flask-wtf not installed — CSRF error handler not registered
 
 # Module Manager - initialized after models are defined (see bottom of file)
 module_manager = None
@@ -833,7 +903,7 @@ def create_invoice():
         except (KeyError, ValueError) as e:
             db.session.rollback()
             logger.error('Error processing invoice form data: %s', e, exc_info=True)
-            flash(f'Error processing form data: {str(e)}', 'danger')
+            flash('Error processing form data. Please check your input.', 'danger')
             customers = Customer.query.order_by(Customer.name).all()
             banks = Bank.query.order_by(Bank.name).all()
             app_settings = Settings.query.first()
@@ -1101,7 +1171,8 @@ def edit_invoice(id):
                 total_usd += subtotal
 
         except (KeyError, ValueError) as e:
-            flash(f'Error processing form data: {str(e)}', 'danger')
+            logger.error('Error processing invoice form data: %s', e)
+            flash('Error processing form data. Please check your input.', 'danger')
             customers = Customer.query.order_by(Customer.name).all()
             banks = Bank.query.order_by(Bank.name).all()
             return render_template('edit.html', invoice=invoice, customers=customers, banks=banks)
@@ -1342,7 +1413,8 @@ def generate_pdf(id):
                              download_name=pdf_filename, mimetype='application/pdf')
         except Exception as e:
             if 'not found' not in str(e):
-                flash(f'Error generating PDF: {e}', 'danger')
+                logger.error('Error generating PDF with designer template: %s', e)
+                flash('Error generating PDF. Check server logs.', 'danger')
                 return redirect(url_for('view_invoice', id=invoice.id))
             # Fall through to default template
             template_path = None
@@ -1392,7 +1464,8 @@ def generate_pdf(id):
         return send_file(buffer, as_attachment=True, download_name=pdf_filename, mimetype='application/pdf')
 
     except Exception as e:
-        flash(f'Error generating PDF: {str(e)}', 'danger')
+        logger.error('Error generating PDF: %s', e)
+        flash('Error generating PDF. Check server logs.', 'danger')
         return redirect(url_for('index'))
 
 
@@ -1474,7 +1547,8 @@ def preview_invoice_pdf(id):
         return Response(pdf_content, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
     except Exception as e:
-        flash(f'Error generating PDF preview: {e}', 'danger')
+        logger.error('Error generating PDF preview: %s', e)
+        flash('Error generating PDF. Check server logs.', 'danger')
         return redirect(url_for('index'))
 
 
@@ -1708,8 +1782,9 @@ def set_default_customer(id):
 # ============================================================================
 
 # Register Auth Blueprint (must be first)
-from auth_routes import auth_bp
+from auth_routes import auth_bp, _apply_rate_limits
 app.register_blueprint(auth_bp)
+_apply_rate_limits()  # apply rate limits after app is ready
 
 # Expenses are now handled by the expenses module
 # Legacy routes removed - functionality moved to modules/expenses/
@@ -1753,7 +1828,8 @@ def create_contractor():
             return redirect(url_for('settings') + '#contractors')
         except Exception as e:
             db.session.rollback()
-            flash(f'Error creating contractor: {str(e)}', 'danger')
+            logger.error('Error creating contractor: %s', e)
+            flash('Error creating record. Please try again.', 'danger')
 
     return render_template('contractor_form.html', contractor=None)
 
@@ -1781,7 +1857,8 @@ def edit_contractor(id):
             return redirect(url_for('settings') + '#contractors')
         except Exception as e:
             db.session.rollback()
-            flash(f'Error updating contractor: {str(e)}', 'danger')
+            logger.error('Error updating contractor: %s', e)
+            flash('Error processing form data. Please check your input.', 'danger')
 
     return render_template('contractor_form.html', contractor=contractor)
 
@@ -1803,7 +1880,8 @@ def delete_contractor(id):
         flash('Contractor deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
-        flash(f'Error deleting contractor: {str(e)}', 'danger')
+        logger.error('Error deleting contractor: %s', e)
+        flash('Error deleting record. Please try again.', 'danger')
 
     return redirect(url_for('settings') + '#contractors')
 
