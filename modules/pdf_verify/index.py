@@ -367,13 +367,65 @@ class PDFVerifyModule(BaseModule):
         self._db = db
 
     def get_capabilities(self):
-        """Expose pdf_verify capability for other modules."""
-        return [{
-            'type': 'pdf_verify',
-            'name': 'PDF Signature Verification',
-            'accepts': ['pdf'],
-            'action': lambda pdf_bytes, **kw: extract_signatures(pdf_bytes),
-        }]
+        """Expose capabilities for cross-module integration."""
+        return [
+            {
+                'type': 'pdf_verify',
+                'name': 'PDF Signature Verification',
+                'accepts': ['pdf'],
+                'action': lambda pdf_bytes, **kw: extract_signatures(pdf_bytes),
+            },
+            {
+                'type': 'file_badge',
+                'name': 'Signature Badge',
+                'action': self._render_file_badge,
+            },
+            {
+                'type': 'file_badge_script',
+                'name': 'Signature Badge Script',
+                'action': self._render_badge_script,
+            },
+        ]
+
+    def _render_file_badge(self, df):
+        """Return inline HTML badge placeholder for a document file."""
+        return (f'<span id="sig-badge-{df.id}" style="margin-left:6px;" '
+                f'data-storage-key="{df.file_path}" '
+                f'data-filename="{df.original_filename or "file.pdf"}"></span>')
+
+    def _render_badge_script(self):
+        """Return JS script that loads signature badges via AJAX."""
+        return '''<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var badges = document.querySelectorAll('[id^="sig-badge-"]');
+    if (!badges.length) return;
+    badges.forEach(function(badge) {
+        var key = badge.dataset.storageKey;
+        var fname = badge.dataset.filename;
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        var headers = {'Content-Type': 'application/json'};
+        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
+        fetch('/pdf-verify/check', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({storage_key: key})
+        })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.signatures || !data.signatures.length) return;
+            var n = data.signatures.length;
+            var signer = data.signatures[0].signer_email || data.signatures[0].signer || 'Unknown';
+            var short = signer.length > 40 ? signer.substring(0, 40) + '\\u2026' : signer;
+            var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
+                + '&name=' + encodeURIComponent(fname)
+                + '&back=' + encodeURIComponent(window.location.pathname);
+            badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
+                + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
+        })
+        .catch(function() {});
+    });
+});
+</script>'''
 
     def register_routes(self, app):
         from flask import Blueprint, request, jsonify, render_template
