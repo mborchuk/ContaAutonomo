@@ -113,6 +113,16 @@
         </div>
 
         <div class="form-group">
+            <label for="payment_methods">Payment Methods</label>
+            <input type="text" id="payment_methods" name="payment_methods"
+                   value="{{ (settings.payment_methods or 'Bank Transfer,PayPal,Credit Card,Cash,Crypto') if settings else 'Bank Transfer,PayPal,Credit Card,Cash,Crypto' }}"
+                   placeholder="Bank Transfer,PayPal,Credit Card,Cash,Crypto">
+            <small style="display: block; margin-top: 5px; color: #666;">
+                Enter payment methods separated by commas. These will appear as options when creating or editing invoices.
+            </small>
+        </div>
+
+        <div class="form-group">
             <label for="base_currency">Base Currency *</label>
             <select id="base_currency" name="base_currency" required>
                 <option value="EUR" selected>EUR (€)</option>
@@ -368,6 +378,7 @@
         <input type="hidden" name="report_template" value="{{ (settings.report_template or 'official_template') if settings else 'official_template' }}">
         <input type="hidden" name="invoice_template" value="{{ (settings.invoice_template or 'default_template') if settings else 'default_template' }}">
         <input type="hidden" name="social_security_monthly" value="{{ settings.social_security_monthly if settings and settings.social_security_monthly else '0' }}">
+        <input type="hidden" name="payment_methods" value="{{ (settings.payment_methods or 'Bank Transfer,PayPal,Credit Card,Cash,Crypto') if settings else 'Bank Transfer,PayPal,Credit Card,Cash,Crypto' }}">
 
         <button type="submit" class="btn btn-primary">Save Business Information</button>
     </form>

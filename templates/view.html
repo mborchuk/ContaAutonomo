@@ -41,6 +41,11 @@
                 <label>Bank Account</label>
                 <input type="text" value="{% if invoice.bank %}{{ invoice.bank.name }} ({{ invoice.bank.iban[-4:] }}){% else %}Not selected{% endif %}" readonly style="background: #e0e0e0;">
             </div>
+
+            <div class="form-group">
+                <label>Payment Method</label>
+                <input type="text" value="{{ invoice.payment_method or 'Bank Transfer' }}" readonly style="background: #e0e0e0;">
+            </div>
         </div>
 
         <!-- Right Column -->
