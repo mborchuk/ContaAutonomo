@@ -263,6 +263,7 @@ class Settings(db.Model):
     # Currency provider settings
     currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
     currency_provider_api_key = db.Column(db.String(200), default='')  # API key for providers that need it
+    payment_methods = db.Column(db.Text, default='Bank Transfer,PayPal,Credit Card,Cash,Crypto')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
@@ -883,7 +884,9 @@ def create_invoice():
                 customers = Customer.query.order_by(Customer.name).all()
                 banks = Bank.query.order_by(Bank.name).all()
                 app_settings = Settings.query.first()
-                return render_template('create.html', customers=customers, banks=banks, settings=app_settings)
+                payment_methods = [m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else []
+                return render_template('create.html', customers=customers, banks=banks, settings=app_settings,
+                                     payment_methods=payment_methods)
 
             # Parse each item
             for item_id in item_keys:
@@ -912,8 +915,10 @@ def create_invoice():
                 tracked_currencies = [c.strip() for c in app_settings.tracked_currencies.split(',') if c.strip()]
             else:
                 tracked_currencies = ['USD', 'EUR', 'GBP', 'CZK']
+            payment_methods = [m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else []
             return render_template('create.html', customers=customers, banks=banks, settings=app_settings,
-                                 tracked_currencies=tracked_currencies)
+                                 tracked_currencies=tracked_currencies,
+                                 payment_methods=payment_methods)
 
         # Client details
         client_vat = request.form.get('client_vat', '')
@@ -974,6 +979,7 @@ def create_invoice():
             notes=notes,
             status=status,
             currency=currency,
+            payment_method=request.form.get('payment_method', 'Bank Transfer'),
             customer_id=customer.id if customer else None,
             bank_id=int(bank_id) if bank_id else None
         )
@@ -1114,7 +1120,8 @@ def create_invoice():
 
     return render_template('create.html', customers=customers, banks=banks, settings=app_settings,
                          default_customer=default_customer, default_bank=default_bank,
-                         tracked_currencies=tracked_currencies)
+                         tracked_currencies=tracked_currencies,
+                         payment_methods=[m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else [])
 
 
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -1136,6 +1143,7 @@ def edit_invoice(id):
             due_date_str = request.form.get('due_date')
             invoice.status = request.form['status']
             invoice.notes = request.form.get('notes', '')
+            invoice.payment_method = request.form.get('payment_method', 'Bank Transfer')
             bank_id = request.form.get('bank_id')
 
             # Parse items from form
@@ -1153,7 +1161,10 @@ def edit_invoice(id):
                 flash('At least one item is required', 'danger')
                 customers = Customer.query.order_by(Customer.name).all()
                 banks = Bank.query.order_by(Bank.name).all()
-                return render_template('edit.html', invoice=invoice, customers=customers, banks=banks)
+                app_settings = Settings.query.first()
+                payment_methods = [m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else []
+                return render_template('edit.html', invoice=invoice, customers=customers, banks=banks,
+                                     payment_methods=payment_methods)
 
             # Parse each item
             for item_id in item_keys:
@@ -1175,7 +1186,10 @@ def edit_invoice(id):
             flash('Error processing form data. Please check your input.', 'danger')
             customers = Customer.query.order_by(Customer.name).all()
             banks = Bank.query.order_by(Bank.name).all()
-            return render_template('edit.html', invoice=invoice, customers=customers, banks=banks)
+            app_settings = Settings.query.first()
+            payment_methods = [m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else []
+            return render_template('edit.html', invoice=invoice, customers=customers, banks=banks,
+                                 payment_methods=payment_methods)
 
         # Client details
         client_vat = request.form.get('client_vat', '')
@@ -1273,7 +1287,8 @@ def edit_invoice(id):
         tracked_currencies = ['USD', 'EUR', 'GBP', 'CZK']
 
     return render_template('edit.html', invoice=invoice, customers=customers, banks=banks,
-                         tracked_currencies=tracked_currencies)
+                         tracked_currencies=tracked_currencies,
+                         payment_methods=[m.strip() for m in app_settings.payment_methods.split(',') if m.strip()] if app_settings and app_settings.payment_methods else [])
 
 
 
@@ -1600,6 +1615,7 @@ def settings():
                 'invoice_template': 'invoice_template',
                 'currency_provider': 'currency_provider',
                 'currency_provider_api_key': 'currency_provider_api_key',
+                'payment_methods': 'payment_methods',
             }
             for form_key, attr in field_map.items():
                 if form_key in request.form:
@@ -2116,6 +2132,13 @@ if __name__ == '__main__':
                 with db.engine.connect() as conn:
                     conn.execute(text(f'ALTER TABLE settings ADD COLUMN {col} {typedef}'))
                     conn.commit()
+
+        # Migrate: add payment_methods column if missing
+        columns = [c['name'] for c in inspector.get_columns('settings')]
+        if 'payment_methods' not in columns:
+            with db.engine.connect() as conn:
+                conn.execute(text("ALTER TABLE settings ADD COLUMN payment_methods TEXT DEFAULT 'Bank Transfer,PayPal,Credit Card,Cash,Crypto'"))
+                conn.commit()
 
         # Initialize module system
         mgr = init_module_manager()

@@ -61,6 +61,19 @@
                     <a href="{{ url_for('settings') }}#banks" target="_blank">Manage bank accounts in Settings</a>
                 </small>
             </div>
+
+            <div class="form-group">
+                <label for="payment_method">Payment Method</label>
+                <select id="payment_method" name="payment_method">
+                    {% if payment_methods %}
+                        {% for pm in payment_methods %}
+                        <option value="{{ pm }}" {% if pm == 'Bank Transfer' %}selected{% endif %}>{{ pm }}</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="Bank Transfer" selected>Bank Transfer</option>
+                    {% endif %}
+                </select>
+            </div>
         </div>
 
         <!-- Right Column -->

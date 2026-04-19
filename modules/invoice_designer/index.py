@@ -893,13 +893,14 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
                                          [('', invoice.notes.replace('\n', '<br/>'))])
 
         if block_id == 'payment_terms':
-            pt = ''
-            if settings and hasattr(settings, 'default_payment_terms'):
-                pt = settings.default_payment_terms or ''
-            if not pt:
-                pt = 'Bank Transfer'
+            # Show payment method from invoice, fall back to settings payment terms
+            pm = getattr(invoice, 'payment_method', None) or ''
+            if not pm and settings and hasattr(settings, 'default_payment_terms'):
+                pm = settings.default_payment_terms or ''
+            if not pm:
+                pm = 'Bank Transfer'
             return _make_block_flowables('payment_terms', L("payment_terms"),
-                                         [('', pt)])
+                                         [('', pm)])
 
         return []
 

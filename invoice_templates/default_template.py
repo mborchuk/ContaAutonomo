@@ -328,7 +328,7 @@ def generate_invoice_pdf(invoice, customer, settings, Bank):
                 ['<b>SWIFT/BIC:</b>', '[Your SWIFT]'],
             ]
 
-    payment_terms = settings.default_payment_terms if settings and settings.default_payment_terms else 'Bank Transfer'
+    payment_method = getattr(invoice, 'payment_method', None) or 'Bank Transfer'
 
     # Create bold style for headers (must be defined before use)
     header_bold_style = styles['Normal'].clone('header_bold_style')
@@ -371,7 +371,7 @@ def generate_invoice_pdf(invoice, customer, settings, Bank):
 
     payment_row = [
         Paragraph(due_date_text, normal_style),
-        Paragraph(payment_terms, normal_style),
+        Paragraph(payment_method, normal_style),
         bank_info_nested_table  # Use nested table instead of text
     ]
 
