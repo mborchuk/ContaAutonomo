@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Signature Details — {{ filename }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1 style="margin: 0;">🔏 Signature Details</h1>
+    <a href="{{ back_url }}" class="btn btn-secondary">← Back</a>
+</div>
+
+<div style="background: #f5f5f5; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; font-size: 14px;">
+    <strong>File:</strong> {{ filename }}
+</div>
+
+{% if error %}
+<div style="background: #ffebee; border: 1px solid #ef9a9a; padding: 14px; border-radius: 6px; color: #c62828;">
+    ⚠️ {{ error }}
+</div>
+
+{% elif not signatures %}
+<div style="background: #fff8e1; border: 1px solid #ffe082; padding: 14px; border-radius: 6px; color: #f57f17;">
+    📄 No digital signatures found in this file.
+</div>
+
+{% else %}
+<div style="margin-bottom: 10px; font-size: 14px; color: #666;">
+    Found <strong>{{ signatures|length }}</strong> signature{{ 's' if signatures|length != 1 else '' }}
+</div>
+
+{% for sig in signatures %}
+<div style="background: #fff; border: 1px solid #c8e6c9; border-left: 4px solid #4caf50; border-radius: 6px; padding: 16px; margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+        <span style="font-size: 20px;">✅</span>
+        <strong style="font-size: 15px;">Signature #{{ loop.index }}</strong>
+    </div>
+
+    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+        {% if sig.signer %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; width: 140px; vertical-align: top;">Signer</td>
+            <td style="padding: 6px 0; word-break: break-word;">{{ sig.signer }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.signer_email %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Email</td>
+            <td style="padding: 6px 0;">{{ sig.signer_email }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.issuer %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Issuer</td>
+            <td style="padding: 6px 0; word-break: break-word;">{{ sig.issuer }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.signed_at %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Signed At</td>
+            <td style="padding: 6px 0;">{{ sig.signed_at }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.valid_from or sig.valid_to %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Certificate Validity</td>
+            <td style="padding: 6px 0;">
+                {{ sig.valid_from or '?' }} → {{ sig.valid_to or '?' }}
+            </td>
+        </tr>
+        {% endif %}
+        {% if sig.algorithm %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Algorithm</td>
+            <td style="padding: 6px 0;">{{ sig.algorithm }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.serial %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Serial #</td>
+            <td style="padding: 6px 0; font-family: monospace; font-size: 12px; word-break: break-all;">{{ sig.serial }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.reason %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Reason</td>
+            <td style="padding: 6px 0;">{{ sig.reason }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.location %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Location</td>
+            <td style="padding: 6px 0;">{{ sig.location }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.contact %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Contact</td>
+            <td style="padding: 6px 0;">{{ sig.contact }}</td>
+        </tr>
+        {% endif %}
+        {% if sig.filter %}
+        <tr>
+            <td style="padding: 6px 12px 6px 0; color: #888; vertical-align: top;">Filter</td>
+            <td style="padding: 6px 0;">{{ sig.filter }}{% if sig.sub_filter %} / {{ sig.sub_filter }}{% endif %}</td>
+        </tr>
+        {% endif %}
+    </table>
+
+    {% if sig.cert_chain and sig.cert_chain|length > 1 %}
+    <details style="margin-top: 14px;">
+        <summary style="cursor: pointer; font-size: 13px; color: #1565c0; font-weight: 500;">
+            🔗 Certificate Chain ({{ sig.cert_chain|length }} certificates)
+        </summary>
+        <div style="margin-top: 10px;">
+            {% for cert in sig.cert_chain %}
+            <div style="background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; padding: 10px; margin-bottom: 8px; font-size: 12px;">
+                <div style="font-weight: 500; margin-bottom: 6px;">
+                    {% if loop.first %}🔑 Leaf{% elif loop.last and cert.subject == cert.issuer %}🏛 Root{% else %}🔗 Intermediate{% endif %}
+                    — {{ cert.subject }}
+                </div>
+                <table style="width: 100%; font-size: 12px;">
+                    <tr>
+                        <td style="color: #888; width: 100px; padding: 2px 0;">Issued by</td>
+                        <td style="padding: 2px 0; word-break: break-word;">{{ cert.issuer }}</td>
+                    </tr>
+                    {% if cert.email %}
+                    <tr>
+                        <td style="color: #888; padding: 2px 0;">Email</td>
+                        <td style="padding: 2px 0;">{{ cert.email }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if cert.valid_from or cert.valid_to %}
+                    <tr>
+                        <td style="color: #888; padding: 2px 0;">Validity</td>
+                        <td style="padding: 2px 0;">{{ cert.valid_from or '?' }} → {{ cert.valid_to or '?' }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td style="color: #888; padding: 2px 0;">Serial</td>
+                        <td style="padding: 2px 0; font-family: monospace; word-break: break-all;">{{ cert.serial }}</td>
+                    </tr>
+                </table>
+            </div>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+{% endblock %}
