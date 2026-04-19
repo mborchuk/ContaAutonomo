@@ -168,9 +168,12 @@ document.addEventListener('DOMContentLoaded', function() {
     badges.forEach(function(badge) {
         var key = badge.dataset.storageKey;
         var fname = badge.dataset.filename;
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        var headers = {'Content-Type': 'application/json'};
+        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
         fetch('/pdf-verify/check', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
+            headers: headers,
             body: JSON.stringify({storage_key: key})
         })
         .then(function(r) { return r.ok ? r.json() : null; })
