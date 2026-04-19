@@ -145,4 +145,10 @@
         {% endfor %}
     {% endif %}
 </div>
+
+{% if module_manager %}
+    {% for panel_html in module_manager.get_invoice_view_panels(invoice) %}
+        {{ panel_html|safe }}
+    {% endfor %}
+{% endif %}
 {% endblock %}

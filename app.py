@@ -1786,6 +1786,10 @@ from auth_routes import auth_bp, _apply_rate_limits
 app.register_blueprint(auth_bp)
 _apply_rate_limits()  # apply rate limits after app is ready
 
+# Exempt auth routes from CSRF (login/setup have no session to protect)
+if csrf:
+    csrf.exempt(auth_bp)
+
 # Expenses are now handled by the expenses module
 # Legacy routes removed - functionality moved to modules/expenses/
 
