@@ -262,8 +262,10 @@ document.addEventListener('click', function(e) {
     var toggle = e.target.closest('.action-dropdown-toggle');
     var allMenus = document.querySelectorAll('.action-dropdown-menu');
     if (toggle) {
+        e.preventDefault();
         e.stopPropagation();
-        var menu = toggle.nextElementSibling;
+        var menu = toggle.parentElement.querySelector('.action-dropdown-menu');
+        if (!menu) return;
         var wasOpen = menu.style.display === 'block';
         allMenus.forEach(function(m) { m.style.display = 'none'; });
         if (!wasOpen) menu.style.display = 'block';
