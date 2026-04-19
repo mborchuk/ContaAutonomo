@@ -100,6 +100,9 @@
                     <span style="font-size: 10px; color: #999; margin-left: 4px;">{{ df.file_format|upper }}</span>
                     {% endif %}
                     <span style="font-size: 11px; color: #bbb; margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
+                    {% if df.file_format and df.file_format|lower == 'pdf' %}
+                    <span id="sig-badge-{{ df.id }}" style="margin-left: 6px;" data-storage-key="{{ df.file_path }}" data-filename="{{ df.original_filename or 'file.pdf' }}"></span>
+                    {% endif %}
                 </div>
                 <div style="display: flex; gap: 6px;">
                     <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">👁 Preview</a>
@@ -157,5 +160,34 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var badges = document.querySelectorAll('[id^="sig-badge-"]');
+    if (!badges.length) return;
+    badges.forEach(function(badge) {
+        var key = badge.dataset.storageKey;
+        var fname = badge.dataset.filename;
+        fetch('/pdf-verify/check', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({storage_key: key})
+        })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.signatures || !data.signatures.length) return;
+            var n = data.signatures.length;
+            var signer = data.signatures[0].signer_email || data.signatures[0].signer || 'Unknown';
+            var short = signer.length > 40 ? signer.substring(0, 40) + '…' : signer;
+            var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
+                + '&name=' + encodeURIComponent(fname)
+                + '&back=' + encodeURIComponent(window.location.pathname);
+            badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s) — click for details">'
+                + '✅ Signed' + (n > 1 ? ' (' + n + ')' : '') + ' — ' + short + '</a>';
+        })
+        .catch(function() {});
+    });
+});
+</script>
 
 {% endblock %}
