@@ -83,6 +83,32 @@ class InvoiceCommentsModule(BaseModule):
                                       comments=comments)
         return [html]
 
+    def get_create_form_html(self):
+        """Inject comment field into invoice create form."""
+        return COMMENT_FORM_HTML
+
+    def get_edit_form_html(self, invoice):
+        """Inject comment field into invoice edit form."""
+        if self.core.invoice_service.is_locked(invoice):
+            return None
+        return COMMENT_FORM_HTML
+
+    def on_invoice_created(self, invoice, request):
+        """Save initial comment after invoice creation."""
+        text = request.form.get('initial_comment', '').strip()
+        if text:
+            comment = self.InvoiceComment(invoice_id=invoice.id, text=text)
+            self._db.session.add(comment)
+            self._db.session.commit()
+
+    def on_invoice_updated(self, invoice, request):
+        """Save comment added during invoice edit."""
+        text = request.form.get('initial_comment', '').strip()
+        if text:
+            comment = self.InvoiceComment(invoice_id=invoice.id, text=text)
+            self._db.session.add(comment)
+            self._db.session.commit()
+
 
 COMMENTS_TEMPLATE = '''
 <div style="margin-top: 30px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px;">
@@ -136,5 +162,15 @@ COMMENTS_TEMPLATE = '''
         No comments yet.
     </p>
     {% endif %}
+</div>
+'''
+
+COMMENT_FORM_HTML = '''
+<div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 10px;">
+    <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">💬 Add Comment</div>
+    <textarea name="initial_comment" rows="2" placeholder="Optional internal comment (not visible on PDF)..."
+              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+                     font-size: 13px; font-family: inherit; resize: vertical;"></textarea>
+    <div style="color: #888; font-size: 11px; margin-top: 4px;">This comment will be saved with the invoice for internal reference.</div>
 </div>
 '''
