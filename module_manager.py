@@ -260,6 +260,19 @@ class BaseModule(ABC):
         """
         return []
 
+    def get_invoice_view_panels(self, invoice):
+        """
+        Provide extra content panels for the invoice view page.
+        Rendered below the action buttons. Use for comments, history, etc.
+
+        Args:
+            invoice: Invoice model instance
+
+        Returns:
+            list of str: rendered HTML snippets (full sections/panels)
+        """
+        return []
+
     def get_create_form_html(self):
         """
         Return HTML to inject into the invoice create form.
@@ -1943,6 +1956,16 @@ class ModuleManager:
         for mod in self.modules.values():
             actions.extend(mod.get_invoice_actions(invoice))
         return actions
+
+    def get_invoice_view_panels(self, invoice):
+        """Collect extra view panels from all active modules"""
+        panels = []
+        for mod in self.modules.values():
+            try:
+                panels.extend(mod.get_invoice_view_panels(invoice))
+            except Exception:
+                pass  # module panel rendering should not break the page
+        return panels
 
     def get_create_form_html(self):
         """Collect create-form HTML snippets from all active modules"""
