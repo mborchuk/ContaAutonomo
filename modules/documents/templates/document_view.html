@@ -100,7 +100,7 @@
                     <span style="font-size: 10px; color: #999; margin-left: 4px;">{{ df.file_format|upper }}</span>
                     {% endif %}
                     <span style="font-size: 11px; color: #bbb; margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
-                    {% if df.file_format and df.file_format|lower == 'pdf' %}
+                    {% if df.file_format and df.file_format|lower == 'pdf' and module_manager and 'pdf_verify' in module_manager.modules %}
                     <span id="sig-badge-{{ df.id }}" style="margin-left: 6px;" data-storage-key="{{ df.file_path }}" data-filename="{{ df.original_filename or 'file.pdf' }}"></span>
                     {% endif %}
                 </div>
@@ -161,6 +161,7 @@
     </div>
 </div>
 
+{% if module_manager and 'pdf_verify' in module_manager.modules %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     var badges = document.querySelectorAll('[id^="sig-badge-"]');
@@ -192,5 +193,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+{% endif %}
 
 {% endblock %}
