@@ -4,7 +4,7 @@ Internal comments/notes on invoices — not visible on PDF.
 """
 
 from module_manager import BaseModule
-from flask import Blueprint, request, redirect, url_for, flash, render_template_string
+from flask import Blueprint, request, redirect, url_for, render_template_string
 from datetime import datetime
 
 
