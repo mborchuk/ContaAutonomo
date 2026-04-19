@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {% if csrf_token is defined or csrf_token %}
+    {% if csrf_token is defined %}
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {% endif %}
     <title>{% block title %}Invoice Manager{% endblock %}</title>
@@ -299,8 +299,9 @@
 // Auto-inject CSRF token into all forms
 (function() {
     var meta = document.querySelector('meta[name="csrf-token"]');
-    if (!meta) return;
+    if (!meta) return;  // CSRF not available — skip injection
     var token = meta.getAttribute('content');
+    if (!token) return;
     document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
         if (form.querySelector('input[name="csrf_token"]')) return;
         var input = document.createElement('input');
