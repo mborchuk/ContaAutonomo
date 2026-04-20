@@ -333,6 +333,25 @@ class DocumentsModule(BaseModule):
         """Return dict name->color from DocumentCategory table."""
         return {c.name: c.color for c in self.DocumentCategory.query.all()}
 
+    def _get_all_tags(self):
+        """Collect all unique tags from documents, stripped of # prefix."""
+        tags = set()
+        for (raw,) in self._db.session.query(self.Document.tags).filter(
+                self.Document.tags.isnot(None)).all():
+            for t in raw.split(','):
+                t = t.strip().lstrip('#')
+                if t:
+                    tags.add(t)
+        return sorted(tags)
+
+    @staticmethod
+    def _clean_tags(raw):
+        """Strip # prefix and whitespace from comma-separated tags."""
+        if not raw:
+            return None
+        cleaned = ','.join(t.strip().lstrip('#') for t in raw.split(',') if t.strip())
+        return cleaned or None
+
     def _get_file_meta(self, file):
         """Extract file size and format from uploaded file."""
         file.seek(0, 2)
@@ -451,14 +470,9 @@ class DocumentsModule(BaseModule):
         categories = self._get_all_categories()
         category_colors = self._get_category_colors()
 
-        all_tags = set()
+        all_tags = self._get_all_tags()
         years = set()
         for doc in self.Document.query.all():
-            if doc.tags:
-                for t in doc.tags.split(','):
-                    t = t.strip()
-                    if t:
-                        all_tags.add(t)
             if doc.document_date:
                 years.add(doc.document_date.year)
 
@@ -468,7 +482,7 @@ class DocumentsModule(BaseModule):
                                categories=categories,
                                category_colors=category_colors,
                                fill_row_color=(self._get_config('fill_row_color', '0') == '1'),
-                               all_tags=sorted(all_tags),
+                               all_tags=all_tags,
                                years=sorted(years, reverse=True),
                                sort_by=sort_by, sort_dir=sort_dir,
                                page=page, total_pages=total_pages, total=total,
@@ -510,7 +524,7 @@ class DocumentsModule(BaseModule):
                     document_date=doc_date,
                     expiry_date=expiry,
                     amount=amount,
-                    tags=request.form.get('tags', '').strip() or None,
+                    tags=self._clean_tags(request.form.get('tags', '')),
                     description=request.form.get('description', '').strip() or None,
                     reference_number=request.form.get('reference_number', '').strip() or None,
                     counterparty=request.form.get('counterparty', '').strip() or None,
@@ -552,7 +566,8 @@ class DocumentsModule(BaseModule):
 
         categories = self._get_all_categories()
         return render_template('document_form.html', document=None,
-                               categories=categories, doc_files=[])
+                               categories=categories, doc_files=[],
+                               all_tags=self._get_all_tags())
 
     def _edit_document(self, id):
         doc = self.Document.query.get_or_404(id)
@@ -578,7 +593,7 @@ class DocumentsModule(BaseModule):
                     doc.expiry_date = None
 
                 doc.amount = float(request.form['amount']) if request.form.get('amount') else None
-                doc.tags = request.form.get('tags', '').strip() or None
+                doc.tags = self._clean_tags(request.form.get('tags', ''))
                 doc.description = request.form.get('description', '').strip() or None
                 doc.reference_number = request.form.get('reference_number', '').strip() or None
                 doc.counterparty = request.form.get('counterparty', '').strip() or None
@@ -624,7 +639,8 @@ class DocumentsModule(BaseModule):
         doc_files = self.DocumentFile.query.filter_by(
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         return render_template('document_form.html', document=doc,
-                               categories=categories, doc_files=doc_files)
+                               categories=categories, doc_files=doc_files,
+                               all_tags=self._get_all_tags())
 
     def _delete_document(self, id):
         doc = self.Document.query.get_or_404(id)

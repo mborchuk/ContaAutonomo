@@ -133,8 +133,8 @@
                 <td>
                     {% if doc.tags %}
                         {% for t in doc.tags.split(',') %}
-                        <a href="{{ url_for('documents.documents_index', tag=t.strip()) }}"
-                           style="display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #555; text-decoration: none; cursor: pointer;">{{ t.strip() }}</a>
+                        <a href="{{ url_for('documents.documents_index', tag=t.strip().lstrip('#')) }}"
+                           style="display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #555; text-decoration: none; cursor: pointer;">{{ t.strip().lstrip('#') }}</a>
                         {% endfor %}
                     {% else %}-{% endif %}
                 </td>
