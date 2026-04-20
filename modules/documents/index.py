@@ -97,13 +97,25 @@ class DocumentsModule(BaseModule):
             details = db.Column(db.Text)
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+        class DocumentNote(db.Model):
+            __tablename__ = 'document_note'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
+            title = db.Column(db.String(200), nullable=False)
+            text = db.Column(db.Text, nullable=False)
+            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
         self.Document = Document
         self.DocumentCategory = DocumentCategory
         self.DocumentFile = DocumentFile
         self.DocumentConfig = DocumentConfig
         self.DocumentHistory = DocumentHistory
+        self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
-                'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory}
+                'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
+                'DocumentNote': DocumentNote}
 
     def on_enable(self):
         """Migrate: add new columns if missing + seed default categories + migrate files."""
@@ -277,6 +289,21 @@ class DocumentsModule(BaseModule):
         def documents_bulk():
             return module._bulk_action()
 
+        @bp.route('/note/add/<int:doc_id>', methods=['POST'])
+        @login_required
+        def note_add(doc_id):
+            return module._add_note(doc_id)
+
+        @bp.route('/note/edit/<int:note_id>', methods=['POST'])
+        @login_required
+        def note_edit(note_id):
+            return module._edit_note(note_id)
+
+        @bp.route('/note/delete/<int:note_id>', methods=['POST'])
+        @login_required
+        def note_delete(note_id):
+            return module._delete_note(note_id)
+
         app.register_blueprint(bp)
 
     # ---- helpers ----
@@ -365,9 +392,12 @@ class DocumentsModule(BaseModule):
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         history = self.DocumentHistory.query.filter_by(
             document_id=doc.id).order_by(self.DocumentHistory.created_at.desc()).all()
+        notes = self.DocumentNote.query.filter_by(
+            document_id=doc.id).order_by(self.DocumentNote.created_at.desc()).all()
         category_colors = self._get_category_colors()
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
-                               history=history, category_colors=category_colors,
+                               history=history, notes=notes,
+                               category_colors=category_colors,
                                today=date.today())
 
     def _list_documents(self):
@@ -872,6 +902,36 @@ class DocumentsModule(BaseModule):
                 flash(f'Tag "{tag}" added to {len(docs)} document(s).', 'success')
 
         return redirect(url_for('documents.documents_index'))
+
+    # ---- notes ----
+
+    def _add_note(self, doc_id):
+        title = request.form.get('note_title', '').strip()
+        text = request.form.get('note_text', '').strip()
+        if title and text:
+            note = self.DocumentNote(document_id=doc_id, title=title, text=text)
+            self._db.session.add(note)
+            self._log_history(doc_id, 'updated', f'Note added: {title}')
+            self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=doc_id))
+
+    def _edit_note(self, note_id):
+        note = self.DocumentNote.query.get_or_404(note_id)
+        title = request.form.get('note_title', '').strip()
+        text = request.form.get('note_text', '').strip()
+        if title and text:
+            note.title = title
+            note.text = text
+            self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=note.document_id))
+
+    def _delete_note(self, note_id):
+        note = self.DocumentNote.query.get_or_404(note_id)
+        doc_id = note.document_id
+        self._log_history(doc_id, 'updated', f'Note removed: {note.title}')
+        self._db.session.delete(note)
+        self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=doc_id))
 
     # ---- dashboard integration ----
 
