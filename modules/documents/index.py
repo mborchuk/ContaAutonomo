@@ -534,6 +534,15 @@ class DocumentsModule(BaseModule):
                 # Auto-sign PDF files if requested
                 self._auto_sign_files(doc.id, request.form)
 
+                # Save initial note if provided
+                note_title = request.form.get('initial_note_title', '').strip()
+                note_text = request.form.get('initial_note_text', '').strip()
+                if note_title and note_text:
+                    self._db.session.add(self.DocumentNote(
+                        document_id=doc.id, title=note_title, text=note_text))
+                    self._log_history(doc.id, 'updated', f'Note added: {note_title}')
+                    self._db.session.commit()
+
                 flash('Document added.', 'success')
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
@@ -594,6 +603,15 @@ class DocumentsModule(BaseModule):
                 # Auto-sign new PDF files if requested
                 if added_files:
                     self._auto_sign_files(doc.id, request.form)
+
+                # Save note if provided during edit
+                note_title = request.form.get('initial_note_title', '').strip()
+                note_text = request.form.get('initial_note_text', '').strip()
+                if note_title and note_text:
+                    self._db.session.add(self.DocumentNote(
+                        document_id=doc.id, title=note_title, text=note_text))
+                    self._log_history(doc.id, 'updated', f'Note added: {note_title}')
+                    self._db.session.commit()
 
                 flash('Document updated.', 'success')
                 return redirect(url_for('documents.documents_view', id=doc.id))
