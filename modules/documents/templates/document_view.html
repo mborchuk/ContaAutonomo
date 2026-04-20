@@ -164,6 +164,13 @@
     </div>
 </div>
 
+{# Render extra panels from modules (e.g. notes, comments) #}
+{% if module_manager %}
+    {% for cap in module_manager.find_capabilities('document_view_panel') %}
+        {{ cap.action(doc)|safe }}
+    {% endfor %}
+{% endif %}
+
 {# Render page-level scripts from modules (e.g. signature verification) #}
 {% if module_manager %}
     {% for cap in module_manager.find_capabilities('file_badge_script') %}
