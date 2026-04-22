@@ -1041,8 +1041,13 @@ class DocumentsModule(BaseModule):
         Returns list of dicts: {name: str, storage_key: str}
         """
         query = self.Document.query.filter(
-            self.Document.document_date >= start_date,
-            self.Document.document_date <= end_date,
+            self._db.or_(
+                self._db.and_(
+                    self.Document.document_date >= start_date,
+                    self.Document.document_date <= end_date,
+                ),
+                self.Document.document_date.is_(None),
+            )
         )
         if doc_ids:
             query = query.filter(self.Document.id.in_(doc_ids))
@@ -1069,18 +1074,21 @@ class DocumentsModule(BaseModule):
     def _report_list(self, start_date, end_date):
         """Return document list for report file picker (AJAX)."""
         docs = self.Document.query.filter(
-            self.Document.document_date >= start_date,
-            self.Document.document_date <= end_date,
+            self._db.or_(
+                self._db.and_(
+                    self.Document.document_date >= start_date,
+                    self.Document.document_date <= end_date,
+                ),
+                self.Document.document_date.is_(None),
+            )
         ).order_by(self.Document.document_date).all()
         result = []
         for d in docs:
             file_count = self.DocumentFile.query.filter_by(document_id=d.id).count()
-            if file_count == 0:
-                continue
             result.append({
                 'id': d.id,
-                'name': d.name,
-                'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else '',
+                'name': d.name + (f' ({file_count} files)' if file_count > 0 else ' (no files)'),
+                'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else 'No date',
                 'category': d.category or '',
                 'files': file_count,
             })
