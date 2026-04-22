@@ -45,6 +45,14 @@
                 {% if section.description %}
                 <div style="color: #666; font-size: 13px; margin-left: 26px;">{{ section.description }}</div>
                 {% endif %}
+                {% if section.has_files %}
+                <div style="margin: 6px 0 0 26px;">
+                    <label class="check-label" style="font-size: 13px;">
+                        <input type="checkbox" name="include_files_{{ section.id }}" value="1">
+                        📎 Include attached files (ZIP archive)
+                    </label>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
             <div style="margin-left: 2px; font-size: 12px;">

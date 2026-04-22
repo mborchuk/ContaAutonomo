@@ -72,6 +72,7 @@ class ReportsModule(BaseModule):
                     'id': s.get('id', ''),
                     'title': s.get('title', s.get('id', 'Unknown')),
                     'description': s.get('description', ''),
+                    'has_files': s.get('has_files', False),
                 })
         return sections
 
@@ -248,6 +249,45 @@ class ReportsModule(BaseModule):
 
             buffer = io.BytesIO()
             template_module.generate_report(buffer, report_data, settings)
+
+            # Check if any section requested file inclusion
+            include_files = {}
+            if mgr:
+                for section in mgr.get_report_sections():
+                    sid = section.get('id', '')
+                    if sid in selected_sections and section.get('files_fn'):
+                        if request.form.get(f'include_files_{sid}') == '1':
+                            include_files[sid] = section['files_fn']
+
+            if include_files:
+                # Generate ZIP with PDF report + attached files
+                import zipfile
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    # Add the PDF report
+                    pdf_filename = f"report_{period_text.replace(' ', '_')}.pdf"
+                    zf.writestr(pdf_filename, buffer.getvalue())
+
+                    # Add files from each section
+                    for sid, files_fn in include_files.items():
+                        try:
+                            files = files_fn(start_date, end_date)
+                            for f in files:
+                                result = self.core.storage.get(f['storage_key'])
+                                if result:
+                                    file_bytes, _ = result
+                                    zf.writestr(f"documents/{f['name']}", file_bytes)
+                        except Exception as e:
+                            self.logger.error('Error adding files for section %s: %s', sid, e)
+
+                zip_buffer.seek(0)
+                zip_filename = f"report_{period_text.replace(' ', '_')}.zip"
+                return send_file(
+                    zip_buffer,
+                    mimetype='application/zip',
+                    as_attachment=True,
+                    download_name=zip_filename
+                )
 
             filename = f"report_{period_text.replace(' ', '_')}.pdf"
             return send_file(

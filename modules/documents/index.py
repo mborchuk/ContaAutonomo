@@ -1003,8 +1003,8 @@ class DocumentsModule(BaseModule):
     def get_report_sections(self):
         return [{
             'id': 'documents',
-            'title': 'Documents with Amounts',
-            'description': 'Documents that have a monetary amount recorded',
+            'title': 'Documents',
+            'description': 'Documents with amounts. Optionally include attached files as ZIP archive.',
             'query_fn': self._report_query,
             'columns': [
                 {'key': 'date', 'label': 'Date', 'width': 3},
@@ -1013,6 +1013,8 @@ class DocumentsModule(BaseModule):
                 {'key': 'amount_eur', 'label': 'Amount (EUR)', 'width': 3},
             ],
             'total_field': 'amount_eur',
+            'has_files': True,
+            'files_fn': self._report_files,
         }]
 
     def _report_query(self, start_date, end_date):
@@ -1027,3 +1029,32 @@ class DocumentsModule(BaseModule):
             'category': d.category or '',
             'amount_eur': d.amount or 0.0,
         } for d in docs]
+
+    def _report_files(self, start_date, end_date):
+        """Return document files for ZIP archive.
+
+        Returns list of dicts: {name: str, storage_key: str}
+        Name is formatted as 'date_docname_filename' for easy identification.
+        """
+        docs = self.Document.query.filter(
+            self.Document.document_date >= start_date,
+            self.Document.document_date <= end_date,
+        ).order_by(self.Document.document_date).all()
+
+        files = []
+        for doc in docs:
+            doc_files = self.DocumentFile.query.filter_by(document_id=doc.id).all()
+            date_str = doc.document_date.strftime('%Y%m%d') if doc.document_date else 'nodate'
+            safe_name = doc.name.replace('/', '_').replace('\\', '_').replace(' ', '_')
+            for df in doc_files:
+                ext = df.original_filename.rsplit('.', 1)[-1] if df.original_filename and '.' in df.original_filename else ''
+                fname = f"{date_str}_{safe_name}"
+                if df.original_filename:
+                    fname += f"_{df.original_filename}"
+                elif ext:
+                    fname += f".{ext}"
+                files.append({
+                    'name': fname,
+                    'storage_key': df.file_path,
+                })
+        return files
