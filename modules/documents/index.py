@@ -1015,6 +1015,7 @@ class DocumentsModule(BaseModule):
             'total_field': 'amount_eur',
             'has_files': True,
             'files_fn': self._report_files,
+            'list_fn': self._report_list,
         }]
 
     def _report_query(self, start_date, end_date):
@@ -1030,16 +1031,22 @@ class DocumentsModule(BaseModule):
             'amount_eur': d.amount or 0.0,
         } for d in docs]
 
-    def _report_files(self, start_date, end_date):
+    def _report_files(self, start_date, end_date, doc_ids=None):
         """Return document files for ZIP archive.
 
+        Args:
+            start_date, end_date: date range
+            doc_ids: optional list of document IDs to include (None = all)
+
         Returns list of dicts: {name: str, storage_key: str}
-        Name is formatted as 'date_docname_filename' for easy identification.
         """
-        docs = self.Document.query.filter(
+        query = self.Document.query.filter(
             self.Document.document_date >= start_date,
             self.Document.document_date <= end_date,
-        ).order_by(self.Document.document_date).all()
+        )
+        if doc_ids:
+            query = query.filter(self.Document.id.in_(doc_ids))
+        docs = query.order_by(self.Document.document_date).all()
 
         files = []
         for doc in docs:
@@ -1058,3 +1065,23 @@ class DocumentsModule(BaseModule):
                     'storage_key': df.file_path,
                 })
         return files
+
+    def _report_list(self, start_date, end_date):
+        """Return document list for report file picker (AJAX)."""
+        docs = self.Document.query.filter(
+            self.Document.document_date >= start_date,
+            self.Document.document_date <= end_date,
+        ).order_by(self.Document.document_date).all()
+        result = []
+        for d in docs:
+            file_count = self.DocumentFile.query.filter_by(document_id=d.id).count()
+            if file_count == 0:
+                continue
+            result.append({
+                'id': d.id,
+                'name': d.name,
+                'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else '',
+                'category': d.category or '',
+                'files': file_count,
+            })
+        return result

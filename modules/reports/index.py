@@ -5,7 +5,7 @@ Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
 from module_manager import BaseModule
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
 import io
@@ -101,7 +101,38 @@ class ReportsModule(BaseModule):
         def reports_generate():
             return module._generate_report()
 
+        @bp.route('/file-list', methods=['POST'])
+        @login_required
+        def file_list():
+            return module._get_file_list()
+
         app.register_blueprint(bp)
+
+    def _get_file_list(self):
+        """AJAX: return list of documents for a section and period."""
+        data = request.get_json(silent=True) or {}
+        section_id = data.get('section_id', '')
+        year = int(data.get('year', datetime.now().year))
+        quarters = [int(q) for q in data.get('quarters', [1])]
+
+        if not quarters:
+            return jsonify({'files': []})
+
+        start_month = (min(quarters) - 1) * 3 + 1
+        end_month = max(quarters) * 3
+        start_date = date(year, start_month, 1)
+        last_day = calendar.monthrange(year, end_month)[1]
+        end_date = date(year, end_month, last_day)
+
+        # Find the section's list_fn from modules
+        mgr = self.core.module_manager
+        files = []
+        if mgr:
+            for section in mgr.get_report_sections():
+                if section.get('id') == section_id and section.get('list_fn'):
+                    files = section['list_fn'](start_date, end_date)
+                    break
+        return jsonify({'files': files})
 
     def _generate_report(self):
         """Generate a financial report PDF.
@@ -271,7 +302,13 @@ class ReportsModule(BaseModule):
                     # Add files from each section
                     for sid, files_fn in include_files.items():
                         try:
-                            files = files_fn(start_date, end_date)
+                            # Pass selected document IDs if user picked specific ones
+                            selected_ids = request.form.getlist(f'file_ids_{sid}')
+                            selected_ids = [int(i) for i in selected_ids] if selected_ids else None
+                            try:
+                                files = files_fn(start_date, end_date, doc_ids=selected_ids)
+                            except TypeError:
+                                files = files_fn(start_date, end_date)  # fallback for modules without doc_ids param
                             for f in files:
                                 result = self.core.storage.get(f['storage_key'])
                                 if result:
