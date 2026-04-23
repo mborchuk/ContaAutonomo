@@ -1018,12 +1018,15 @@ class DocumentsModule(BaseModule):
             'list_fn': self._report_list,
         }]
 
-    def _report_query(self, start_date, end_date):
-        docs = self.Document.query.filter(
+    def _report_query(self, start_date, end_date, doc_ids=None):
+        query = self.Document.query.filter(
             self.Document.amount.isnot(None),
             self.Document.document_date >= start_date,
             self.Document.document_date <= end_date,
-        ).order_by(self.Document.document_date).all()
+        )
+        if doc_ids:
+            query = query.filter(self.Document.id.in_(doc_ids))
+        docs = query.order_by(self.Document.document_date).all()
         return [{
             'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else '',
             'name': d.name,

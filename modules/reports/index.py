@@ -224,8 +224,13 @@ class ReportsModule(BaseModule):
                     elif sid == 'ss_payments':
                         ss_data = query_fn(start_date, end_date)
                     else:
-                        # Generic section
-                        data = query_fn(start_date, end_date)
+                        # Generic section — pass selected doc IDs if user picked specific files
+                        selected_ids = request.form.getlist(f'file_ids_{sid}')
+                        selected_ids = [int(i) for i in selected_ids] if selected_ids else None
+                        try:
+                            data = query_fn(start_date, end_date, doc_ids=selected_ids)
+                        except TypeError:
+                            data = query_fn(start_date, end_date)
                         if data:
                             extra_sections.append({
                                 'id': sid,
