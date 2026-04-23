@@ -142,7 +142,7 @@
 
     {% if module_manager %}
         {% for html in module_manager.get_create_form_html() %}
-            {{ html|safe }}
+            <div style="margin-top: 15px;">{{ html|safe }}</div>
         {% endfor %}
     {% endif %}
 

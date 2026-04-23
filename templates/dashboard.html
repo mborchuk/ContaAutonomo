@@ -258,7 +258,7 @@
         </thead>
         <tbody>
             <!-- Loop through quarters -->
-            {% for quarter in [1, 2, 3, 4] if quarter in invoices_by_year[year] %}
+            {% for quarter in [4, 3, 2, 1] if quarter in invoices_by_year[year] %}
                 <!-- Quarter header -->
                 <tr style="background: #f0f0f0; font-weight: bold;">
                     <td colspan="10" style="padding: 8px; font-size: 14px;">Q{{ quarter }} {{ year }}</td>
@@ -523,12 +523,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Module Dashboard Panels -->
 {% if module_panels %}
+<div style="margin-top: 25px;">
 {% for panel in module_panels %}
     {% if panel.template %}
         {% set data = panel.data %}
         {% include panel.template ignore missing %}
     {% endif %}
 {% endfor %}
+</div>
 {% endif %}
 
 {% endblock %}

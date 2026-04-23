@@ -70,7 +70,7 @@
                     {{ year }}
                 </td>
             </tr>
-            {% for quarter in [1, 2, 3, 4] if quarter in expenses_by_year[year] %}
+            {% for quarter in [4, 3, 2, 1] if quarter in expenses_by_year[year] %}
                 <tr style="background: #f0f0f0;">
                     <td colspan="8" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: #555;">
                         Quarter {{ quarter }}

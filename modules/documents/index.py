@@ -97,13 +97,25 @@ class DocumentsModule(BaseModule):
             details = db.Column(db.Text)
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+        class DocumentNote(db.Model):
+            __tablename__ = 'document_note'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
+            title = db.Column(db.String(200), nullable=False)
+            text = db.Column(db.Text, nullable=False)
+            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
         self.Document = Document
         self.DocumentCategory = DocumentCategory
         self.DocumentFile = DocumentFile
         self.DocumentConfig = DocumentConfig
         self.DocumentHistory = DocumentHistory
+        self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
-                'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory}
+                'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
+                'DocumentNote': DocumentNote}
 
     def on_enable(self):
         """Migrate: add new columns if missing + seed default categories + migrate files."""
@@ -277,6 +289,21 @@ class DocumentsModule(BaseModule):
         def documents_bulk():
             return module._bulk_action()
 
+        @bp.route('/note/add/<int:doc_id>', methods=['POST'])
+        @login_required
+        def note_add(doc_id):
+            return module._add_note(doc_id)
+
+        @bp.route('/note/edit/<int:note_id>', methods=['POST'])
+        @login_required
+        def note_edit(note_id):
+            return module._edit_note(note_id)
+
+        @bp.route('/note/delete/<int:note_id>', methods=['POST'])
+        @login_required
+        def note_delete(note_id):
+            return module._delete_note(note_id)
+
         app.register_blueprint(bp)
 
     # ---- helpers ----
@@ -305,6 +332,25 @@ class DocumentsModule(BaseModule):
     def _get_category_colors(self):
         """Return dict name->color from DocumentCategory table."""
         return {c.name: c.color for c in self.DocumentCategory.query.all()}
+
+    def _get_all_tags(self):
+        """Collect all unique tags from documents, stripped of # prefix."""
+        tags = set()
+        for (raw,) in self._db.session.query(self.Document.tags).filter(
+                self.Document.tags.isnot(None)).all():
+            for t in raw.split(','):
+                t = t.strip().lstrip('#')
+                if t:
+                    tags.add(t)
+        return sorted(tags)
+
+    @staticmethod
+    def _clean_tags(raw):
+        """Strip # prefix and whitespace from comma-separated tags."""
+        if not raw:
+            return None
+        cleaned = ','.join(t.strip().lstrip('#') for t in raw.split(',') if t.strip())
+        return cleaned or None
 
     def _get_file_meta(self, file):
         """Extract file size and format from uploaded file."""
@@ -365,9 +411,12 @@ class DocumentsModule(BaseModule):
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         history = self.DocumentHistory.query.filter_by(
             document_id=doc.id).order_by(self.DocumentHistory.created_at.desc()).all()
+        notes = self.DocumentNote.query.filter_by(
+            document_id=doc.id).order_by(self.DocumentNote.created_at.desc()).all()
         category_colors = self._get_category_colors()
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
-                               history=history, category_colors=category_colors,
+                               history=history, notes=notes,
+                               category_colors=category_colors,
                                today=date.today())
 
     def _list_documents(self):
@@ -421,14 +470,9 @@ class DocumentsModule(BaseModule):
         categories = self._get_all_categories()
         category_colors = self._get_category_colors()
 
-        all_tags = set()
+        all_tags = self._get_all_tags()
         years = set()
         for doc in self.Document.query.all():
-            if doc.tags:
-                for t in doc.tags.split(','):
-                    t = t.strip()
-                    if t:
-                        all_tags.add(t)
             if doc.document_date:
                 years.add(doc.document_date.year)
 
@@ -438,7 +482,7 @@ class DocumentsModule(BaseModule):
                                categories=categories,
                                category_colors=category_colors,
                                fill_row_color=(self._get_config('fill_row_color', '0') == '1'),
-                               all_tags=sorted(all_tags),
+                               all_tags=all_tags,
                                years=sorted(years, reverse=True),
                                sort_by=sort_by, sort_dir=sort_dir,
                                page=page, total_pages=total_pages, total=total,
@@ -480,7 +524,7 @@ class DocumentsModule(BaseModule):
                     document_date=doc_date,
                     expiry_date=expiry,
                     amount=amount,
-                    tags=request.form.get('tags', '').strip() or None,
+                    tags=self._clean_tags(request.form.get('tags', '')),
                     description=request.form.get('description', '').strip() or None,
                     reference_number=request.form.get('reference_number', '').strip() or None,
                     counterparty=request.form.get('counterparty', '').strip() or None,
@@ -504,6 +548,15 @@ class DocumentsModule(BaseModule):
                 # Auto-sign PDF files if requested
                 self._auto_sign_files(doc.id, request.form)
 
+                # Save initial note if provided
+                note_title = request.form.get('initial_note_title', '').strip()
+                note_text = request.form.get('initial_note_text', '').strip()
+                if note_title and note_text:
+                    self._db.session.add(self.DocumentNote(
+                        document_id=doc.id, title=note_title, text=note_text))
+                    self._log_history(doc.id, 'updated', f'Note added: {note_title}')
+                    self._db.session.commit()
+
                 flash('Document added.', 'success')
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
@@ -513,7 +566,8 @@ class DocumentsModule(BaseModule):
 
         categories = self._get_all_categories()
         return render_template('document_form.html', document=None,
-                               categories=categories, doc_files=[])
+                               categories=categories, doc_files=[],
+                               all_tags=self._get_all_tags())
 
     def _edit_document(self, id):
         doc = self.Document.query.get_or_404(id)
@@ -539,7 +593,7 @@ class DocumentsModule(BaseModule):
                     doc.expiry_date = None
 
                 doc.amount = float(request.form['amount']) if request.form.get('amount') else None
-                doc.tags = request.form.get('tags', '').strip() or None
+                doc.tags = self._clean_tags(request.form.get('tags', ''))
                 doc.description = request.form.get('description', '').strip() or None
                 doc.reference_number = request.form.get('reference_number', '').strip() or None
                 doc.counterparty = request.form.get('counterparty', '').strip() or None
@@ -565,6 +619,15 @@ class DocumentsModule(BaseModule):
                 if added_files:
                     self._auto_sign_files(doc.id, request.form)
 
+                # Save note if provided during edit
+                note_title = request.form.get('initial_note_title', '').strip()
+                note_text = request.form.get('initial_note_text', '').strip()
+                if note_title and note_text:
+                    self._db.session.add(self.DocumentNote(
+                        document_id=doc.id, title=note_title, text=note_text))
+                    self._log_history(doc.id, 'updated', f'Note added: {note_title}')
+                    self._db.session.commit()
+
                 flash('Document updated.', 'success')
                 return redirect(url_for('documents.documents_view', id=doc.id))
             except Exception as e:
@@ -576,7 +639,8 @@ class DocumentsModule(BaseModule):
         doc_files = self.DocumentFile.query.filter_by(
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         return render_template('document_form.html', document=doc,
-                               categories=categories, doc_files=doc_files)
+                               categories=categories, doc_files=doc_files,
+                               all_tags=self._get_all_tags())
 
     def _delete_document(self, id):
         doc = self.Document.query.get_or_404(id)
@@ -873,6 +937,36 @@ class DocumentsModule(BaseModule):
 
         return redirect(url_for('documents.documents_index'))
 
+    # ---- notes ----
+
+    def _add_note(self, doc_id):
+        title = request.form.get('note_title', '').strip()
+        text = request.form.get('note_text', '').strip()
+        if title and text:
+            note = self.DocumentNote(document_id=doc_id, title=title, text=text)
+            self._db.session.add(note)
+            self._log_history(doc_id, 'updated', f'Note added: {title}')
+            self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=doc_id))
+
+    def _edit_note(self, note_id):
+        note = self.DocumentNote.query.get_or_404(note_id)
+        title = request.form.get('note_title', '').strip()
+        text = request.form.get('note_text', '').strip()
+        if title and text:
+            note.title = title
+            note.text = text
+            self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=note.document_id))
+
+    def _delete_note(self, note_id):
+        note = self.DocumentNote.query.get_or_404(note_id)
+        doc_id = note.document_id
+        self._log_history(doc_id, 'updated', f'Note removed: {note.title}')
+        self._db.session.delete(note)
+        self._db.session.commit()
+        return redirect(url_for('documents.documents_view', id=doc_id))
+
     # ---- dashboard integration ----
 
     def get_dashboard_panels(self):
@@ -909,8 +1003,8 @@ class DocumentsModule(BaseModule):
     def get_report_sections(self):
         return [{
             'id': 'documents',
-            'title': 'Documents with Amounts',
-            'description': 'Documents that have a monetary amount recorded',
+            'title': 'Documents',
+            'description': 'Documents with amounts. Optionally include attached files as ZIP archive.',
             'query_fn': self._report_query,
             'columns': [
                 {'key': 'date', 'label': 'Date', 'width': 3},
@@ -919,17 +1013,86 @@ class DocumentsModule(BaseModule):
                 {'key': 'amount_eur', 'label': 'Amount (EUR)', 'width': 3},
             ],
             'total_field': 'amount_eur',
+            'has_files': True,
+            'files_fn': self._report_files,
+            'list_fn': self._report_list,
         }]
 
-    def _report_query(self, start_date, end_date):
-        docs = self.Document.query.filter(
+    def _report_query(self, start_date, end_date, doc_ids=None):
+        query = self.Document.query.filter(
             self.Document.amount.isnot(None),
             self.Document.document_date >= start_date,
             self.Document.document_date <= end_date,
-        ).order_by(self.Document.document_date).all()
+        )
+        if doc_ids:
+            query = query.filter(self.Document.id.in_(doc_ids))
+        docs = query.order_by(self.Document.document_date).all()
         return [{
             'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else '',
             'name': d.name,
             'category': d.category or '',
             'amount_eur': d.amount or 0.0,
         } for d in docs]
+
+    def _report_files(self, start_date, end_date, doc_ids=None):
+        """Return document files for ZIP archive.
+
+        Args:
+            start_date, end_date: date range
+            doc_ids: optional list of document IDs to include (None = all)
+
+        Returns list of dicts: {name: str, storage_key: str}
+        """
+        query = self.Document.query.filter(
+            self._db.or_(
+                self._db.and_(
+                    self.Document.document_date >= start_date,
+                    self.Document.document_date <= end_date,
+                ),
+                self.Document.document_date.is_(None),
+            )
+        )
+        if doc_ids:
+            query = query.filter(self.Document.id.in_(doc_ids))
+        docs = query.order_by(self.Document.document_date).all()
+
+        files = []
+        for doc in docs:
+            doc_files = self.DocumentFile.query.filter_by(document_id=doc.id).all()
+            date_str = doc.document_date.strftime('%Y%m%d') if doc.document_date else 'nodate'
+            safe_name = doc.name.replace('/', '_').replace('\\', '_').replace(' ', '_')
+            for df in doc_files:
+                ext = df.original_filename.rsplit('.', 1)[-1] if df.original_filename and '.' in df.original_filename else ''
+                fname = f"{date_str}_{safe_name}"
+                if df.original_filename:
+                    fname += f"_{df.original_filename}"
+                elif ext:
+                    fname += f".{ext}"
+                files.append({
+                    'name': fname,
+                    'storage_key': df.file_path,
+                })
+        return files
+
+    def _report_list(self, start_date, end_date):
+        """Return document list for report file picker (AJAX)."""
+        docs = self.Document.query.filter(
+            self._db.or_(
+                self._db.and_(
+                    self.Document.document_date >= start_date,
+                    self.Document.document_date <= end_date,
+                ),
+                self.Document.document_date.is_(None),
+            )
+        ).order_by(self.Document.document_date).all()
+        result = []
+        for d in docs:
+            file_count = self.DocumentFile.query.filter_by(document_id=d.id).count()
+            result.append({
+                'id': d.id,
+                'name': d.name + (f' ({file_count} files)' if file_count > 0 else ' (no files)'),
+                'date': d.document_date.strftime('%d/%m/%Y') if d.document_date else 'No date',
+                'category': d.category or '',
+                'files': file_count,
+            })
+        return result

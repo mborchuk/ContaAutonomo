@@ -142,7 +142,7 @@
 
     {% if module_manager %}
         {% for html in module_manager.get_edit_form_html(invoice) %}
-            {{ html|safe }}
+            <div style="margin-top: 15px;">{{ html|safe }}</div>
         {% endfor %}
     {% endif %}
 

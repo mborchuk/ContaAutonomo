@@ -1,11 +1,11 @@
-<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+<div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 25px;">
     <h3 style="margin: 0 0 12px 0; font-size: 16px;">📄 Document Alerts</h3>
     {% if data.expiring %}
     <div style="margin-bottom: 10px;">
         <span style="font-size: 12px; font-weight: bold; color: #f0ad4e;">⚠ Expiring soon (30 days)</span>
         {% for doc in data.expiring %}
         <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #f5f5f5;">
-            <span>{{ doc.name }}</span>
+            <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="color: #1565c0; text-decoration: none;">{{ doc.name }}</a>
             <span style="color: #f0ad4e;">{{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
         </div>
         {% endfor %}
@@ -16,7 +16,7 @@
         <span style="font-size: 12px; font-weight: bold; color: #d9534f;">✕ Expired</span>
         {% for doc in data.expired %}
         <div style="display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; border-bottom: 1px solid #f5f5f5;">
-            <span>{{ doc.name }}</span>
+            <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="color: #d9534f; text-decoration: none;">{{ doc.name }}</a>
             <span style="color: #d9534f;">{{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
         </div>
         {% endfor %}

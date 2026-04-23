@@ -5,7 +5,7 @@ Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
 from module_manager import BaseModule
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
 import io
@@ -72,6 +72,7 @@ class ReportsModule(BaseModule):
                     'id': s.get('id', ''),
                     'title': s.get('title', s.get('id', 'Unknown')),
                     'description': s.get('description', ''),
+                    'has_files': s.get('has_files', False),
                 })
         return sections
 
@@ -100,7 +101,38 @@ class ReportsModule(BaseModule):
         def reports_generate():
             return module._generate_report()
 
+        @bp.route('/file-list', methods=['POST'])
+        @login_required
+        def file_list():
+            return module._get_file_list()
+
         app.register_blueprint(bp)
+
+    def _get_file_list(self):
+        """AJAX: return list of documents for a section and period."""
+        data = request.get_json(silent=True) or {}
+        section_id = data.get('section_id', '')
+        year = int(data.get('year', datetime.now().year))
+        quarters = [int(q) for q in data.get('quarters', [1])]
+
+        if not quarters:
+            return jsonify({'files': []})
+
+        start_month = (min(quarters) - 1) * 3 + 1
+        end_month = max(quarters) * 3
+        start_date = date(year, start_month, 1)
+        last_day = calendar.monthrange(year, end_month)[1]
+        end_date = date(year, end_month, last_day)
+
+        # Find the section's list_fn from modules
+        mgr = self.core.module_manager
+        files = []
+        if mgr:
+            for section in mgr.get_report_sections():
+                if section.get('id') == section_id and section.get('list_fn'):
+                    files = section['list_fn'](start_date, end_date)
+                    break
+        return jsonify({'files': files})
 
     def _generate_report(self):
         """Generate a financial report PDF.
@@ -192,8 +224,13 @@ class ReportsModule(BaseModule):
                     elif sid == 'ss_payments':
                         ss_data = query_fn(start_date, end_date)
                     else:
-                        # Generic section
-                        data = query_fn(start_date, end_date)
+                        # Generic section — pass selected doc IDs if user picked specific files
+                        selected_ids = request.form.getlist(f'file_ids_{sid}')
+                        selected_ids = [int(i) for i in selected_ids] if selected_ids else None
+                        try:
+                            data = query_fn(start_date, end_date, doc_ids=selected_ids)
+                        except TypeError:
+                            data = query_fn(start_date, end_date)
                         if data:
                             extra_sections.append({
                                 'id': sid,
@@ -248,6 +285,51 @@ class ReportsModule(BaseModule):
 
             buffer = io.BytesIO()
             template_module.generate_report(buffer, report_data, settings)
+
+            # Check if any section requested file inclusion
+            include_files = {}
+            if mgr:
+                for section in mgr.get_report_sections():
+                    sid = section.get('id', '')
+                    if sid in selected_sections and section.get('files_fn'):
+                        if request.form.get(f'include_files_{sid}') == '1':
+                            include_files[sid] = section['files_fn']
+
+            if include_files:
+                # Generate ZIP with PDF report + attached files
+                import zipfile
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    # Add the PDF report
+                    pdf_filename = f"report_{period_text.replace(' ', '_')}.pdf"
+                    zf.writestr(pdf_filename, buffer.getvalue())
+
+                    # Add files from each section
+                    for sid, files_fn in include_files.items():
+                        try:
+                            # Pass selected document IDs if user picked specific ones
+                            selected_ids = request.form.getlist(f'file_ids_{sid}')
+                            selected_ids = [int(i) for i in selected_ids] if selected_ids else None
+                            try:
+                                files = files_fn(start_date, end_date, doc_ids=selected_ids)
+                            except TypeError:
+                                files = files_fn(start_date, end_date)  # fallback for modules without doc_ids param
+                            for f in files:
+                                result = self.core.storage.get(f['storage_key'])
+                                if result:
+                                    file_bytes, _ = result
+                                    zf.writestr(f"documents/{f['name']}", file_bytes)
+                        except Exception as e:
+                            self.logger.error('Error adding files for section %s: %s', sid, e)
+
+                zip_buffer.seek(0)
+                zip_filename = f"report_{period_text.replace(' ', '_')}.zip"
+                return send_file(
+                    zip_buffer,
+                    mimetype='application/zip',
+                    as_attachment=True,
+                    download_name=zip_filename
+                )
 
             filename = f"report_{period_text.replace(' ', '_')}.pdf"
             return send_file(

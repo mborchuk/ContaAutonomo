@@ -45,6 +45,18 @@
                 {% if section.description %}
                 <div style="color: #666; font-size: 13px; margin-left: 26px;">{{ section.description }}</div>
                 {% endif %}
+                {% if section.has_files %}
+                <div style="margin: 6px 0 0 26px;">
+                    <label class="check-label" style="font-size: 13px;">
+                        <input type="checkbox" name="include_files_{{ section.id }}" value="1"
+                               onchange="toggleFileList('{{ section.id }}', this.checked)">
+                        📎 Include attached files (ZIP archive)
+                    </label>
+                    <div id="file-list-{{ section.id }}" style="display:none; margin-top:8px; padding:10px; background:#fff; border:1px solid #ddd; border-radius:4px; max-height:250px; overflow-y:auto;">
+                        <div style="color:#999; font-size:12px;">Loading documents...</div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
             <div style="margin-left: 2px; font-size: 12px;">
@@ -149,6 +161,54 @@ function toggleAll(state) {
     document.querySelectorAll('input[name="sections"]').forEach(function(cb) {
         cb.checked = state;
     });
+}
+
+function toggleFileList(sectionId, show) {
+    var box = document.getElementById('file-list-' + sectionId);
+    if (!show) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    // Get period params
+    var year = document.getElementById('year').value;
+    var periodType = document.getElementById('period_type').value;
+    var quarters = [];
+    if (periodType === 'quarter') {
+        quarters = [document.getElementById('quarter').value];
+    } else if (periodType === 'quarters') {
+        document.querySelectorAll('input[name="quarters"]:checked').forEach(function(cb) { quarters.push(cb.value); });
+    } else {
+        quarters = ['1','2','3','4'];
+    }
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var headers = {'Content-Type': 'application/json'};
+    if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
+    fetch('/reports/file-list', {
+        method: 'POST', headers: headers,
+        body: JSON.stringify({section_id: sectionId, year: year, quarters: quarters})
+    })
+    .then(function(r) { return r.ok ? r.json() : null; })
+    .then(function(data) {
+        if (!data || !data.files || !data.files.length) {
+            box.innerHTML = '<div style="color:#999;font-size:12px;">No documents found for this period.</div>';
+            return;
+        }
+        var html = '<div style="margin-bottom:6px;font-size:11px;color:#888;">'
+            + '<a href="#" onclick="toggleDocAll(\'' + sectionId + '\',true);return false;">Select all</a> · '
+            + '<a href="#" onclick="toggleDocAll(\'' + sectionId + '\',false);return false;">Deselect all</a>'
+            + ' (' + data.files.length + ' documents)</div>';
+        data.files.forEach(function(f) {
+            html += '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">'
+                + '<input type="checkbox" name="file_ids_' + sectionId + '" value="' + f.id + '" checked style="width:14px;height:14px;">'
+                + '<span>' + f.name + '</span>'
+                + '<span style="color:#999;margin-left:auto;">' + f.date + '</span>'
+                + '</label>';
+        });
+        box.innerHTML = html;
+    })
+    .catch(function() { box.innerHTML = '<div style="color:#d9534f;font-size:12px;">Failed to load documents.</div>'; });
+}
+
+function toggleDocAll(sectionId, state) {
+    document.querySelectorAll('input[name="file_ids_' + sectionId + '"]').forEach(function(cb) { cb.checked = state; });
 }
 
 document.addEventListener('DOMContentLoaded', function() {

@@ -70,8 +70,8 @@
                     <td style="padding: 6px 0;">
                         {% if doc.tags %}
                             {% for t in doc.tags.split(',') %}
-                            <a href="{{ url_for('documents.documents_index', tag=t.strip()) }}"
-                               style="display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 10px; font-size: 12px; background: #f0f0f0; color: #555; text-decoration: none;">{{ t.strip() }}</a>
+                            <a href="{{ url_for('documents.documents_index', tag=t.strip().lstrip('#')) }}"
+                               style="display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 10px; font-size: 12px; background: #f0f0f0; color: #555; text-decoration: none;">{{ t.strip().lstrip('#') }}</a>
                             {% endfor %}
                         {% else %}—{% endif %}
                     </td>
@@ -125,6 +125,60 @@
             <p style="color: #999; font-size: 13px;">No files attached.</p>
             {% endif %}
         </div>
+
+        <!-- Notes -->
+        <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-size: 15px; color: #666;">📝 Notes ({{ notes|length if notes else 0 }})</h3>
+                <button type="button" onclick="document.getElementById('new-note-form').style.display = document.getElementById('new-note-form').style.display === 'none' ? 'block' : 'none'"
+                        class="btn btn-primary" style="padding: 3px 10px; font-size: 11px;">+ Add</button>
+            </div>
+
+            <form id="new-note-form" method="POST" action="{{ url_for('documents.note_add', doc_id=doc.id) }}"
+                  style="display: none; background: #f8f9ff; padding: 12px; border-radius: 6px; border: 1px solid #d0d7ff; margin-bottom: 14px;">
+                <input type="text" name="note_title" placeholder="Title (e.g. Payment status)" required
+                       style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+                <textarea name="note_text" rows="3" placeholder="Write your note..." required
+                          style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 6px;"></textarea>
+                <div style="display: flex; gap: 6px;">
+                    <button type="submit" class="btn btn-success" style="padding: 4px 12px; font-size: 11px;">Save</button>
+                    <button type="button" onclick="this.closest('form').style.display='none'"
+                            class="btn btn-secondary" style="padding: 4px 12px; font-size: 11px;">Cancel</button>
+                </div>
+            </form>
+
+            {% if notes %}
+            {% for note in notes %}
+            <div style="background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 12px; margin-bottom: 8px;" data-note="{{ note.id }}">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                    <div>
+                        <strong style="font-size: 13px; color: #333;">{{ note.title }}</strong>
+                        <span style="font-size: 10px; color: #999; margin-left: 6px;">{{ note.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                    </div>
+                    <div style="display: flex; gap: 2px; flex-shrink: 0;">
+                        <button type="button" onclick="var e=this.closest('[data-note]'); e.querySelector('.nv').style.display='none'; e.querySelector('.ne').style.display='block';"
+                                style="background:none;border:none;color:#999;cursor:pointer;font-size:11px;padding:1px 4px;" title="Edit">✏️</button>
+                        <form method="POST" action="{{ url_for('documents.note_delete', note_id=note.id) }}" style="margin:0;" onsubmit="return confirm('Delete this note?');">
+                            <button type="submit" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:11px;padding:1px 4px;" title="Delete">✕</button>
+                        </form>
+                    </div>
+                </div>
+                <div class="nv" style="font-size: 12px; color: #555; white-space: pre-wrap; word-break: break-word;">{{ note.text }}</div>
+                <form class="ne" method="POST" action="{{ url_for('documents.note_edit', note_id=note.id) }}" style="display:none;">
+                    <input type="text" name="note_title" value="{{ note.title }}" required style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-weight:500;margin-bottom:4px;">
+                    <textarea name="note_text" rows="2" required style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit;resize:vertical;margin-bottom:4px;">{{ note.text }}</textarea>
+                    <div style="display:flex;gap:4px;">
+                        <button type="submit" class="btn btn-success" style="padding:3px 10px;font-size:10px;">Save</button>
+                        <button type="button" onclick="var e=this.closest('[data-note]'); e.querySelector('.ne').style.display='none'; e.querySelector('.nv').style.display='block';"
+                                class="btn btn-secondary" style="padding:3px 10px;font-size:10px;">Cancel</button>
+                    </div>
+                </form>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: #bbb; font-size: 12px; text-align: center; padding: 6px 0;">No notes yet.</p>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Right: Meta + History -->
@@ -163,6 +217,13 @@
         </div>
     </div>
 </div>
+
+{# Render extra panels from modules (e.g. notes, comments) #}
+{% if module_manager %}
+    {% for cap in module_manager.find_capabilities('document_view_panel') %}
+        {{ cap.action(doc)|safe }}
+    {% endfor %}
+{% endif %}
 
 {# Render page-level scripts from modules (e.g. signature verification) #}
 {% if module_manager %}

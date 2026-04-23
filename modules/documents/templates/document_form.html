@@ -55,8 +55,13 @@
                 <label for="tags">Tags</label>
                 <input type="text" id="tags" name="tags"
                        value="{{ document.tags if document and document.tags else '' }}"
-                       placeholder="e.g., home, march, 2024 (comma-separated)">
-                <small style="color: #999;">Comma-separated tags for quick filtering</small>
+                       placeholder="e.g., insurance, contract, 2026 (comma-separated)"
+                       autocomplete="off">
+                {% if all_tags %}
+                <div id="tag-suggestions" style="display:none; border:1px solid #ddd; border-top:none; border-radius:0 0 4px 4px; max-height:150px; overflow-y:auto; background:#fff; position:relative; z-index:10;">
+                </div>
+                {% endif %}
+                <small style="color: #999;">Comma-separated tags for quick filtering. Type to see existing tags.</small>
             </div>
 
             <div class="form-group">
@@ -149,6 +154,16 @@
         </div>
     </div>
 
+    <!-- Initial note (optional) -->
+    <div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 15px;">
+        <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">📝 Add Note (optional)</div>
+        <input type="text" name="initial_note_title" placeholder="Note title (e.g. Payment status, Follow-up)"
+               style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; margin-bottom: 6px;">
+        <textarea name="initial_note_text" rows="2" placeholder="Note text..."
+                  style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical;"></textarea>
+        <div style="color: #888; font-size: 11px; margin-top: 4px;">You can add more notes after saving.</div>
+    </div>
+
     <div style="margin-top: 30px;">
         <button type="submit" class="btn btn-success">{{ 'Update' if document else 'Add' }} Document</button>
         <a href="{{ url_for('documents.documents_index') }}" class="btn btn-primary">Cancel</a>
@@ -160,6 +175,43 @@ document.addEventListener('DOMContentLoaded', function() {
     const dateField = document.getElementById('document_date');
     if (!dateField.value) {
         dateField.value = new Date().toISOString().split('T')[0];
+    }
+
+    // Tag autocomplete
+    var allTags = {{ all_tags | tojson if all_tags else '[]' }};
+    var tagsInput = document.getElementById('tags');
+    var sugBox = document.getElementById('tag-suggestions');
+    if (tagsInput && sugBox && allTags.length) {
+        tagsInput.addEventListener('input', function() {
+            var val = this.value;
+            var parts = val.split(',');
+            var current = parts[parts.length - 1].trim().toLowerCase().replace(/^#/, '');
+            if (!current) { sugBox.style.display = 'none'; return; }
+            var existing = parts.slice(0, -1).map(function(s) { return s.trim().toLowerCase().replace(/^#/, ''); });
+            var matches = allTags.filter(function(t) {
+                return t.toLowerCase().indexOf(current) !== -1 && existing.indexOf(t.toLowerCase()) === -1;
+            });
+            if (!matches.length) { sugBox.style.display = 'none'; return; }
+            sugBox.innerHTML = '';
+            matches.forEach(function(tag) {
+                var div = document.createElement('div');
+                div.textContent = tag;
+                div.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;';
+                div.onmouseenter = function() { this.style.background = '#f0f0f0'; };
+                div.onmouseleave = function() { this.style.background = ''; };
+                div.onclick = function() {
+                    parts[parts.length - 1] = ' ' + tag;
+                    tagsInput.value = parts.join(',') + ', ';
+                    sugBox.style.display = 'none';
+                    tagsInput.focus();
+                };
+                sugBox.appendChild(div);
+            });
+            sugBox.style.display = 'block';
+        });
+        tagsInput.addEventListener('blur', function() {
+            setTimeout(function() { sugBox.style.display = 'none'; }, 200);
+        });
     }
 });
 </script>
