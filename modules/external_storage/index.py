@@ -244,20 +244,20 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             self._folder_cache.clear()
 
     def _retry_on_ssl(self, fn):
-        """Execute fn() under lock; on SSL/connection error, rebuild service and retry once."""
-        with self._lock:
-            try:
-                return fn()
-            except Exception as e:
-                err_str = str(e).lower()
-                if any(k in err_str for k in ('ssl', 'record_layer', 'broken pipe',
-                                               'connection reset', 'not accessible')):
-                    logger.info('[GDrive] connection error, rebuilding service: %s', e)
+        """Execute fn(); on SSL/connection error, rebuild service and retry once."""
+        try:
+            return fn()
+        except Exception as e:
+            err_str = str(e).lower()
+            if any(k in err_str for k in ('ssl', 'record_layer', 'broken pipe',
+                                           'connection reset', 'not accessible')):
+                logger.info('[GDrive] connection error, rebuilding service: %s', e)
+                with self._lock:
                     self._service = None
                     self._folder_cache.clear()
                     self._build_service()
-                    return fn()
-                raise
+                return fn()
+            raise
 
     def _get_or_create_folder(self, folder_name, parent_id):
         """Get existing subfolder or create it. Returns folder ID.
