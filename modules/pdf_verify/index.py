@@ -394,37 +394,44 @@ class PDFVerifyModule(BaseModule):
                 f'data-filename="{df.original_filename or "file.pdf"}"></span>')
 
     def _render_badge_script(self):
-        """Return JS script that loads signature badges via AJAX."""
+        """Return JS script that loads signature badges via AJAX (sequential)."""
         return '''<script>
-document.addEventListener('DOMContentLoaded', function() {
-    var badges = document.querySelectorAll('[id^="sig-badge-"]');
+(function() {
+    var badges = Array.from(document.querySelectorAll('[id^="sig-badge-"]'));
     if (!badges.length) return;
-    badges.forEach(function(badge) {
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var headers = {'Content-Type': 'application/json'};
+    if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
+
+    function checkNext(i) {
+        if (i >= badges.length) return;
+        var badge = badges[i];
         var key = badge.dataset.storageKey;
         var fname = badge.dataset.filename;
-        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-        var headers = {'Content-Type': 'application/json'};
-        if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
         fetch('/pdf-verify/check', {
-            method: 'POST',
-            headers: headers,
+            method: 'POST', headers: headers,
             body: JSON.stringify({storage_key: key})
         })
         .then(function(r) { return r.ok ? r.json() : null; })
         .then(function(data) {
-            if (!data || !data.signatures || !data.signatures.length) return;
-            var n = data.signatures.length;
-            var signer = data.signatures[0].signer_email || data.signatures[0].signer || 'Unknown';
-            var short = signer.length > 40 ? signer.substring(0, 40) + '\\u2026' : signer;
-            var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
-                + '&name=' + encodeURIComponent(fname)
-                + '&back=' + encodeURIComponent(window.location.pathname);
-            badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
-                + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
+            if (data && data.signatures && data.signatures.length) {
+                var n = data.signatures.length;
+                var signer = data.signatures[0].signer_email || data.signatures[0].signer || 'Unknown';
+                var short = signer.length > 40 ? signer.substring(0, 40) + '\\u2026' : signer;
+                var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
+                    + '&name=' + encodeURIComponent(fname)
+                    + '&back=' + encodeURIComponent(window.location.pathname);
+                badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
+                    + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
+            } else if (data) {
+                badge.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;">Not signed</span>';
+            }
         })
-        .catch(function() {});
-    });
-});
+        .catch(function() {})
+        .finally(function() { checkNext(i + 1); });
+    }
+    checkNext(0);
+})();
 </script>'''
 
     def register_routes(self, app):

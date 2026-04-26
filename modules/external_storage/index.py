@@ -203,32 +203,61 @@ class GoogleDriveStorageBackend(FileStorageBackend):
     """
 
     def __init__(self, folder_id, credentials_json=None):
+        import threading
         self.folder_id = folder_id
         self._credentials_json = credentials_json
         self._service = None
         self._folder_cache = {}  # path -> folder_id cache
+        self._lock = threading.Lock()
 
     def _get_service(self):
         if self._service is None:
-            from google.oauth2 import service_account
-            from googleapiclient.discovery import build
-
-            scope = 'https://www.googleapis.com/auth/drive'
-            if self._credentials_json and os.path.isfile(self._credentials_json):
-                creds = service_account.Credentials.from_service_account_file(
-                    self._credentials_json,
-                    scopes=[scope])
-                logger.info('[GDrive] auth via service account file: %s, scope=%s',
-                            self._credentials_json, scope)
-            else:
-                import google.auth
-                creds, _ = google.auth.default(scopes=[scope])
-                logger.info('[GDrive] auth via default credentials, scope=%s', scope)
-
-            self._service = build('drive', 'v3', credentials=creds,
-                                  cache_discovery=False)
-            logger.info('[GDrive] service built, folder_id=%s', self.folder_id)
+            with self._lock:
+                if self._service is None:  # double-check after acquiring lock
+                    self._build_service()
         return self._service
+
+    def _build_service(self):
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+
+        scope = 'https://www.googleapis.com/auth/drive'
+        if self._credentials_json and os.path.isfile(self._credentials_json):
+            creds = service_account.Credentials.from_service_account_file(
+                self._credentials_json,
+                scopes=[scope])
+            logger.info('[GDrive] auth via service account file: %s, scope=%s',
+                        self._credentials_json, scope)
+        else:
+            import google.auth
+            creds, _ = google.auth.default(scopes=[scope])
+            logger.info('[GDrive] auth via default credentials, scope=%s', scope)
+
+        self._service = build('drive', 'v3', credentials=creds,
+                              cache_discovery=False)
+        logger.info('[GDrive] service built, folder_id=%s', self.folder_id)
+
+    def _reset_service(self):
+        """Force rebuild of the GDrive service (e.g. after SSL failure)."""
+        with self._lock:
+            self._service = None
+            self._folder_cache.clear()
+
+    def _retry_on_ssl(self, fn):
+        """Execute fn(); on SSL/connection error, rebuild service and retry once."""
+        try:
+            return fn()
+        except Exception as e:
+            err_str = str(e).lower()
+            if any(k in err_str for k in ('ssl', 'record_layer', 'broken pipe',
+                                           'connection reset', 'not accessible')):
+                logger.info('[GDrive] connection error, rebuilding service: %s', e)
+                with self._lock:
+                    self._service = None
+                    self._folder_cache.clear()
+                    self._build_service()
+                return fn()
+            raise
 
     def _get_or_create_folder(self, folder_name, parent_id):
         """Get existing subfolder or create it. Returns folder ID.
@@ -361,6 +390,7 @@ class GoogleDriveStorageBackend(FileStorageBackend):
 
         If storage_key contains '/' it's treated as a relative path and resolved.
         Otherwise it's assumed to be a GDrive file ID already.
+        NOTE: caller must hold self._lock if thread safety is needed.
         """
         if not storage_key:
             return None
@@ -453,7 +483,7 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             logger.debug('Google Drive delete failed for %s: %s', storage_key, e)
 
     def get(self, storage_key):
-        try:
+        def _do_get():
             service = self._get_service()
             file_id = self._to_file_id(storage_key)
             if not file_id:
@@ -465,6 +495,8 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             logger.info('[GDrive.get] key=%s -> fileId=%s, name=%s, %d bytes',
                         storage_key, file_id, meta.get('name'), len(content))
             return content, meta.get('name', 'file')
+        try:
+            return self._retry_on_ssl(_do_get)
         except Exception as e:
             logger.info('[GDrive.get] failed for %s: %s', storage_key, e)
             return None
