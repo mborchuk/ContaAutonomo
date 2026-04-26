@@ -286,6 +286,21 @@ class ReportsModule(BaseModule):
             buffer = io.BytesIO()
             template_module.generate_report(buffer, report_data, settings)
 
+            # Apply PDF signatures if requested
+            if mgr:
+                signers = mgr.find_capabilities('pdf_sign')
+                selected_signers = [i for i in range(len(signers))
+                                    if request.form.get(f'sign_cap_{i}')]
+                if selected_signers:
+                    pdf_bytes = buffer.getvalue()
+                    for idx in selected_signers:
+                        try:
+                            pdf_bytes = signers[idx]['action'](pdf_bytes)
+                        except Exception as e:
+                            self.logger.error('Report signing failed (%s): %s',
+                                              signers[idx].get('name', '?'), e)
+                    buffer = io.BytesIO(pdf_bytes)
+
             # Check if any section requested file inclusion
             include_files = {}
             if mgr:
