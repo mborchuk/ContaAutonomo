@@ -113,9 +113,14 @@
                     {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
                         {% set signers = module_manager.find_capabilities('pdf_sign') %}
                         {% for cap in signers %}
-                        <form method="POST" action="{{ url_for('documents.file_sign', file_id=df.id, cap_index=loop.index0) }}" style="margin:0;" onsubmit="return confirm('Sign with {{ cap.name }}?');">
-                            <button type="submit" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ {{ cap.name }}</button>
-                        </form>
+                            {% if cap.has_position is defined and cap.has_position %}
+                            <a href="{{ url_for('pdf_signature.sign_file_picker', file_id=df.id, cap_index=loop.index0) }}"
+                               class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ {{ cap.name }}</a>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('documents.file_sign', file_id=df.id, cap_index=loop.index0) }}" style="margin:0;" onsubmit="return confirm('Sign with {{ cap.name }}?');">
+                                <button type="submit" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ {{ cap.name }}</button>
+                            </form>
+                            {% endif %}
                         {% endfor %}
                     {% endif %}
                 </div>

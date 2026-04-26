@@ -10,7 +10,7 @@ from datetime import datetime
 import importlib.util
 
 from module_manager import BaseModule
-from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
+from flask import Blueprint, request, jsonify, render_template, render_template_string, flash, redirect, url_for
 
 # Graceful degradation: try importing optional dependencies
 try:
@@ -140,7 +140,7 @@ class PDFSignatureModule(BaseModule):
 
     # --- PDF signing methods ---
 
-    def _apply_visual_signature(self, pdf_bytes):
+    def _apply_visual_signature(self, pdf_bytes, position=None, page_num=None, **kw):
         if not PILLOW_AVAILABLE:
             raise RuntimeError('Pillow library is not installed — cannot apply visual signature.')
 
@@ -185,10 +185,19 @@ class PDFSignatureModule(BaseModule):
             for page in reader.pages:
                 writer.add_page(page)
 
-            # Build overlay for the last page
-            last_page = writer.pages[-1]
-            page_w = float(last_page.mediabox.width)
-            page_h = float(last_page.mediabox.height)
+            # Build overlay for the target page (default: last)
+            total_pages = len(writer.pages)
+            target_idx = total_pages - 1  # default: last page
+            if page_num is not None:
+                if page_num == 0:  # 0 = first page
+                    target_idx = 0
+                elif 1 <= page_num <= total_pages:
+                    target_idx = page_num - 1  # 1-based to 0-based
+                # else: keep last page
+
+            target_page = writer.pages[target_idx]
+            page_w = float(target_page.mediabox.width)
+            page_h = float(target_page.mediabox.height)
 
             # Scale signature (keep aspect ratio)
             max_w = cfg.sig_max_width or 150
@@ -196,24 +205,24 @@ class PDFSignatureModule(BaseModule):
             draw_w = img_w * scale
             draw_h = img_h * scale
 
-            # Position based on config
+            # Position based on config or override
             margin_x = cfg.sig_margin_x if cfg.sig_margin_x is not None else 40
             margin_y = cfg.sig_margin_y if cfg.sig_margin_y is not None else 40
-            position = cfg.sig_position or 'bottom-left'
+            pos = position or cfg.sig_position or 'bottom-left'
 
-            if position == 'bottom-right':
+            if pos == 'bottom-right':
                 x = page_w - draw_w - margin_x
                 y = margin_y
-            elif position == 'bottom-center':
+            elif pos == 'bottom-center':
                 x = (page_w - draw_w) / 2
                 y = margin_y
-            elif position == 'top-left':
+            elif pos == 'top-left':
                 x = margin_x
                 y = page_h - draw_h - margin_y
-            elif position == 'top-right':
+            elif pos == 'top-right':
                 x = page_w - draw_w - margin_x
                 y = page_h - draw_h - margin_y
-            elif position == 'top-center':
+            elif pos == 'top-center':
                 x = (page_w - draw_w) / 2
                 y = page_h - draw_h - margin_y
             else:  # bottom-left (default)
@@ -226,10 +235,10 @@ class PDFSignatureModule(BaseModule):
             c.drawImage(tmp_path, x, y, width=draw_w, height=draw_h, mask='auto')
             c.save()
 
-            # Merge overlay onto last page
+            # Merge overlay onto target page
             overlay_buf.seek(0)
             overlay_reader = PdfReader(overlay_buf)
-            last_page.merge_page(overlay_reader.pages[0])
+            target_page.merge_page(overlay_reader.pages[0])
 
             # Write result
             out = io.BytesIO()
@@ -594,7 +603,8 @@ class PDFSignatureModule(BaseModule):
                 'method': 'visual',
                 'name': 'Visual Signature (image overlay)',
                 'accepts': ['pdf'],
-                'action': lambda pdf_bytes, **kw: self._apply_visual_signature(pdf_bytes),
+                'action': lambda pdf_bytes, **kw: self._apply_visual_signature(pdf_bytes, **kw),
+                'has_position': True,
             })
         if cfg.digital_enabled and cfg.certificate_key:
             caps.append({
@@ -755,4 +765,141 @@ class PDFSignatureModule(BaseModule):
             )
             return redirect(url_for('view_invoice', id=invoice_id))
 
+        @bp.route('/sign-file/<int:file_id>/<int:cap_index>')
+        @login_required
+        def sign_file_picker(file_id, cap_index):
+            """Show position picker before signing a document file."""
+            from pypdf import PdfReader as _PdfReader
+            result = module.core.storage.get(
+                module._db.session.execute(
+                    module._db.text('SELECT file_path FROM document_file WHERE id = :fid'),
+                    {'fid': file_id}
+                ).fetchone()[0]
+            )
+            page_count = 1
+            if result:
+                try:
+                    reader = _PdfReader(io.BytesIO(result[0]))
+                    page_count = len(reader.pages)
+                except Exception:
+                    pass
+            return render_template_string(SIGN_POSITION_TEMPLATE,
+                                         file_id=file_id, cap_index=cap_index,
+                                         page_count=page_count)
+
+        @bp.route('/sign-file/<int:file_id>/<int:cap_index>', methods=['POST'])
+        @login_required
+        def sign_file_apply(file_id, cap_index):
+            """Apply signature with chosen position."""
+            position = request.form.get('position', 'bottom-left')
+            page_num = int(request.form.get('page_num', 0))
+            back_url = request.form.get('back_url', '/')
+
+            signers = module.core.module_manager.find_capabilities('pdf_sign')
+            if cap_index < 0 or cap_index >= len(signers):
+                flash('Signing method not available.', 'danger')
+                return redirect(back_url)
+
+            cap = signers[cap_index]
+            row = module._db.session.execute(
+                module._db.text('SELECT file_path, document_id, original_filename FROM document_file WHERE id = :fid'),
+                {'fid': file_id}
+            ).fetchone()
+            if not row:
+                flash('File not found.', 'danger')
+                return redirect(back_url)
+
+            file_path, doc_id, orig_name = row
+            try:
+                result = module.core.storage.get(file_path)
+                if not result:
+                    flash('File not found in storage.', 'danger')
+                    return redirect(back_url)
+                pdf_bytes, _ = result
+                signed = cap['action'](pdf_bytes, position=position, page_num=page_num)
+                module.core.storage.save(signed, file_path)
+                flash(f'File signed with {cap.get("name", "signer")}.', 'success')
+            except Exception as e:
+                module.logger.error('Sign file error: %s', e)
+                flash('Signing failed. Check server logs.', 'danger')
+
+            return redirect(back_url)
+
         app.register_blueprint(bp)
+
+
+SIGN_POSITION_TEMPLATE = '''
+{% extends "base.html" %}
+{% block title %}Sign PDF — Choose Position{% endblock %}
+{% block content %}
+<h1>✍️ Sign PDF — Choose Position</h1>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; max-width: 900px;">
+    <!-- Left: Position form -->
+    <div>
+        <form method="POST" action="{{ url_for('pdf_signature.sign_file_apply', file_id=file_id, cap_index=cap_index) }}">
+            <input type="hidden" name="back_url" value="{{ request.referrer or '/' }}">
+
+            <div class="form-group">
+                <label for="page_num">Page</label>
+                <select id="page_num" name="page_num">
+                    <option value="0">Last page</option>
+                    {% for p in range(1, page_count + 1) %}
+                    <option value="{{ p }}">Page {{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Signature Position</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px;">
+                    {% for pos, label in [
+                        ('top-left', '↖ Top Left'), ('top-center', '↑ Top Center'), ('top-right', '↗ Top Right'),
+                        ('bottom-left', '↙ Bottom Left'), ('bottom-center', '↓ Bottom Center'), ('bottom-right', '↘ Bottom Right')
+                    ] %}
+                    <label style="display:flex;align-items:center;gap:6px;padding:10px;border:2px solid #ddd;border-radius:6px;cursor:pointer;font-size:13px;transition:border-color 0.2s;"
+                           onmouseenter="this.style.borderColor='#5b6bc0'" onmouseleave="if(!this.querySelector('input').checked)this.style.borderColor='#ddd'">
+                        <input type="radio" name="position" value="{{ pos }}" {% if pos == 'bottom-left' %}checked{% endif %}
+                               onchange="document.querySelectorAll('[name=position]').forEach(function(r){r.closest('label').style.borderColor='#ddd'}); this.closest('label').style.borderColor='#5b6bc0';"
+                               style="width:16px;height:16px;">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <button type="submit" class="btn btn-success" style="padding: 10px 24px;">✍️ Sign</button>
+                <a href="{{ request.referrer or '/' }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Right: Visual position guide -->
+    <div style="background: #f5f5f5; border: 1px solid #ddd; border-radius: 8px; padding: 20px;">
+        <div style="font-size: 13px; color: #666; margin-bottom: 12px;">Position preview ({{ page_count }} page{{ 's' if page_count != 1 else '' }})</div>
+        <div style="background: #fff; border: 1px solid #ccc; width: 200px; height: 280px; margin: 0 auto; position: relative; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div id="sig-preview" style="position:absolute;width:50px;height:20px;background:rgba(91,107,200,0.3);border:1px dashed #5b6bc0;border-radius:2px;bottom:10px;left:10px;transition:all 0.3s;display:flex;align-items:center;justify-content:center;font-size:8px;color:#5b6bc0;">✍️</div>
+        </div>
+        <script>
+        document.querySelectorAll('[name="position"]').forEach(function(r) {
+            r.addEventListener('change', function() {
+                var p = document.getElementById('sig-preview');
+                var s = p.style;
+                s.left = s.right = s.top = s.bottom = 'auto';
+                switch(this.value) {
+                    case 'top-left': s.top='10px'; s.left='10px'; break;
+                    case 'top-center': s.top='10px'; s.left='50%'; s.transform='translateX(-50%)'; break;
+                    case 'top-right': s.top='10px'; s.right='10px'; break;
+                    case 'bottom-left': s.bottom='10px'; s.left='10px'; break;
+                    case 'bottom-center': s.bottom='10px'; s.left='50%'; s.transform='translateX(-50%)'; break;
+                    case 'bottom-right': s.bottom='10px'; s.right='10px'; break;
+                }
+                if (!this.value.includes('center')) s.transform = '';
+            });
+        });
+        </script>
+    </div>
+</div>
+{% endblock %}
+'''
