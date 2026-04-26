@@ -423,6 +423,8 @@ class PDFVerifyModule(BaseModule):
                     + '&back=' + encodeURIComponent(window.location.pathname);
                 badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
                     + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
+            } else if (data) {
+                badge.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;">Not signed</span>';
             }
         })
         .catch(function() {})
