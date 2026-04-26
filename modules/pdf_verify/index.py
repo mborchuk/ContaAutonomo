@@ -396,7 +396,7 @@ class PDFVerifyModule(BaseModule):
     def _render_badge_script(self):
         """Return JS script that loads signature badges via AJAX."""
         return '''<script>
-document.addEventListener('DOMContentLoaded', function() {
+(function() {
     var badges = document.querySelectorAll('[id^="sig-badge-"]');
     if (!badges.length) return;
     badges.forEach(function(badge) {
@@ -422,9 +422,9 @@ document.addEventListener('DOMContentLoaded', function() {
             badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
                 + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
         })
-        .catch(function() {});
+        .catch(function(e) { console.log('sig-verify error:', e); });
     });
-});
+})();
 </script>'''
 
     def register_routes(self, app):
