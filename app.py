@@ -1910,6 +1910,61 @@ def delete_contractor(id):
 # SYSTEM LOGS
 # ============================================================================
 
+@app.route('/api/rates-history')
+@login_required
+def rates_history():
+    """Return historical exchange rates for chart."""
+    from flask import jsonify
+    from datetime import date, timedelta
+    from currency_converter import get_exchange_rate
+
+    from_cur = request.args.get('from', 'USD')
+    to_cur = request.args.get('to', 'EUR')
+    period = request.args.get('period', '1m')  # 1d, 1w, 1m
+
+    today = date.today()
+    if period == '1d':
+        days = 1
+        step = 1  # hourly not available, just show today vs yesterday
+    elif period == '1w':
+        days = 7
+        step = 1
+    else:  # 1m
+        days = 30
+        step = 1
+
+    points = []
+    for i in range(days, -1, -step):
+        d = today - timedelta(days=i)
+        date_str = d.strftime('%Y-%m-%d')
+        try:
+            rate, _ = get_exchange_rate(date_str)
+            if rate and rate > 0:
+                # get_exchange_rate returns USD/EUR rate
+                # We need from_cur/to_cur
+                if from_cur == 'USD' and to_cur == 'EUR':
+                    val = 1.0 / rate if rate else 0
+                elif from_cur == 'EUR' and to_cur == 'USD':
+                    val = rate
+                else:
+                    # For other pairs, use the currency service if available
+                    if module_manager:
+                        try:
+                            converted, r, _ = module_manager.core.currency_service.convert(
+                                1.0, from_cur, to_cur, date_str)
+                            val = converted
+                        except Exception:
+                            val = None
+                    else:
+                        val = None
+                if val:
+                    points.append({'date': d.strftime('%d/%m'), 'rate': round(val, 4)})
+        except Exception:
+            pass
+
+    return jsonify({'points': points, 'from': from_cur, 'to': to_cur})
+
+
 @app.route('/logs')
 @login_required
 def system_logs():

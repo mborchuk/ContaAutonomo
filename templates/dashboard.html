@@ -46,26 +46,38 @@
                 </td>
                 <td style="width: 25%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
                     <div style="color: #666; font-size: 12px; margin-bottom: 10px;">Currency Converter</div>
-                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 4px;">
                         <input type="number" id="converter-amount" value="100" step="0.01"
                                style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px;"
                                oninput="convertCurrency()">
                         <select id="converter-from" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 13px;"
-                                onchange="convertCurrency()">
+                                onchange="convertCurrency(); loadRateChart();">
                             {% for currency in tracked_currencies %}
                             <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
                             {% endfor %}
                         </select>
                     </div>
+                    <div style="text-align: center; margin-bottom: 4px;">
+                        <button type="button" onclick="swapCurrencies()" style="background:none;border:1px solid #ddd;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;color:#666;" title="Swap">⇅</button>
+                    </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <input type="number" id="converter-result" readonly
                                style="width: 80px; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; background: #f5f5f5;">
                         <select id="converter-to" style="flex: 1; padding: 6px; border: 1px solid #ddd; border-radius: 3px; font-size: 13px;"
-                                onchange="convertCurrency()">
+                                onchange="convertCurrency(); loadRateChart();">
                             {% for currency in tracked_currencies %}
                             <option value="{{ currency }}" {% if currency == base_currency %}selected{% endif %}>{{ currency }}</option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <!-- Rate chart -->
+                    <div style="margin-top: 10px;">
+                        <div style="display: flex; gap: 4px; margin-bottom: 6px;">
+                            <button type="button" class="chart-period active" data-period="1m" onclick="setChartPeriod('1m',this)" style="padding:2px 6px;font-size:10px;border:1px solid #ddd;border-radius:3px;background:#e3f2fd;cursor:pointer;">1M</button>
+                            <button type="button" class="chart-period" data-period="1w" onclick="setChartPeriod('1w',this)" style="padding:2px 6px;font-size:10px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;">1W</button>
+                            <button type="button" class="chart-period" data-period="1d" onclick="setChartPeriod('1d',this)" style="padding:2px 6px;font-size:10px;border:1px solid #ddd;border-radius:3px;background:#fff;cursor:pointer;">1D</button>
+                        </div>
+                        <canvas id="rate-chart" width="200" height="60" style="width:100%;height:60px;"></canvas>
                     </div>
                 </td>
                 <td style="width: 20%; padding: 15px; border-right: 1px solid #e0e0e0; vertical-align: top;">
@@ -515,9 +527,68 @@ function convertCurrency() {
     document.getElementById('converter-result').value = result.toFixed(2);
 }
 
-// Initialize converter on page load
+function swapCurrencies() {
+    var from = document.getElementById('converter-from');
+    var to = document.getElementById('converter-to');
+    var tmp = from.value;
+    from.value = to.value;
+    to.value = tmp;
+    convertCurrency();
+    loadRateChart();
+}
+
+var chartPeriod = '1m';
+var rateChart = null;
+
+function setChartPeriod(period, btn) {
+    chartPeriod = period;
+    document.querySelectorAll('.chart-period').forEach(function(b) { b.style.background = '#fff'; });
+    btn.style.background = '#e3f2fd';
+    loadRateChart();
+}
+
+function loadRateChart() {
+    var from = document.getElementById('converter-from').value;
+    var to = document.getElementById('converter-to').value;
+    fetch('/api/rates-history?from=' + from + '&to=' + to + '&period=' + chartPeriod)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+            if (!data || !data.points || !data.points.length) return;
+            var canvas = document.getElementById('rate-chart');
+            var ctx = canvas.getContext('2d');
+            if (rateChart) rateChart.destroy();
+            rateChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.points.map(function(p) { return p.date; }),
+                    datasets: [{
+                        data: data.points.map(function(p) { return p.rate; }),
+                        borderColor: '#5B6FD8',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: true,
+                        backgroundColor: 'rgba(91,111,216,0.08)',
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false }
+                    }
+                }
+            });
+        })
+        .catch(function() {});
+}
+
+// Initialize converter and chart on page load
 document.addEventListener('DOMContentLoaded', function() {
     convertCurrency();
+    if (document.getElementById('rate-chart')) loadRateChart();
 });
 </script>
 
