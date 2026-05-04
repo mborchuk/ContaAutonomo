@@ -381,12 +381,38 @@ class PDFSignatureModule(BaseModule):
 
     # --- Invoice view page actions ---
 
+    def _check_real_pdf_signed(self, invoice):
+        """Check the actual PDF file for embedded digital signatures.
+
+        Uses pdf_verify's extract_signatures if available.
+        Returns list of signature dicts if signed, empty list otherwise.
+        """
+        try:
+            from modules.pdf_verify.index import extract_signatures
+            result = self.core.invoice_service.get_pdf(invoice)
+            if not result:
+                return []
+            pdf_bytes, _ = result
+            return extract_signatures(pdf_bytes)
+        except Exception as exc:
+            self.logger.debug('PDF Signature: _check_real_pdf_signed failed: %s', exc)
+            return []
+
     def get_invoice_actions(self, invoice):
-        """Return HTML showing signature status badge or sign button on the view page."""
+        """Return HTML showing signature status badge or sign button on the view page.
+
+        Checks DB first (fast path), then falls back to verifying the actual
+        PDF file — handles cases where a pre-signed PDF was uploaded.
+        """
         sig = self.PDFSignatureInvoice.query.filter_by(invoice_id=invoice.id).first()
+        storage_key = getattr(invoice, 'pdf_storage_key', '') or ''
 
         if sig and sig.is_signed:
-            # Already signed — show green badge with details
+            # Already signed per DB — check real file for signer details
+            sigs = self._check_real_pdf_signed(invoice)
+            signer = ''
+            if sigs:
+                signer = sigs[0].get('signer_email') or sigs[0].get('signer') or ''
             html = render_template(
                 'sign_button.html',
                 invoice=invoice,
@@ -394,12 +420,36 @@ class PDFSignatureModule(BaseModule):
                 can_sign=False,
                 has_visual=sig.has_visual,
                 has_digital=sig.has_digital,
+                storage_key=storage_key,
+                signer=signer,
+            )
+            return [html]
+
+        # DB doesn't say signed — check the actual PDF file
+        sigs = self._check_real_pdf_signed(invoice)
+        if sigs:
+            # Real file is signed — update DB so next load is instant
+            if not sig:
+                sig = self._get_invoice_sig(invoice.id)
+            sig.is_signed = True
+            sig.has_digital = True
+            sig.signed_at = sig.signed_at or datetime.utcnow()
+            self._db.session.commit()
+            signer = sigs[0].get('signer_email') or sigs[0].get('signer') or ''
+            html = render_template(
+                'sign_button.html',
+                invoice=invoice,
+                is_signed=True,
+                can_sign=False,
+                has_visual=sig.has_visual,
+                has_digital=True,
+                storage_key=storage_key,
+                signer=signer,
             )
             return [html]
 
         if sig and (sig.has_visual or sig.has_digital) and not sig.is_signed:
             # Signing intent stored but not yet signed — show sign button
-            # only if PDF exists and invoice is not locked
             has_pdf = self.core.invoice_service.has_pdf(invoice)
             is_locked = self.core.invoice_service.is_locked(invoice)
             if has_pdf and not is_locked:
@@ -410,10 +460,12 @@ class PDFSignatureModule(BaseModule):
                     can_sign=True,
                     has_visual=sig.has_visual,
                     has_digital=sig.has_digital,
+                    storage_key=storage_key,
+                    signer='',
                 )
                 return [html]
 
-        # No signing intent — show neutral badge
+        # Not signed — show neutral badge
         html = render_template(
             'sign_button.html',
             invoice=invoice,
@@ -421,6 +473,8 @@ class PDFSignatureModule(BaseModule):
             can_sign=False,
             has_visual=False,
             has_digital=False,
+            storage_key=storage_key,
+            signer='',
         )
         return [html]
 

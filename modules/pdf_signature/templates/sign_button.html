@@ -1,25 +1,23 @@
 <!-- PDF Signature status/action (injected by pdf_signature module) -->
 {% if is_signed %}
-    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; background: #d4edda; color: #155724; border-radius: 4px; font-size: 14px;">
-        ✓ Signed
-        {% if has_visual and has_digital %}
-            <small style="opacity: 0.8;">(visual + digital)</small>
-        {% elif has_visual %}
-            <small style="opacity: 0.8;">(visual)</small>
-        {% elif has_digital %}
-            <small style="opacity: 0.8;">(digital)</small>
-        {% endif %}
-    </span>
+    {% set detail_url = '/pdf-verify/details?key=' ~ (storage_key|urlencode) ~ '&name=invoice_' ~ (invoice.invoice_number|urlencode) ~ '.pdf&back=' ~ ('/view/' ~ invoice.id|string)|urlencode %}
+    {% set short_signer = signer[:40] ~ '…' if signer|length > 40 else signer %}
+    <a href="{{ detail_url }}"
+       style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: #e8f5e9; color: #2e7d32; text-decoration: none; border: 1px solid #a5d6a7;"
+       title="View signature details">
+        ✅ Signed
+        {% if signer %} — {{ short_signer }}{% endif %}
+    </a>
 {% elif can_sign %}
     <form method="POST"
           action="{{ url_for('pdf_signature.sign_invoice', invoice_id=invoice.id) }}"
           style="display: inline;">
-        <button type="submit" class="btn btn-primary" style="padding: 6px 12px; font-size: 14px;">
+        <button type="submit" class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;">
             ✍️ Sign PDF
         </button>
     </form>
 {% else %}
-    <span style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; background: #f8f9fa; color: #6c757d; border-radius: 4px; font-size: 14px;">
+    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: #fff3e0; color: #e65100; border: 1px solid #ffcc80;">
         Not signed
     </span>
 {% endif %}

@@ -149,45 +149,7 @@
             {{ action_html|safe }}
         {% endfor %}
     {% endif %}
-    {% if invoice.pdf_storage_key and module_manager and module_manager.find_capabilities('pdf_verify') %}
-    <span id="inv-sig-badge" data-storage-key="{{ invoice.pdf_storage_key }}"
-          data-filename="invoice_{{ invoice.invoice_number }}.pdf"></span>
-    {% endif %}
 </div>
-
-{% if invoice.pdf_storage_key and module_manager and module_manager.find_capabilities('pdf_verify') %}
-<script>
-(function() {
-    var badge = document.getElementById('inv-sig-badge');
-    if (!badge) return;
-    var key = badge.dataset.storageKey;
-    var fname = badge.dataset.filename;
-    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
-    var headers = {'Content-Type': 'application/json'};
-    if (csrfMeta) headers['X-CSRFToken'] = csrfMeta.getAttribute('content');
-    fetch('/pdf-verify/check', {
-        method: 'POST', headers: headers,
-        body: JSON.stringify({storage_key: key})
-    })
-    .then(function(r) { return r.ok ? r.json() : null; })
-    .then(function(data) {
-        if (data && data.signatures && data.signatures.length) {
-            var n = data.signatures.length;
-            var signer = data.signatures[0].signer_email || data.signatures[0].signer || 'Unknown';
-            var short = signer.length > 40 ? signer.substring(0, 40) + '\u2026' : signer;
-            var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
-                + '&name=' + encodeURIComponent(fname)
-                + '&back=' + encodeURIComponent(window.location.pathname);
-            badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:10px;font-size:12px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
-                + '\u2705 Signed \u2014 ' + short + '</a>';
-        } else if (data) {
-            // Don't show "Not signed" for invoices — only show if signed
-        }
-    })
-    .catch(function() {});
-})();
-</script>
-{% endif %}
 
 {% if module_manager %}
     {% for panel_html in module_manager.get_invoice_view_panels(invoice) %}
