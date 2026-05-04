@@ -181,7 +181,7 @@
             badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:10px;font-size:12px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
                 + '\u2705 Signed \u2014 ' + short + '</a>';
         } else if (data) {
-            badge.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:10px;font-size:12px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;">Not signed</span>';
+            // Don't show "Not signed" for invoices — only show if signed
         }
     })
     .catch(function() {});
