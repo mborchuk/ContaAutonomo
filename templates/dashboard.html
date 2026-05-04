@@ -266,7 +266,7 @@
 
                 <!-- Invoices for this quarter -->
                 {% for invoice in invoices_by_year[year][quarter] %}
-                <tr>
+                <tr class="clickable-row" data-href="{{ url_for('view_invoice', id=invoice.id) }}">
                     <td>{{ invoice.invoice_number }}</td>
                     <td>
                         <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
@@ -395,6 +395,14 @@
     background: #f8f9fa;
 }
 
+.invoiceTable tr.clickable-row {
+    cursor: pointer;
+}
+
+.invoiceTable tr.clickable-row:hover {
+    background: #e8f4fd;
+}
+
 /* Compact columns */
 .invoiceTable th:nth-child(1),
 .invoiceTable td:nth-child(1) {
@@ -518,6 +526,15 @@ function convertCurrency() {
 // Initialize converter on page load
 document.addEventListener('DOMContentLoaded', function() {
     convertCurrency();
+
+    // Clickable invoice rows
+    document.querySelectorAll('.clickable-row').forEach(function(row) {
+        row.addEventListener('click', function(e) {
+            // Don't navigate if clicking a link or button inside the row
+            if (e.target.closest('a, button, .btn')) return;
+            window.location.href = row.dataset.href;
+        });
+    });
 });
 </script>
 

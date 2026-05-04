@@ -92,7 +92,7 @@
     </thead>
     <tbody>
         {% for invoice in invoices %}
-        <tr>
+        <tr class="clickable-row" data-href="{{ url_for('view_invoice', id=invoice.id) }}">
             <td>{{ invoice.invoice_number }}</td>
             <td>{{ invoice.client_name }}</td>
             <td>{{ invoice.invoice_date.strftime('%d/%m/%Y') if invoice.invoice_date else 'N/A' }}</td>
@@ -166,6 +166,14 @@
 
 .invoiceTable tr:hover {
     background: #f8f9fa;
+}
+
+.invoiceTable tr.clickable-row {
+    cursor: pointer;
+}
+
+.invoiceTable tr.clickable-row:hover {
+    background: #e8f4fd;
 }
 
 /* Column widths */
@@ -270,6 +278,13 @@ document.addEventListener('click', function(e) {
     if (!e.target.closest('.inv-menu') && !e.target.closest('button[onclick]')) {
         document.querySelectorAll('.inv-menu').forEach(function(m) { m.style.display = 'none'; });
     }
+});
+// Clickable invoice rows
+document.querySelectorAll('.clickable-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+        if (e.target.closest('a, button, .btn, .inv-menu')) return;
+        window.location.href = row.dataset.href;
+    });
 });
 </script>
 {% endblock %}
