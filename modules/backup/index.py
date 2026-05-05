@@ -376,6 +376,9 @@ class BackupModule(BaseModule):
                 "if(confirm('Load demo data? This will REPLACE all current data.')){"
                 "var f=document.createElement('form');"
                 "f.method='POST';f.action='/backup/load-demo';"
+                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
+                "var m=document.querySelector('meta[name=csrf-token]');"
+                "if(m)c.value=m.content;f.appendChild(c);"
                 "document.body.appendChild(f);f.submit();}"
             )
             a(f'<button type="button" class="btn btn-warning"'
@@ -406,7 +409,11 @@ class BackupModule(BaseModule):
             "f.appendChild(i);"
             "var e=document.createElement('input');"
             "e.type='hidden';e.name='encrypt';e.value='" + val + "';"
-            "f.appendChild(e);document.body.appendChild(f);f.submit();"
+            "f.appendChild(e);"
+            "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
+            "var m=document.querySelector('meta[name=csrf-token]');"
+            "if(m)c.value=m.content;f.appendChild(c);"
+            "document.body.appendChild(f);f.submit();"
         )
         return (f'<button type="button" class="btn {cls}" '
                 f'style="margin-right:10px;" onclick="{js}">'
@@ -444,6 +451,9 @@ class BackupModule(BaseModule):
                 "var f=document.createElement('form');"
                 "f.method='POST';"
                 "f.action='/backup/restore/" + fn + "';"
+                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
+                "var m=document.querySelector('meta[name=csrf-token]');"
+                "if(m)c.value=m.content;f.appendChild(c);"
                 "document.body.appendChild(f);f.submit();}"
             )
             a(f'<button type="button" class="btn btn-success"'
@@ -453,6 +463,9 @@ class BackupModule(BaseModule):
                 "var f=document.createElement('form');"
                 "f.method='POST';"
                 "f.action='/backup/delete/" + fn + "';"
+                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
+                "var m=document.querySelector('meta[name=csrf-token]');"
+                "if(m)c.value=m.content;f.appendChild(c);"
                 "document.body.appendChild(f);f.submit();}"
             )
             a(f'<button type="button" class="btn btn-danger"'
