@@ -1,5 +1,26 @@
 # Release Notes
 
+## v1.2.0 — Signature Verification & UX Improvements
+
+### Invoice Signature Badge
+- Invoice view page now verifies the actual PDF file for digital signatures
+- Works with pre-signed PDFs (uploaded from DocuSign, Adobe Sign, etc.) — not just module-signed
+- Badge shows signer email/name extracted from the PDF certificate
+- Clickable badge links to full signature details page (via pdf_verify module)
+- Style matches document view badges (green pill for signed, orange for unsigned)
+- DB record auto-updated when a signed PDF is detected
+
+### Clickable Invoice Rows
+- Dashboard and Invoices list: clicking any invoice row opens its view page
+- Links and buttons inside rows (PDF download, action menu) still work normally
+- Hover highlight changed to light blue for better UX
+
+### Bug Fixes
+- Fixed CSRF token missing on backup delete/restore/create buttons (caused "Session expired" error)
+- All dynamic form submissions in backup module now include CSRF token
+
+---
+
 ## v1.1.0 — Documents Overhaul
 
 ### Documents Module (v0.5.0)
