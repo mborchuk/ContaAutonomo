@@ -30,17 +30,26 @@ Technical reference for the Autónomos application architecture.
 
 | Route | Description |
 |-------|-------------|
-| `/` | Dashboard |
-| `/invoices` | Invoice list with filters |
+| `/` | Dashboard (clickable invoice rows navigate to view) |
+| `/invoices` | Invoice list with filters, sorting, pagination (clickable rows) |
 | `/create` | Create invoice (calls `module_manager.on_invoice_created` after commit) |
 | `/edit/<id>` | Edit invoice (calls `module_manager.on_invoice_updated` after commit) |
-| `/view/<id>` | View invoice (renders `module_manager.get_invoice_actions`) |
-| `/generate-pdf/<id>` | Generate invoice PDF |
-| `/settings` | Settings (all tabs) |
+| `/view/<id>` | View invoice (renders `module_manager.get_invoice_actions` + `get_invoice_view_panels`) |
+| `/generate-pdf/<id>` | Generate/download invoice PDF |
+| `/preview-pdf/<id>` | Preview invoice PDF in browser |
+| `/settings` | Settings (all tabs — each saves independently) |
 | `/logs` | System activity logs |
 | `/scheduler` | Scheduled tasks overview |
 | `/customers/*` | Customer CRUD |
 | `/contractors/*` | Contractor CRUD |
+
+### Security
+
+- **CSRF Protection**: Flask-WTF CSRFProtect — auto-injected into all POST forms via meta tag
+- **Rate Limiting**: Flask-Limiter (memory storage) — configurable per-route
+- **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, HSTS (when FORCE_HTTPS=1)
+- **Session Security**: HttpOnly cookies, SameSite=Lax, Secure (when HTTPS), 1-hour lifetime
+- **Auth Blueprint**: exempt from CSRF (handles its own validation)
 
 ### Activity Logging
 
@@ -275,11 +284,12 @@ Document management system with categories, tags, multi-file attachments, and ch
 
 Full encrypted backups including DB dump (all tables via SQLAlchemy inspector) and uploaded files.
 
-- Routes: `/backup/`, create, download, restore
+- Routes: `/backup/`, create, download, restore, delete, upload-restore, load-demo
 - Models: `BackupConfig`
-- Features: AES-256-CBC encryption (none/app password/custom), custom backup directory, S3 upload via external_storage, daily auto-backup via scheduler
-- Settings: backup options in General tab (`settings_tab = 'general'`)
+- Features: AES-256-CBC encryption (none/app password/custom), custom backup directory, external storage upload, daily auto-backup via scheduler, configurable retention (daily_backup_retention_count)
+- Settings: backup options in Security tab
 - Scheduler: registers `backup.daily` job at 03:00
+- All dynamic form buttons include CSRF tokens for security
 
 ### Reports (`reports`)
 
@@ -287,10 +297,14 @@ PDF financial reports collecting data dynamically from all enabled modules.
 
 - Routes: `/reports/`, generate
 - Nav: Reports
-- User selects which sections to include via checkboxes (Income is always available from core; other sections come from enabled modules)
-- Collects data via `module_manager.get_report_sections()`
-- Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
-- Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns` and `total_field`
+- Features:
+  - User selects which sections to include via checkboxes
+  - Income section always available from core; other sections from enabled modules
+  - "Include attached files (ZIP archive)" option with selectable document checklist
+  - PDF signing checkboxes (when pdf_signature module enabled)
+  - Collects data via `module_manager.get_report_sections()`
+  - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
+  - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns` and `total_field`
 
 ### External Storage (`external_storage`)
 
@@ -316,20 +330,57 @@ Upload ready-made invoice PDFs instead of generating them.
 - Processes uploads after save via `on_invoice_created()` / `on_invoice_updated()`
 - Detailed activity logging: attach/replace/reject/fail events with file name, size, hash
 
+### Invoice Comments (`invoice_comments`)
+
+Internal comments/notes on invoices — not visible on the PDF.
+
+- Routes: `/invoice-comments/add/<id>` (POST), `/invoice-comments/delete/<id>` (POST)
+- Models: `InvoiceComment` (invoice_id, text, created_at)
+- Features:
+  - Comments panel on invoice view page via `get_invoice_view_panels()`
+  - Add/delete comments with timestamps
+  - Optional initial comment field on create/edit forms
+  - Comments are internal only — never appear on invoice PDF
+- Hooks: `on_invoice_created()`, `on_invoice_updated()` — saves initial comment from form
+
 ### PDF Signature (`pdf_signature`)
 
 Visual and digital signing of invoice PDFs.
 
-- Routes: `/pdf-signature/settings` (POST), `/pdf-signature/upload-file` (POST), `/pdf-signature/preview-signature` (GET)
-- Models: `PDFSignatureConfig` (signature image path, PFX path, position, margins, enable flags)
+- Routes: `/pdf-signature/settings` (POST), `/pdf-signature/upload-file` (POST), `/pdf-signature/preview-signature` (GET), `/pdf-signature/sign/<id>` (POST)
+- Models: `PDFSignatureConfig` (signature image path, PFX path, position, margins, enable flags), `PDFSignatureInvoice` (per-invoice signing state)
 - Features:
-  - Visual signature: image overlay on PDF with configurable position (top-left/right, center-left/right, bottom-left/right), margins, and max width
+  - Visual signature: image overlay on PDF with configurable position (6 positions), margins, and max width
   - Digital signature: X.509/PFX certificate signing via pyHanko
-  - Auto-signs on PDF generation when enabled
-  - Signature checkboxes on invoice create form (hidden when both types disabled in settings)
+  - Signature checkboxes on invoice create/edit forms
+  - Invoice view badge: verifies actual PDF file for embedded signatures (not just DB)
+  - Works with pre-signed PDFs (DocuSign, Adobe Sign, etc.) — auto-detects and updates DB
+  - Clickable badge links to signature details page (via pdf_verify module)
+  - Badge shows signer email/name extracted from PDF certificate
+  - Capabilities: exposes `pdf_sign` (visual, digital) for cross-module use
 - Settings: dedicated "PDF Signature" tab with image upload, PFX upload, position controls
-- Hooks: `on_invoice_created()` — auto-signs after PDF generation
+- Hooks: `on_invoice_created()`, `on_invoice_updated()` — stores signing intent, triggers signing
 - Files stored in `pdf_signature_files/` via `core.storage`
+
+### PDF Verify (`pdf_verify`)
+
+Detect and display digital signature information in PDF files.
+
+- Routes: `/pdf-verify/check` (POST — AJAX), `/pdf-verify/details` (GET — full page)
+- No models (stateless — reads signatures directly from PDF files)
+- Features:
+  - Detects signatures in any PDF regardless of signing tool
+  - Extracts signer name, email, issuer, signing time, algorithm, certificate chain
+  - Parses PKCS#7/CMS signed data via asn1crypto
+  - Finds leaf (end-entity) certificate — not root CA
+  - Badge on document files: green pill "✅ Signed — email" or orange "Not signed"
+  - Sequential AJAX requests to avoid SSL concurrency issues (Python 3.14 + GDrive)
+  - Full signature details page with certificate chain display
+- Capabilities:
+  - `pdf_verify` — callable that returns signature list from PDF bytes
+  - `file_badge` — renders badge placeholder for document files
+  - `file_badge_script` — renders JS that loads badges via AJAX
+- Used by: `pdf_signature` module (for invoice badge verification), `documents` module (for file badges)
 
 ### AI Parser (`ai_parser`)
 
@@ -476,6 +527,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `get_dashboard_panels()` | Dashboard widget data |
 | `get_report_sections()` | Report section generators |
 | `get_invoice_actions(invoice)` | HTML snippets for invoice view actions bar |
+| `get_invoice_view_panels(invoice)` | HTML panels rendered below invoice view (e.g. comments) |
 | `get_create_form_html()` | HTML to inject into invoice create form |
 | `get_edit_form_html(invoice)` | HTML to inject into invoice edit form |
 | `on_invoice_created(invoice, request)` | Called after new invoice is committed |
@@ -485,6 +537,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
 | `get_auth_providers()` | Return `AuthProvider` instances for pluggable auth |
+| `get_capabilities()` | Declare capabilities for cross-module discovery |
 | `on_user_authenticated(identity)` | Called after successful login (any provider) |
 | `on_user_logout()` | Called when user logs out |
 
@@ -535,7 +588,7 @@ for signer in signers:
     signed_pdf = signer['action'](pdf_bytes)
 ```
 
-Standard capability types: `pdf_sign`, `ocr`, `email_send`. Modules can define any custom types.
+Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`. Modules can define any custom types.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.
 
