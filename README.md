@@ -8,11 +8,15 @@ A self-hosted web application for freelancers and small businesses to manage inv
 - Multi-currency support with ECB exchange rate conversion and 50+ currency symbols
 - Customer and contractor management
 - Configurable tax rates (VAT, income tax advance) per country
+- Configurable payment methods per invoice
 - Modular architecture — enable only what you need
-- Password-protected access with encrypted backups
+- Password-protected access with pluggable auth providers (OAuth, SAML)
+- CSRF protection, rate limiting, and security headers
+- Encrypted backups with scheduling
 - Activity logging (file or database) with configurable retention
 - Built-in task scheduler for periodic jobs
-- Dashboard with financial overview, tax calculations, and exchange rates
+- Dashboard with financial overview, tax calculations, exchange rates, and clickable invoice rows
+- Invoice signature verification — detects digital signatures in uploaded PDFs
 
 ### Modules (enable/disable in Settings → Modules)
 
@@ -27,6 +31,9 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **External Storage** | Pluggable file storage: Local, AWS S3, Google Cloud Storage, Google Drive |
 | **Invoice Attachments** | Upload signed/scanned invoice PDFs with SHA-256 hash tracking |
 | **PDF Signature** | Visual (image overlay) and digital (X.509/PFX) signing of invoice PDFs |
+| **PDF Verify** | Detect digital signatures in PDFs — shows signer info, clickable badge on documents and invoices |
+| **Invoice Comments** | Internal comments/notes on invoices (not visible on PDF) |
+| **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout and presets |
 | **AI Parser** | Parse invoice data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
 
 ## Quick Start
@@ -74,9 +81,10 @@ Data is persisted in Docker volumes (`app_data`, `app_backups`, etc.).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SECRET_KEY` | `dev-secret-key-...` | Flask session secret. **Set in production.** |
+| `SECRET_KEY` | *(random)* | Flask session secret. **Required in production.** |
 | `DATABASE_URL` | `sqlite:///invoices.db` | SQLAlchemy database URI |
 | `FLASK_DEBUG` | `0` | Set to `1` for debug mode |
+| `FORCE_HTTPS` | `0` | Set to `1` to enable HSTS and secure cookies |
 
 ## Configuration
 
@@ -109,9 +117,8 @@ Toggle dashboard panels in Settings → General:
 ContaAutonomo/
 ├── app.py                      # Core application (models, routes, settings)
 ├── module_manager.py           # Module system (BaseModule, CoreServices, TaskScheduler)
-├── auth.py / auth_routes.py    # Authentication
+├── auth.py / auth_routes.py    # Authentication (pluggable providers)
 ├── currency_converter.py       # ECB exchange rates + shared CURRENCY_SYMBOLS
-├── repositories.py             # Repository pattern for DB queries
 ├── modules/                    # Dynamic modules
 │   ├── ai_parser/              # AI-powered invoice parsing
 │   ├── backup/                 # Backup & Restore
@@ -119,7 +126,10 @@ ContaAutonomo/
 │   ├── expenses/               # Expense tracking
 │   ├── external_storage/       # Pluggable storage: Local, S3, GCS, Google Drive
 │   ├── invoice_attachments/    # Upload signed/scanned invoice PDFs
+│   ├── invoice_comments/       # Internal invoice comments
+│   ├── invoice_designer/       # Visual invoice template editor
 │   ├── pdf_signature/          # Visual + digital PDF signing
+│   ├── pdf_verify/             # PDF signature detection & display
 │   ├── reports/                # Financial reports
 │   ├── tax_management/         # Spanish tax forms & SS payments
 │   └── tax_poland/             # Polish tax rules (JDG/B2B IT)
@@ -217,11 +227,12 @@ See `modules/tax_poland/` for a complete real-world example with progressive bra
 ## Technology Stack
 
 - **Backend**: Flask + SQLAlchemy (SQLite)
-- **PDF**: ReportLab (generation), pyHanko (digital signatures)
-- **Security**: cryptography (AES-256 backup encryption)
+- **PDF**: ReportLab (generation), pypdf (manipulation), pyHanko (digital signatures)
+- **Security**: Flask-WTF (CSRF), Flask-Limiter (rate limiting), cryptography (AES-256 backup encryption)
 - **Cloud Storage**: boto3 (S3), google-cloud-storage (GCS), google-api-python-client (Drive)
-- **Exchange Rates**: ECB API with exchangerate-api fallback
+- **Exchange Rates**: ECB API with Frankfurter and exchangerate-api fallbacks
 - **AI Parsing**: OpenAI, Anthropic, Google Generative AI (optional)
+- **Signature Verification**: asn1crypto (PKCS#7/CMS parsing)
 
 ## License
 
