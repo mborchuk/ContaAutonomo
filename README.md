@@ -25,16 +25,16 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Expenses** | Track business expenses with file uploads, categories, and contractor linking |
 | **Tax Management** | Spanish tax forms (Modelos 349, 303, 130, 390, 100) and Social Security payments |
 | **Tax Poland (IT)** | Polish tax rules for IT freelancers (JDG/B2B) — flat 19% or progressive 12%/32%, VAT 23%, ZUS |
-| **Documents** | General document storage and management |
-| **Backup & Restore** | Full encrypted backups (DB + files), daily scheduling, S3 support |
-| **Reports** | PDF financial reports with dynamic section selection from enabled modules |
+| **Documents** | Document management with multi-file attachments, categories, tags, expiry tracking, notes, history, and bulk actions |
+| **Backup & Restore** | Full encrypted backups (DB + files), daily scheduling, S3/GCS/Google Drive support |
+| **Reports** | PDF financial reports with dynamic section selection from enabled modules; optional file attachment as ZIP |
 | **External Storage** | Pluggable file storage: Local, AWS S3, Google Cloud Storage, Google Drive |
 | **Invoice Attachments** | Upload signed/scanned invoice PDFs with SHA-256 hash tracking |
 | **PDF Signature** | Visual (image overlay) and digital (X.509/PFX) signing of invoice PDFs |
 | **PDF Verify** | Detect digital signatures in PDFs — shows signer info, clickable badge on documents and invoices |
 | **Invoice Comments** | Internal comments/notes on invoices (not visible on PDF) |
-| **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout and presets |
-| **AI Parser** | Parse invoice data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
+| **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout, block positioning, presets, and JSON import/export |
+| **AI Parser** | Parse invoice data from PDFs/images using AI providers (OpenAI, Anthropic, Google Document AI) |
 
 ## Quick Start
 
@@ -85,12 +85,17 @@ Data is persisted in Docker volumes (`app_data`, `app_backups`, etc.).
 | `DATABASE_URL` | `sqlite:///invoices.db` | SQLAlchemy database URI |
 | `FLASK_DEBUG` | `0` | Set to `1` for debug mode |
 | `FORCE_HTTPS` | `0` | Set to `1` to enable HSTS and secure cookies |
+| `GUNICORN_WORKERS` | `2` | Number of gunicorn worker processes |
 
 ## Configuration
 
+### First Run
+
+After launching, go to **Settings → Business Information** and fill in your name, VAT, address. Then add a **Bank Account**, add your first **Customer**, and create your first invoice.
+
 ### Tax Rates
 
-Tax rates are configurable in Settings → General Settings → Tax Rates:
+Tax rates are configurable in **Settings → General Settings → Tax Rates**:
 
 - **VAT / IVA Rate** — applied to invoices (e.g. 21% Spain, 23% Poland, 20% UK)
 - **Quarterly Tax Advance Rate** — applied to income for quarterly tax calculations (e.g. 20% Modelo 130 in Spain)
@@ -99,17 +104,20 @@ Modules can override these calculations. For example, enabling the Tax Poland mo
 
 ### Multi-Currency
 
-The app supports any currency. In Settings → General:
+The app supports any currency. In **Settings → General**:
 
 1. Enter tracked currencies as comma-separated codes (e.g. `USD,EUR,GBP,PLN`)
 2. Select your base currency from the dropdown (populated dynamically from tracked currencies)
 3. Currency symbols are resolved automatically for 50+ currencies; unknown codes display as-is
 
+Exchange rates are fetched from the ECB (European Central Bank) with configurable fallback providers. See Settings → General → Exchange Rate Provider.
+
 ### Dashboard
 
-Toggle dashboard panels in Settings → General:
-- Currency & Holidays panel (exchange rates, converter, upcoming holidays)
-- Tax Obligations panel (income tax, VAT, social security)
+Toggle dashboard panels in **Settings → General**:
+
+- **Currency & Holidays panel** — current date, exchange rates, converter, tax deadlines, upcoming public holidays
+- **Tax Obligations panel** — income tax, VAT, social security for the current year with IRPF bracket breakdown
 
 ## Project Structure
 
@@ -119,6 +127,8 @@ ContaAutonomo/
 ├── module_manager.py           # Module system (BaseModule, CoreServices, TaskScheduler)
 ├── auth.py / auth_routes.py    # Authentication (pluggable providers)
 ├── currency_converter.py       # ECB exchange rates + shared CURRENCY_SYMBOLS
+├── repositories.py             # Database repository layer
+├── docker_entrypoint.py        # Docker startup: DB init, migrations, gunicorn
 ├── modules/                    # Dynamic modules
 │   ├── ai_parser/              # AI-powered invoice parsing
 │   ├── backup/                 # Backup & Restore
@@ -157,11 +167,13 @@ ContaAutonomo/
 ```
 
 Modules are discovered at startup from the `modules/` directory. Each module:
+
 - Defines models, routes, and templates independently
 - Accesses core services through `CoreServices` interface
 - Can contribute to dashboard, reports, settings, and navigation
 - Can override tax calculations for different countries
 - Can register periodic tasks via the built-in scheduler
+- Can declare capabilities for cross-module discovery (`pdf_sign`, `pdf_verify`, `file_badge`, etc.)
 
 See [MODULES_DOCUMENTATION.md](MODULES_DOCUMENTATION.md) for the full API reference and [modules/README.md](modules/README.md) for the module development guide.
 
@@ -212,6 +224,26 @@ class TaxMyCountryModule(BaseModule):
 
 See `modules/tax_poland/` for a complete real-world example with progressive brackets, health insurance, and ZUS contributions.
 
+## Invoice PDF Templates
+
+Invoice PDF templates live in `invoice_templates/` and in modules (via `get_invoice_templates()`). Select the active template in **Settings → General → Invoice PDF Template**.
+
+Built-in templates:
+
+- `default_template` — professional with grey accents, sender/recipient side-by-side
+- `modern_blue_template` — clean minimalist design with blue accents
+
+The **Invoice Designer** module provides a visual editor for creating custom templates with configurable block positions, colors, fonts, and labels. Designer templates appear in the dropdown with a `🎨` prefix and can be exported/imported as JSON.
+
+Custom template function signature:
+
+```python
+def generate_invoice_pdf(invoice, customer, settings, Bank=None):
+    """
+    Returns: io.BytesIO buffer containing the PDF
+    """
+```
+
 ## Production Deployment
 
 1. Set a strong `SECRET_KEY` environment variable
@@ -220,8 +252,8 @@ See `modules/tax_poland/` for a complete real-world example with progressive bra
    gunicorn -w 2 -b 0.0.0.0:5000 app:app
    ```
 3. Use a reverse proxy (nginx/Caddy) with HTTPS
-4. Enable the Backup module with daily scheduling
-5. Consider External Storage module for S3/GCS backups
+4. Enable the **Backup** module with daily scheduling
+5. Consider the **External Storage** module for S3/GCS backups
 6. Set `FLASK_DEBUG=0` (default)
 
 ## Technology Stack
@@ -230,8 +262,8 @@ See `modules/tax_poland/` for a complete real-world example with progressive bra
 - **PDF**: ReportLab (generation), pypdf (manipulation), pyHanko (digital signatures)
 - **Security**: Flask-WTF (CSRF), Flask-Limiter (rate limiting), cryptography (AES-256 backup encryption)
 - **Cloud Storage**: boto3 (S3), google-cloud-storage (GCS), google-api-python-client (Drive)
-- **Exchange Rates**: ECB API with Frankfurter and exchangerate-api fallbacks
-- **AI Parsing**: OpenAI, Anthropic, Google Generative AI (optional)
+- **Exchange Rates**: ECB API with Frankfurter, Open Exchange Rates, and Fixer.io support
+- **AI Parsing**: OpenAI, Anthropic Claude, Google Document AI (optional)
 - **Signature Verification**: asn1crypto (PKCS#7/CMS parsing)
 
 ## License
