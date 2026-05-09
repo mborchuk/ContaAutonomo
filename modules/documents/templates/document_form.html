@@ -118,7 +118,7 @@
                             <a href="{{ url_for('documents.file_download', file_id=df.id) }}"
                                class="btn btn-success" style="padding: 2px 8px; font-size: 11px;">📥</a>
                             <button type="button" class="btn btn-danger" style="padding: 2px 8px; font-size: 11px;"
-                                    onclick="if(confirm('Remove this file?')){var f=document.createElement('form');f.method='POST';f.action='{{ url_for('documents.file_delete', file_id=df.id) }}';document.body.appendChild(f);f.submit();}">✕</button>
+                                    onclick="if(confirm('Remove this file?')){var f=document.createElement('form');f.method='POST';f.action='{{ url_for('documents.file_delete', file_id=df.id) }}';var c=document.createElement('input');c.type='hidden';c.name='csrf_token';var m=document.querySelector('meta[name=csrf-token]');if(m)c.value=m.content;f.appendChild(c);document.body.appendChild(f);f.submit();}">✕</button>
                         </div>
                     </div>
                     {% endfor %}
