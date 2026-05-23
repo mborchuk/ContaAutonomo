@@ -1,0 +1,56 @@
+# Core services exposed to modules via CoreServices (see module_manager.py).
+# Used by the Architecture page to render the Core Services API table.
+# Signatures here mirror module_manager.py; keep them in sync when the
+# CoreServices interface changes.
+
+- name: db
+  description: "SQLAlchemy session and engine for module models and queries"
+  methods:
+    - sig: "session.commit() -> None"
+      desc: "Commit the current SQLAlchemy transaction (writes pending model changes)"
+    - sig: "session.query(Model)"
+      desc: "Build a query against a registered SQLAlchemy model class"
+
+- name: storage
+  description: "FileStorageBackend (default LocalStorageBackend); pluggable via set_storage_backend()"
+  methods:
+    - sig: "save(file_data, relative_path) -> str  # storage_key"
+      desc: "Persist file_data (bytes or file-like object) at <relative_path> and return the storage key used to retrieve it later"
+    - sig: "delete(storage_key) -> None"
+      desc: "Delete the file identified by storage_key from the active backend"
+    - sig: "send(storage_key, download_name=None)"
+      desc: "Return a Flask response that streams the file as a download; download_name is the suggested filename"
+    - sig: "exists(storage_key) -> bool"
+      desc: "Return True if a file with the given storage_key is present in the active backend"
+
+- name: activity_logger
+  description: "FileActivityLogger | DbActivityLogger; pluggable via set_activity_logger()"
+  methods:
+    - sig: "log(action, category='system', details=None, user=None) -> None"
+      desc: "Append an audit entry with a UTC timestamp; details may be a string or a JSON-serialisable dict"
+    - sig: "get_entries(limit=100, category=None, offset=0) -> list[dict]"
+      desc: "Return up to <limit> entries (newest first), optionally filtered by category and paginated by offset"
+
+- name: scheduler
+  description: "TaskScheduler — single in-process daemon thread running registered periodic jobs"
+  methods:
+    - sig: "add_job(job_id, func, job_type='interval', interval=3600, time_str='03:00', description='') -> None"
+      desc: "Register a periodic job; job_type is 'interval' (every <interval> seconds) or 'daily' (at <time_str> HH:MM local time)"
+    - sig: "get_jobs() -> list[dict]"
+      desc: "Return a snapshot of registered jobs including id, type, schedule, last_run, next_run, running flag and last_error"
+
+- name: invoice_service
+  description: "InvoiceService — safe invoice CRUD with PAID-locking and PDF attachment helpers"
+  methods:
+    - sig: "get(invoice_id) -> Invoice | None"
+      desc: "Fetch an Invoice by primary key, or return None if it does not exist"
+    - sig: "attach_pdf(invoice_or_id, file_data, original_filename=None) -> str  # storage_key"
+      desc: "Store the PDF via core.storage, update pdf_hash and pdf_storage_key, and log the action; raises ValueError if the invoice is PAID with a sealed PDF"
+
+- name: currency_service
+  description: "CurrencyService — exchange-rate API with default ECB provider and pluggable custom providers"
+  methods:
+    - sig: "get_rate(from_currency, to_currency, date_str) -> (rate, actual_date)"
+      desc: "Return the rate where 1 from_currency = rate to_currency on date_str (YYYY-MM-DD); tries the active custom provider first, then falls back to ECB"
+    - sig: "convert(amount, from_currency, to_currency, date_str) -> (converted_amount, rate, actual_date)"
+      desc: "Convert amount across currencies using get_rate; returns the converted amount, the rate applied and the date the rate was sourced from"
