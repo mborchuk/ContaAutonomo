@@ -1,0 +1,40 @@
+---
+layout: default
+---
+{%- comment -%}
+  Page layout: extends `default` and renders a single <h1> derived from
+  `page.title`, plus optional breadcrumbs sourced from `page.breadcrumbs`.
+
+  Frontmatter contract:
+    title: <string>                     # required, becomes the sole <h1>
+    breadcrumbs:                         # optional
+      - label: "Home"
+        url: "/"
+      - label: "Architecture"
+        url: "/architecture/"
+      - label: "Module manager"         # last item: current page (no url)
+
+  The last breadcrumb item is rendered as plain text (current page) and
+  marked with aria-current="page" per WAI-ARIA breadcrumb pattern.
+{%- endcomment -%}
+
+{%- if page.breadcrumbs and page.breadcrumbs.size > 0 -%}
+<nav class="breadcrumbs" aria-label="Breadcrumb">
+  <ol>
+    {%- for crumb in page.breadcrumbs -%}
+      {%- assign is_last = forloop.last -%}
+      <li>
+        {%- if is_last or crumb.url == nil or crumb.url == "" -%}
+          <span aria-current="page">{{ crumb.label }}</span>
+        {%- else -%}
+          <a href="{{ crumb.url | relative_url }}">{{ crumb.label }}</a>
+        {%- endif -%}
+      </li>
+    {%- endfor -%}
+  </ol>
+</nav>
+{%- endif -%}
+
+<h1>{{ page.title }}</h1>
+
+{{ content }}
