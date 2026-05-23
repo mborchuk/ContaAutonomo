@@ -22,6 +22,13 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    permissions:
+      # First-run only: configure-pages with enablement:true calls the
+      # Pages API to create the site if it has not been configured in
+      # Settings → Pages yet. Once the site is created this can be
+      # narrowed back to `contents: read`.
+      contents: read
+      pages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -60,6 +67,11 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          # Auto-create the Pages site on first run if Settings → Pages
+          # has not been configured manually yet (avoids the "Get Pages
+          # site failed" 404 from configure-pages).
+          enablement: true
 
       - name: Build with Jekyll
         working-directory: docs
