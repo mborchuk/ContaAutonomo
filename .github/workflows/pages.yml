@@ -63,6 +63,11 @@ jobs:
       - name: Configure Pages
         id: pages
         uses: actions/configure-pages@v5
+        with:
+          # Auto-create the Pages site on first run if Settings → Pages
+          # has not been configured manually yet (avoids the "Get Pages
+          # site failed" 404 from configure-pages).
+          enablement: true
 
       - name: Build with Jekyll
         working-directory: docs
