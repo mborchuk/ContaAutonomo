@@ -1,0 +1,40 @@
+# Screenshots gallery data for the GitHub Pages site.
+#
+# Two groups: `core` (main app screens) and `modules` (optional/feature modules).
+# Each item:
+#   - file:    filename inside `assets/img/screenshots/` (no path prefix).
+#   - alt:     descriptive alt-text, 10..150 characters (Requirement 8.5).
+#   - caption: visible caption under the thumbnail, 5..150 characters
+#              (Requirement 5.6).
+groups:
+  - id: core
+    title: "Core screens"
+    items:
+      - file: dashboard.png
+        alt: "Dashboard with KPI cards, recent invoice list, expense summary and upcoming tax obligations panel"
+        caption: "Dashboard with monthly summary and upcoming tax deadlines"
+      - file: invoices_list.png
+        alt: "Invoice list page showing invoices with number, client, amount, currency and paid or pending status badges"
+        caption: "Invoices list with status filtering and search"
+      - file: invoice_create.png
+        alt: "Invoice creation form with client picker, line items, currency selector, IVA and IRPF fields"
+        caption: "Create invoice form with multi-currency line items"
+      - file: settings.png
+        alt: "Settings page with company profile, tax defaults, modules toggle list and storage backend options"
+        caption: "Settings page for company, taxes and modules"
+
+  - id: modules
+    title: "Module screens"
+    items:
+      - file: expenses.png
+        alt: "Expenses list with categories, amounts, currencies, contractor links and attached receipt thumbnails"
+        caption: "Expenses module with categories and receipts"
+      - file: documents.png
+        alt: "Documents module showing uploaded files, folders, type filters and download or preview actions"
+        caption: "Documents module with uploads and previews"
+      - file: tax_form.png
+        alt: "Spanish tax form view with Modelo number, period selector, computed IVA and IRPF totals"
+        caption: "Tax form with computed IVA and IRPF totals"
+      - file: invoice_designer.png
+        alt: "Invoice designer with drag and drop fields, layout canvas, font controls and live PDF preview"
+        caption: "Invoice designer with drag-and-drop layout editor"
