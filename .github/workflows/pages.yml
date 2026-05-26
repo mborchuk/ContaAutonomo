@@ -23,10 +23,6 @@ jobs:
     name: Build site
     runs-on: ubuntu-latest
     permissions:
-      # First-run only: configure-pages with enablement:true calls the
-      # Pages API to create the site if it has not been configured in
-      # Settings → Pages yet. Once the site is created this can be
-      # narrowed back to `contents: read`.
       contents: read
       pages: write
     steps:
@@ -36,7 +32,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version-file: "docs/.ruby-version"
+          ruby-version: "3.3.6"
           bundler-cache: true
           working-directory: docs
 
