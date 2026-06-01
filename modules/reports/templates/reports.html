@@ -124,6 +124,23 @@
                 <label class="check-label"><input type="checkbox" name="include_cancelled" value="1"> Include cancelled invoices</label>
                 <label class="check-label"><input type="checkbox" name="detailed_view" value="1" checked> Detailed view (show all transactions)</label>
             </div>
+            <!-- PDF Signing -->
+            {% if module_manager %}
+                {% set signers = module_manager.find_capabilities('pdf_sign') %}
+                {% if signers %}
+                <div style="margin-top: 15px;">
+                    <label style="margin-bottom: 8px;">Sign Report PDF</label>
+                    <div style="display: flex; flex-direction: column; gap: 6px; margin-left: 2px;">
+                        {% for cap in signers %}
+                        <label class="check-label">
+                            <input type="checkbox" name="sign_cap_{{ loop.index0 }}" value="1">
+                            ✍️ {{ cap.name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
         </div>
 
         <!-- Submit Button -->
