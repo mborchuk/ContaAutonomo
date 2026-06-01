@@ -795,7 +795,7 @@ class TaskScheduler:
     # ---- public API used by modules ----
 
     def add_job(self, job_id, func, job_type='interval',
-                interval=3600, time_str='03:00', description=''):
+                interval=3600, time_str='03:00', description='', timeout=3600):
         """
         Register a periodic job.
 
@@ -806,6 +806,8 @@ class TaskScheduler:
             interval:    seconds between runs (for 'interval' type)
             time_str:    'HH:MM' local time (for 'daily' type)
             description: human-readable label
+            timeout:     max seconds a single run may take before being
+                         abandoned so it can't block the scheduler forever
         """
         from datetime import datetime
         with self._lock:
@@ -815,6 +817,7 @@ class TaskScheduler:
                 'interval': interval,
                 'time_str': time_str,
                 'description': description,
+                'timeout': timeout,
                 'last_run': None,
                 'next_run': self._calc_next(job_type, interval, time_str),
                 'running': False,
@@ -889,15 +892,35 @@ class TaskScheduler:
 
     def _run_job(self, jid, j):
         from datetime import datetime
+        import threading
         with self._lock:
             j['running'] = True
+
+        # Run the job body in a separate daemon thread so a hung job (slow S3,
+        # an AI parse that never returns) can't block the scheduler indefinitely.
+        result = {'error': None}
+
+        def _execute():
+            try:
+                with self._app.app_context():
+                    j['func']()
+            except Exception as e:
+                result['error'] = str(e)
+                logger.error('Scheduler job %s failed: %s', jid, e)
+
+        timeout = j.get('timeout', 3600)
+        worker = threading.Thread(target=_execute, name=f'job:{jid}', daemon=True)
+        worker.start()
+        worker.join(timeout=timeout)
+
         try:
-            with self._app.app_context():
-                j['func']()
-            j['last_error'] = None
-        except Exception as e:
-            j['last_error'] = str(e)
-            logger.error('Scheduler job %s failed: %s', jid, e)
+            if worker.is_alive():
+                # The thread keeps running (daemon) but we stop waiting on it and
+                # schedule the next run so other jobs aren't starved.
+                j['last_error'] = f'Job timed out after {timeout}s'
+                logger.error('Scheduler job %s timed out after %ss', jid, timeout)
+            else:
+                j['last_error'] = result['error']
         finally:
             with self._lock:
                 j['running'] = False
@@ -1561,6 +1584,7 @@ class ModuleManager:
         self.core._module_manager = self
         self.modules = {}           # module_id -> module instance
         self.discovered = {}        # module_id -> module class
+        self.failed_modules = {}    # module_id -> error message (load failures)
         self._enabled_cache = None
 
     def _get_module_enabled_model(self):
@@ -1629,14 +1653,24 @@ class ModuleManager:
         """Get list of all discovered modules with their enabled state"""
         result = []
         for mod_id, mod_class in self.discovered.items():
-            # Instantiate temporarily to read metadata
-            instance = mod_class(self.core)
+            load_error = self.failed_modules.get(mod_id)
+            try:
+                # Instantiate temporarily to read metadata
+                instance = mod_class(self.core)
+                name, description, version = (
+                    instance.name, instance.description, instance.version)
+            except Exception as e:
+                # A module too broken to even instantiate still gets a row,
+                # so the user can see it failed rather than wondering where it went.
+                name, description, version = mod_id, 'Failed to load', '?'
+                load_error = load_error or str(e)
             result.append({
                 'module_id': mod_id,
-                'name': instance.name,
-                'description': instance.description,
-                'version': instance.version,
-                'enabled': self.is_enabled(mod_id)
+                'name': name,
+                'description': description,
+                'version': version,
+                'enabled': self.is_enabled(mod_id),
+                'load_error': load_error,
             })
         return result
 
@@ -1714,13 +1748,17 @@ class ModuleManager:
                              _sanitize_log(module_id), e)
 
             self.modules[module_id] = instance
+            self.failed_modules.pop(module_id, None)
             logger.info("Loaded module: %s v%s",
                        _sanitize_log(instance.name),
                        _sanitize_log(instance.version))
 
         except Exception as e:
+            # Track the failure so it can be surfaced in Settings → Modules
+            # instead of the module silently disappearing from the UI.
+            self.failed_modules[module_id] = str(e)
             logger.error("Error loading module '%s': %s",
-                         _sanitize_log(module_id), e)
+                         _sanitize_log(module_id), e, exc_info=True)
 
     def get_nav_items(self):
         """Get navigation items from all active modules"""

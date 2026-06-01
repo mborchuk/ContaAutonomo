@@ -286,6 +286,29 @@ class ExpensesModule(BaseModule):
             'query_fn': self._get_expenses_for_report
         }]
 
+    def _convert_to(self, amount, from_currency, to_currency, when=None):
+        """Convert an amount between currencies via the shared CurrencyService.
+
+        Falls back to the original amount (logged) instead of a hard-coded rate
+        if the provider has no rate available, so reports are never silently wrong.
+        """
+        if not amount or from_currency == to_currency:
+            return amount
+        date_str = None
+        if when is not None and hasattr(when, 'strftime'):
+            date_str = when.strftime('%Y-%m-%d')
+        try:
+            converted, _rate, _actual_date = self.core.currency_service.convert(
+                amount, from_currency, to_currency, date_str)
+            if converted is not None:
+                return converted
+        except Exception as e:
+            self.logger.warning('Currency conversion %s->%s failed: %s',
+                                 from_currency, to_currency, e)
+        self.logger.warning('No exchange rate for %s->%s; using unconverted amount',
+                             from_currency, to_currency)
+        return amount
+
     def _get_expenses_for_report(self, start_date, end_date):
         """Query expenses for a date range"""
         expenses = self.Expense.query.filter(
@@ -304,12 +327,8 @@ class ExpensesModule(BaseModule):
 
         result = []
         for expense in expenses:
-            amount_eur = expense.amount
-            if expense.currency != 'EUR':
-                if expense.currency == 'USD':
-                    amount_eur = expense.amount * 0.92
-                elif expense.currency == 'GBP':
-                    amount_eur = expense.amount * 1.17
+            amount_eur = self._convert_to(expense.amount, expense.currency, 'EUR',
+                                          expense.expense_date)
             result.append({
                 'expense_date': expense.expense_date.strftime('%d/%m/%Y'),
                 'invoice_number': expense.invoice_number or '',
@@ -336,14 +355,8 @@ class ExpensesModule(BaseModule):
         total_expenses = 0
         vat_paid = 0
         for expense in expenses_query:
-            amount_base = expense.amount
-            if expense.currency != base_currency:
-                if expense.currency == 'EUR' and base_currency == 'USD':
-                    amount_base = expense.amount * exchange_rates.get('EUR', 1.0)
-                elif expense.currency == 'USD' and base_currency == 'EUR':
-                    eur_rate = exchange_rates.get('EUR', 1.0)
-                    amount_base = expense.amount / eur_rate if eur_rate > 0 else expense.amount
-                # else: approximate as-is
+            amount_base = self._convert_to(expense.amount, expense.currency,
+                                           base_currency, expense.expense_date)
             total_expenses += amount_base
             vat_rate = (context.get('settings').default_vat_rate or 21.0) / 100.0 if context.get('settings') and hasattr(context['settings'], 'default_vat_rate') else 0.21
             vat_paid += amount_base * vat_rate

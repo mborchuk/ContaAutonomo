@@ -583,7 +583,7 @@
     {% if module_states %}
         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 15px;">
             {% for mod in module_states %}
-            <div style="background: {% if mod.enabled %}#d4edda{% else %}#f8f9fa{% endif %}; padding: 20px; border-radius: 8px; border-left: 4px solid {% if mod.enabled %}#28a745{% else %}#ccc{% endif %};">
+            <div style="background: {% if mod.load_error %}#f8d7da{% elif mod.enabled %}#d4edda{% else %}#f8f9fa{% endif %}; padding: 20px; border-radius: 8px; border-left: 4px solid {% if mod.load_error %}#dc3545{% elif mod.enabled %}#28a745{% else %}#ccc{% endif %};">
                 <div style="display: flex; justify-content: space-between; align-items: start;">
                     <div>
                         <h4 style="margin: 0 0 5px 0; color: #333;">{{ mod.name }}</h4>
@@ -605,7 +605,12 @@
                         {% endif %}
                     </form>
                 </div>
-                {% if mod.enabled %}
+                {% if mod.load_error %}
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+                    <span style="color: #721c24; font-size: 12px; font-weight: 600;">⚠ Failed to load</span>
+                    <pre style="margin: 6px 0 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: #721c24; background: rgba(0,0,0,0.04); padding: 6px; border-radius: 4px;">{{ mod.load_error }}</pre>
+                </div>
+                {% elif mod.enabled %}
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
                     <span style="color: #155724; font-size: 12px; font-weight: 500;">✓ Active</span>
                 </div>

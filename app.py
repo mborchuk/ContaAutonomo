@@ -24,14 +24,20 @@ app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
 
 # --- SECRET_KEY: require in production, warn in dev ---
 _secret = os.environ.get('SECRET_KEY', '')
+_is_dev = (os.environ.get('FLASK_DEBUG') == '1'
+           or os.environ.get('FLASK_ENV') == 'development')
 if not _secret:
-    if os.environ.get('FLASK_DEBUG') == '1' or os.environ.get('FLASK_ENV') == 'development':
+    if _is_dev:
         _secret = 'dev-only-insecure-key-' + hashlib.sha256(os.urandom(16)).hexdigest()
         logger.warning('SECRET_KEY not set — using random dev key. Sessions will reset on restart.')
     else:
-        _secret = hashlib.sha256(os.urandom(32)).hexdigest()
-        logger.critical('SECRET_KEY not set! Generated a random key. '
-                        'Set SECRET_KEY env var for persistent sessions.')
+        # Fail hard in production: a random per-restart key silently invalidates
+        # every session on each container restart.
+        raise RuntimeError(
+            "SECRET_KEY environment variable is required in production. "
+            "Generate one with: "
+            "python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
 app.config['SECRET_KEY'] = _secret
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
