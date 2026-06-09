@@ -138,7 +138,7 @@ class TaxManagementModule(BaseModule):
     # --- REST API (served under /api/v1/m/tax_management/... ) ---
 
     def get_api_routes(self):
-        """Expose tax forms and SS payments (read-only). API_IMPLEMENTATION.MD Phase B."""
+        """Expose tax forms and SS payments (read-only)."""
         return [
             {'path': 'tax-forms', 'methods': ['GET'],
              'handler': self._api_tax_forms, 'summary': 'List tax forms'},

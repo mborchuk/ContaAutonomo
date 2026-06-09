@@ -309,7 +309,7 @@ class DocumentsModule(BaseModule):
     # --- REST API (served under /api/v1/m/documents/... ) ---
 
     def get_api_routes(self):
-        """Expose document metadata (read-only). API_IMPLEMENTATION.MD Phase B."""
+        """Expose document metadata (read-only)."""
         return [
             {'path': 'documents', 'methods': ['GET'],
              'handler': self._api_documents,

@@ -397,7 +397,7 @@ class AIParserModule(BaseModule):
     # --- REST API (served under /api/v1/m/ai_parser/... ) ---
 
     def get_api_routes(self):
-        """Expose AI document parsing. API_IMPLEMENTATION.MD Phase B.
+        """Expose AI document parsing.
 
         POST multipart with a `file` field (and optional `doc_type` form field)
         to /api/v1/m/ai_parser/parse. Returns the extracted fields as JSON.

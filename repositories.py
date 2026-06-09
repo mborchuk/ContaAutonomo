@@ -128,7 +128,7 @@ class ExpenseRepository(BaseRepository):
         if file and file.filename:
             filename = secure_filename(file.filename)
             if not filename:
-                # IMPL §1.8: secure_filename can return '' for names made only of
+                # secure_filename can return '' for names made only of
                 # unsafe chars (e.g. '../../../etc/passwd'); reject explicitly.
                 raise ValueError('Invalid filename')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -149,7 +149,7 @@ class ExpenseRepository(BaseRepository):
         if file and file.filename:
             filename = secure_filename(file.filename)
             if not filename:
-                # IMPL §1.8: secure_filename can return '' for names made only of
+                # secure_filename can return '' for names made only of
                 # unsafe chars (e.g. '../../../etc/passwd'); reject explicitly.
                 raise ValueError('Invalid filename')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

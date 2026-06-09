@@ -12,7 +12,7 @@ import threading as _threading
 import xml.etree.ElementTree as _ET
 
 
-# --- ECB feed cache (IMPL §3.3) ---
+# --- ECB feed cache ---
 # The ECB historical XML feed is ~1MB and was previously fetched on *every* rate
 # lookup (invoice create, dashboard load), blocking the worker 2-5s. ECB updates
 # rates once per business day, so cache the raw feed in memory for 4 hours.
@@ -80,7 +80,7 @@ def get_exchange_rate_ecb(date_str):
         Tuple of (exchange rate as float, actual date used) or (None, None) if failed
     """
     try:
-        # ECB publishes daily rates in XML format (cached 4h, IMPL §3.3)
+        # ECB publishes daily rates in XML format (cached 4h)
         root = _get_ecb_xml_root()
 
         # ECB XML namespace
@@ -194,7 +194,7 @@ def get_multiple_exchange_rates(date_str, currencies, base_currency='EUR'):
     rates = {}
 
     try:
-        # Use European Central Bank as primary source (cached 4h, IMPL §3.3)
+        # Use European Central Bank as primary source (cached 4h)
         root = _get_ecb_xml_root()
 
         ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',

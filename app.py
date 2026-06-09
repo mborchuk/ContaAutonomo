@@ -26,7 +26,7 @@ from currency_converter import get_exchange_rate, convert_usd_to_eur, get_curren
 import logging
 import logging.config
 
-# Module-level logging config (IMPL §1.10): applies whether started via
+# Module-level logging config: applies whether started via
 # `python app.py` or gunicorn — basicConfig in __main__ has no effect under
 # gunicorn, so configure here at import time instead.
 logging.config.dictConfig({
@@ -70,10 +70,10 @@ app.config['SECRET_KEY'] = _secret
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# --- Upload size cap (IMPL §1.3): reject oversized bodies before they fill disk ---
+# --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
 
-# --- SQLAlchemy engine options (IMPL §1.5): safe on SQLite, sane for Postgres ---
+# --- SQLAlchemy engine options: safe on SQLite, sane for Postgres ---
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_pre_ping': True,   # verify a connection before use (avoids stale-conn errors)
     'pool_recycle': 300,     # recycle connections every 5 minutes
@@ -88,7 +88,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 
 db = SQLAlchemy(app)
 
-# --- SQLite pragmas (IMPL §1.4): WAL for concurrent reads, enforce foreign keys.
+# --- SQLite pragmas: WAL for concurrent reads, enforce foreign keys.
 # Listen on the generic Engine (works at import time, no app context needed); the
 # isinstance check means it only touches SQLite connections. ---
 from sqlalchemy import event as _sa_event
@@ -135,7 +135,7 @@ def set_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-    # CSP in report-only first (IMPL §2.1): the app emits inline styles/scripts and
+    # CSP in report-only first: the app emits inline styles/scripts and
     # module-generated HTML, so report violations before enforcing. Tighten and
     # switch to 'Content-Security-Policy' after auditing reports.
     response.headers['Content-Security-Policy-Report-Only'] = (
@@ -166,7 +166,7 @@ def internal_error(e):
 
 @app.errorhandler(413)
 def request_entity_too_large(e):
-    # IMPL §1.3: friendly response instead of a stack trace when MAX_CONTENT_LENGTH
+    # friendly response instead of a stack trace when MAX_CONTENT_LENGTH
     # is exceeded. JSON for the API, flash+redirect for the web UI.
     if request.path.startswith('/api/'):
         from flask import jsonify
@@ -207,7 +207,7 @@ except ImportError:
 module_manager = None
 
 
-# --- Health probe (IMPL §3.6): checks DB + storage, for Docker/uptime monitors ---
+# --- Health probe: checks DB + storage, for Docker/uptime monitors ---
 @app.route('/health')
 def health_check():
     from flask import jsonify
@@ -1425,7 +1425,7 @@ def view_invoice(id):
 @app.route('/delete/<int:id>', methods=['POST'])
 @login_required
 def delete_invoice(id):
-    # IMPL §1.6: POST-only + CSRF token. A GET delete could be triggered by an
+    # POST-only + CSRF token. A GET delete could be triggered by an
     # <img src="/delete/42"> and is not covered by CSRF protection.
     invoice = Invoice.query.get_or_404(id)
 
@@ -2272,7 +2272,7 @@ if __name__ == '__main__':
             _apply_log_settings(s, mgr)
             _apply_currency_provider(s, mgr)
 
-    # Graceful shutdown (IMPL §3.7): on SIGTERM/SIGINT stop the scheduler so an
+    # Graceful shutdown: on SIGTERM/SIGINT stop the scheduler so an
     # in-flight job (e.g. a backup) isn't killed mid-write, then exit.
     import signal
 

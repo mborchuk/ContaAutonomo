@@ -30,7 +30,7 @@ def login_required(f):
 
 def _store_session_identity(identity):
     """Store auth identity in session after successful login."""
-    # IMPL §1.9: clear any pre-login session first so the session id does not
+    # clear any pre-login session first so the session id does not
     # carry over from before authentication (session-fixation defense).
     session.clear()
     session['authenticated'] = True
@@ -136,7 +136,7 @@ def login():
             safe_provider = str(provider_id).replace('\n', '').replace('\r', '')
             logger.warning('Failed login attempt from %s via %s',
                            safe_ip, safe_provider)
-            # IMPL §1.7: record failed logins in the activity log for incident
+            # record failed logins in the activity log for incident
             # analysis (structured detail per Phase 6).
             try:
                 from app import log_activity

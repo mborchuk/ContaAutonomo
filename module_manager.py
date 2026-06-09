@@ -104,7 +104,7 @@ class BaseModule(ABC):
         Contribute REST endpoints to the /api/v1 API (served by the 'api' module).
 
         Only called for enabled modules, so endpoints are automatically
-        module-aware (a disabled module exposes nothing — see API.MD §6).
+        module-aware (a disabled module exposes nothing).
 
         Returns:
             list of dicts, each describing one endpoint:
