@@ -62,6 +62,12 @@ class BaseModule(ABC):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        """Module ids that must be enabled for this module to work correctly.
+        Returns a list of module_id strings (default: none)."""
+        return []
+
+    @property
     def nav_items(self):
         """
         Navigation menu items. Return list of dicts:
@@ -1714,11 +1720,29 @@ class ModuleManager:
                 'version': version,
                 'enabled': self.is_enabled(mod_id),
                 'load_error': load_error,
+                'missing_dependencies': (self.missing_dependencies(mod_id)
+                                         if self.is_enabled(mod_id) else []),
             })
         return result
 
+    def missing_dependencies(self, module_id):
+        """Return the list of declared dependencies of a module that are not
+        currently enabled. Empty list means all dependencies satisfied."""
+        cls = self.discovered.get(module_id)
+        if not cls:
+            return []
+        try:
+            deps = cls(self.core).dependencies or []
+        except Exception:
+            return []
+        return [d for d in deps if not self.is_enabled(d)]
+
     def enable_module(self, module_id):
         """Enable a module"""
+        missing = self.missing_dependencies(module_id)
+        if missing:
+            logger.warning("Module '%s' enabled but depends on disabled module(s): %s",
+                           _sanitize_log(module_id), _sanitize_log(', '.join(missing)))
         ModuleEnabled = self._get_module_enabled_model()
         record = ModuleEnabled.query.filter_by(module_id=module_id).first()
         if record:
