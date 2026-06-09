@@ -306,6 +306,63 @@ class DocumentsModule(BaseModule):
 
         app.register_blueprint(bp)
 
+    # --- REST API (served under /api/v1/m/documents/... ) ---
+
+    def get_api_routes(self):
+        """Expose document metadata (read-only). API_IMPLEMENTATION.MD Phase B."""
+        return [
+            {'path': 'documents', 'methods': ['GET'],
+             'handler': self._api_documents,
+             'summary': 'List documents (filters: category, status, page, per_page)'},
+            {'path': 'documents/<int:doc_id>', 'methods': ['GET'],
+             'handler': self._api_get_document, 'summary': 'Get one document'},
+        ]
+
+    def _api_serialize_document(self, d):
+        return {
+            'id': d.id,
+            'name': d.name,
+            'category': d.category,
+            'status': d.status,
+            'tags': d.tags,
+            'document_date': d.document_date.isoformat() if d.document_date else None,
+            'expiry_date': d.expiry_date.isoformat() if d.expiry_date else None,
+            'amount': d.amount,
+            'reference_number': d.reference_number,
+            'counterparty': d.counterparty,
+            'original_filename': d.original_filename,
+        }
+
+    def _api_documents(self, request):
+        from modules.api.index import ApiError
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+            per_page = min(100, max(1, int(request.args.get('per_page', 20))))
+        except ValueError:
+            raise ApiError(400, 'bad_request', 'page/per_page must be integers')
+        query = self.Document.query
+        category = request.args.get('category')
+        if category:
+            query = query.filter(self.Document.category == category)
+        status = request.args.get('status')
+        if status:
+            query = query.filter(self.Document.status == status)
+        query = query.order_by(self.Document.document_date.desc(),
+                               self.Document.id.desc())
+        total = query.count()
+        rows = query.offset((page - 1) * per_page).limit(per_page).all()
+        return {
+            'data': [self._api_serialize_document(d) for d in rows],
+            'page': page, 'per_page': per_page, 'total': total,
+        }, 200
+
+    def _api_get_document(self, request, doc_id=None):
+        from modules.api.index import ApiError
+        doc = self.Document.query.get(doc_id)
+        if not doc:
+            raise ApiError(404, 'not_found', f'Document #{doc_id} not found')
+        return self._api_serialize_document(doc), 200
+
     # ---- helpers ----
 
     def _get_config(self, key, default=''):

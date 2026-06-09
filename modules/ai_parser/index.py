@@ -394,6 +394,41 @@ class AIParserModule(BaseModule):
 
         app.register_blueprint(bp)
 
+    # --- REST API (served under /api/v1/m/ai_parser/... ) ---
+
+    def get_api_routes(self):
+        """Expose AI document parsing. API_IMPLEMENTATION.MD Phase B.
+
+        POST multipart with a `file` field (and optional `doc_type` form field)
+        to /api/v1/m/ai_parser/parse. Returns the extracted fields as JSON.
+        """
+        return [
+            {'path': 'parse', 'methods': ['POST'],
+             'handler': self._api_parse,
+             'summary': 'Parse an uploaded document (PDF/image) into fields via AI'},
+        ]
+
+    def _api_parse(self, request):
+        from modules.api.index import ApiError
+        file = request.files.get('file')
+        if not file or not file.filename:
+            raise ApiError(400, 'bad_request',
+                           'Multipart "file" field is required')
+        doc_type = request.form.get('doc_type', 'invoice')
+        provider = self._get_provider()
+        if not provider:
+            raise ApiError(400, 'bad_request',
+                           'AI provider not configured (Settings → AI Parser)')
+        try:
+            result = provider.parse_document(file.read(), file.filename, doc_type)
+        except Exception as e:
+            self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
+            raise ApiError(502, 'parse_failed', 'Parsing failed. Check server logs.')
+        self.core.log_activity('ai_parse_success', 'ai_parser',
+                               {'file': file.filename, 'doc_type': doc_type,
+                                'provider': provider.name, 'via': 'api'})
+        return {'data': result}, 200
+
     # --- Settings integration ---
 
     @property
