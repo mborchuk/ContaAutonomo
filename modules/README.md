@@ -149,6 +149,7 @@ Every module must inherit from `BaseModule` and implement required properties.
 |--------|------|---------|-------------|
 | `register_models(db)` | SQLAlchemy db | `dict` | Define DB models, return `{'Name': Class}` |
 | `register_routes(app)` | Flask app | `None` | Register Blueprint with routes |
+| `get_api_routes()` | — | `list[dict]` | Contribute REST endpoints to the `/api/v1` API (served by the `api` module) |
 | `register_template_filters(app)` | Flask app | `None` | Add Jinja2 filters |
 | `on_enable()` | — | `None` | Called when module is enabled |
 | `on_disable()` | — | `None` | Called when module is disabled |

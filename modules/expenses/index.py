@@ -132,6 +132,90 @@ class ExpensesModule(BaseModule):
     def _get_settings_repo(self):
         return SettingsRepository(self._db, self.Settings)
 
+    # --- REST API (served under /api/v1/m/expenses/... by the api module) ---
+
+    def get_api_routes(self):
+        """Expose expenses over the REST API. See API_IMPLEMENTATION.MD Phase A."""
+        return [
+            {'path': 'expenses', 'methods': ['GET', 'POST'],
+             'handler': self._api_expenses,
+             'summary': 'List expenses (filters: category, contractor_id, page, '
+                        'per_page) or create one'},
+            {'path': 'expenses/<int:exp_id>', 'methods': ['GET'],
+             'handler': self._api_get_expense,
+             'summary': 'Get one expense'},
+        ]
+
+    def _api_serialize_expense(self, e):
+        return {
+            'id': e.id,
+            'contractor_id': e.contractor_id,
+            'amount': e.amount,
+            'currency': e.currency,
+            'category': e.category,
+            'description': e.description,
+            'expense_date': e.expense_date.isoformat() if e.expense_date else None,
+            'invoice_number': e.invoice_number,
+        }
+
+    def _api_expenses(self, request):
+        from modules.api.index import ApiError  # lazy: only when API calls in
+        repo = self._get_repo()
+
+        if request.method == 'POST':
+            body = request.get_json(silent=True) or {}
+            try:
+                amount = float(body['amount'])
+            except (KeyError, TypeError, ValueError):
+                raise ApiError(400, 'bad_request', 'amount (number) is required')
+            date_str = body.get('expense_date')
+            try:
+                exp_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except (TypeError, ValueError):
+                raise ApiError(400, 'bad_request', 'expense_date must be YYYY-MM-DD')
+            contractor_id = body.get('contractor_id')
+            if contractor_id is not None:
+                try:
+                    contractor_id = int(contractor_id)
+                except (TypeError, ValueError):
+                    raise ApiError(400, 'bad_request', 'contractor_id must be an integer')
+            exp = repo.create(
+                amount=amount,
+                currency=body.get('currency', 'EUR'),
+                category=body.get('category'),
+                description=body.get('description'),
+                expense_date=exp_date,
+                contractor_id=contractor_id,
+                invoice_number=body.get('invoice_number'),
+                notes=body.get('notes'),
+            )
+            self.core.log_activity('expense_created', 'expense',
+                                   {'id': exp.id, 'amount': amount,
+                                    'currency': exp.currency, 'via': 'api'})
+            return self._api_serialize_expense(exp), 201
+
+        # GET — paginated list with optional filters
+        try:
+            page = max(1, int(request.args.get('page', 1)))
+            per_page = min(100, max(1, int(request.args.get('per_page', 20))))
+        except ValueError:
+            raise ApiError(400, 'bad_request', 'page/per_page must be integers')
+        category = request.args.get('category')
+        contractor_id = request.args.get('contractor_id', type=int)
+        pagination = repo.get_paginated(page=page, per_page=per_page,
+                                        contractor_id=contractor_id, category=category)
+        return {
+            'data': [self._api_serialize_expense(e) for e in pagination.items],
+            'page': page, 'per_page': per_page, 'total': pagination.total,
+        }, 200
+
+    def _api_get_expense(self, request, exp_id=None):
+        from modules.api.index import ApiError
+        exp = self.Expense.query.get(exp_id)
+        if not exp:
+            raise ApiError(404, 'not_found', f'Expense #{exp_id} not found')
+        return self._api_serialize_expense(exp), 200
+
     def _list_expenses(self):
         """List all expenses grouped by year and quarter"""
         repo = self._get_repo()

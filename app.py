@@ -10,7 +10,18 @@ from datetime import datetime
 from functools import wraps
 import io
 import os
+import sys
 import hashlib
+
+# When started with `python app.py`, this module is '__main__'. Register it
+# under its import name as well, *before* any `from app import ...` runs (here
+# or in plugin modules / InvoiceService). Otherwise that import re-executes this
+# file as a separate 'app' module with a second SQLAlchemy()/db, and ORM calls
+# made through the import fail with "current Flask app is not registered with
+# this 'SQLAlchemy' instance". Aliasing keeps a single module/db.
+if __name__ == '__main__':
+    sys.modules.setdefault('app', sys.modules['__main__'])
+
 from currency_converter import get_exchange_rate, convert_usd_to_eur, get_currency_symbol
 import logging
 
@@ -2168,4 +2179,6 @@ if __name__ == '__main__':
             _apply_log_settings(s, mgr)
             _apply_currency_provider(s, mgr)
 
-    app.run(debug=os.environ.get('FLASK_DEBUG', '1') == '1')
+    app.run(host=os.environ.get('HOST', '127.0.0.1'),
+            port=int(os.environ.get('PORT', '5000')),
+            debug=os.environ.get('FLASK_DEBUG', '1') == '1')

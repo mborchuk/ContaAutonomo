@@ -426,6 +426,27 @@ Polish tax rules for IT freelancers (JDG/B2B).
 - `on_enable()`: sets default VAT rate to 23%
 - Example of a country-specific tax module — see source for implementation patterns
 
+### AI Communication API (`api`)
+
+REST/JSON API under `/api/v1` so AI agents and external tools can read and write
+app data. Full reference: [`modules/api/README.md`](api/README.md).
+
+- Routes: `/api/v1/` (index), `/api/v1/openapi.json` (manifest), `/api/v1/health`,
+  `/api/v1/invoices` (GET list, POST create), `/api/v1/invoices/<id>`
+  (GET/PATCH/DELETE), `/api/v1/invoices/<id>/pdf`, `/api/v1/customers`,
+  `/api/v1/expenses` (when `expenses` enabled), `/api/v1/dashboard/summary`,
+  `/api/v1/rates`, `/api/v1/m/<module_id>/<path>` (module-contributed)
+- Auth: static token in the `X-API-Token` header, stored in `settings.api_token`,
+  compared with `hmac.compare_digest`. Blueprint is CSRF-exempt (token replaces CSRF).
+- Safety: all invoice writes go through `core.invoice_service`, so PAID invoices
+  stay read-only (`409 conflict`); amounts are computed server-side via
+  `core.currency_service` (never trusted from the client).
+- Rate limits: reads 60/min, writes 20/min, heavy (PDF) 10/min — via the existing
+  Flask-Limiter instance.
+- New hook: `BaseModule.get_api_routes()` lets any module contribute endpoints.
+- Settings: API tab (view / rotate token).
+- `on_enable()`: adds the idempotent `settings.api_token` column and mints a token.
+
 ---
 
 ## Creating a Module
@@ -520,6 +541,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 |--------|-------------|
 | `register_models(db)` | Define DB models, return `{'Name': Class}` |
 | `register_routes(app)` | Register Flask Blueprint |
+| `get_api_routes()` | Contribute REST endpoints to the `/api/v1` API (served by the `api` module) |
 | `on_enable()` | Called on load — migrations, scheduler registration |
 | `on_disable()` | Called on disable |
 | `get_settings_html(settings)` | Return HTML for settings tab |

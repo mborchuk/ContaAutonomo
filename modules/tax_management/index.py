@@ -135,6 +135,43 @@ class TaxManagementModule(BaseModule):
 
         app.register_blueprint(bp)
 
+    # --- REST API (served under /api/v1/m/tax_management/... ) ---
+
+    def get_api_routes(self):
+        """Expose tax forms and SS payments (read-only). API_IMPLEMENTATION.MD Phase B."""
+        return [
+            {'path': 'tax-forms', 'methods': ['GET'],
+             'handler': self._api_tax_forms, 'summary': 'List tax forms'},
+            {'path': 'ss-payments', 'methods': ['GET'],
+             'handler': self._api_ss_payments, 'summary': 'List Social Security payments'},
+        ]
+
+    def _api_tax_forms(self, request):
+        forms = self.TaxForm.query.order_by(
+            self.TaxForm.year.desc(), self.TaxForm.form_type, self.TaxForm.quarter
+        ).all()
+        data = [{
+            'id': f.id,
+            'form_type': f.form_type,
+            'year': f.year,
+            'quarter': f.quarter,
+            'original_filename': f.original_filename,
+            'uploaded_at': f.uploaded_at.isoformat() if f.uploaded_at else None,
+            'notes': f.notes,
+        } for f in forms]
+        return {'data': data, 'total': len(data)}, 200
+
+    def _api_ss_payments(self, request):
+        payments = self.SSPayment.query.order_by(
+            self.SSPayment.payment_date.desc()).all()
+        data = [{
+            'id': p.id,
+            'payment_date': p.payment_date.isoformat() if p.payment_date else None,
+            'amount': p.amount,
+            'description': p.description,
+        } for p in payments]
+        return {'data': data, 'total': len(data)}, 200
+
     # --- Tax Forms Logic ---
 
     def _list_tax_forms(self):
