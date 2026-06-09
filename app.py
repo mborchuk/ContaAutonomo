@@ -219,14 +219,9 @@ def request_entity_too_large(e):
         return jsonify(error='payload_too_large',
                        message='Request body too large (max 50 MB)'), 413
     flash('File too large. Maximum size is 50 MB.', 'danger')
-    # Only redirect to a same-origin referrer (avoid open redirect via Referer).
-    referrer = request.referrer
-    if referrer:
-        from urllib.parse import urlparse
-        ref = urlparse(referrer)
-        if not (ref.scheme in ('http', 'https') and ref.netloc == request.host):
-            referrer = None
-    return redirect(referrer or url_for('dashboard'))
+    # Redirect to a fixed internal page — never request.referrer — to avoid an
+    # open redirect via a crafted Referer header.
+    return redirect(url_for('dashboard'))
 
 
 from jinja2.exceptions import TemplateNotFound
@@ -241,18 +236,9 @@ try:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash('Session expired or invalid request. Please try again.', 'danger')
-        # Only redirect to a same-origin http(s) referrer to prevent open redirect.
-        # Anything else (cross-host, non-http scheme, scheme-relative //evil) falls
-        # back to the dashboard.
-        referrer = request.referrer
-        safe_target = None
-        if referrer:
-            from urllib.parse import urlparse
-            ref_parsed = urlparse(referrer)
-            if (ref_parsed.scheme in ('http', 'https')
-                    and ref_parsed.netloc == request.host):
-                safe_target = referrer
-        return redirect(safe_target or url_for('dashboard'))
+        # Redirect to a fixed internal page — never to request.referrer — so a
+        # crafted Referer can't drive an open redirect.
+        return redirect(url_for('dashboard'))
 except ImportError:
     pass  # flask-wtf not installed — CSRF error handler not registered
 

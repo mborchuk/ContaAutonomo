@@ -38,6 +38,8 @@ def _activity(action, category, details=None):
         from importlib import import_module
         import_module('app').log_activity(action, category, details)
     except Exception:
+        # Activity logging is best-effort; never block auth on a logging hiccup
+        # (app may not be fully initialized yet during early startup).
         pass
 
 
@@ -201,7 +203,8 @@ def _apply_rate_limits():
     """Apply rate limits after app is fully initialized (avoids circular import)."""
     global login, setup
     try:
-        from app import limiter
+        from importlib import import_module
+        limiter = import_module('app').limiter
         if limiter:
             login = limiter.limit('5/minute')(login)
             setup = limiter.limit('3/minute')(setup)
@@ -266,7 +269,8 @@ def security():
 def _notify_modules_authenticated(identity):
     """Notify all modules that a user authenticated."""
     try:
-        from app import module_manager
+        from importlib import import_module
+        module_manager = import_module('app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:
@@ -281,7 +285,8 @@ def _notify_modules_authenticated(identity):
 def _notify_modules_logout():
     """Notify all modules that a user logged out."""
     try:
-        from app import module_manager
+        from importlib import import_module
+        module_manager = import_module('app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:
