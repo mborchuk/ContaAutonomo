@@ -7,6 +7,34 @@ Converts salary amounts using rates from a specified date or the last day of pre
 import requests
 from datetime import datetime, timedelta
 import sys
+import time as _time
+import threading as _threading
+import xml.etree.ElementTree as _ET
+
+
+# --- ECB feed cache ---
+# The ECB historical XML feed is ~1MB and was previously fetched on *every* rate
+# lookup (invoice create, dashboard load), blocking the worker 2-5s. ECB updates
+# rates once per business day, so cache the raw feed in memory for 4 hours.
+_ECB_HIST_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
+_ecb_cache = {'content': None, 'ts': 0.0}
+_ECB_TTL = 14400  # seconds (4 hours)
+_ecb_lock = _threading.Lock()
+
+
+def _get_ecb_xml_root():
+    """Return a parsed ElementTree root for the ECB historical feed, using a
+    4-hour in-memory cache. Raises on network error (callers already handle it)."""
+    now = _time.time()
+    with _ecb_lock:
+        content = _ecb_cache['content']
+        if content is None or (now - _ecb_cache['ts']) >= _ECB_TTL:
+            resp = requests.get(_ECB_HIST_URL, timeout=10)
+            resp.raise_for_status()
+            content = resp.content
+            _ecb_cache['content'] = content
+            _ecb_cache['ts'] = now
+    return _ET.fromstring(content)
 
 
 # Comprehensive currency code → symbol mapping.
@@ -52,15 +80,8 @@ def get_exchange_rate_ecb(date_str):
         Tuple of (exchange rate as float, actual date used) or (None, None) if failed
     """
     try:
-        # ECB publishes daily rates in XML format
-        url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
-
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-
-        # Parse XML to find the rate for the specific date
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(response.content)
+        # ECB publishes daily rates in XML format (cached 4h)
+        root = _get_ecb_xml_root()
 
         # ECB XML namespace
         ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',
@@ -173,13 +194,8 @@ def get_multiple_exchange_rates(date_str, currencies, base_currency='EUR'):
     rates = {}
 
     try:
-        # Use European Central Bank as primary source
-        url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(response.content)
+        # Use European Central Bank as primary source (cached 4h)
+        root = _get_ecb_xml_root()
 
         ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',
               'xmlns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}

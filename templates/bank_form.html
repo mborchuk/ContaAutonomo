@@ -9,7 +9,7 @@
     <div class="form-group">
         <label for="name">Account Name *</label>
         <input type="text" id="name" name="name" value="{{ bank.name if bank else '' }}" required>
-        <small style="display: block; margin-top: 5px; color: #666;">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             A friendly name for this account (e.g., "Business Account EUR")
         </small>
     </div>
@@ -27,7 +27,7 @@
     <div class="form-group">
         <label for="bank_name">Bank Institution</label>
         <input type="text" id="bank_name" name="bank_name" value="{{ bank.bank_name if bank else '' }}">
-        <small style="display: block; margin-top: 5px; color: #666;">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             Name of the bank (e.g., "BBVA", "Santander")
         </small>
     </div>

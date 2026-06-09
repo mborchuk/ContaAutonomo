@@ -3,7 +3,7 @@
 API Module — ContaAutónomo AI Communication API
 
 Exposes a plain REST/JSON API under /api/v1 so AI agents (and other external
-tools) can read and write app data. Implements the design in API.MD:
+tools) can read and write app data. Provides:
 
 - Token auth via the `X-API-Token` header (constant-time compare).
 - The /api/v1 Blueprint is CSRF-exempt (token replaces CSRF), mirroring auth_bp.
@@ -14,7 +14,7 @@ tools) can read and write app data. Implements the design in API.MD:
   both module-aware: only enabled modules are advertised.
 - Rate limits via the existing Flask-Limiter instance.
 
-The optional MCP wrapper (API.MD §12) lives outside this module/process.
+The optional MCP wrapper lives outside this module/process.
 """
 
 import hmac
@@ -30,7 +30,7 @@ from module_manager import BaseModule
 # API surface version (path is /api/v1). Bump when the contract changes.
 API_VERSION = 'v1'
 
-# Rate limits per API.MD §11.
+# Rate limits.
 READ_LIMIT = '60/minute'
 WRITE_LIMIT = '20/minute'
 HEAVY_LIMIT = '10/minute'
@@ -90,7 +90,7 @@ class ApiModule(BaseModule):
     def on_enable(self):
         """Add the api_token column to `settings` (idempotent) and mint a
         first token if the singleton row already exists. Follows the guarded
-        ALTER TABLE migration pattern (DOCUMENTATIONS.MD §12)."""
+        ALTER TABLE migration pattern."""
         db = self.core.db
         try:
             inspector = sa_inspect(db.engine)
@@ -176,7 +176,7 @@ class ApiModule(BaseModule):
         return bool(token) and hmac.compare_digest(sent, token)
 
     def _require_api_token(self, f):
-        """Constant-time check of the X-API-Token header (API.MD §5)."""
+        """Constant-time check of the X-API-Token header."""
         @wraps(f)
         def wrap(*args, **kwargs):
             token = self._get_token()
@@ -538,7 +538,7 @@ class ApiModule(BaseModule):
                                'unit_price_usd': unit, 'subtotal_usd': subtotal})
             total += subtotal
 
-        # Server computes amounts via the currency service (API.MD §8) —
+        # Server computes amounts via the currency service —
         # the client is never trusted to compute money.
         cur = self.core.currency_service
         try:
@@ -725,7 +725,7 @@ class ApiModule(BaseModule):
             by_status[inv.status] = by_status.get(inv.status, 0) + 1
             total_eur += inv.amount_eur or 0.0
             total_usd += inv.amount_usd or 0.0
-            # VAT only applies to 'standard' tax_type customers (DOCS §4.1).
+            # VAT only applies to 'standard' tax_type customers.
             cust = inv.customer
             if cust and cust.tax_type == 'standard':
                 vat_base_eur += inv.amount_eur or 0.0

@@ -110,7 +110,7 @@ class ReportsModule(BaseModule):
 
         # --- Dedicated REST API blueprint for heavy report generation ---
         # Kept off the generic /api/v1/m dispatcher (which shares READ_LIMIT) so
-        # generation gets its own HEAVY rate limit (API_IMPLEMENTATION.MD §6.1).
+        # generation gets its own HEAVY rate limit.
         from app import csrf, limiter
         HEAVY = '10/minute'  # mirror modules.api.index.HEAVY_LIMIT
 

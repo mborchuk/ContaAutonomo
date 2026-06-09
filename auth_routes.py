@@ -17,6 +17,53 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 
+# --- Account lockout (in-memory, per source IP) ---
+# Complements the 5/min rate limit: after repeated failures, lock briefly so a
+# slow distributed guess is also slowed. Resets on success or after the window.
+import time as _time
+
+_LOCK_THRESHOLD = 10
+_LOCK_WINDOW = 900  # seconds (15 min)
+_failed_attempts = {}  # ip -> [count, first_ts]
+
+
+def _activity(action, category, details=None):
+    """Write to the activity log via a late dynamic import.
+
+    app.py imports this module, so a static `from app import ...` here forms an
+    import cycle. Resolving 'app' dynamically at call time avoids that and is a
+    no-op if the app isn't ready yet.
+    """
+    try:
+        from importlib import import_module
+        import_module('app').log_activity(action, category, details)
+    except Exception:
+        # Activity logging is best-effort; never block auth on a logging hiccup
+        # (app may not be fully initialized yet during early startup).
+        pass
+
+
+def _is_locked(ip):
+    rec = _failed_attempts.get(ip)
+    if not rec:
+        return False
+    count, ts = rec
+    if _time.time() - ts > _LOCK_WINDOW:
+        _failed_attempts.pop(ip, None)
+        return False
+    return count >= _LOCK_THRESHOLD
+
+
+def _record_failure(ip):
+    count, ts = _failed_attempts.get(ip, (0, _time.time()))
+    if _time.time() - ts > _LOCK_WINDOW:
+        count, ts = 0, _time.time()
+    _failed_attempts[ip] = (count + 1, ts)
+
+
+def _reset_failures(ip):
+    _failed_attempts.pop(ip, None)
+
 
 def login_required(f):
     """Decorator to require login for routes."""
@@ -30,6 +77,9 @@ def login_required(f):
 
 def _store_session_identity(identity):
     """Store auth identity in session after successful login."""
+    # clear any pre-login session first so the session id does not
+    # carry over from before authentication (session-fixation defense).
+    session.clear()
     session['authenticated'] = True
     session['auth_provider'] = identity.get('provider', 'password')
     session['auth_identity'] = {
@@ -105,6 +155,14 @@ def login():
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        if _is_locked(ip):
+            logger.warning('Login locked for %s (too many failures)',
+                           ip.replace('\n', '').replace('\r', ''))
+            flash('Too many failed attempts. Try again in a few minutes.', 'danger')
+            providers = auth_service.available_providers()
+            return render_template('login.html', auth_providers=providers), 429
+
         # Determine which provider to use
         provider_id = request.form.get('auth_provider', 'password')
         result = auth_service.authenticate(provider_id, request)
@@ -114,25 +172,26 @@ def login():
             return redirect(result.redirect_url)
 
         if result.success:
+            _reset_failures(ip)
             _store_session_identity(result.identity)
 
             # Notify modules
             _notify_modules_authenticated(result.identity)
 
             flash('Login successful!', 'success')
-            try:
-                from app import log_activity
-                log_activity('login', 'auth',
-                             f'provider={result.identity.get("provider", "?")}')
-            except Exception:
-                pass  # log_activity may not be available during early init
+            _activity('login', 'auth',
+                      f'provider={result.identity.get("provider", "?")}')
             return redirect(url_for('dashboard'))
         else:
+            _record_failure(ip)
             # Strip CR/LF from user-controlled values before logging (log injection).
             safe_ip = (request.remote_addr or '').replace('\n', '').replace('\r', '')
             safe_provider = str(provider_id).replace('\n', '').replace('\r', '')
             logger.warning('Failed login attempt from %s via %s',
                            safe_ip, safe_provider)
+            # record failed logins in the activity log for incident analysis
+            _activity('login_failed', 'auth',
+                      {'provider': safe_provider, 'ip': safe_ip})
             flash(result.error or 'Authentication failed.', 'danger')
 
     # Render login page with all available providers
@@ -144,7 +203,8 @@ def _apply_rate_limits():
     """Apply rate limits after app is fully initialized (avoids circular import)."""
     global login, setup
     try:
-        from app import limiter
+        from importlib import import_module
+        limiter = import_module('app').limiter
         if limiter:
             login = limiter.limit('5/minute')(login)
             setup = limiter.limit('3/minute')(setup)
@@ -155,12 +215,7 @@ def _apply_rate_limits():
 @auth_bp.route('/logout')
 def logout():
     """Logout — notify providers and modules."""
-    try:
-        from app import log_activity
-        log_activity('logout', 'auth')
-    except Exception:
-        pass  # log_activity may not be available during early init
-
+    _activity('logout', 'auth')
     auth_service.on_logout(session)
     _notify_modules_logout()
     session.clear()
@@ -203,11 +258,7 @@ def security():
                     pass  # encryption token update not critical
 
                 flash('Password changed successfully!', 'success')
-                try:
-                    from app import log_activity
-                    log_activity('password_changed', 'auth')
-                except Exception:
-                    pass  # logging failure should not block password change
+                _activity('password_changed', 'auth')
             except Exception as e:
                 logger.error('Password change error: %s', e)
                 flash('Error changing password. Check current password.', 'danger')
@@ -218,7 +269,8 @@ def security():
 def _notify_modules_authenticated(identity):
     """Notify all modules that a user authenticated."""
     try:
-        from app import module_manager
+        from importlib import import_module
+        module_manager = import_module('app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:
@@ -233,7 +285,8 @@ def _notify_modules_authenticated(identity):
 def _notify_modules_logout():
     """Notify all modules that a user logged out."""
     try:
-        from app import module_manager
+        from importlib import import_module
+        module_manager = import_module('app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:

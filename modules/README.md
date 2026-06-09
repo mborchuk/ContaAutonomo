@@ -1014,6 +1014,8 @@ def _upload_file(self):
 14. **Always `file.seek(0)` before reading** uploaded files — the stream position may be at the end if Flask or another handler already read it.
 15. **Use `self.logger`** for console/debug logging and `self.core.log_activity()` for user-visible audit trail. Both are available automatically.
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
+17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
+18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
 
 ---
 

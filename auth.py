@@ -257,7 +257,12 @@ class AuthManager:
     delegated to AuthProvider implementations.
     """
 
-    def __init__(self, config_file='instance/auth_config.json'):
+    def __init__(self, config_file=None):
+        # Allow overriding the auth config location (e.g. to keep the password
+        # hash off the source tree on bare-metal installs). Falls back to the
+        # default under instance/.
+        if config_file is None:
+            config_file = os.environ.get('AUTH_CONFIG_PATH', 'instance/auth_config.json')
         self.config_file = config_file
         self.config_dir = os.path.dirname(config_file)
         self.ensure_config_dir()

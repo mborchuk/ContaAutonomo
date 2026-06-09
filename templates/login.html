@@ -3,109 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Invoice Manager</title>
+    <meta name="color-scheme" content="light dark">
+    <title>Sign in · ContaAutónomo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: var(--space-4);
+            background: linear-gradient(135deg, var(--indigo-500) 0%, var(--indigo-700) 100%);
         }
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            width: 100%;
-            max-width: 420px;
+        .login-card {
+            background: var(--color-surface); padding: var(--space-7);
+            border-radius: var(--radius-xl); box-shadow: var(--shadow-lg);
+            width: 100%; max-width: 420px;
         }
-        h1 { color: #333; margin-bottom: 10px; text-align: center; }
-        .subtitle { color: #666; text-align: center; margin-bottom: 30px; font-size: 14px; }
-        .form-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 5px; color: #333; font-weight: 500; }
-        input[type="password"] {
-            width: 100%; padding: 12px; border: 2px solid #ddd;
-            border-radius: 5px; font-size: 16px; transition: border-color 0.3s;
+        .login-brand {
+            display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+            font-size: var(--fs-xl); font-weight: var(--fw-bold); color: var(--color-text);
         }
-        input[type="password"]:focus { outline: none; border-color: #667eea; }
-        .btn {
-            display: block; width: 100%; padding: 12px; border: none;
-            border-radius: 5px; font-size: 16px; font-weight: bold;
-            cursor: pointer; transition: transform 0.2s; text-align: center;
-            text-decoration: none; color: #fff;
-        }
-        .btn:hover { transform: translateY(-2px); }
-        .alert { padding: 12px; margin-bottom: 20px; border-radius: 5px; font-size: 14px; }
-        .alert-danger { background: #fee; color: #c33; border: 1px solid #fcc; }
-        .alert-success { background: #efe; color: #363; border: 1px solid #cfc; }
-        .lock-icon { text-align: center; font-size: 48px; margin-bottom: 20px; color: #667eea; }
-        .divider {
-            display: flex; align-items: center; margin: 20px 0; color: #999; font-size: 13px;
-        }
-        .divider::before, .divider::after {
-            content: ''; flex: 1; border-bottom: 1px solid #ddd;
-        }
-        .divider::before { margin-right: 12px; }
-        .divider::after { margin-left: 12px; }
-        .external-providers { display: flex; flex-direction: column; gap: 10px; }
+        .login-brand .nav-logo-icon { width: 40px; height: 40px; }
+        .login-brand span span { color: var(--color-accent); }
+        .subtitle { color: var(--color-text-muted); text-align: center; margin: var(--space-2) 0 var(--space-6); font-size: var(--fs-sm); }
+        .login-card .btn { display: block; width: 100%; padding: var(--space-3); font-size: var(--fs-md); text-align: center; }
+        .divider { display: flex; align-items: center; margin: var(--space-5) 0; color: var(--color-text-faint); font-size: var(--fs-sm); }
+        .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid var(--color-border); }
+        .divider::before { margin-right: var(--space-3); }
+        .divider::after  { margin-left: var(--space-3); }
+        .external-providers { display: flex; flex-direction: column; gap: var(--space-3); }
         .btn-external {
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-            padding: 12px; border: 2px solid #ddd; border-radius: 5px;
-            background: #fff; color: #333; font-size: 15px; font-weight: 500;
-            cursor: pointer; transition: border-color 0.2s, background 0.2s;
-            text-decoration: none;
+            display: flex; align-items: center; justify-content: center; gap: var(--space-2);
+            padding: var(--space-3); border: 1px solid var(--color-border-strong); border-radius: var(--radius-md);
+            background: var(--color-surface); color: var(--color-text); font-size: var(--fs-base);
+            font-weight: var(--fw-medium); cursor: pointer; text-decoration: none;
+            transition: border-color .15s, background .15s;
         }
-        .btn-external:hover { border-color: #667eea; background: #f8f8ff; }
-        .btn-external .icon { font-size: 20px; }
+        .btn-external:hover { border-color: var(--color-primary); background: var(--color-primary-tint); }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="lock-icon">🔒</div>
-        <h1>Invoice Manager</h1>
+    <main class="login-card">
+        <div class="login-brand">
+            <span class="nav-logo-icon" aria-hidden="true">CA</span>
+            <span>Conta<span>Autónomo</span></span>
+        </div>
         <p class="subtitle">Sign in to continue</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        {# Password form (always shown if password provider is available) #}
         <form method="POST" action="{{ url_for('auth.login') }}">
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" required autofocus>
+                <input type="password" id="password" name="password" autocomplete="current-password" required autofocus>
             </div>
-            <button type="submit" name="auth_provider" value="password"
-                    class="btn" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);">
-                Login
-            </button>
+            <button type="submit" name="auth_provider" value="password" class="btn btn-primary">Sign in</button>
         </form>
 
-        {# External auth providers (OAuth, SAML, etc.) #}
         {% if auth_providers is defined and auth_providers %}
             {% set ns = namespace(has_external=false) %}
             {% for provider in auth_providers %}
-                {% if provider.is_external %}
-                    {% set ns.has_external = true %}
-                {% endif %}
+                {% if provider.is_external %}{% set ns.has_external = true %}{% endif %}
             {% endfor %}
             {% if ns.has_external %}
             <div class="divider">or sign in with</div>
             <div class="external-providers">
                 {% for provider in auth_providers %}
                 {% if provider.is_external %}
-                <a href="#"
-                   class="btn-external"
+                <a href="#" class="btn-external"
                    {% if provider.login_button_style %}style="{{ provider.login_button_style }}"{% endif %}
                    onclick="event.preventDefault(); var f=document.createElement('form'); f.method='POST'; f.action='{{ url_for('auth.login') }}'; var i=document.createElement('input'); i.type='hidden'; i.name='auth_provider'; i.value='{{ provider.provider_id }}'; f.appendChild(i); document.body.appendChild(f); f.submit();">
-                    <span class="icon">{{ provider.icon }}</span>
+                    <span class="icon" aria-hidden="true">{{ provider.icon }}</span>
                     {{ provider.display_name }}
                 </a>
                 {% endif %}
@@ -113,6 +86,6 @@
             </div>
             {% endif %}
         {% endif %}
-    </div>
+    </main>
 </body>
 </html>

@@ -135,7 +135,7 @@ class ExpensesModule(BaseModule):
     # --- REST API (served under /api/v1/m/expenses/... by the api module) ---
 
     def get_api_routes(self):
-        """Expose expenses over the REST API. See API_IMPLEMENTATION.MD Phase A."""
+        """Expose expenses over the REST API."""
         return [
             {'path': 'expenses', 'methods': ['GET', 'POST'],
              'handler': self._api_expenses,

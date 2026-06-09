@@ -62,6 +62,12 @@ class BaseModule(ABC):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        """Module ids that must be enabled for this module to work correctly.
+        Returns a list of module_id strings (default: none)."""
+        return []
+
+    @property
     def nav_items(self):
         """
         Navigation menu items. Return list of dicts:
@@ -104,7 +110,7 @@ class BaseModule(ABC):
         Contribute REST endpoints to the /api/v1 API (served by the 'api' module).
 
         Only called for enabled modules, so endpoints are automatically
-        module-aware (a disabled module exposes nothing — see API.MD §6).
+        module-aware (a disabled module exposes nothing).
 
         Returns:
             list of dicts, each describing one endpoint:
@@ -847,6 +853,7 @@ class TaskScheduler:
                 'next_run': self._calc_next(job_type, interval, time_str),
                 'running': False,
                 'last_error': None,
+                'history': [],  # last runs: {ran_at, duration_ms, error}
             }
 
     def remove_job(self, job_id):
@@ -869,8 +876,15 @@ class TaskScheduler:
                     'next_run': j['next_run'].isoformat() if j['next_run'] else None,
                     'running': j['running'],
                     'last_error': j['last_error'],
+                    'history': list(j.get('history', [])),
                 })
             return out
+
+    def get_history(self, job_id, limit=10):
+        """Return the recent run history for a job (most recent last)."""
+        with self._lock:
+            j = self._jobs.get(job_id)
+            return list(j.get('history', []))[-limit:] if j else []
 
     def start(self):
         """Start the scheduler background thread (idempotent)."""
@@ -918,6 +932,8 @@ class TaskScheduler:
     def _run_job(self, jid, j):
         from datetime import datetime
         import threading
+        import time as _time
+        _started = _time.time()
         with self._lock:
             j['running'] = True
 
@@ -952,6 +968,14 @@ class TaskScheduler:
                 j['last_run'] = datetime.now()
                 j['next_run'] = self._calc_next(
                     j['type'], j['interval'], j['time_str'])
+                # Keep a bounded in-memory run history for the Scheduled Tasks page.
+                hist = j.setdefault('history', [])
+                hist.append({
+                    'ran_at': j['last_run'].isoformat(),
+                    'duration_ms': int((_time.time() - _started) * 1000),
+                    'error': j['last_error'],
+                })
+                del hist[:-10]  # keep last 10
 
 
 class CoreServices:
@@ -1696,11 +1720,29 @@ class ModuleManager:
                 'version': version,
                 'enabled': self.is_enabled(mod_id),
                 'load_error': load_error,
+                'missing_dependencies': (self.missing_dependencies(mod_id)
+                                         if self.is_enabled(mod_id) else []),
             })
         return result
 
+    def missing_dependencies(self, module_id):
+        """Return the list of declared dependencies of a module that are not
+        currently enabled. Empty list means all dependencies satisfied."""
+        cls = self.discovered.get(module_id)
+        if not cls:
+            return []
+        try:
+            deps = cls(self.core).dependencies or []
+        except Exception:
+            return []
+        return [d for d in deps if not self.is_enabled(d)]
+
     def enable_module(self, module_id):
         """Enable a module"""
+        missing = self.missing_dependencies(module_id)
+        if missing:
+            logger.warning("Module '%s' enabled but depends on disabled module(s): %s",
+                           _sanitize_log(module_id), _sanitize_log(', '.join(missing)))
         ModuleEnabled = self._get_module_enabled_model()
         record = ModuleEnabled.query.filter_by(module_id=module_id).first()
         if record:

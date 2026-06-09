@@ -9,7 +9,7 @@
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
         <!-- Left Column -->
         <div>
-            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Invoice Details</h2>
+            <h2 style="margin-bottom: 20px; color: var(--color-primary);">Invoice Details</h2>
 
             <div class="form-group">
                 <label for="invoice_number">Invoice Number *</label>
@@ -57,7 +57,7 @@
                     </option>
                     {% endfor %}
                 </select>
-                <small style="display: block; margin-top: 5px; color: #666;">
+                <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
                     <a href="{{ url_for('settings') }}#banks" target="_blank">Manage bank accounts in Settings</a>
                 </small>
             </div>
@@ -78,7 +78,7 @@
 
         <!-- Right Column -->
         <div>
-            <h2 style="margin-bottom: 20px; color: #5b6bc0;">Client Information</h2>
+            <h2 style="margin-bottom: 20px; color: var(--color-primary);">Client Information</h2>
 
             <div class="form-group">
                 <label for="customer_select">Select Existing Customer</label>
@@ -116,9 +116,9 @@
         </div>
     </div>
 
-    <hr style="margin: 30px 0; border: none; border-top: 2px solid #e0e0e0;">
+    <hr style="margin: 30px 0; border: none; border-top: 2px solid var(--color-border);">
 
-    <h2 style="margin-bottom: 20px; color: #5b6bc0;">Service Details</h2>
+    <h2 style="margin-bottom: 20px; color: var(--color-primary);">Service Details</h2>
 
     <div id="items-container">
         <!-- Item rows will be added here -->
@@ -128,7 +128,7 @@
         + Add Item
     </button>
 
-    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+    <div style="background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <strong>Total:</strong>
             <strong id="grand-total" style="font-size: 18px;" data-currency="USD">$0.00</strong>
@@ -164,7 +164,7 @@ function addItem() {
     const itemDiv = document.createElement('div');
     itemDiv.className = 'item-row';
     itemDiv.id = `item-${itemCounter}`;
-    itemDiv.style.cssText = 'border: 1px solid #e0e0e0; padding: 15px; margin-bottom: 15px; border-radius: 5px; background: #fafafa;';
+    itemDiv.style.cssText = 'border: 1px solid var(--color-border); padding: 15px; margin-bottom: 15px; border-radius: 5px; background: var(--color-surface-2);';
 
     itemDiv.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -190,7 +190,7 @@ function addItem() {
 
             <div class="form-group">
                 <label>Subtotal</label>
-                <input type="number" id="subtotal-${itemCounter}" readonly style="background: #f5f5f5;" value="0.00">
+                <input type="number" id="subtotal-${itemCounter}" readonly style="background: var(--color-surface-2);" value="0.00">
             </div>
         </div>
     `;

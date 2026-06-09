@@ -114,14 +114,17 @@
             <td>{{ "%.4f"|format(invoice.exchange_rate) }}</td>
             <td>
                 <div style="position: relative; display: inline-block;">
-                    <button onclick="toggleMenu(this)" type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">⋮</button>
-                    <div class="inv-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:1000; min-width:140px; padding:4px 0;">
-                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">👁 View</a>
-                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">📄 PDF</a>
+                    <button onclick="toggleMenu(this)" type="button" class="btn btn-secondary" aria-haspopup="true" aria-expanded="false" style="padding: 4px 10px;">⋮</button>
+                    <div class="inv-menu">
+                        <a href="{{ url_for('view_invoice', id=invoice.id) }}">👁 View</a>
+                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}">📄 PDF</a>
                         {% if invoice.status != 'paid' %}
-                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}" style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">✏️ Edit</a>
-                        <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
-                        <a href="{{ url_for('delete_invoice', id=invoice.id) }}" onclick="return confirm('Delete this invoice?')" style="display:block; padding:6px 14px; font-size:13px; color:#d9534f; text-decoration:none;">🗑 Delete</a>
+                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}">✏️ Edit</a>
+                        <hr>
+                        <form method="POST" action="{{ url_for('delete_invoice', id=invoice.id) }}" onsubmit="return confirm('Delete this invoice?')" style="margin:0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="danger">🗑 Delete</button>
+                        </form>
                         {% endif %}
                     </div>
                 </div>
@@ -132,49 +135,10 @@
 </table>
 
 <style>
-.invoiceTable {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 0;
-    font-size: 13px;
-    table-layout: fixed;
-}
-
-.invoiceTable th,
-.invoiceTable td {
-    padding: 8px 6px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.invoiceTable td:last-child {
-    overflow: visible;
-    text-overflow: unset;
-}
-
-.invoiceTable th {
-    background: #f8f9fa;
-    font-weight: bold;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    font-size: 12px;
-}
-
-.invoiceTable tr:hover {
-    background: #f8f9fa;
-}
-
-.invoiceTable tr.clickable-row {
-    cursor: pointer;
-}
-
-.invoiceTable tr.clickable-row:hover {
-    background: #e8f4fd;
-}
+/* index-specific: fixed layout + ellipsis truncation (look/colors live in app.css) */
+.invoiceTable { table-layout: fixed; }
+.invoiceTable th, .invoiceTable td { overflow: hidden; text-overflow: ellipsis; }
+.invoiceTable td:last-child { overflow: visible; text-overflow: unset; }
 
 /* Column widths */
 .invoiceTable th:nth-child(1),

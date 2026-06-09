@@ -4,14 +4,14 @@
 
 {% block content %}
 <div style="max-width: 600px; margin: 50px auto;">
-    <div style="background: #fff3cd; border: 2px solid #ffc107; padding: 30px; border-radius: 8px; text-align: center;">
-        <h2 style="color: #856404; margin-top: 0;">⚠️ Warning</h2>
+    <div style="background: var(--color-warning-bg); border: 2px solid var(--amber-400); padding: 30px; border-radius: 8px; text-align: center;">
+        <h2 style="color: var(--color-warning-fg); margin-top: 0;">⚠️ Warning</h2>
 
-        <p style="font-size: 16px; color: #856404; margin: 20px 0;">
+        <p style="font-size: 16px; color: var(--color-warning-fg); margin: 20px 0;">
             The PDF file for invoice <strong>{{ invoice.invoice_number }}</strong> has been modified and is not the original version.
         </p>
 
-        <p style="font-size: 14px; color: #856404; margin: 20px 0;">
+        <p style="font-size: 14px; color: var(--color-warning-fg); margin: 20px 0;">
             Do you want to regenerate and overwrite the existing PDF file?
         </p>
 

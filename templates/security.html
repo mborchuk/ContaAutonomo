@@ -5,7 +5,7 @@
 {% block content %}
 <h1>Security Settings</h1>
 
-<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 5px; margin-bottom: 30px;">
+<div style="background: var(--color-warning-bg); border: 1px solid var(--amber-400); padding: 15px; border-radius: 5px; margin-bottom: 30px;">
     <strong>⚠️ Important:</strong> Your password encrypts your database and backups.
     If you forget it, you won't be able to access your data!
 </div>
@@ -13,7 +13,7 @@
 <!-- Change Password -->
 <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px;">
     <h2 style="margin-top: 0;">Change Password</h2>
-    <p style="color: #666; margin-bottom: 20px;">Update your password to keep your account secure.</p>
+    <p style="color: var(--color-text-muted); margin-bottom: 20px;">Update your password to keep your account secure.</p>
 
     <form method="POST" action="{{ url_for('auth.security') }}" onsubmit="return validatePasswordChange()">
         <input type="hidden" name="action" value="change_password">
@@ -45,7 +45,7 @@
 <!-- Session Info -->
 <div style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
     <h2 style="margin-top: 0;">Session</h2>
-    <p style="color: #666; margin-bottom: 20px;">Manage your current session.</p>
+    <p style="color: var(--color-text-muted); margin-bottom: 20px;">Manage your current session.</p>
 
     <a href="{{ url_for('auth.logout') }}" class="btn btn-danger"
        onclick="return confirm('Are you sure you want to logout?')">
@@ -56,7 +56,7 @@
 <style>
     .strength-bar {
         height: 4px;
-        background: #ddd;
+        background: var(--color-border);
         border-radius: 2px;
         margin-top: 5px;
         overflow: hidden;
@@ -66,13 +66,13 @@
         width: 0%;
         transition: width 0.3s, background 0.3s;
     }
-    .strength-weak { width: 33%; background: #f44336; }
-    .strength-medium { width: 66%; background: #ff9800; }
-    .strength-strong { width: 100%; background: #4caf50; }
+    .strength-weak { width: 33%; background: var(--color-danger); }
+    .strength-medium { width: 66%; background: var(--color-accent); }
+    .strength-strong { width: 100%; background: var(--color-success); }
     .password-strength {
         margin-top: 5px;
         font-size: 12px;
-        color: #666;
+        color: var(--color-text-muted);
     }
 </style>
 
@@ -93,15 +93,15 @@
         if (strength <= 2) {
             strengthFill.classList.add('strength-weak');
             strengthText.textContent = 'Weak password';
-            strengthText.style.color = '#f44336';
+            strengthText.style.color = 'var(--color-danger)';
         } else if (strength <= 4) {
             strengthFill.classList.add('strength-medium');
             strengthText.textContent = 'Medium password';
-            strengthText.style.color = '#ff9800';
+            strengthText.style.color = 'var(--color-accent)';
         } else {
             strengthFill.classList.add('strength-strong');
             strengthText.textContent = 'Strong password';
-            strengthText.style.color = '#4caf50';
+            strengthText.style.color = 'var(--color-success)';
         }
     }
 

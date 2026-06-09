@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>Scheduled Tasks</h1>
-<p style="color: #666; margin-bottom: 25px;">Periodic tasks registered by core and modules. The scheduler checks every 30 seconds.</p>
+<p style="color: var(--color-text-muted); margin-bottom: 25px;">Periodic tasks registered by core and modules. The scheduler checks every 30 seconds.</p>
 
 {% if jobs %}
 <table>
@@ -36,11 +36,11 @@
             <td>{{ job.next_run[:19] if job.next_run else '—' }}</td>
             <td>
                 {% if job.running %}
-                    <span style="color: #007bff; font-weight: 500;">⏳ Running</span>
+                    <span style="color: var(--color-primary); font-weight: 500;">⏳ Running</span>
                 {% elif job.last_error %}
-                    <span style="color: #dc3545;" title="{{ job.last_error }}">✗ Error</span>
+                    <span style="color: var(--color-danger);" title="{{ job.last_error }}">✗ Error</span>
                 {% else %}
-                    <span style="color: #28a745;">✓ OK</span>
+                    <span style="color: var(--color-success);">✓ OK</span>
                 {% endif %}
             </td>
         </tr>
@@ -48,7 +48,7 @@
     </tbody>
 </table>
 {% else %}
-<div style="text-align: center; padding: 60px 20px; color: #999;">
+<div style="text-align: center; padding: 60px 20px; color: var(--color-text-faint);">
     <p style="font-size: 16px;">No scheduled tasks registered.</p>
     <p style="font-size: 14px;">Modules can register periodic tasks (e.g. daily backups, DB optimization).</p>
 </div>
