@@ -17,6 +17,37 @@ logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
 
+# --- Account lockout (in-memory, per source IP) ---
+# Complements the 5/min rate limit: after repeated failures, lock briefly so a
+# slow distributed guess is also slowed. Resets on success or after the window.
+import time as _time
+
+_LOCK_THRESHOLD = 10
+_LOCK_WINDOW = 900  # seconds (15 min)
+_failed_attempts = {}  # ip -> [count, first_ts]
+
+
+def _is_locked(ip):
+    rec = _failed_attempts.get(ip)
+    if not rec:
+        return False
+    count, ts = rec
+    if _time.time() - ts > _LOCK_WINDOW:
+        _failed_attempts.pop(ip, None)
+        return False
+    return count >= _LOCK_THRESHOLD
+
+
+def _record_failure(ip):
+    count, ts = _failed_attempts.get(ip, (0, _time.time()))
+    if _time.time() - ts > _LOCK_WINDOW:
+        count, ts = 0, _time.time()
+    _failed_attempts[ip] = (count + 1, ts)
+
+
+def _reset_failures(ip):
+    _failed_attempts.pop(ip, None)
+
 
 def login_required(f):
     """Decorator to require login for routes."""
@@ -108,6 +139,14 @@ def login():
         return redirect(url_for('dashboard'))
 
     if request.method == 'POST':
+        ip = request.remote_addr or 'unknown'
+        if _is_locked(ip):
+            logger.warning('Login locked for %s (too many failures)',
+                           ip.replace('\n', '').replace('\r', ''))
+            flash('Too many failed attempts. Try again in a few minutes.', 'danger')
+            providers = auth_service.available_providers()
+            return render_template('login.html', auth_providers=providers), 429
+
         # Determine which provider to use
         provider_id = request.form.get('auth_provider', 'password')
         result = auth_service.authenticate(provider_id, request)
@@ -117,6 +156,7 @@ def login():
             return redirect(result.redirect_url)
 
         if result.success:
+            _reset_failures(ip)
             _store_session_identity(result.identity)
 
             # Notify modules
@@ -131,6 +171,7 @@ def login():
                 pass  # log_activity may not be available during early init
             return redirect(url_for('dashboard'))
         else:
+            _record_failure(ip)
             # Strip CR/LF from user-controlled values before logging (log injection).
             safe_ip = (request.remote_addr or '').replace('\n', '').replace('\r', '')
             safe_provider = str(provider_id).replace('\n', '').replace('\r', '')

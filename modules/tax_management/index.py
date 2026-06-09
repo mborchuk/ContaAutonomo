@@ -241,6 +241,11 @@ class TaxManagementModule(BaseModule):
             if ext not in allowed:
                 flash('Invalid file type. Allowed: PDF, Excel, Word', 'danger')
                 return redirect(url_for('tax_management.tax_forms_index'))
+            # Validate real content, not just the extension (rename bypass).
+            from file_validation import validate_filestorage
+            if not validate_filestorage(file, ext):
+                flash('File content does not match its extension.', 'danger')
+                return redirect(url_for('tax_management.tax_forms_index'))
 
             # Check for existing
             query = self.TaxForm.query.filter_by(form_type=form_type, year=year)
