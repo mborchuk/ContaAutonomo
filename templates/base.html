@@ -326,5 +326,52 @@
     };
 })();
 </script>
+
+<style>
+/* Opt-in dark theme (toggled via the button / 'D' shortcut, persisted). */
+html.dark body { background:#1e1e1e; color:#ddd; }
+html.dark .top-nav { background:#2a2a2a; }
+html.dark table, html.dark .card, html.dark .panel,
+html.dark .container, html.dark .box { background:#2a2a2a; color:#ddd; }
+html.dark a { color:#6db3f2; }
+html.dark input, html.dark select, html.dark textarea {
+    background:#333; color:#eee; border-color:#555; }
+html.dark th, html.dark td { border-color:#444 !important; }
+</style>
+<button id="theme-toggle" title="Toggle dark mode (D)"
+        style="position:fixed;right:14px;bottom:14px;z-index:2000;border:none;
+               border-radius:50%;width:42px;height:42px;cursor:pointer;background:#333;
+               color:#fff;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,.3);">🌙</button>
+<script>
+(function(){
+    var root = document.documentElement;
+    function apply(t){ root.classList.toggle('dark', t === 'dark'); }
+    // Only apply a theme the user explicitly chose (no surprise auto-dark).
+    if (localStorage.getItem('theme') === 'dark') apply('dark');
+    function toggle(){
+        var dark = root.classList.toggle('dark');
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
+    }
+    var btn = document.getElementById('theme-toggle');
+    if (btn) btn.addEventListener('click', toggle);
+
+    // Global keyboard shortcuts (ignored while typing).
+    document.addEventListener('keydown', function(e){
+        var tag = (e.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select'
+            || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === 'n') { window.location.href = '/create'; }
+        else if (e.key === 'e') { window.location.href = '/expenses/create'; }
+        else if (e.key === 'd') { toggle(); }
+        else if (e.key === '/') {
+            var s = document.querySelector('input[type=search],input[name=search],input[placeholder*=earch]');
+            if (s) { e.preventDefault(); s.focus(); }
+        }
+        else if (e.key === '?') {
+            alert('Shortcuts:\n N = New invoice\n E = New expense\n D = Dark mode\n / = Focus search\n ? = This help');
+        }
+    });
+})();
+</script>
 </body>
 </html>
