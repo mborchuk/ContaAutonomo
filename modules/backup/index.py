@@ -102,7 +102,16 @@ class BackupModule(BaseModule):
         module = self
         self._app = app
 
+        # Rate-limit the resource-intensive backup/restore endpoints.
+        from app import limiter
+
+        def _rl(rule):
+            def deco(f):
+                return limiter.limit(rule)(f) if limiter else f
+            return deco
+
         @bp.route('/', methods=['POST'])
+        @_rl('10/minute')
         @login_required
         def create_backup():
             encrypt = request.form.get('encrypt', 'yes') == 'yes'
@@ -136,6 +145,7 @@ class BackupModule(BaseModule):
             return redirect(url_for('settings') + '#security')
 
         @bp.route('/restore/<filename>', methods=['POST'])
+        @_rl('10/minute')
         @login_required
         def restore_backup(filename):
             cfg = module._get_config()
@@ -159,6 +169,7 @@ class BackupModule(BaseModule):
             return redirect(url_for('settings') + '#security')
 
         @bp.route('/upload-restore', methods=['GET', 'POST'])
+        @_rl('10/minute')
         @login_required
         def upload_restore():
             if request.method == 'GET':
@@ -183,6 +194,7 @@ class BackupModule(BaseModule):
             return redirect(url_for('settings') + '#security')
 
         @bp.route('/load-demo', methods=['POST'])
+        @_rl('10/minute')
         @login_required
         def load_demo():
             demo_path = Path(module.core.app_path) / 'demo_data.json'
@@ -219,8 +231,20 @@ class BackupModule(BaseModule):
         except Exception as e:
             logger.debug('backup_config migration: %s', e)  # table may not exist yet
 
-        # Run startup backup immediately (first launch of the day)
-        self._perform_startup_backup()
+        # Defer the startup backup ~60s instead of running it inline: a large
+        # DB + many files could otherwise delay the app becoming available.
+        import threading
+
+        def _deferred_startup_backup():
+            with self.core.app.app_context():
+                try:
+                    self._perform_startup_backup()
+                except Exception as e:
+                    logger.error('Deferred startup backup failed: %s', e)
+
+        t = threading.Timer(60.0, _deferred_startup_backup)
+        t.daemon = True
+        t.start()
 
         # Register daily backup job with the scheduler
         self.core.scheduler.add_job(

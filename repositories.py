@@ -127,6 +127,10 @@ class ExpenseRepository(BaseRepository):
 
         if file and file.filename:
             filename = secure_filename(file.filename)
+            if not filename:
+                # secure_filename can return '' for names made only of
+                # unsafe chars (e.g. '../../../etc/passwd'); reject explicitly.
+                raise ValueError('Invalid filename')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"{timestamp}_{filename}"
 
@@ -144,6 +148,10 @@ class ExpenseRepository(BaseRepository):
     def update_with_file(self, app, expense, file, storage=None, **kwargs):
         if file and file.filename:
             filename = secure_filename(file.filename)
+            if not filename:
+                # secure_filename can return '' for names made only of
+                # unsafe chars (e.g. '../../../etc/passwd'); reject explicitly.
+                raise ValueError('Invalid filename')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filename = f"{timestamp}_{filename}"
 

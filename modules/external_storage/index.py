@@ -243,21 +243,42 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             self._service = None
             self._folder_cache.clear()
 
-    def _retry_on_ssl(self, fn):
-        """Execute fn(); on SSL/connection error, rebuild service and retry once."""
-        try:
-            return fn()
-        except Exception as e:
-            err_str = str(e).lower()
-            if any(k in err_str for k in ('ssl', 'record_layer', 'broken pipe',
-                                           'connection reset', 'not accessible')):
-                logger.info('[GDrive] connection error, rebuilding service: %s', e)
-                with self._lock:
-                    self._service = None
-                    self._folder_cache.clear()
-                    self._build_service()
+    def _retry_on_ssl(self, fn, max_retries=3):
+        """Execute fn() with retries + exponential backoff for transient errors.
+
+        Retries SSL/connection errors (rebuilding the service first) and transient
+        HTTP errors (429/503/timeout) up to max_retries, backing off with jitter.
+        Non-transient errors raise immediately.
+        """
+        import time
+        import random
+
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
                 return fn()
-            raise
+            except Exception as e:
+                last_exc = e
+                err_str = str(e).lower()
+                ssl_like = any(k in err_str for k in (
+                    'ssl', 'record_layer', 'broken pipe',
+                    'connection reset', 'not accessible'))
+                transient = ssl_like or any(k in err_str for k in (
+                    '429', '503', 'rate limit', 'timeout', 'temporarily'))
+                if not transient or attempt == max_retries - 1:
+                    raise
+                if ssl_like:
+                    with self._lock:
+                        self._service = None
+                        self._folder_cache.clear()
+                        self._build_service()
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                logger.info('[GDrive] transient error (attempt %d/%d), retrying in '
+                            '%.1fs: %s', attempt + 1, max_retries, wait, e)
+                time.sleep(wait)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError('GDrive operation failed after retries')
 
     def _get_or_create_folder(self, folder_name, parent_id):
         """Get existing subfolder or create it. Returns folder ID.

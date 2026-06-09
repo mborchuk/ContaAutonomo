@@ -24,6 +24,39 @@ if __name__ == '__main__':
 
 from currency_converter import get_exchange_rate, convert_usd_to_eur, get_currency_symbol
 import logging
+import logging.config
+
+
+class _RequestIdFilter(logging.Filter):
+    """Inject the current request id into log records for cross-worker tracing.
+    Falls back to '-' outside a request context."""
+    def filter(self, record):
+        try:
+            from flask import g, has_request_context
+            record.request_id = (getattr(g, 'request_id', '-')
+                                 if has_request_context() else '-')
+        except Exception:
+            record.request_id = '-'
+        return True
+
+
+# Module-level logging config: applies whether started via
+# `python app.py` or gunicorn — basicConfig in __main__ has no effect under
+# gunicorn, so configure here at import time instead.
+logging.config.dictConfig({
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {'request_id': {'()': _RequestIdFilter}},
+    'formatters': {
+        'default': {'format': '%(asctime)s [%(name)s] [%(request_id)s] %(levelname)s: %(message)s',
+                    'datefmt': '%Y-%m-%d %H:%M:%S'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'default',
+                    'filters': ['request_id']},
+    },
+    'root': {'level': 'INFO', 'handlers': ['console']},
+})
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +86,42 @@ app.config['SECRET_KEY'] = _secret
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+
+# --- Upload size cap: reject oversized bodies before they fill disk ---
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
+
+# --- SQLAlchemy engine options: safe on SQLite, sane for Postgres ---
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,   # verify a connection before use (avoids stale-conn errors)
+    'pool_recycle': 300,     # recycle connections every 5 minutes
+}
+
 # --- Session security ---
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 _force_https = os.environ.get('FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
 app.config['SESSION_COOKIE_SECURE'] = _force_https
-app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+app.config['PERMANENT_SESSION_LIFETIME'] = SESSION_LIFETIME_SECONDS
 
 db = SQLAlchemy(app)
+
+# --- SQLite pragmas: WAL for concurrent reads, enforce foreign keys.
+# Listen on the generic Engine (works at import time, no app context needed); the
+# isinstance check means it only touches SQLite connections. ---
+from sqlalchemy import event as _sa_event
+from sqlalchemy.engine import Engine as _SAEngine
+import sqlite3 as _sqlite3
+
+
+@_sa_event.listens_for(_SAEngine, 'connect')
+def _set_sqlite_pragma(dbapi_conn, _connection_record):
+    if isinstance(dbapi_conn, _sqlite3.Connection):
+        cur = dbapi_conn.cursor()
+        cur.execute('PRAGMA journal_mode=WAL')
+        cur.execute('PRAGMA synchronous=NORMAL')
+        cur.execute('PRAGMA foreign_keys=ON')
+        cur.close()
 
 # --- CSRF protection ---
 try:
@@ -84,6 +145,34 @@ except ImportError:
     limiter = None
     logger.warning('flask-limiter not installed — rate limiting disabled')
 
+# --- Optional Sentry error tracking (env-gated) ---
+_sentry_dsn = os.environ.get('SENTRY_DSN')
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        sentry_sdk.init(dsn=_sentry_dsn, integrations=[FlaskIntegration()])
+        logger.info('Sentry error tracking enabled')
+    except ImportError:
+        logger.warning('SENTRY_DSN set but sentry-sdk not installed — skipping')
+
+
+# --- Request correlation id (for tracing across interleaved worker logs) ---
+@app.before_request
+def _assign_request_id():
+    import uuid
+    from flask import g
+    g.request_id = uuid.uuid4().hex[:8]
+
+
+@app.after_request
+def _add_request_id_header(response):
+    from flask import g
+    rid = getattr(g, 'request_id', None)
+    if rid:
+        response.headers['X-Request-ID'] = rid
+    return response
+
 
 # --- Security headers ---
 @app.after_request
@@ -92,6 +181,16 @@ def set_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     response.headers['X-XSS-Protection'] = '1; mode=block'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # CSP in report-only first: the app emits inline styles/scripts and
+    # module-generated HTML, so report violations before enforcing. Tighten and
+    # switch to 'Content-Security-Policy' after auditing reports.
+    response.headers['Content-Security-Policy-Report-Only'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "frame-ancestors 'none';"
+    )
     if _force_https:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
@@ -111,6 +210,20 @@ def internal_error(e):
     return redirect(url_for('dashboard'))
 
 
+@app.errorhandler(413)
+def request_entity_too_large(e):
+    # friendly response instead of a stack trace when MAX_CONTENT_LENGTH
+    # is exceeded. JSON for the API, flash+redirect for the web UI.
+    if request.path.startswith('/api/'):
+        from flask import jsonify
+        return jsonify(error='payload_too_large',
+                       message='Request body too large (max 50 MB)'), 413
+    flash('File too large. Maximum size is 50 MB.', 'danger')
+    # Redirect to a fixed internal page — never request.referrer — to avoid an
+    # open redirect via a crafted Referer header.
+    return redirect(url_for('dashboard'))
+
+
 from jinja2.exceptions import TemplateNotFound
 @app.errorhandler(TemplateNotFound)
 def template_not_found(e):
@@ -123,23 +236,36 @@ try:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash('Session expired or invalid request. Please try again.', 'danger')
-        # Only redirect to a same-origin http(s) referrer to prevent open redirect.
-        # Anything else (cross-host, non-http scheme, scheme-relative //evil) falls
-        # back to the dashboard.
-        referrer = request.referrer
-        safe_target = None
-        if referrer:
-            from urllib.parse import urlparse
-            ref_parsed = urlparse(referrer)
-            if (ref_parsed.scheme in ('http', 'https')
-                    and ref_parsed.netloc == request.host):
-                safe_target = referrer
-        return redirect(safe_target or url_for('dashboard'))
+        # Redirect to a fixed internal page — never to request.referrer — so a
+        # crafted Referer can't drive an open redirect.
+        return redirect(url_for('dashboard'))
 except ImportError:
     pass  # flask-wtf not installed — CSRF error handler not registered
 
 # Module Manager - initialized after models are defined (see bottom of file)
 module_manager = None
+
+
+# --- Health probe: checks DB + storage, for Docker/uptime monitors ---
+@app.route('/health')
+def health_check():
+    from flask import jsonify
+    from sqlalchemy import text
+    checks = {'db': False, 'storage': False}
+    try:
+        db.session.execute(text('SELECT 1'))
+        checks['db'] = True
+    except Exception as e:
+        # Probe only: DB unreachable is reported via the 503 below, not raised.
+        logger.warning('health: db probe failed: %s', e)
+    try:
+        if module_manager is not None:
+            module_manager.core.storage.exists('__health_probe__')
+        checks['storage'] = True
+    except Exception as e:
+        # Probe only: storage backend unreachable is reported via the 503.
+        logger.warning('health: storage probe failed: %s', e)
+    return jsonify(checks), (200 if all(checks.values()) else 503)
 
 
 def log_activity(action, category='system', details=None):
@@ -1335,9 +1461,11 @@ def view_invoice(id):
     return render_template('view.html', invoice=invoice, customers=customers, banks=banks, hash_mismatch=hash_mismatch)
 
 
-@app.route('/delete/<int:id>')
+@app.route('/delete/<int:id>', methods=['POST'])
 @login_required
 def delete_invoice(id):
+    # POST-only + CSRF token. A GET delete could be triggered by an
+    # <img src="/delete/42"> and is not covered by CSRF protection.
     invoice = Invoice.query.get_or_404(id)
 
     # Prevent deleting paid invoices
@@ -2182,6 +2310,22 @@ if __name__ == '__main__':
         if s and mgr:
             _apply_log_settings(s, mgr)
             _apply_currency_provider(s, mgr)
+
+    # Graceful shutdown: on SIGTERM/SIGINT stop the scheduler so an
+    # in-flight job (e.g. a backup) isn't killed mid-write, then exit.
+    import signal
+
+    def _graceful_shutdown(signum, _frame):
+        logger.info('Shutdown signal %s received — stopping scheduler', signum)
+        try:
+            if module_manager is not None:
+                module_manager.core.scheduler.stop()
+        except Exception as e:
+            logger.warning('Scheduler stop during shutdown failed: %s', e)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _graceful_shutdown)
+    signal.signal(signal.SIGINT, _graceful_shutdown)
 
     app.run(host=os.environ.get('HOST', '127.0.0.1'),
             port=int(os.environ.get('PORT', '5000')),

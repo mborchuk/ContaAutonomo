@@ -1,0 +1,149 @@
+/* ============================================================================
+   ContaAutónomo — Design Tokens (single source of truth)
+   Light theme = :root. Dark theme = html.dark overrides the same names, so
+   every component reads tokens and themes for free. Never hardcode hex in
+   components or templates — reference a --token.
+   Palette evolved from the original brand (indigo #667eea, orange #ff6b35,
+   blue #007bff) but shifted to WCAG 2.1 AA-compliant shades.
+   ============================================================================ */
+:root {
+    /* ---- Brand scales ---- */
+    --indigo-50:  #eef2ff;
+    --indigo-100: #e0e7ff;
+    --indigo-500: #6366f1;
+    --indigo-600: #4f46e5;   /* button bg, white text = 5.9:1 AA */
+    --indigo-700: #4338ca;   /* hover / links on white = 7.7:1 */
+    --orange-500: #ff6b35;   /* original brand accent (decorative) */
+    --orange-600: #ea580c;   /* interactive accent, white text = 4.5:1 AA */
+    --orange-700: #c2410c;   /* hover */
+
+    /* ---- Status scales ---- */
+    --blue-600:   #1d4ed8;
+    --green-700:  #15803d;  --green-100: #dcfce7;  --green-800: #166534;
+    --red-600:    #dc2626;  --red-100:  #fee2e2;   --red-800:  #991b1b;
+    --amber-100:  #fef3c7;  --amber-800: #92400e;  --amber-400: #fbbf24;
+
+    /* ---- Neutral (slate) ---- */
+    --slate-900: #0f172a;
+    --slate-800: #1e293b;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+    --slate-50:  #f8fafc;
+    --white:     #ffffff;
+
+    /* ---- Semantic: surfaces & text ---- */
+    --color-bg:            var(--slate-100);
+    --color-surface:       var(--white);
+    --color-surface-2:     var(--slate-50);
+    --color-surface-3:     var(--slate-100);
+    --color-border:        var(--slate-200);
+    --color-border-strong: var(--slate-300);
+
+    --color-text:        #1f2937;            /* 13.6:1 on surface */
+    --color-text-muted:  var(--slate-600);   /* 7.4:1  AA */
+    --color-text-faint:  var(--slate-500);   /* 4.7:1  AA (replaces old #999 fail) */
+
+    /* ---- Semantic: interactive ---- */
+    --color-primary:        var(--indigo-600);
+    --color-primary-hover:  var(--indigo-700);
+    --color-primary-tint:   var(--indigo-50);
+    --color-on-primary:     var(--white);
+
+    --color-accent:         var(--orange-600);
+    --color-accent-hover:   var(--orange-700);
+    --color-on-accent:      var(--white);
+
+    --color-link:           var(--indigo-700);
+
+    /* ---- Semantic: feedback ---- */
+    --color-success:    var(--green-700);  --color-success-bg: var(--green-100); --color-success-fg: var(--green-800);
+    --color-danger:     var(--red-600);    --color-danger-bg:  var(--red-100);   --color-danger-fg:  var(--red-800);
+    --color-warning-bg: var(--amber-100);  --color-warning-fg: var(--amber-800);
+    --color-info:       var(--blue-600);
+
+    /* ---- Focus ring (visible, 3:1 against bg) ---- */
+    --focus-ring: 0 0 0 3px var(--indigo-100), 0 0 0 5px var(--indigo-600);
+
+    /* ---- Typography ---- */
+    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --fs-xs:   0.75rem;    /* 12 */
+    --fs-sm:   0.8125rem;  /* 13 */
+    --fs-base: 0.9375rem;  /* 15 */
+    --fs-md:   1.0625rem;  /* 17 */
+    --fs-lg:   1.25rem;    /* 20 */
+    --fs-xl:   1.5rem;     /* 24 */
+    --fs-2xl:  1.875rem;   /* 30 */
+    --lh-tight: 1.25;
+    --lh-base:  1.55;
+    --fw-normal: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-bold: 700;
+
+    /* ---- Spacing (8-pt grid) ---- */
+    --space-1: 0.25rem;  --space-2: 0.5rem;  --space-3: 0.75rem;
+    --space-4: 1rem;     --space-5: 1.5rem;  --space-6: 2rem;
+    --space-7: 2.5rem;   --space-8: 3rem;
+
+    /* ---- Radius ---- */
+    --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 12px; --radius-full: 999px;
+
+    /* ---- Elevation ---- */
+    --shadow-sm: 0 1px 2px rgba(15,23,42,.06), 0 1px 3px rgba(15,23,42,.10);
+    --shadow-md: 0 2px 6px rgba(15,23,42,.08), 0 4px 12px rgba(15,23,42,.10);
+    --shadow-lg: 0 10px 30px rgba(15,23,42,.18);
+
+    /* ---- Layout ---- */
+    --container-max: 1400px;
+    --nav-height: 64px;
+
+    /* ---- z-index ---- */
+    --z-nav: 100; --z-dropdown: 200; --z-overlay: 1000; --z-toast: 2000;
+}
+
+/* ============================================================================
+   Dark theme — re-point the SAME semantic tokens. Components need no changes.
+   ============================================================================ */
+html.dark {
+    --color-bg:            var(--slate-900);
+    --color-surface:       var(--slate-800);
+    --color-surface-2:     #243044;
+    --color-surface-3:     var(--slate-700);
+    --color-border:        var(--slate-700);
+    --color-border-strong: var(--slate-600);
+
+    --color-text:        var(--slate-200);
+    --color-text-muted:  var(--slate-300);
+    --color-text-faint:  var(--slate-400);
+
+    --color-primary:        #818cf8;
+    --color-primary-hover:  #a5b4fc;
+    --color-primary-tint:   #312e81;
+    --color-on-primary:     var(--slate-900);
+
+    --color-accent:         #fb923c;
+    --color-accent-hover:   #fdba74;
+    --color-on-accent:      var(--slate-900);
+
+    --color-link:           #93c5fd;
+
+    --color-success-bg: #064e3b; --color-success-fg: #6ee7b7;
+    --color-danger-bg:  #7f1d1d; --color-danger-fg:  #fca5a5;
+    --color-warning-bg: #78350f; --color-warning-fg: #fcd34d;
+
+    --focus-ring: 0 0 0 3px rgba(129,140,248,.35), 0 0 0 5px #818cf8;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-md: 0 2px 8px rgba(0,0,0,.45);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.55);
+}
+
+/* Respect OS preference only when user has not explicitly chosen a theme. */
+@media (prefers-color-scheme: dark) {
+    html.theme-auto { color-scheme: dark; }
+}

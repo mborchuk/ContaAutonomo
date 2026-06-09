@@ -138,7 +138,7 @@ class TaxManagementModule(BaseModule):
     # --- REST API (served under /api/v1/m/tax_management/... ) ---
 
     def get_api_routes(self):
-        """Expose tax forms and SS payments (read-only). API_IMPLEMENTATION.MD Phase B."""
+        """Expose tax forms and SS payments (read-only)."""
         return [
             {'path': 'tax-forms', 'methods': ['GET'],
              'handler': self._api_tax_forms, 'summary': 'List tax forms'},
@@ -240,6 +240,11 @@ class TaxManagementModule(BaseModule):
             ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
             if ext not in allowed:
                 flash('Invalid file type. Allowed: PDF, Excel, Word', 'danger')
+                return redirect(url_for('tax_management.tax_forms_index'))
+            # Validate real content, not just the extension (rename bypass).
+            from file_validation import validate_filestorage
+            if not validate_filestorage(file, ext):
+                flash('File content does not match its extension.', 'danger')
                 return redirect(url_for('tax_management.tax_forms_index'))
 
             # Check for existing
