@@ -358,6 +358,14 @@ class AIParserModule(BaseModule):
         login_required = self.core.login_required
         module = self
 
+        # Rate-limit the AI parse endpoint (calls an external AI provider).
+        from app import limiter
+
+        def _rl(rule):
+            def deco(f):
+                return limiter.limit(rule)(f) if limiter else f
+            return deco
+
         @bp.route('/')
         @login_required
         def parse_page():
@@ -365,6 +373,7 @@ class AIParserModule(BaseModule):
             return render_template('parse.html')
 
         @bp.route('/parse', methods=['POST'])
+        @_rl('10/minute')
         @login_required
         def parse_document():
             """Parse uploaded document via AI and return JSON."""
