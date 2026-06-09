@@ -86,8 +86,10 @@ app.config['SECRET_KEY'] = _secret
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+
 # --- Upload size cap: reject oversized bodies before they fill disk ---
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
 
 # --- SQLAlchemy engine options: safe on SQLite, sane for Postgres ---
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
@@ -100,7 +102,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 _force_https = os.environ.get('FORCE_HTTPS', '').lower() in ('1', 'true', 'yes')
 app.config['SESSION_COOKIE_SECURE'] = _force_https
-app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+app.config['PERMANENT_SESSION_LIFETIME'] = SESSION_LIFETIME_SECONDS
 
 db = SQLAlchemy(app)
 
