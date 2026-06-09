@@ -1767,7 +1767,8 @@ class ModuleManager:
                     for provider in providers:
                         auth_service.register(provider)
                         logger.info("Auth provider '%s' registered from module '%s'",
-                                    provider.provider_id, module_id)
+                                    _sanitize_log(provider.provider_id),
+                                    _sanitize_log(module_id))
             except Exception as e:
                 logger.debug("Module '%s' auth provider registration: %s",
                              _sanitize_log(module_id), e)

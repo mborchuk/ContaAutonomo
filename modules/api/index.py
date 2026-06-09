@@ -318,14 +318,17 @@ class ApiModule(BaseModule):
             try:
                 module.core.db.session.execute(text('SELECT 1'))
                 checks['db'] = True
-            except Exception:
-                pass
+            except Exception as e:
+                # Probe only: a failure means db is down; report it via the 503,
+                # don't surface the error to the caller.
+                module.logger.warning('health: db probe failed: %s', e)
             try:
                 # exists() returning a bool (either value) proves the backend answers.
                 module.core.storage.exists('__api_probe__')
                 checks['storage'] = True
-            except Exception:
-                pass
+            except Exception as e:
+                # Probe only: storage backend unreachable; reflected in the 503.
+                module.logger.warning('health: storage probe failed: %s', e)
             status = 200 if all(checks.values()) else 503
             return jsonify(checks), status
 
@@ -445,12 +448,14 @@ class ApiModule(BaseModule):
             # loaded by the module loader (importlib exec, not in sys.modules). So
             # match structurally by class name, not identity.
             if isinstance(e, ApiError) or type(e).__name__ == 'ApiError':
+                # ApiError carries a controlled, caller-safe message (no raw
+                # exception text). Handlers convert domain errors (e.g. the PAID
+                # lock ValueError) into ApiError at the call site.
                 return _json_error(getattr(e, 'status', 500),
                                    getattr(e, 'code', 'server_error'),
-                                   getattr(e, 'message', str(e)))
-            if isinstance(e, ValueError):
-                # invoice_service raises ValueError on the PAID lock (API.MD §10).
-                return _json_error(409, 'conflict', str(e))
+                                   getattr(e, 'message', 'Request failed'))
+            # Any other exception is unexpected: log it server-side, return a
+            # generic message so no stack-trace/exception detail leaks to clients.
             self.core.db.session.rollback()
             self.logger.error('API handler error: %s', e, exc_info=True)
             return _json_error(500, 'server_error', 'Unexpected server error')
@@ -492,7 +497,6 @@ class ApiModule(BaseModule):
     def _create_invoice(self):
         from app import Invoice, InvoiceItem, Customer, db
         body = self._json_body()
-        svc = self.core.invoice_service
 
         client_name = (body.get('client_name') or '').strip()
         if not client_name:
@@ -646,8 +650,13 @@ class ApiModule(BaseModule):
         if not fields:
             raise ApiError(400, 'bad_request', 'No updatable fields supplied')
 
-        # update() raises ValueError on the PAID lock → mapped to 409 by _handle.
-        inv = svc.update(invoice_id, **fields)
+        # update() raises ValueError on the PAID lock. Catch it here and return a
+        # controlled 409 message (never echo the raw exception text to the client).
+        try:
+            inv = svc.update(invoice_id, **fields)
+        except ValueError:
+            raise ApiError(409, 'conflict',
+                           f'Invoice #{invoice_id} is PAID and cannot be modified')
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _delete_invoice(self, invoice_id):
@@ -902,6 +911,8 @@ class ApiModule(BaseModule):
     # ------------------------------------------------------------------ #
 
     def get_settings_html(self, settings):
+        from markupsafe import escape
+
         token = ''
         try:
             token = self._ensure_token()
@@ -910,13 +921,17 @@ class ApiModule(BaseModule):
 
         base = f'/api/{API_VERSION}'
         manifest = f'{base}/openapi.json'
+        # HTML-escape the token before it touches any HTML context. The token is
+        # url-safe so this is a no-op in practice, but it removes the taint flow
+        # CodeQL reports (reflected XSS) and is correct defense-in-depth.
+        safe_token = escape(token)
 
         if token:
             token_block = (
                 '<p>Send this token in the <code>X-API-Token</code> header on '
                 'every request.</p>'
                 '<div style="display:flex;gap:.5rem;align-items:center;">'
-                f'<input type="text" id="api-token-field" readonly value="{token}" '
+                f'<input type="text" id="api-token-field" readonly value="{safe_token}" '
                 'style="flex:1;font-family:monospace;" onclick="this.select()">'
                 '<button type="button" class="btn btn-secondary" '
                 "onclick=\"(function(b){var i=document.getElementById('api-token-field');"
@@ -926,20 +941,22 @@ class ApiModule(BaseModule):
                 "var t=b.textContent;b.textContent='Copied!';"
                 'setTimeout(function(){b.textContent=t;},1200);})(this)">Copy</button>'
                 '</div>'
-                # Quick-start: real token templated in (url-safe charset, no injection).
-                '<p style="margin-top:.75rem;">Quick start:</p>'
+                # Quick-start. Token is read from the input field above by the copy
+                # button; in these curl examples we show a placeholder rather than
+                # the raw secret to avoid echoing it into extra HTML contexts.
+                '<p style="margin-top:.75rem;">Quick start (use the token above):</p>'
                 '<pre style="white-space:pre-wrap;background:#f5f5f5;padding:.5rem;'
                 'border-radius:4px;">'
-                f'curl -H "X-API-Token: {token}" \\\n'
+                'curl -H "X-API-Token: $TOKEN" \\\n'
                 f'  $ORIGIN{base}/invoices\n\n'
-                f'curl -X POST -H "X-API-Token: {token}" \\\n'
+                'curl -X POST -H "X-API-Token: $TOKEN" \\\n'
                 '  -H "Content-Type: application/json" \\\n'
                 '  -d \'{"client_name":"ACME","items":'
                 '[{"description":"Work","quantity":1,"unit_price_usd":100}]}\' \\\n'
                 f'  $ORIGIN{base}/invoices'
                 '</pre>'
-                '<small>Replace <code>$ORIGIN</code> with your server URL '
-                '(e.g. <code>https://your-host</code>).</small>'
+                '<small>Replace <code>$ORIGIN</code> with your server URL and '
+                '<code>$TOKEN</code> with the token above.</small>'
             )
         else:
             token_block = '<p><em>No token yet — save once to generate one.</em></p>'

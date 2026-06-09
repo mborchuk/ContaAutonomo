@@ -429,7 +429,6 @@ class ExpensesModule(BaseModule):
         """Contribute expenses and VAT data to Tax Obligations panel"""
         current_year = context['current_year']
         base_currency = context['base_currency']
-        exchange_rates = context['exchange_rates']
 
         expenses_query = self.Expense.query.filter(
             self._db.extract('year', self.Expense.expense_date) == current_year

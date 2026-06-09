@@ -20,7 +20,7 @@ except ImportError:
     PYPDF_AVAILABLE = False
 
 try:
-    from asn1crypto import cms, x509, pem as asn1_pem
+    from asn1crypto import cms
     ASN1_AVAILABLE = True
 except ImportError:
     ASN1_AVAILABLE = False
@@ -74,6 +74,8 @@ def extract_signatures(pdf_bytes):
                             sig_obj = sig_obj.get_object()
                         sig_objects.append(sig_obj)
         except Exception:
+            # Best-effort fallback scan: a malformed/encrypted PDF annotation
+            # tree just yields no extra signatures — not a fatal error.
             pass
 
     for sig in sig_objects:
@@ -140,7 +142,6 @@ def _parse_pkcs7(raw_bytes, info):
 
     # Extract signer info and identify which cert signed
     signer_serial = None
-    signer_issuer = None
     signer_infos = signed_data['signer_infos']
     if signer_infos:
         si = signer_infos[0]
@@ -154,7 +155,6 @@ def _parse_pkcs7(raw_bytes, info):
         sid = si['sid']
         if sid.name == 'issuer_and_serial_number':
             signer_serial = sid.chosen['serial_number'].native
-            signer_issuer = sid.chosen['issuer']
 
         # Signing time from authenticated attributes
         if si['signed_attrs']:
@@ -243,6 +243,7 @@ def _extract_cert_info(cert):
                 if name_val['type'].native == 'email_address':
                     email = str(name_val['value'])
     except Exception:
+        # Email is optional metadata; absent/odd subject just leaves it blank.
         pass
 
     if not email:
@@ -254,6 +255,7 @@ def _extract_cert_info(cert):
                         email = str(name.chosen)
                         break
         except Exception:
+            # SAN is optional; missing/unsupported extension leaves email blank.
             pass
 
     valid_from = None
@@ -266,6 +268,8 @@ def _extract_cert_info(cert):
         if na:
             valid_to = na.isoformat()
     except Exception:
+        # Validity dates are best-effort display data; leave them as None if the
+        # certificate structure is unexpected.
         pass
 
     serial = str(cert.serial_number) if hasattr(cert, 'serial_number') else ''

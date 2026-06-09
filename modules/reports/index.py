@@ -208,7 +208,12 @@ class ReportsModule(BaseModule):
                 currency_mode=body.get('currency_mode', 'base'),
                 file_ids=file_ids, include_files_sids=include_files_sids)
         except ValueError as e:
-            return jsonify(error='bad_request', message=str(e)), 400
+            # _build_report raises ValueError for invalid params. sections/quarters
+            # are already validated above, so log the detail server-side and return
+            # a generic message (don't echo raw exception text to the client).
+            self.logger.warning('API report generation rejected: %s', e)
+            return jsonify(error='bad_request',
+                           message='Invalid report parameters'), 400
         except Exception as e:
             self._db.session.rollback()
             self.logger.error('API report generation failed: %s', e, exc_info=True)

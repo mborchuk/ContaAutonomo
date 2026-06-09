@@ -2,9 +2,12 @@ FROM python:3.14-slim
 
 WORKDIR /app
 
-# System deps for reportlab
+# Patch OS packages (clears base-image CVEs in perl-base, libc6, util-linux, …)
+# and install system deps for reportlab.
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends libffi-dev && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
