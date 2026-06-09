@@ -99,6 +99,31 @@ class BaseModule(ABC):
         """Register any Jinja2 template filters"""
         pass
 
+    def get_api_routes(self):
+        """
+        Contribute REST endpoints to the /api/v1 API (served by the 'api' module).
+
+        Only called for enabled modules, so endpoints are automatically
+        module-aware (a disabled module exposes nothing — see API.MD §6).
+
+        Returns:
+            list of dicts, each describing one endpoint:
+              - 'path': sub-path under /api/v1/ (e.g. 'expenses') — no leading slash
+              - 'methods': list of HTTP verbs (default ['GET'])
+              - 'handler': callable(request, **path_params) -> (data, status)
+                           where `data` is a JSON-serializable object and `status`
+                           is an int HTTP code. May also return a Flask Response.
+              - 'summary': short description for the OpenAPI manifest (optional)
+
+        Example:
+            return [
+                {'path': 'expenses', 'methods': ['GET'],
+                 'handler': self._api_list_expenses,
+                 'summary': 'List expenses'},
+            ]
+        """
+        return []
+
     def on_enable(self):
         """Called when module is enabled. Use for DB table creation, etc."""
         pass
@@ -1917,6 +1942,29 @@ class ModuleManager:
         for mod in self.modules.values():
             sections.extend(mod.get_report_sections())
         return sections
+
+    def get_api_routes(self):
+        """Collect REST endpoints contributed by enabled modules.
+
+        Called lazily (at request time) by the 'api' module so the result is
+        always load-order independent and reflects only currently-enabled
+        modules. Each entry is tagged with its owning module_id.
+
+        Returns:
+            list of dicts: {module_id, path, methods, handler, summary}
+        """
+        routes = []
+        for mod_id, mod in self.modules.items():
+            try:
+                for route in mod.get_api_routes():
+                    entry = dict(route)
+                    entry['module_id'] = mod_id
+                    entry.setdefault('methods', ['GET'])
+                    routes.append(entry)
+            except Exception as e:
+                logger.error("Module '%s' get_api_routes error: %s",
+                             _sanitize_log(mod_id), e)
+        return routes
 
     def get_settings_html(self, settings):
         """Get settings HTML panels from all active modules"""
