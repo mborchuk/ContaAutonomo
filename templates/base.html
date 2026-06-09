@@ -1,251 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="theme-auto">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     {% if csrf_token is defined %}
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {% endif %}
-    <title>{% block title %}Invoice Manager{% endblock %}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; background: #f5f5f5; }
+    <title>{% block title %}ContaAutónomo{% endblock %} · ContaAutónomo</title>
 
-        /* Top Navigation Bar */
-        .top-nav {
-            background: white;
-            border-bottom: 1px solid #e0e0e0;
-            padding: 0;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        }
+    {# Apply saved theme before first paint to avoid a flash of the wrong theme. #}
+    <script>
+        (function () {
+            var t = localStorage.getItem('theme');
+            if (t === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.classList.remove('theme-auto'); }
+            else if (t === 'light') { document.documentElement.classList.remove('theme-auto'); }
+        })();
+    </script>
 
-        .nav-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 30px;
-            height: 70px;
-        }
-
-        .nav-logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 20px;
-            font-weight: bold;
-            color: #333;
-            text-decoration: none;
-        }
-
-        .nav-logo-icon {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        .nav-logo-text {
-            color: #333;
-        }
-
-        .nav-logo-text span {
-            color: #ff6b35;
-        }
-
-        .nav-menu {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            flex: 1;
-            justify-content: center;
-        }
-
-        .nav-menu a {
-            padding: 10px 20px;
-            color: #666;
-            text-decoration: none;
-            font-size: 15px;
-            font-weight: 500;
-            border-radius: 6px;
-            transition: all 0.2s;
-        }
-
-        .nav-menu a:hover {
-            background: #f5f5f5;
-            color: #333;
-        }
-
-        .nav-menu a.active {
-            color: #007bff;
-            background: #e7f3ff;
-        }
-
-        /* Dropdown menus */
-        .nav-dropdown {
-            position: relative;
-        }
-        .nav-dropdown-toggle {
-            padding: 10px 20px;
-            color: #666;
-            text-decoration: none;
-            font-size: 15px;
-            font-weight: 500;
-            border-radius: 6px;
-            transition: all 0.2s;
-            cursor: pointer;
-            background: none;
-            border: none;
-            font-family: inherit;
-        }
-        .nav-dropdown-toggle:hover {
-            background: #f5f5f5;
-            color: #333;
-        }
-        .nav-dropdown-toggle::after {
-            content: ' ▾';
-            font-size: 11px;
-            opacity: 0.5;
-        }
-        .nav-dropdown-menu {
-            display: none;
-            position: absolute;
-            top: 100%;
-            left: 0;
-            background: white;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            min-width: 180px;
-            z-index: 200;
-            padding: 4px 0;
-        }
-        .nav-dropdown:hover .nav-dropdown-menu {
-            display: block;
-        }
-        .nav-dropdown-menu a {
-            display: block;
-            padding: 8px 16px;
-            color: #666;
-            text-decoration: none;
-            font-size: 14px;
-            border-radius: 0;
-        }
-        .nav-dropdown-menu a:hover {
-            background: #f5f5f5;
-            color: #333;
-        }
-
-        .nav-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .nav-btn {
-            padding: 10px 20px;
-            border-radius: 6px;
-            text-decoration: none;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.2s;
-            border: none;
-            cursor: pointer;
-        }
-
-        .nav-btn-outline {
-            background: white;
-            color: #666;
-            border: 1px solid #ddd;
-        }
-
-        .nav-btn-outline:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
-
-        .nav-btn-primary {
-            background: #ff6b35;
-            color: white;
-            border: none;
-        }
-
-        .nav-btn-primary:hover {
-            background: #e55a2b;
-        }
-
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            margin-top: 20px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        h1 { color: #333; margin-bottom: 20px; }
-        .alert { padding: 12px; margin-bottom: 20px; border-radius: 4px; }
-        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-        .alert-danger { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f8f9fa; font-weight: bold; }
-        tr:hover { background: #f8f9fa; }
-        .btn { padding: 6px 12px; text-decoration: none; border-radius: 4px; font-size: 14px; display: inline-block; margin-right: 5px; border: none; cursor: pointer; }
-        .btn-primary { background: #007bff; color: white; }
-        .btn-secondary { background: #6c757d; color: white; }
-        .btn-success { background: #28a745; color: white; }
-        .btn-danger { background: #dc3545; color: white; }
-        .btn:hover { opacity: 0.9; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #333; }
-        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-        .form-group textarea { min-height: 100px; }
-        .form-control { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-        .filter-form { background: #f8f9fa; padding: 20px; border-radius: 4px; margin-bottom: 20px; }
-        .filter-form input, .filter-form select { width: auto; margin-right: 10px; }
-        .status-badge { padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
-        .status-pending { background: #ffc107; color: #000; }
-        .status-paid { background: #28a745; color: white; }
-        .status-cancelled { background: #dc3545; color: white; }
-        .sortable { cursor: pointer; user-select: none; position: relative; }
-        .sortable:hover { background: #e9ecef; }
-        .sortable::after { content: ' ⇅'; opacity: 0.3; font-size: 12px; }
-        .sortable.asc::after { content: ' ↑'; opacity: 1; }
-        .sortable.desc::after { content: ' ↓'; opacity: 1; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    {% block head %}{% endblock %}
 </head>
 <body>
-    <!-- Top Navigation -->
-    <div class="top-nav">
-        <div class="nav-container">
+    <a href="#main" class="skip-link">Skip to main content</a>
+
+    <header class="top-nav">
+        <nav class="nav-container" aria-label="Primary">
             <a href="{{ url_for('dashboard') }}" class="nav-logo">
-                <div class="nav-logo-icon">CA</div>
-                <div class="nav-logo-text">Conta<span>Autónomo</span></div>
+                <span class="nav-logo-icon" aria-hidden="true">CA</span>
+                <span class="nav-logo-text">Conta<span>Autónomo</span></span>
             </a>
 
-            <div class="nav-menu">
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <button class="nav-toggle" aria-label="Toggle navigation menu"
+                    aria-expanded="false" aria-controls="nav-menu">☰</button>
+
+            <div class="nav-menu" id="nav-menu">
+                <a href="{{ url_for('dashboard') }}"
+                   {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
                 {% if module_manager %}
                     {% for entry in module_manager.get_full_nav() %}
                         {% if entry.type == 'link' %}
-                        <a href="{{ url_for(entry.endpoint) }}">{{ entry.icon ~ ' ' if entry.icon }}{{ entry.label }}</a>
+                        <a href="{{ url_for(entry.endpoint) }}"
+                           {% if request.endpoint == entry.endpoint %}aria-current="page"{% endif %}>{{ entry.icon ~ ' ' if entry.icon }}{{ entry.label }}</a>
                         {% elif entry.type == 'dropdown' %}
                         <div class="nav-dropdown">
-                            <button class="nav-dropdown-toggle">{{ entry.label }}</button>
+                            <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">{{ entry.label }}</button>
                             <div class="nav-dropdown-menu">
                                 {% for item in entry['items'] %}
                                 <a href="{{ url_for(item.endpoint) }}">{{ item.icon ~ ' ' if item.icon }}{{ item.label }}</a>
@@ -256,110 +56,131 @@
                     {% endfor %}
                 {% else %}
                 <div class="nav-dropdown">
-                    <button class="nav-dropdown-toggle">Invoices</button>
+                    <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">Invoices</button>
                     <div class="nav-dropdown-menu">
                         <a href="{{ url_for('index') }}">All Invoices</a>
                         <a href="{{ url_for('create_invoice') }}">Create Invoice</a>
                     </div>
                 </div>
                 <div class="nav-dropdown">
-                    <button class="nav-dropdown-toggle">System</button>
+                    <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">System</button>
                     <div class="nav-dropdown-menu">
                         <a href="{{ url_for('system_logs') }}">Logs</a>
                         <a href="{{ url_for('scheduled_tasks') }}">Scheduled Tasks</a>
                     </div>
                 </div>
-                <a href="{{ url_for('settings') }}">Settings</a>
+                <a href="{{ url_for('settings') }}"
+                   {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
                 {% endif %}
             </div>
 
             <div class="nav-actions">
                 <a href="{{ url_for('auth.logout') }}" class="nav-btn nav-btn-primary">Logout</a>
             </div>
-        </div>
-    </div>
+        </nav>
+    </header>
 
-    <div class="container">
+    <main class="container" id="main">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
-    <footer style="text-align: center; padding: 20px 0; color: #999; font-size: 13px;">
-        ContaAutónomo <a href="https://github.com/mborchuk/ContaAutonomo/releases" target="_blank" style="color: #999; text-decoration: underline;">v{{ app_version }}</a> · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" style="color: #999; text-decoration: underline;">Mykola Borchuk</a>
+    <footer class="site-footer">
+        ContaAutónomo <a href="https://github.com/mborchuk/ContaAutonomo/releases" target="_blank" rel="noopener">v{{ app_version }}</a>
+        · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" rel="noopener">Mykola Borchuk</a>
     </footer>
 
+    <button id="theme-toggle" class="theme-toggle" type="button"
+            aria-pressed="false" aria-label="Toggle dark mode (press D)" title="Toggle dark mode (D)">🌙</button>
+
 <script>
-// Auto-inject CSRF token into all forms
-(function() {
+// --- CSRF: inject token into POST forms + fetch headers -------------------
+(function () {
     var meta = document.querySelector('meta[name="csrf-token"]');
-    if (!meta) return;  // CSRF not available — skip injection
+    if (!meta) return;
     var token = meta.getAttribute('content');
     if (!token) return;
-    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function (form) {
         if (form.querySelector('input[name="csrf_token"]')) return;
         var input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'csrf_token';
-        input.value = token;
+        input.type = 'hidden'; input.name = 'csrf_token'; input.value = token;
         form.appendChild(input);
     });
-    // Also set header for fetch/AJAX requests
     var origFetch = window.fetch;
-    window.fetch = function(url, opts) {
+    window.fetch = function (url, opts) {
         opts = opts || {};
         if (opts.method && opts.method.toUpperCase() === 'POST') {
             opts.headers = opts.headers || {};
             if (opts.headers instanceof Headers) {
                 if (!opts.headers.has('X-CSRFToken')) opts.headers.set('X-CSRFToken', token);
-            } else {
-                if (!opts.headers['X-CSRFToken']) opts.headers['X-CSRFToken'] = token;
+            } else if (!opts.headers['X-CSRFToken']) {
+                opts.headers['X-CSRFToken'] = token;
             }
         }
         return origFetch.call(this, url, opts);
     };
 })();
-</script>
 
-<style>
-/* Opt-in dark theme (toggled via the button / 'D' shortcut, persisted). */
-html.dark body { background:#1e1e1e; color:#ddd; }
-html.dark .top-nav { background:#2a2a2a; }
-html.dark table, html.dark .card, html.dark .panel,
-html.dark .container, html.dark .box { background:#2a2a2a; color:#ddd; }
-html.dark a { color:#6db3f2; }
-html.dark input, html.dark select, html.dark textarea {
-    background:#333; color:#eee; border-color:#555; }
-html.dark th, html.dark td { border-color:#444 !important; }
-</style>
-<button id="theme-toggle" title="Toggle dark mode (D)"
-        style="position:fixed;right:14px;bottom:14px;z-index:2000;border:none;
-               border-radius:50%;width:42px;height:42px;cursor:pointer;background:#333;
-               color:#fff;font-size:18px;box-shadow:0 2px 8px rgba(0,0,0,.3);">🌙</button>
-<script>
-(function(){
+// --- Theme toggle ---------------------------------------------------------
+(function () {
     var root = document.documentElement;
-    function apply(t){ root.classList.toggle('dark', t === 'dark'); }
-    // Only apply a theme the user explicitly chose (no surprise auto-dark).
-    if (localStorage.getItem('theme') === 'dark') apply('dark');
-    function toggle(){
+    var btn = document.getElementById('theme-toggle');
+    function sync() {
+        var dark = root.classList.contains('dark');
+        if (btn) { btn.setAttribute('aria-pressed', String(dark)); btn.textContent = dark ? '☀️' : '🌙'; }
+    }
+    function toggle() {
+        root.classList.remove('theme-auto');
         var dark = root.classList.toggle('dark');
         localStorage.setItem('theme', dark ? 'dark' : 'light');
+        sync();
     }
-    var btn = document.getElementById('theme-toggle');
+    sync();
     if (btn) btn.addEventListener('click', toggle);
+    window.__toggleTheme = toggle;
 
-    // Global keyboard shortcuts (ignored while typing).
-    document.addEventListener('keydown', function(e){
+    // --- Responsive nav ---
+    var navToggle = document.querySelector('.nav-toggle');
+    var navMenu = document.getElementById('nav-menu');
+    if (navToggle && navMenu) {
+        navToggle.addEventListener('click', function () {
+            var open = navMenu.classList.toggle('open');
+            navToggle.setAttribute('aria-expanded', String(open));
+        });
+        // On mobile, tapping a dropdown label expands it instead of hovering.
+        navMenu.querySelectorAll('.nav-dropdown-toggle').forEach(function (t) {
+            t.addEventListener('click', function () {
+                if (window.matchMedia('(max-width: 900px)').matches) {
+                    var dd = t.closest('.nav-dropdown');
+                    var open = dd.classList.toggle('open');
+                    t.setAttribute('aria-expanded', String(open));
+                }
+            });
+        });
+    }
+
+    // --- Keyboard-accessible clickable rows (progressive enhancement) ---
+    document.querySelectorAll('.clickable-row[data-href]').forEach(function (row) {
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('role', 'link');
+        function go(e) { if (e.target.closest('a, button, .btn, .inv-menu')) return; window.location.href = row.dataset.href; }
+        row.addEventListener('click', go);
+        row.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.location.href = row.dataset.href; }
+        });
+    });
+
+    // --- Global keyboard shortcuts (ignored while typing) ---
+    document.addEventListener('keydown', function (e) {
         var tag = (e.target.tagName || '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select'
-            || e.metaKey || e.ctrlKey || e.altKey) return;
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.metaKey || e.ctrlKey || e.altKey) return;
         if (e.key === 'n') { window.location.href = '/create'; }
         else if (e.key === 'e') { window.location.href = '/expenses/create'; }
         else if (e.key === 'd') { toggle(); }
@@ -373,5 +194,6 @@ html.dark th, html.dark td { border-color:#444 !important; }
     });
 })();
 </script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

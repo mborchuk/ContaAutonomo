@@ -53,7 +53,7 @@
             <option value="eu_b2b" {% if not customer or customer.tax_type == 'eu_b2b' %}selected{% endif %}>EU B2B (Reverse charge - intra-EU B2B, VAT 0%)</option>
             <option value="standard" {% if customer and customer.tax_type == 'standard' %}selected{% endif %}>Standard (VAT 21%)</option>
         </select>
-        <small style="display: block; margin-top: 5px; color: #666;">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             Select the tax treatment for this customer
         </small>
     </div>
