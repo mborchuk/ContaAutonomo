@@ -128,9 +128,11 @@ def login():
                 pass  # log_activity may not be available during early init
             return redirect(url_for('dashboard'))
         else:
+            # Strip CR/LF from user-controlled values before logging (log injection).
+            safe_ip = (request.remote_addr or '').replace('\n', '').replace('\r', '')
+            safe_provider = str(provider_id).replace('\n', '').replace('\r', '')
             logger.warning('Failed login attempt from %s via %s',
-                           request.remote_addr.replace('\n', '').replace('\r', ''),
-                           provider_id)
+                           safe_ip, safe_provider)
             flash(result.error or 'Authentication failed.', 'danger')
 
     # Render login page with all available providers

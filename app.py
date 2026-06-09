@@ -123,14 +123,18 @@ try:
     @app.errorhandler(CSRFError)
     def handle_csrf_error(e):
         flash('Session expired or invalid request. Please try again.', 'danger')
-        # Only redirect to same-origin referrer to prevent open redirect
+        # Only redirect to a same-origin http(s) referrer to prevent open redirect.
+        # Anything else (cross-host, non-http scheme, scheme-relative //evil) falls
+        # back to the dashboard.
         referrer = request.referrer
+        safe_target = None
         if referrer:
             from urllib.parse import urlparse
             ref_parsed = urlparse(referrer)
-            if ref_parsed.netloc and ref_parsed.netloc != request.host:
-                referrer = None  # external referrer — ignore
-        return redirect(referrer or url_for('dashboard'))
+            if (ref_parsed.scheme in ('http', 'https')
+                    and ref_parsed.netloc == request.host):
+                safe_target = referrer
+        return redirect(safe_target or url_for('dashboard'))
 except ImportError:
     pass  # flask-wtf not installed — CSRF error handler not registered
 
