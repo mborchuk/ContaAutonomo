@@ -276,7 +276,9 @@ class GoogleDriveStorageBackend(FileStorageBackend):
                 logger.info('[GDrive] transient error (attempt %d/%d), retrying in '
                             '%.1fs: %s', attempt + 1, max_retries, wait, e)
                 time.sleep(wait)
-        raise last_exc
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError('GDrive operation failed after retries')
 
     def _get_or_create_folder(self, folder_name, parent_id):
         """Get existing subfolder or create it. Returns folder ID.

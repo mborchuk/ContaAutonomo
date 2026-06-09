@@ -219,7 +219,14 @@ def request_entity_too_large(e):
         return jsonify(error='payload_too_large',
                        message='Request body too large (max 50 MB)'), 413
     flash('File too large. Maximum size is 50 MB.', 'danger')
-    return redirect(request.referrer or url_for('dashboard'))
+    # Only redirect to a same-origin referrer (avoid open redirect via Referer).
+    referrer = request.referrer
+    if referrer:
+        from urllib.parse import urlparse
+        ref = urlparse(referrer)
+        if not (ref.scheme in ('http', 'https') and ref.netloc == request.host):
+            referrer = None
+    return redirect(referrer or url_for('dashboard'))
 
 
 from jinja2.exceptions import TemplateNotFound

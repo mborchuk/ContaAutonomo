@@ -27,6 +27,20 @@ _LOCK_WINDOW = 900  # seconds (15 min)
 _failed_attempts = {}  # ip -> [count, first_ts]
 
 
+def _activity(action, category, details=None):
+    """Write to the activity log via a late dynamic import.
+
+    app.py imports this module, so a static `from app import ...` here forms an
+    import cycle. Resolving 'app' dynamically at call time avoids that and is a
+    no-op if the app isn't ready yet.
+    """
+    try:
+        from importlib import import_module
+        import_module('app').log_activity(action, category, details)
+    except Exception:
+        pass
+
+
 def _is_locked(ip):
     rec = _failed_attempts.get(ip)
     if not rec:
@@ -163,12 +177,8 @@ def login():
             _notify_modules_authenticated(result.identity)
 
             flash('Login successful!', 'success')
-            try:
-                from app import log_activity
-                log_activity('login', 'auth',
-                             f'provider={result.identity.get("provider", "?")}')
-            except Exception:
-                pass  # log_activity may not be available during early init
+            _activity('login', 'auth',
+                      f'provider={result.identity.get("provider", "?")}')
             return redirect(url_for('dashboard'))
         else:
             _record_failure(ip)
@@ -177,14 +187,9 @@ def login():
             safe_provider = str(provider_id).replace('\n', '').replace('\r', '')
             logger.warning('Failed login attempt from %s via %s',
                            safe_ip, safe_provider)
-            # record failed logins in the activity log for incident
-            # analysis (structured detail per Phase 6).
-            try:
-                from app import log_activity
-                log_activity('login_failed', 'auth',
-                             {'provider': safe_provider, 'ip': safe_ip})
-            except Exception:
-                pass  # log_activity may be unavailable during early init
+            # record failed logins in the activity log for incident analysis
+            _activity('login_failed', 'auth',
+                      {'provider': safe_provider, 'ip': safe_ip})
             flash(result.error or 'Authentication failed.', 'danger')
 
     # Render login page with all available providers
@@ -207,12 +212,7 @@ def _apply_rate_limits():
 @auth_bp.route('/logout')
 def logout():
     """Logout — notify providers and modules."""
-    try:
-        from app import log_activity
-        log_activity('logout', 'auth')
-    except Exception:
-        pass  # log_activity may not be available during early init
-
+    _activity('logout', 'auth')
     auth_service.on_logout(session)
     _notify_modules_logout()
     session.clear()
@@ -255,11 +255,7 @@ def security():
                     pass  # encryption token update not critical
 
                 flash('Password changed successfully!', 'success')
-                try:
-                    from app import log_activity
-                    log_activity('password_changed', 'auth')
-                except Exception:
-                    pass  # logging failure should not block password change
+                _activity('password_changed', 'auth')
             except Exception as e:
                 logger.error('Password change error: %s', e)
                 flash('Error changing password. Check current password.', 'danger')

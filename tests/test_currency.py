@@ -35,7 +35,7 @@ def test_ecb_feed_is_cached(monkeypatch):
     _reset_cache()
 
     r1, d1 = cc.get_exchange_rate('2026-03-17')
-    r2, d2 = cc.get_exchange_rate('2026-03-18')
+    cc.get_exchange_rate('2026-03-18')  # second lookup should hit the cache
 
     # USD->EUR = 1 / 1.0850
     assert round(r1, 4) == round(1 / 1.0850, 4)
