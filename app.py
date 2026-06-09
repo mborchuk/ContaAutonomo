@@ -26,18 +26,34 @@ from currency_converter import get_exchange_rate, convert_usd_to_eur, get_curren
 import logging
 import logging.config
 
+
+class _RequestIdFilter(logging.Filter):
+    """Inject the current request id into log records for cross-worker tracing.
+    Falls back to '-' outside a request context."""
+    def filter(self, record):
+        try:
+            from flask import g, has_request_context
+            record.request_id = (getattr(g, 'request_id', '-')
+                                 if has_request_context() else '-')
+        except Exception:
+            record.request_id = '-'
+        return True
+
+
 # Module-level logging config: applies whether started via
 # `python app.py` or gunicorn — basicConfig in __main__ has no effect under
 # gunicorn, so configure here at import time instead.
 logging.config.dictConfig({
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {'request_id': {'()': _RequestIdFilter}},
     'formatters': {
-        'default': {'format': '%(asctime)s [%(name)s] %(levelname)s: %(message)s',
+        'default': {'format': '%(asctime)s [%(name)s] [%(request_id)s] %(levelname)s: %(message)s',
                     'datefmt': '%Y-%m-%d %H:%M:%S'},
     },
     'handlers': {
-        'console': {'class': 'logging.StreamHandler', 'formatter': 'default'},
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'default',
+                    'filters': ['request_id']},
     },
     'root': {'level': 'INFO', 'handlers': ['console']},
 })
@@ -126,6 +142,34 @@ try:
 except ImportError:
     limiter = None
     logger.warning('flask-limiter not installed — rate limiting disabled')
+
+# --- Optional Sentry error tracking (env-gated) ---
+_sentry_dsn = os.environ.get('SENTRY_DSN')
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.flask import FlaskIntegration
+        sentry_sdk.init(dsn=_sentry_dsn, integrations=[FlaskIntegration()])
+        logger.info('Sentry error tracking enabled')
+    except ImportError:
+        logger.warning('SENTRY_DSN set but sentry-sdk not installed — skipping')
+
+
+# --- Request correlation id (for tracing across interleaved worker logs) ---
+@app.before_request
+def _assign_request_id():
+    import uuid
+    from flask import g
+    g.request_id = uuid.uuid4().hex[:8]
+
+
+@app.after_request
+def _add_request_id_header(response):
+    from flask import g
+    rid = getattr(g, 'request_id', None)
+    if rid:
+        response.headers['X-Request-ID'] = rid
+    return response
 
 
 # --- Security headers ---

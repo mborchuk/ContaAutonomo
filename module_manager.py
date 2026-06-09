@@ -847,6 +847,7 @@ class TaskScheduler:
                 'next_run': self._calc_next(job_type, interval, time_str),
                 'running': False,
                 'last_error': None,
+                'history': [],  # last runs: {ran_at, duration_ms, error}
             }
 
     def remove_job(self, job_id):
@@ -869,8 +870,15 @@ class TaskScheduler:
                     'next_run': j['next_run'].isoformat() if j['next_run'] else None,
                     'running': j['running'],
                     'last_error': j['last_error'],
+                    'history': list(j.get('history', [])),
                 })
             return out
+
+    def get_history(self, job_id, limit=10):
+        """Return the recent run history for a job (most recent last)."""
+        with self._lock:
+            j = self._jobs.get(job_id)
+            return list(j.get('history', []))[-limit:] if j else []
 
     def start(self):
         """Start the scheduler background thread (idempotent)."""
@@ -918,6 +926,8 @@ class TaskScheduler:
     def _run_job(self, jid, j):
         from datetime import datetime
         import threading
+        import time as _time
+        _started = _time.time()
         with self._lock:
             j['running'] = True
 
@@ -952,6 +962,14 @@ class TaskScheduler:
                 j['last_run'] = datetime.now()
                 j['next_run'] = self._calc_next(
                     j['type'], j['interval'], j['time_str'])
+                # Keep a bounded in-memory run history for the Scheduled Tasks page.
+                hist = j.setdefault('history', [])
+                hist.append({
+                    'ran_at': j['last_run'].isoformat(),
+                    'duration_ms': int((_time.time() - _started) * 1000),
+                    'error': j['last_error'],
+                })
+                del hist[:-10]  # keep last 10
 
 
 class CoreServices:
