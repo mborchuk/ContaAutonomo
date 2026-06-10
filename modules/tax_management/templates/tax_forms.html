@@ -226,8 +226,11 @@
 <script>
 function editSS(btn, id, date, amount, desc) {
     var row = btn.closest('tr');
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfInput = csrfMeta ? '<input type="hidden" name="csrf_token" value="' + csrfMeta.getAttribute('content') + '">' : '';
     row.innerHTML = '<td colspan="4">' +
         '<form method="POST" action="/tax-forms/ss-payments/' + id + '/edit" style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 10px; align-items: center;">' +
+        csrfInput +
         '<input type="date" name="payment_date" value="' + date + '" required style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
         '<input type="number" name="amount" step="0.01" value="' + amount + '" required style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
         '<input type="text" name="description" value="' + desc + '" style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
