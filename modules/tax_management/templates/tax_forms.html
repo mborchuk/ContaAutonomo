@@ -158,8 +158,12 @@
 
 <!-- Social Security Payments -->
 <div id="ss-payments" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; margin-top: 30px; overflow: hidden;">
-    <div style="background: var(--color-success-bg); padding: 15px; border-bottom: 1px solid var(--color-border);">
+    <div style="background: var(--color-success-bg); padding: 15px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 16px; color: var(--color-success-fg);">Social Security Payments (Cuotas Autónomo)</h3>
+        {% if ss_by_year %}
+        <a href="{{ url_for('tax_management.ss_payment_export') }}" class="btn btn-secondary"
+           style="padding: 4px 10px; font-size: 12px;" title="Download all SS payments as CSV">⬇ Export CSV</a>
+        {% endif %}
     </div>
     <div style="padding: 20px;">
         <!-- Add SS Payment Form -->
@@ -199,6 +203,9 @@
                     </td>
                     <td style="text-align: right; padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
                         €{{ "%.2f"|format(ss_by_year[year]|sum(attribute='amount')) }}
+                        <a href="{{ url_for('tax_management.ss_payment_export', year=year) }}"
+                           style="font-size: 11px; font-weight: normal; margin-left: 8px;"
+                           title="Download {{ year }} SS payments as CSV">CSV</a>
                     </td>
                 </tr>
                 {% for p in ss_by_year[year] %}
