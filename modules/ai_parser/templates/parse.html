@@ -4,7 +4,7 @@
 
 {% block content %}
 <h1>🤖 AI Document Parser</h1>
-<p style="color: #666; margin-bottom: 25px;">Upload an invoice or expense document — AI will extract the data for you.</p>
+<p style="color: var(--color-text-muted); margin-bottom: 25px;">Upload an invoice or expense document — AI will extract the data for you.</p>
 
 <div style="max-width: 600px;">
     <div class="form-group">
@@ -18,7 +18,7 @@
     <div class="form-group">
         <label for="parse_file">Upload Document (PDF, JPG, PNG)</label>
         <input type="file" id="parse_file" accept=".pdf,.jpg,.jpeg,.png"
-               style="padding: 10px; border: 2px dashed #90caf9; border-radius: 8px; background: #f0f7ff; width: 100%;">
+               style="padding: 10px; border: 2px dashed var(--color-primary-tint); border-radius: 8px; background: var(--color-primary-tint); width: 100%;">
     </div>
 
     <button type="button" onclick="parseDoc()" class="btn btn-primary" id="parse_btn"
@@ -29,8 +29,8 @@
     <div id="parse_status" style="margin-top: 15px; display: none;"></div>
 
     <div id="parse_result" style="display: none; margin-top: 25px;">
-        <h2 style="color: #1565c0;">Parsed Data</h2>
-        <pre id="parse_json" style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;"></pre>
+        <h2 style="color: var(--color-primary);">Parsed Data</h2>
+        <pre id="parse_json" style="background: var(--color-surface-3); padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 13px;"></pre>
         <div style="margin-top: 15px; display: flex; gap: 10px;">
             <button type="button" onclick="createFromParsed()" class="btn btn-success" id="create_btn">
                 Create from parsed data →
@@ -51,7 +51,7 @@ function parseDoc() {
 
     if (!fileInput.files.length) {
         statusDiv.style.display = 'block';
-        statusDiv.innerHTML = '<span style="color: #d32f2f;">Please select a file.</span>';
+        statusDiv.innerHTML = '<span style="color: var(--color-danger);">Please select a file.</span>';
         return;
     }
 
@@ -62,7 +62,7 @@ function parseDoc() {
     btn.disabled = true;
     btn.textContent = '⏳ Parsing...';
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<span style="color: #1565c0;">Sending to AI provider...</span>';
+    statusDiv.innerHTML = '<span style="color: var(--color-primary);">Sending to AI provider...</span>';
     resultDiv.style.display = 'none';
 
     fetch('/ai-parser/parse', { method: 'POST', body: formData })
@@ -71,19 +71,19 @@ function parseDoc() {
             btn.disabled = false;
             btn.textContent = '🔍 Parse Document';
             if (data.error) {
-                statusDiv.innerHTML = '<span style="color: #d32f2f;">Error: ' + data.error + '</span>';
+                statusDiv.innerHTML = '<span style="color: var(--color-danger);">Error: ' + data.error + '</span>';
                 return;
             }
             parsedData = data;
             parsedData._doc_type = docType;
-            statusDiv.innerHTML = '<span style="color: #2e7d32;">✓ Parsed successfully!</span>';
+            statusDiv.innerHTML = '<span style="color: var(--color-success);">✓ Parsed successfully!</span>';
             document.getElementById('parse_json').textContent = JSON.stringify(data, null, 2);
             resultDiv.style.display = 'block';
         })
         .catch(err => {
             btn.disabled = false;
             btn.textContent = '🔍 Parse Document';
-            statusDiv.innerHTML = '<span style="color: #d32f2f;">Request failed: ' + err + '</span>';
+            statusDiv.innerHTML = '<span style="color: var(--color-danger);">Request failed: ' + err + '</span>';
         });
 }
 

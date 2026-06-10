@@ -9,12 +9,12 @@
 {% if templates %}
 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;">
     {% for tpl in templates %}
-    <div style="border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fff;">
+    <div style="border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; background: var(--color-surface);">
         {% set cfg = tpl.config_json | tojson | safe %}
-        <div style="height: 8px; background: {{ (tpl.config_json | from_json).get('accent_color', '#5B6FD8') if tpl.config_json else '#5B6FD8' }};"></div>
+        <div style="height: 8px; background: {{ (tpl.config_json | from_json).get('accent_color', 'var(--color-primary)') if tpl.config_json else 'var(--color-primary)' }};"></div>
         <div style="padding: 16px;">
             <h3 style="margin: 0 0 8px 0; font-size: 16px;">{{ tpl.name }}</h3>
-            <div style="font-size: 12px; color: #888; margin-bottom: 12px;">
+            <div style="font-size: 12px; color: var(--color-text-faint); margin-bottom: 12px;">
                 Layout: {{ (tpl.config_json | from_json).get('layout', 'modern') | title if tpl.config_json else 'Modern' }}
                 · Updated: {{ tpl.updated_at.strftime('%d/%m/%Y') if tpl.updated_at else '-' }}
             </div>
@@ -38,19 +38,19 @@
     {% endfor %}
 </div>
 {% else %}
-<p style="text-align: center; color: #666; padding: 40px;">
+<p style="text-align: center; color: var(--color-text-muted); padding: 40px;">
     No custom templates yet. <a href="{{ url_for('invoice_designer.designer_create') }}">Create your first template</a>
 </p>
 {% endif %}
 
-<p style="margin-top: 25px; font-size: 13px; color: #888;">
+<p style="margin-top: 25px; font-size: 13px; color: var(--color-text-faint);">
     💡 After creating a template, select it in Settings → General Settings → Invoice PDF Template.
 </p>
 
-<div style="margin-top: 20px; padding: 16px; border: 1px dashed #ccc; border-radius: 8px; background: #fafafa;">
+<div style="margin-top: 20px; padding: 16px; border: 1px dashed var(--color-border); border-radius: 8px; background: var(--color-surface-2);">
     <form method="POST" action="{{ url_for('invoice_designer.designer_import') }}" enctype="multipart/form-data"
           style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-        <span style="font-size: 13px; color: #666;">📥 Import template from JSON:</span>
+        <span style="font-size: 13px; color: var(--color-text-muted);">📥 Import template from JSON:</span>
         <input type="text" name="import_name" placeholder="Template name (optional)" style="font-size: 13px; padding: 4px 8px; max-width: 200px;">
         <input type="file" name="json_file" accept=".json" required style="font-size: 13px;">
         <button type="submit" class="btn btn-secondary" style="padding: 4px 12px; font-size: 13px;">Import</button>

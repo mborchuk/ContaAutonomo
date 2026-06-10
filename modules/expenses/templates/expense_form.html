@@ -26,7 +26,7 @@
                     </option>
                     {% endfor %}
                 </select>
-                <small style="display: block; margin-top: 5px; color: #666;">
+                <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
                     <a href="{{ url_for('settings') }}#contractors" target="_blank">Manage contractors in Settings</a>
                 </small>
             </div>
@@ -91,7 +91,7 @@
                 <label for="file">Upload File (Invoice/Receipt)</label>
                 <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png">
                 {% if expense and expense.file_path %}
-                <small style="display: block; margin-top: 5px; color: #4CAF50;">
+                <small style="display: block; margin-top: 5px; color: var(--color-success);">
                     Current file: <a href="{{ url_for('expenses.expenses_file', filename=expense.file_path.split('/')[-1]) }}" target="_blank">View</a>
                 </small>
                 {% endif %}

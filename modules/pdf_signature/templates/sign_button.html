@@ -3,7 +3,7 @@
     {% set detail_url = '/pdf-verify/details?key=' ~ (storage_key|urlencode) ~ '&name=invoice_' ~ (invoice.invoice_number|urlencode) ~ '.pdf&back=' ~ ('/view/' ~ invoice.id|string)|urlencode %}
     {% set short_signer = signer[:40] ~ '…' if signer|length > 40 else signer %}
     <a href="{{ detail_url }}"
-       style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: #e8f5e9; color: #2e7d32; text-decoration: none; border: 1px solid #a5d6a7;"
+       style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: var(--color-success-bg); color: var(--color-success); text-decoration: none; border: 1px solid var(--color-success-bg);"
        title="View signature details">
         ✅ Signed
         {% if signer %} — {{ short_signer }}{% endif %}
@@ -17,7 +17,7 @@
         </button>
     </form>
 {% else %}
-    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: #fff3e0; color: #e65100; border: 1px solid #ffcc80;">
+    <span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 10px; font-size: 12px; background: var(--color-warning-bg); color: var(--color-accent); border: 1px solid var(--color-warning-bg);">
         Not signed
     </span>
 {% endif %}

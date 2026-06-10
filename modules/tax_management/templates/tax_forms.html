@@ -6,14 +6,14 @@
 <h1>Tax Forms Management</h1>
 
 <!-- Upload Form -->
-<div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 30px; padding: 20px;">
+<div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; margin-bottom: 30px; padding: 20px;">
     <h3 style="margin-top: 0;">Upload Tax Form</h3>
     <form method="POST" action="{{ url_for('tax_management.tax_forms_upload') }}" enctype="multipart/form-data">
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 15px;">
             <div>
                 <label for="form_type" style="display: block; margin-bottom: 5px; font-weight: 500;">Form Type:</label>
                 <select name="form_type" id="form_type" required
-                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;"
+                        style="width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: 3px;"
                         onchange="updateQuarterField()">
                     <option value="">Select form...</option>
                     {% for code, info in form_types.items() %}
@@ -26,13 +26,13 @@
                 <label for="year" style="display: block; margin-bottom: 5px; font-weight: 500;">Year:</label>
                 <input type="number" name="year" id="year" required
                        value="{{ current_year }}" min="2020" max="2050"
-                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                       style="width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: 3px;">
             </div>
 
             <div id="quarter-field">
                 <label for="quarter" style="display: block; margin-bottom: 5px; font-weight: 500;">Quarter:</label>
                 <select name="quarter" id="quarter"
-                        style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                        style="width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: 3px;">
                     <option value="">N/A</option>
                     <option value="1">Q1</option>
                     <option value="2">Q2</option>
@@ -44,14 +44,14 @@
             <div>
                 <label for="file" style="display: block; margin-bottom: 5px; font-weight: 500;">File:</label>
                 <input type="file" name="file" id="file" required accept=".pdf,.xlsx,.xls,.doc,.docx"
-                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;">
+                       style="width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: 3px;">
             </div>
         </div>
 
         <div style="margin-bottom: 15px;">
             <label for="notes" style="display: block; margin-bottom: 5px; font-weight: 500;">Notes (optional):</label>
             <textarea name="notes" id="notes" rows="2"
-                      style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 3px;"></textarea>
+                      style="width: 100%; padding: 8px; border: 1px solid var(--color-border); border-radius: 3px;"></textarea>
         </div>
 
         <button type="submit" class="btn btn-primary">Upload Form</button>
@@ -59,9 +59,9 @@
 </div>
 
 <!-- Tax Forms Table -->
-<div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; overflow: hidden;">
-    <div style="background: #f8f9fa; padding: 15px; border-bottom: 1px solid #e0e0e0;">
-        <h3 style="margin: 0; font-size: 16px; color: #333;">Uploaded Tax Forms</h3>
+<div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; overflow: hidden;">
+    <div style="background: var(--color-surface-2); padding: 15px; border-bottom: 1px solid var(--color-border);">
+        <h3 style="margin: 0; font-size: 16px; color: var(--color-text);">Uploaded Tax Forms</h3>
     </div>
 
     {% if forms_by_year %}
@@ -79,22 +79,22 @@
         </thead>
         <tbody>
             {% for year in years %}
-                <tr style="background: #e3f2fd;">
-                    <td colspan="7" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                <tr style="background: var(--color-primary-tint);">
+                    <td colspan="7" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
                         {{ year }}
                     </td>
                 </tr>
 
                 {% for quarter in [4, 3, 2, 1, 0] if quarter in forms_by_year[year] %}
                     {% if quarter > 0 %}
-                    <tr style="background: #f0f0f0;">
-                        <td colspan="7" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: #555;">
+                    <tr style="background: var(--color-surface-3);">
+                        <td colspan="7" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: var(--color-text-muted);">
                             Quarter {{ quarter }}
                         </td>
                     </tr>
                     {% elif forms_by_year[year][0] %}
-                    <tr style="background: #f0f0f0;">
-                        <td colspan="7" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: #555;">
+                    <tr style="background: var(--color-surface-3);">
+                        <td colspan="7" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: var(--color-text-muted);">
                             Annual Forms
                         </td>
                     </tr>
@@ -102,7 +102,7 @@
 
                     {% for form in forms_by_year[year][quarter] %}
                     <tr>
-                        <td><span style="font-weight: 500; color: #333;">Modelo {{ form.form_type }}</span></td>
+                        <td><span style="font-weight: 500; color: var(--color-text);">Modelo {{ form.form_type }}</span></td>
                         <td>{{ form.year }}</td>
                         <td>{% if form.quarter %}Q{{ form.quarter }}{% else %}-{% endif %}</td>
                         <td>{{ form.original_filename }}</td>
@@ -137,9 +137,9 @@
 
     <style>
     .taxFormsTable { width: 100%; border-collapse: collapse; margin-top: 0; font-size: 13px; }
-    .taxFormsTable th, .taxFormsTable td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #ddd; white-space: nowrap; }
-    .taxFormsTable th { background: #f8f9fa; font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 12px; color: #666; border-bottom: 2px solid #e0e0e0; }
-    .taxFormsTable tbody tr:hover:not([style*="background: #e3f2fd"]):not([style*="background: #f0f0f0"]) { background: #f8f9fa; }
+    .taxFormsTable th, .taxFormsTable td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
+    .taxFormsTable th { background: var(--color-surface-2); font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 12px; color: var(--color-text-muted); border-bottom: 2px solid var(--color-border); }
+    .taxFormsTable tbody tr:hover:not([style*="background: var(--color-primary-tint)"]):not([style*="background: var(--color-surface-3)"]) { background: var(--color-surface-2); }
     .taxFormsTable th:nth-child(1), .taxFormsTable td:nth-child(1) { width: 120px; }
     .taxFormsTable th:nth-child(2), .taxFormsTable td:nth-child(2) { width: 70px; }
     .taxFormsTable th:nth-child(3), .taxFormsTable td:nth-child(3) { width: 80px; }
@@ -149,7 +149,7 @@
     </style>
 
     {% else %}
-    <div style="padding: 40px; text-align: center; color: #999;">
+    <div style="padding: 40px; text-align: center; color: var(--color-text-faint);">
         <p style="font-size: 16px; margin: 0;">No tax forms uploaded yet</p>
         <p style="font-size: 14px; margin: 10px 0 0 0;">Upload your first tax form using the form above</p>
     </div>
@@ -157,9 +157,9 @@
 </div>
 
 <!-- Social Security Payments -->
-<div id="ss-payments" style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; margin-top: 30px; overflow: hidden;">
-    <div style="background: #d4edda; padding: 15px; border-bottom: 1px solid #e0e0e0;">
-        <h3 style="margin: 0; font-size: 16px; color: #155724;">Social Security Payments (Cuotas Autónomo)</h3>
+<div id="ss-payments" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px; margin-top: 30px; overflow: hidden;">
+    <div style="background: var(--color-success-bg); padding: 15px; border-bottom: 1px solid var(--color-border);">
+        <h3 style="margin: 0; font-size: 16px; color: var(--color-success-fg);">Social Security Payments (Cuotas Autónomo)</h3>
     </div>
     <div style="padding: 20px;">
         <!-- Add SS Payment Form -->
@@ -167,15 +167,15 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 10px; align-items: end;">
                 <div>
                     <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500;">Date</label>
-                    <input type="date" name="payment_date" required style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px;">
+                    <input type="date" name="payment_date" required style="width: 100%; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px;">
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500;">Amount (€)</label>
-                    <input type="number" name="amount" step="0.01" required placeholder="299.57" style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px;">
+                    <input type="number" name="amount" step="0.01" required placeholder="299.57" style="width: 100%; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px;">
                 </div>
                 <div>
                     <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 500;">Description</label>
-                    <input type="text" name="description" placeholder="e.g., SS Jan 2026, Regularización 2024..." style="width: 100%; padding: 6px; border: 1px solid #ddd; border-radius: 3px;">
+                    <input type="text" name="description" placeholder="e.g., SS Jan 2026, Regularización 2024..." style="width: 100%; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px;">
                 </div>
                 <button type="submit" class="btn btn-success" style="padding: 6px 16px;">+ Add</button>
             </div>
@@ -193,11 +193,11 @@
             </thead>
             <tbody>
                 {% for year in ss_years %}
-                <tr style="background: #e3f2fd;">
-                    <td colspan="3" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                <tr style="background: var(--color-primary-tint);">
+                    <td colspan="3" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
                         {{ year }}
                     </td>
-                    <td style="text-align: right; padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                    <td style="text-align: right; padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
                         €{{ "%.2f"|format(ss_by_year[year]|sum(attribute='amount')) }}
                     </td>
                 </tr>
@@ -218,7 +218,7 @@
             </tbody>
         </table>
         {% else %}
-        <p style="text-align: center; color: #999; padding: 20px;">No SS payments recorded yet.</p>
+        <p style="text-align: center; color: var(--color-text-faint); padding: 20px;">No SS payments recorded yet.</p>
         {% endif %}
     </div>
 </div>
@@ -228,9 +228,9 @@ function editSS(btn, id, date, amount, desc) {
     var row = btn.closest('tr');
     row.innerHTML = '<td colspan="4">' +
         '<form method="POST" action="/tax-forms/ss-payments/' + id + '/edit" style="display: grid; grid-template-columns: 1fr 1fr 2fr auto; gap: 10px; align-items: center;">' +
-        '<input type="date" name="payment_date" value="' + date + '" required style="padding: 4px; border: 1px solid #ddd; border-radius: 3px;">' +
-        '<input type="number" name="amount" step="0.01" value="' + amount + '" required style="padding: 4px; border: 1px solid #ddd; border-radius: 3px;">' +
-        '<input type="text" name="description" value="' + desc + '" style="padding: 4px; border: 1px solid #ddd; border-radius: 3px;">' +
+        '<input type="date" name="payment_date" value="' + date + '" required style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
+        '<input type="number" name="amount" step="0.01" value="' + amount + '" required style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
+        '<input type="text" name="description" value="' + desc + '" style="padding: 4px; border: 1px solid var(--color-border); border-radius: 3px;">' +
         '<div><button type="submit" class="btn btn-success" style="padding: 3px 8px; font-size: 11px;">Save</button> ' +
         '<button type="button" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="location.reload()">Cancel</button></div>' +
         '</form></td>';
