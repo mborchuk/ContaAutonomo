@@ -107,12 +107,19 @@
     if (!meta) return;
     var token = meta.getAttribute('content');
     if (!token) return;
-    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function (form) {
+    function injectToken(form) {
         if (form.querySelector('input[name="csrf_token"]')) return;
         var input = document.createElement('input');
         input.type = 'hidden'; input.name = 'csrf_token'; input.value = token;
         form.appendChild(input);
-    });
+    }
+    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(injectToken);
+    // Forms created after page load (e.g. inline edit rows) miss the pass above —
+    // inject at submit time so every POST form carries the token.
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (form && form.tagName === 'FORM' && form.method.toUpperCase() === 'POST') injectToken(form);
+    }, true);
     var origFetch = window.fetch;
     window.fetch = function (url, opts) {
         opts = opts || {};
