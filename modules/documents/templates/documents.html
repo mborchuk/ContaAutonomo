@@ -4,12 +4,12 @@
 
 {% block content %}
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <h1>Documents <span style="font-size: 14px; color: #999; font-weight: normal;">({{ total }})</span></h1>
+    <h1>Documents <span style="font-size: 14px; color: var(--color-text-faint); font-weight: normal;">({{ total }})</span></h1>
     <a href="{{ url_for('documents.documents_create') }}" class="btn btn-success">+ Add Document</a>
 </div>
 
 <!-- Filters -->
-<div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+<div style="background: var(--color-surface-3); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
     <form method="GET" action="{{ url_for('documents.documents_index') }}">
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
             <div>
@@ -46,13 +46,13 @@
 <!-- Tags quick filter -->
 {% if all_tags %}
 <div style="margin-bottom: 15px;">
-    <span style="font-size: 13px; color: #666; margin-right: 8px;">Tags:</span>
+    <span style="font-size: 13px; color: var(--color-text-muted); margin-right: 8px;">Tags:</span>
     {% for t in all_tags %}
     <a href="{{ url_for('documents.documents_index', tag=t) }}"
        style="display: inline-block; padding: 2px 10px; margin: 2px; border-radius: 12px; font-size: 12px;
-              background: {{ '#e3f2fd' if request.args.get('tag') == t else '#f0f0f0' }};
-              color: {{ '#1565c0' if request.args.get('tag') == t else '#555' }};
-              text-decoration: none; border: 1px solid {{ '#90caf9' if request.args.get('tag') == t else '#ddd' }};">
+              background: {{ 'var(--color-primary-tint)' if request.args.get('tag') == t else 'var(--color-surface-3)' }};
+              color: {{ 'var(--color-primary)' if request.args.get('tag') == t else 'var(--color-text-muted)' }};
+              text-decoration: none; border: 1px solid {{ 'var(--color-primary-tint)' if request.args.get('tag') == t else 'var(--color-border)' }};">
         {{ t }}
     </a>
     {% endfor %}
@@ -60,8 +60,8 @@
 {% endif %}
 
 <!-- Bulk actions bar (hidden until checkboxes selected) -->
-<div id="bulkBar" style="display:none; background:#e3f2fd; padding:10px 15px; border-radius:5px; margin-bottom:12px; align-items:center; gap:10px;">
-    <span id="bulkCount" style="font-size:13px; font-weight:bold; color:#1565c0;">0 selected</span>
+<div id="bulkBar" style="display:none; background:var(--color-primary-tint); padding:10px 15px; border-radius:5px; margin-bottom:12px; align-items:center; gap:10px;">
+    <span id="bulkCount" style="font-size:13px; font-weight:bold; color:var(--color-primary);">0 selected</span>
     <form method="POST" action="{{ url_for('documents.documents_bulk') }}" id="bulkForm" style="display:inline-flex; gap:8px; align-items:center; margin-left:12px;">
         <div id="bulkIdsContainer"></div>
         <select name="bulk_action" id="bulkAction" class="form-control" style="width:auto; padding:4px 8px; font-size:12px;">
@@ -103,8 +103,8 @@
         {% for doc in documents %}
             {% if doc.document_date and doc.document_date.year != current_year.value %}
                 {% set current_year.value = doc.document_date.year %}
-                <tr style="background: #e3f2fd;">
-                    <td colspan="8" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: #1976d2;">
+                <tr style="background: var(--color-primary-tint);">
+                    <td colspan="8" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
                         {{ current_year.value }}
                     </td>
                 </tr>
@@ -113,17 +113,17 @@
                 <td><input type="checkbox" class="doc-check" value="{{ doc.id }}"></td>
                 <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
                 <td style="font-weight: 500;">
-                    <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration: none; color: #333;">
+                    <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration: none; color: var(--color-text);">
                     {{ doc.name }}
                     </a>
                     {% if doc.expiry_date %}
-                    <br><span style="font-size: 11px; color: {{ '#d9534f' if doc.expiry_date < today else '#999' }};">
+                    <br><span style="font-size: 11px; color: {{ 'var(--color-danger)' if doc.expiry_date < today else 'var(--color-text-faint)' }};">
                         {{ 'Expired' if doc.expiry_date < today else 'Expires' }}: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
                     {% endif %}
                 </td>
                 <td>
                     {% if doc.category %}
-                    {% set cat_color = category_colors.get(doc.category, '#e2e3e5') %}
+                    {% set cat_color = category_colors.get(doc.category, 'var(--color-surface-3)') %}
                     <span style="padding: 2px 8px; border-radius: 3px; font-size: 11px; background: {{ cat_color }};">
                         {{ doc.category }}
                     </span>
@@ -134,38 +134,38 @@
                     {% if doc.tags %}
                         {% for t in doc.tags.split(',') %}
                         <a href="{{ url_for('documents.documents_index', tag=t.strip().lstrip('#')) }}"
-                           style="display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 10px; font-size: 11px; background: #f0f0f0; color: #555; text-decoration: none; cursor: pointer;">{{ t.strip().lstrip('#') }}</a>
+                           style="display: inline-block; padding: 1px 6px; margin: 1px; border-radius: 10px; font-size: 11px; background: var(--color-surface-3); color: var(--color-text-muted); text-decoration: none; cursor: pointer;">{{ t.strip().lstrip('#') }}</a>
                         {% endfor %}
                     {% else %}-{% endif %}
                 </td>
                 <td style="white-space: nowrap;">
                     {% set doc_files = files_by_doc.get(doc.id, []) %}
                     {% if doc_files %}
-                        <span style="font-size: 11px; color: #888;">{{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}</span>
+                        <span style="font-size: 11px; color: var(--color-text-faint);">{{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}</span>
                     {% elif doc.file_format %}
-                        <span style="font-size: 11px; color: #888;">{{ (doc.file_format or '')|upper }}</span>
+                        <span style="font-size: 11px; color: var(--color-text-faint);">{{ (doc.file_format or '')|upper }}</span>
                     {% else %}-{% endif %}
                 </td>
                 <td style="white-space: nowrap; overflow: visible;">
                     <div class="action-dropdown" style="position: relative; display: inline-block;">
                         <button class="btn btn-secondary action-dropdown-toggle" style="padding: 4px 10px; font-size: 12px;">⋮</button>
-                        <div class="action-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; background:#fff; border:1px solid #ddd; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:100; min-width:160px; padding:4px 0;">
+                        <div class="action-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:100; min-width:160px; padding:4px 0;">
                             {% set doc_files = files_by_doc.get(doc.id, []) %}
                             {% if doc_files %}
                                 {% for df in doc_files %}
                                 <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
-                                   style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">👁 {{ df.original_filename|truncate(25) }}</a>
+                                   style="display:block; padding:6px 14px; font-size:13px; color:var(--color-text); text-decoration:none;">👁 {{ df.original_filename|truncate(25) }}</a>
                                 {% endfor %}
-                                <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
+                                <hr style="margin:4px 0; border:none; border-top:1px solid var(--color-surface-3);">
                             {% endif %}
                             <a href="{{ url_for('documents.documents_edit', id=doc.id) }}"
-                               style="display:block; padding:6px 14px; font-size:13px; color:#333; text-decoration:none;">✏️ Edit</a>
+                               style="display:block; padding:6px 14px; font-size:13px; color:var(--color-text); text-decoration:none;">✏️ Edit</a>
                             <form method="POST" action="{{ url_for('documents.documents_duplicate', id=doc.id) }}" style="margin:0;">
-                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:#333; background:none; border:none; cursor:pointer;">📋 Duplicate</button>
+                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:var(--color-text); background:none; border:none; cursor:pointer;">📋 Duplicate</button>
                             </form>
-                            <hr style="margin:4px 0; border:none; border-top:1px solid #eee;">
+                            <hr style="margin:4px 0; border:none; border-top:1px solid var(--color-surface-3);">
                             <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="margin:0;" onsubmit="return confirm('Delete this document?');">
-                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:#d9534f; background:none; border:none; cursor:pointer;">🗑 Delete</button>
+                                <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:var(--color-danger); background:none; border:none; cursor:pointer;">🗑 Delete</button>
                             </form>
                         </div>
                     </div>
@@ -182,7 +182,7 @@
     <a href="{{ url_for('documents.documents_index', page=page-1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
        class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">← Prev</a>
     {% endif %}
-    <span style="padding:6px 12px; font-size:13px; color:#666;">Page {{ page }} of {{ total_pages }}</span>
+    <span style="padding:6px 12px; font-size:13px; color:var(--color-text-muted);">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
     <a href="{{ url_for('documents.documents_index', page=page+1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
        class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">Next →</a>
@@ -191,7 +191,7 @@
 {% endif %}
 
 {% else %}
-<p style="text-align: center; color: #666; padding: 40px;">No documents found. <a href="{{ url_for('documents.documents_create') }}">Add your first document</a></p>
+<p style="text-align: center; color: var(--color-text-muted); padding: 40px;">No documents found. <a href="{{ url_for('documents.documents_create') }}">Add your first document</a></p>
 {% endif %}
 
 <script>

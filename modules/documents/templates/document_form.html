@@ -26,7 +26,7 @@
                     <option value="{{ cat }}">
                     {% endfor %}
                 </datalist>
-                <small style="color: #999;">Type a new category to auto-add it, or pick from the list</small>
+                <small style="color: var(--color-text-faint);">Type a new category to auto-add it, or pick from the list</small>
             </div>
 
             <div class="form-group">
@@ -39,7 +39,7 @@
                 <label for="expiry_date">Expiry Date</label>
                 <input type="date" id="expiry_date" name="expiry_date"
                        value="{{ document.expiry_date.strftime('%Y-%m-%d') if document and document.expiry_date else '' }}">
-                <small style="color: #999;">Optional. For certificates, contracts, etc.</small>
+                <small style="color: var(--color-text-faint);">Optional. For certificates, contracts, etc.</small>
             </div>
         </div>
 
@@ -58,10 +58,10 @@
                        placeholder="e.g., insurance, contract, 2026 (comma-separated)"
                        autocomplete="off">
                 {% if all_tags %}
-                <div id="tag-suggestions" style="display:none; border:1px solid #ddd; border-top:none; border-radius:0 0 4px 4px; max-height:150px; overflow-y:auto; background:#fff; position:relative; z-index:10;">
+                <div id="tag-suggestions" style="display:none; border:1px solid var(--color-border); border-top:none; border-radius:0 0 4px 4px; max-height:150px; overflow-y:auto; background:var(--color-surface); position:relative; z-index:10;">
                 </div>
                 {% endif %}
-                <small style="color: #999;">Comma-separated tags for quick filtering. Type to see existing tags.</small>
+                <small style="color: var(--color-text-faint);">Comma-separated tags for quick filtering. Type to see existing tags.</small>
             </div>
 
             <div class="form-group">
@@ -100,16 +100,16 @@
             {% if document and doc_files %}
             <div class="form-group">
                 <label>Attached Files</label>
-                <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; background: #fafafa;">
+                <div style="border: 1px solid var(--color-border); border-radius: 6px; padding: 10px; background: var(--color-surface-2);">
                     {% for df in doc_files %}
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; {% if not loop.last %}border-bottom: 1px solid #eee;{% endif %}">
+                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %}">
                         <div style="flex: 1; min-width: 0;">
                             <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank"
-                               style="font-size: 13px; text-decoration: none; color: #1976d2;">
+                               style="font-size: 13px; text-decoration: none; color: var(--color-primary);">
                                 📄 {{ df.original_filename or 'file' }}
                             </a>
                             {% if df.file_size %}
-                            <span style="font-size: 11px; color: #999; margin-left: 6px;">
+                            <span style="font-size: 11px; color: var(--color-text-faint); margin-left: 6px;">
                                 {{ '%.1f'|format(df.file_size / 1024) }} KB
                             </span>
                             {% endif %}
@@ -130,38 +130,38 @@
                 <label for="files">{{ 'Add More Files' if document and doc_files else 'Files (PDF, JPG, PNG)' }} {% if not document %}*{% endif %}</label>
                 <input type="file" id="files" name="files" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xlsx,.xls"
                        multiple {% if not document %}required{% endif %}>
-                <small style="color: #999; display: block; margin-top: 4px;">You can select multiple files at once</small>
+                <small style="color: var(--color-text-faint); display: block; margin-top: 4px;">You can select multiple files at once</small>
             </div>
 
             {% set pdf_signers = module_manager.find_capabilities('pdf_sign') if module_manager else [] %}
             {% set has_sign_module = module_manager and 'pdf_signature' in module_manager.modules %}
             {% if pdf_signers %}
-            <div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 10px;">
-                <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">✍️ Sign PDF after upload</div>
+            <div style="background: var(--color-primary-tint); padding: 12px 15px; border-radius: 6px; border: 1px solid var(--color-primary-tint); margin-top: 10px;">
+                <div style="font-weight: bold; color: var(--color-primary); margin-bottom: 8px;">✍️ Sign PDF after upload</div>
                 {% for cap in pdf_signers %}
                 <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; margin-right: 16px;">
                     <input type="checkbox" name="sign_cap_{{ loop.index0 }}" value="1" style="width:15px; height:15px;">
                     {{ cap.name }}
                 </label>
                 {% endfor %}
-                <div style="color: #888; font-size: 11px; margin-top: 6px;">PDF files will be signed automatically after saving.</div>
+                <div style="color: var(--color-text-faint); font-size: 11px; margin-top: 6px;">PDF files will be signed automatically after saving.</div>
             </div>
             {% elif has_sign_module %}
-            <div style="background: #fff8e1; padding: 10px 12px; border-radius: 6px; border: 1px solid #ffe082; font-size: 12px; color: #666;">
-                ✍️ PDF signing available but not configured. <a href="/settings" style="color: #1565c0;">Configure in Settings → PDF Signature</a>
+            <div style="background: var(--color-warning-bg); padding: 10px 12px; border-radius: 6px; border: 1px solid var(--color-warning-bg); font-size: 12px; color: var(--color-text-muted);">
+                ✍️ PDF signing available but not configured. <a href="/settings" style="color: var(--color-primary);">Configure in Settings → PDF Signature</a>
             </div>
             {% endif %}
         </div>
     </div>
 
     <!-- Initial note (optional) -->
-    <div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 15px;">
-        <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">📝 Add Note (optional)</div>
+    <div style="background: var(--color-primary-tint); padding: 12px 15px; border-radius: 6px; border: 1px solid var(--color-primary-tint); margin-top: 15px;">
+        <div style="font-weight: bold; color: var(--color-primary); margin-bottom: 8px;">📝 Add Note (optional)</div>
         <input type="text" name="initial_note_title" placeholder="Note title (e.g. Payment status, Follow-up)"
-               style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; margin-bottom: 6px;">
+               style="width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 13px; margin-bottom: 6px;">
         <textarea name="initial_note_text" rows="2" placeholder="Note text..."
-                  style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical;"></textarea>
-        <div style="color: #888; font-size: 11px; margin-top: 4px;">You can add more notes after saving.</div>
+                  style="width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical;"></textarea>
+        <div style="color: var(--color-text-faint); font-size: 11px; margin-top: 4px;">You can add more notes after saving.</div>
     </div>
 
     <div style="margin-top: 30px;">
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 var div = document.createElement('div');
                 div.textContent = tag;
                 div.style.cssText = 'padding:6px 10px;cursor:pointer;font-size:13px;';
-                div.onmouseenter = function() { this.style.background = '#f0f0f0'; };
+                div.onmouseenter = function() { this.style.background = 'var(--color-surface-3)'; };
                 div.onmouseleave = function() { this.style.background = ''; };
                 div.onclick = function() {
                     parts[parts.length - 1] = ' ' + tag;
