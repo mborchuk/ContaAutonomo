@@ -18,35 +18,35 @@
     <!-- Left: Details -->
     <div>
         <!-- Info card -->
-        <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">Document Details</h3>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">Document Details</h3>
             <table style="width: 100%; font-size: 14px;">
                 <tr>
-                    <td style="padding: 6px 0; color: #888; width: 140px;">Status</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint); width: 140px;">Status</td>
                     <td style="padding: 6px 0;">
-                        {% set status_colors = {'active': '#28a745', 'pending': '#ffc107', 'archived': '#6c757d', 'expired': '#dc3545'} %}
-                        <span style="padding: 2px 10px; border-radius: 12px; font-size: 12px; color: #fff; background: {{ status_colors.get(doc.status or 'active', '#6c757d') }};">
+                        {% set status_colors = {'active': 'var(--color-success)', 'pending': 'var(--amber-400)', 'archived': 'var(--color-text-muted)', 'expired': 'var(--color-danger)'} %}
+                        <span style="padding: 2px 10px; border-radius: 12px; font-size: 12px; color: var(--color-surface); background: {{ status_colors.get(doc.status or 'active', 'var(--color-text-muted)') }};">
                             {{ (doc.status or 'active')|capitalize }}
                         </span>
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Category</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Category</td>
                     <td style="padding: 6px 0;">
                         {% if doc.category %}
-                        <span style="padding: 2px 8px; border-radius: 3px; font-size: 12px; background: {{ category_colors.get(doc.category, '#e2e3e5') }};">{{ doc.category }}</span>
+                        <span style="padding: 2px 8px; border-radius: 3px; font-size: 12px; background: {{ category_colors.get(doc.category, 'var(--color-surface-3)') }};">{{ doc.category }}</span>
                         {% else %}—{% endif %}
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Date</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Date</td>
                     <td style="padding: 6px 0;">{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '—' }}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Expiry Date</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Expiry Date</td>
                     <td style="padding: 6px 0;">
                         {% if doc.expiry_date %}
-                        <span style="color: {{ '#dc3545' if doc.expiry_date < today else '#333' }};">
+                        <span style="color: {{ 'var(--color-danger)' if doc.expiry_date < today else 'var(--color-text)' }};">
                             {{ doc.expiry_date.strftime('%d/%m/%Y') }}
                             {% if doc.expiry_date < today %} (expired){% endif %}
                         </span>
@@ -54,52 +54,52 @@
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Amount</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Amount</td>
                     <td style="padding: 6px 0;">{{ '%.2f'|format(doc.amount) if doc.amount else '—' }}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Reference #</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Reference #</td>
                     <td style="padding: 6px 0;">{{ doc.reference_number or '—' }}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Counterparty</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Counterparty</td>
                     <td style="padding: 6px 0;">{{ doc.counterparty or '—' }}</td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Tags</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Tags</td>
                     <td style="padding: 6px 0;">
                         {% if doc.tags %}
                             {% for t in doc.tags.split(',') %}
                             <a href="{{ url_for('documents.documents_index', tag=t.strip().lstrip('#')) }}"
-                               style="display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 10px; font-size: 12px; background: #f0f0f0; color: #555; text-decoration: none;">{{ t.strip().lstrip('#') }}</a>
+                               style="display: inline-block; padding: 1px 8px; margin: 1px; border-radius: 10px; font-size: 12px; background: var(--color-surface-3); color: var(--color-text-muted); text-decoration: none;">{{ t.strip().lstrip('#') }}</a>
                             {% endfor %}
                         {% else %}—{% endif %}
                     </td>
                 </tr>
                 <tr>
-                    <td style="padding: 6px 0; color: #888;">Description</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Description</td>
                     <td style="padding: 6px 0;">{{ doc.description or '—' }}</td>
                 </tr>
             </table>
         </div>
 
         <!-- Files -->
-        <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: #666; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">
                 📎 Files ({{ doc_files|length }})
             </h3>
             {% if doc_files %}
             {% for df in doc_files %}
-            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid #f5f5f5;{% endif %}">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %}">
                 <div style="flex: 1; min-width: 0;">
                     <span style="font-size: 13px;">📄 {{ df.original_filename or 'file' }}</span>
                     {% if df.file_size %}
-                    <span style="font-size: 11px; color: #999; margin-left: 8px;">{{ '%.1f'|format(df.file_size / 1024) }} KB</span>
+                    <span style="font-size: 11px; color: var(--color-text-faint); margin-left: 8px;">{{ '%.1f'|format(df.file_size / 1024) }} KB</span>
                     {% endif %}
                     {% if df.file_format %}
-                    <span style="font-size: 10px; color: #999; margin-left: 4px;">{{ df.file_format|upper }}</span>
+                    <span style="font-size: 10px; color: var(--color-text-faint); margin-left: 4px;">{{ df.file_format|upper }}</span>
                     {% endif %}
-                    <span style="font-size: 11px; color: #bbb; margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
+                    <span style="font-size: 11px; color: var(--color-border); margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
                     {# Render file badges from modules (e.g. signature verification) #}
                     {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
                         {% for badge in module_manager.find_capabilities('file_badge') %}
@@ -122,24 +122,24 @@
             </div>
             {% endfor %}
             {% else %}
-            <p style="color: #999; font-size: 13px;">No files attached.</p>
+            <p style="color: var(--color-text-faint); font-size: 13px;">No files attached.</p>
             {% endif %}
         </div>
 
         <!-- Notes -->
-        <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 15px;">
-                <h3 style="margin: 0; font-size: 15px; color: #666;">📝 Notes ({{ notes|length if notes else 0 }})</h3>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-size: 15px; color: var(--color-text-muted);">📝 Notes ({{ notes|length if notes else 0 }})</h3>
                 <button type="button" onclick="document.getElementById('new-note-form').style.display = document.getElementById('new-note-form').style.display === 'none' ? 'block' : 'none'"
                         class="btn btn-primary" style="padding: 3px 10px; font-size: 11px;">+ Add</button>
             </div>
 
             <form id="new-note-form" method="POST" action="{{ url_for('documents.note_add', doc_id=doc.id) }}"
-                  style="display: none; background: #f8f9ff; padding: 12px; border-radius: 6px; border: 1px solid #d0d7ff; margin-bottom: 14px;">
+                  style="display: none; background: var(--color-primary-tint); padding: 12px; border-radius: 6px; border: 1px solid var(--color-primary-tint); margin-bottom: 14px;">
                 <input type="text" name="note_title" placeholder="Title (e.g. Payment status)" required
-                       style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
+                       style="width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 13px; font-weight: 500; margin-bottom: 6px;">
                 <textarea name="note_text" rows="3" placeholder="Write your note..." required
-                          style="width: 100%; padding: 7px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 6px;"></textarea>
+                          style="width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 6px;"></textarea>
                 <div style="display: flex; gap: 6px;">
                     <button type="submit" class="btn btn-success" style="padding: 4px 12px; font-size: 11px;">Save</button>
                     <button type="button" onclick="this.closest('form').style.display='none'"
@@ -149,24 +149,24 @@
 
             {% if notes %}
             {% for note in notes %}
-            <div style="background: #fafafa; border: 1px solid #eee; border-radius: 6px; padding: 12px; margin-bottom: 8px;" data-note="{{ note.id }}">
+            <div style="background: var(--color-surface-2); border: 1px solid var(--color-surface-3); border-radius: 6px; padding: 12px; margin-bottom: 8px;" data-note="{{ note.id }}">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
                     <div>
-                        <strong style="font-size: 13px; color: #333;">{{ note.title }}</strong>
-                        <span style="font-size: 10px; color: #999; margin-left: 6px;">{{ note.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                        <strong style="font-size: 13px; color: var(--color-text);">{{ note.title }}</strong>
+                        <span style="font-size: 10px; color: var(--color-text-faint); margin-left: 6px;">{{ note.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                     </div>
                     <div style="display: flex; gap: 2px; flex-shrink: 0;">
                         <button type="button" onclick="var e=this.closest('[data-note]'); e.querySelector('.nv').style.display='none'; e.querySelector('.ne').style.display='block';"
-                                style="background:none;border:none;color:#999;cursor:pointer;font-size:11px;padding:1px 4px;" title="Edit">✏️</button>
+                                style="background:none;border:none;color:var(--color-text-faint);cursor:pointer;font-size:11px;padding:1px 4px;" title="Edit">✏️</button>
                         <form method="POST" action="{{ url_for('documents.note_delete', note_id=note.id) }}" style="margin:0;" onsubmit="return confirm('Delete this note?');">
-                            <button type="submit" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:11px;padding:1px 4px;" title="Delete">✕</button>
+                            <button type="submit" style="background:none;border:none;color:var(--color-border);cursor:pointer;font-size:11px;padding:1px 4px;" title="Delete">✕</button>
                         </form>
                     </div>
                 </div>
-                <div class="nv" style="font-size: 12px; color: #555; white-space: pre-wrap; word-break: break-word;">{{ note.text }}</div>
+                <div class="nv" style="font-size: 12px; color: var(--color-text-muted); white-space: pre-wrap; word-break: break-word;">{{ note.text }}</div>
                 <form class="ne" method="POST" action="{{ url_for('documents.note_edit', note_id=note.id) }}" style="display:none;">
-                    <input type="text" name="note_title" value="{{ note.title }}" required style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-weight:500;margin-bottom:4px;">
-                    <textarea name="note_text" rows="2" required style="width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:inherit;resize:vertical;margin-bottom:4px;">{{ note.text }}</textarea>
+                    <input type="text" name="note_title" value="{{ note.title }}" required style="width:100%;padding:5px 8px;border:1px solid var(--color-border);border-radius:4px;font-size:12px;font-weight:500;margin-bottom:4px;">
+                    <textarea name="note_text" rows="2" required style="width:100%;padding:5px 8px;border:1px solid var(--color-border);border-radius:4px;font-size:12px;font-family:inherit;resize:vertical;margin-bottom:4px;">{{ note.text }}</textarea>
                     <div style="display:flex;gap:4px;">
                         <button type="submit" class="btn btn-success" style="padding:3px 10px;font-size:10px;">Save</button>
                         <button type="button" onclick="var e=this.closest('[data-note]'); e.querySelector('.ne').style.display='none'; e.querySelector('.nv').style.display='block';"
@@ -176,7 +176,7 @@
             </div>
             {% endfor %}
             {% else %}
-            <p style="color: #bbb; font-size: 12px; text-align: center; padding: 6px 0;">No notes yet.</p>
+            <p style="color: var(--color-border); font-size: 12px; text-align: center; padding: 6px 0;">No notes yet.</p>
             {% endif %}
         </div>
     </div>
@@ -184,35 +184,35 @@
     <!-- Right: Meta + History -->
     <div>
         <!-- Meta -->
-        <div style="background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
-            <div style="color: #888; margin-bottom: 6px;">Created</div>
+        <div style="background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
+            <div style="color: var(--color-text-faint); margin-bottom: 6px;">Created</div>
             <div style="margin-bottom: 12px;">{{ doc.created_at.strftime('%d/%m/%Y %H:%M') if doc.created_at else '—' }}</div>
-            <div style="color: #888; margin-bottom: 6px;">Last Updated</div>
+            <div style="color: var(--color-text-faint); margin-bottom: 6px;">Last Updated</div>
             <div style="margin-bottom: 12px;">{{ doc.updated_at.strftime('%d/%m/%Y %H:%M') if doc.updated_at else '—' }}</div>
-            <div style="color: #888; margin-bottom: 6px;">ID</div>
+            <div style="color: var(--color-text-faint); margin-bottom: 6px;">ID</div>
             <div>#{{ doc.id }}</div>
         </div>
 
         <!-- History -->
-        <div style="background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px;">
-            <h3 style="margin: 0 0 12px 0; font-size: 15px; color: #666;">📜 History</h3>
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 15px; color: var(--color-text-muted);">📜 History</h3>
             {% if history %}
             <div style="max-height: 400px; overflow-y: auto;">
                 {% for h in history %}
-                <div style="padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid #f5f5f5;{% endif %} font-size: 12px;">
+                <div style="padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %} font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
                         {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄'} %}
                         <span style="font-weight: 500;">{{ action_icons.get(h.action, '•') }} {{ h.action|replace('_', ' ')|capitalize }}</span>
-                        <span style="color: #999;">{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+                        <span style="color: var(--color-text-faint);">{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                     </div>
                     {% if h.details %}
-                    <div style="color: #666; font-size: 11px; word-break: break-word;">{{ h.details }}</div>
+                    <div style="color: var(--color-text-muted); font-size: 11px; word-break: break-word;">{{ h.details }}</div>
                     {% endif %}
                 </div>
                 {% endfor %}
             </div>
             {% else %}
-            <p style="color: #999; font-size: 12px;">No history yet.</p>
+            <p style="color: var(--color-text-faint); font-size: 12px;">No history yet.</p>
             {% endif %}
         </div>
     </div>

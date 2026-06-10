@@ -1,15 +1,15 @@
-<h3 style="margin-bottom: 15px; color: #333;">✍️ PDF Signature</h3>
-<p style="color: #666; margin-bottom: 20px;">Configure visual and digital signing of invoice PDFs.</p>
+<h3 style="margin-bottom: 15px; color: var(--color-text);">✍️ PDF Signature</h3>
+<p style="color: var(--color-text-muted); margin-bottom: 20px;">Configure visual and digital signing of invoice PDFs.</p>
 
 {% if not pillow_available %}
-<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 14px;">
+<div style="background: var(--color-warning-bg); border: 1px solid var(--amber-400); padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 14px;">
     <strong>⚠️ Pillow not installed.</strong> Visual signature (image overlay) is unavailable.
     Install with: <code>pip install Pillow</code>
 </div>
 {% endif %}
 
 {% if not pyhanko_available %}
-<div style="background: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 14px;">
+<div style="background: var(--color-warning-bg); border: 1px solid var(--amber-400); padding: 12px; border-radius: 5px; margin-bottom: 15px; font-size: 14px;">
     <strong>⚠️ pyHanko not installed.</strong> Digital (X.509) signing is unavailable.
     Install with: <code>pip install pyhanko</code>
 </div>
@@ -24,25 +24,25 @@
                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
         Enable visual signature (image overlay on PDF)
         {% if not pillow_available %}
-        <span style="color: #dc3545; font-size: 12px; margin-left: 8px;">— requires Pillow</span>
+        <span style="color: var(--color-danger); font-size: 12px; margin-left: 8px;">— requires Pillow</span>
         {% endif %}
     </label>
 </div>
 
 <!-- Signature Image Upload -->
-<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+<div style="background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
     <h4 style="margin-bottom: 10px;">Signature Image</h4>
-    <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Upload a PNG or JPG image of your signature.</p>
+    <p style="color: var(--color-text-muted); font-size: 13px; margin-bottom: 10px;">Upload a PNG or JPG image of your signature.</p>
 
     {% if cfg.signature_image_key %}
-    <div style="margin-bottom: 12px; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px;">
+    <div style="margin-bottom: 12px; padding: 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px;">
         <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="color: #2e7d32; font-size: 14px;">✓ Signature image configured</span>
-            <span style="color: #666; font-size: 13px;">({{ cfg.signature_image_key.split('/')[-1] }})</span>
+            <span style="color: var(--color-success); font-size: 14px;">✓ Signature image configured</span>
+            <span style="color: var(--color-text-muted); font-size: 13px;">({{ cfg.signature_image_key.split('/')[-1] }})</span>
         </div>
         <div style="margin-top: 8px;">
             <img id="pdf-sig-preview" src="/pdf-signature/preview-signature" alt="Signature preview"
-                 style="max-width: 200px; max-height: 80px; border: 1px solid #ccc; border-radius: 3px;"
+                 style="max-width: 200px; max-height: 80px; border: 1px solid var(--color-border); border-radius: 3px;"
                  onerror="this.style.display='none'">
         </div>
     </div>
@@ -53,7 +53,7 @@
                style="font-size: 14px;"
                {% if not pillow_available %}disabled{% endif %}>
         <button type="button" onclick="uploadSignatureImage()" class="btn btn-sm"
-                style="padding: 6px 14px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+                style="padding: 6px 14px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
                 {% if not pillow_available %}disabled{% endif %}>
             Upload
         </button>
@@ -71,21 +71,21 @@
                style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
         Enable digital signature (X.509 / PFX certificate)
         {% if not pyhanko_available %}
-        <span style="color: #dc3545; font-size: 12px; margin-left: 8px;">— requires pyHanko</span>
+        <span style="color: var(--color-danger); font-size: 12px; margin-left: 8px;">— requires pyHanko</span>
         {% endif %}
     </label>
 </div>
 
 <!-- Certificate Upload -->
-<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+<div style="background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
     <h4 style="margin-bottom: 10px;">PFX / P12 Certificate</h4>
-    <p style="color: #666; font-size: 13px; margin-bottom: 10px;">Upload your .pfx or .p12 certificate file for digital signing.</p>
+    <p style="color: var(--color-text-muted); font-size: 13px; margin-bottom: 10px;">Upload your .pfx or .p12 certificate file for digital signing.</p>
 
     {% if cfg.certificate_key %}
-    <div style="margin-bottom: 12px; padding: 10px; background: #fff; border: 1px solid #dee2e6; border-radius: 4px;">
+    <div style="margin-bottom: 12px; padding: 10px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 4px;">
         <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="color: #2e7d32; font-size: 14px;">✓ Certificate configured</span>
-            <span style="color: #666; font-size: 13px;">({{ cfg.certificate_key.split('/')[-1] if cfg.certificate_key else '' }})</span>
+            <span style="color: var(--color-success); font-size: 14px;">✓ Certificate configured</span>
+            <span style="color: var(--color-text-muted); font-size: 13px;">({{ cfg.certificate_key.split('/')[-1] if cfg.certificate_key else '' }})</span>
         </div>
     </div>
     {% endif %}
@@ -95,7 +95,7 @@
                style="font-size: 14px;"
                {% if not pyhanko_available %}disabled{% endif %}>
         <button type="button" onclick="uploadCertificate()" class="btn btn-sm"
-                style="padding: 6px 14px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+                style="padding: 6px 14px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
                 {% if not pyhanko_available %}disabled{% endif %}>
             Upload
         </button>
@@ -105,15 +105,15 @@
 </div>
 
 <!-- Signature Position Settings -->
-<div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+<div style="background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
     <h4 style="margin-bottom: 10px;">Signature Position</h4>
-    <p style="color: #666; font-size: 13px; margin-bottom: 12px;">Configure where the visual signature appears on the PDF.</p>
+    <p style="color: var(--color-text-muted); font-size: 13px; margin-bottom: 12px;">Configure where the visual signature appears on the PDF.</p>
 
     <div style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
         <div>
             <label for="pdf_sig_position" style="font-weight: 600; display: block; margin-bottom: 5px; font-size: 13px;">Position</label>
             <select name="pdf_sig_position" id="pdf_sig_position"
-                    style="padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; min-width: 160px;">
+                    style="padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 14px; min-width: 160px;">
                 <option value="bottom-left" {% if (cfg.sig_position or 'bottom-left') == 'bottom-left' %}selected{% endif %}>Bottom Left</option>
                 <option value="bottom-center" {% if cfg.sig_position == 'bottom-center' %}selected{% endif %}>Bottom Center</option>
                 <option value="bottom-right" {% if cfg.sig_position == 'bottom-right' %}selected{% endif %}>Bottom Right</option>
@@ -126,19 +126,19 @@
             <label for="pdf_sig_margin_x" style="font-weight: 600; display: block; margin-bottom: 5px; font-size: 13px;">Horizontal Margin (pt)</label>
             <input type="number" name="pdf_sig_margin_x" id="pdf_sig_margin_x"
                    value="{{ cfg.sig_margin_x if cfg.sig_margin_x is not none else 40 }}"
-                   min="0" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                   min="0" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 14px;">
         </div>
         <div>
             <label for="pdf_sig_margin_y" style="font-weight: 600; display: block; margin-bottom: 5px; font-size: 13px;">Vertical Margin (pt)</label>
             <input type="number" name="pdf_sig_margin_y" id="pdf_sig_margin_y"
                    value="{{ cfg.sig_margin_y if cfg.sig_margin_y is not none else 40 }}"
-                   min="0" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                   min="0" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 14px;">
         </div>
         <div>
             <label for="pdf_sig_max_width" style="font-weight: 600; display: block; margin-bottom: 5px; font-size: 13px;">Max Width (pt)</label>
             <input type="number" name="pdf_sig_max_width" id="pdf_sig_max_width"
                    value="{{ cfg.sig_max_width if cfg.sig_max_width is not none else 150 }}"
-                   min="20" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px;">
+                   min="20" max="500" style="width: 80px; padding: 6px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 14px;">
         </div>
     </div>
 </div>
@@ -151,7 +151,7 @@
            placeholder="PFX/P12 certificate password"
            style="max-width: 400px;"
            {% if not pyhanko_available %}disabled{% endif %}>
-    <small style="display: block; margin-top: 5px; color: #666;">Password for your PFX/P12 certificate file.</small>
+    <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">Password for your PFX/P12 certificate file.</small>
 </div>
 
 <!-- Debug info (hidden by default, visible in page source) -->
@@ -162,19 +162,19 @@ function uploadSignatureImage() {
     const fileInput = document.getElementById('pdf_sig_image_file');
     const statusEl = document.getElementById('pdf-sig-image-status');
     if (!fileInput.files.length) {
-        statusEl.innerHTML = '<span style="color: #dc3545;">Please select a file first.</span>';
+        statusEl.innerHTML = '<span style="color: var(--color-danger);">Please select a file first.</span>';
         return;
     }
     const file = fileInput.files[0];
     const ext = file.name.split('.').pop().toLowerCase();
     if (!['png', 'jpg', 'jpeg'].includes(ext)) {
-        statusEl.innerHTML = '<span style="color: #dc3545;">Invalid format. Please upload PNG or JPG.</span>';
+        statusEl.innerHTML = '<span style="color: var(--color-danger);">Invalid format. Please upload PNG or JPG.</span>';
         return;
     }
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', 'signature');
-    statusEl.innerHTML = '<span style="color: #666;">Uploading...</span>';
+    statusEl.innerHTML = '<span style="color: var(--color-text-muted);">Uploading...</span>';
     console.log('[PDF Signature] Uploading signature image:', file.name);
     fetch('/pdf-signature/upload-file', { method: 'POST', body: formData })
         .then(r => {
@@ -184,15 +184,15 @@ function uploadSignatureImage() {
         .then(data => {
             console.log('[PDF Signature] Upload response data:', data);
             if (data.error) {
-                statusEl.innerHTML = '<span style="color: #dc3545;">' + data.error + '</span>';
+                statusEl.innerHTML = '<span style="color: var(--color-danger);">' + data.error + '</span>';
             } else {
                 document.getElementById('pdf_sig_image_key').value = data.storage_key;
-                statusEl.innerHTML = '<span style="color: #2e7d32;">✓ Uploaded successfully. Click "Save Settings" to apply.</span>';
+                statusEl.innerHTML = '<span style="color: var(--color-success);">✓ Uploaded successfully. Click "Save Settings" to apply.</span>';
             }
         })
         .catch(err => {
             console.error('[PDF Signature] Upload failed:', err);
-            statusEl.innerHTML = '<span style="color: #dc3545;">Upload failed. Check browser console for details.</span>';
+            statusEl.innerHTML = '<span style="color: var(--color-danger);">Upload failed. Check browser console for details.</span>';
         });
 }
 
@@ -200,19 +200,19 @@ function uploadCertificate() {
     const fileInput = document.getElementById('pdf_sig_cert_file');
     const statusEl = document.getElementById('pdf-sig-cert-status');
     if (!fileInput.files.length) {
-        statusEl.innerHTML = '<span style="color: #dc3545;">Please select a file first.</span>';
+        statusEl.innerHTML = '<span style="color: var(--color-danger);">Please select a file first.</span>';
         return;
     }
     const file = fileInput.files[0];
     const ext = file.name.split('.').pop().toLowerCase();
     if (!['pfx', 'p12'].includes(ext)) {
-        statusEl.innerHTML = '<span style="color: #dc3545;">Invalid format. Please upload .pfx or .p12 file.</span>';
+        statusEl.innerHTML = '<span style="color: var(--color-danger);">Invalid format. Please upload .pfx or .p12 file.</span>';
         return;
     }
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', 'certificate');
-    statusEl.innerHTML = '<span style="color: #666;">Uploading...</span>';
+    statusEl.innerHTML = '<span style="color: var(--color-text-muted);">Uploading...</span>';
     console.log('[PDF Signature] Uploading certificate:', file.name);
     fetch('/pdf-signature/upload-file', { method: 'POST', body: formData })
         .then(r => {
@@ -222,15 +222,15 @@ function uploadCertificate() {
         .then(data => {
             console.log('[PDF Signature] Upload response data:', data);
             if (data.error) {
-                statusEl.innerHTML = '<span style="color: #dc3545;">' + data.error + '</span>';
+                statusEl.innerHTML = '<span style="color: var(--color-danger);">' + data.error + '</span>';
             } else {
                 document.getElementById('pdf_sig_cert_key').value = data.storage_key;
-                statusEl.innerHTML = '<span style="color: #2e7d32;">✓ Uploaded successfully. Click "Save Settings" to apply.</span>';
+                statusEl.innerHTML = '<span style="color: var(--color-success);">✓ Uploaded successfully. Click "Save Settings" to apply.</span>';
             }
         })
         .catch(err => {
             console.error('[PDF Signature] Upload failed:', err);
-            statusEl.innerHTML = '<span style="color: #dc3545;">Upload failed. Check browser console for details.</span>';
+            statusEl.innerHTML = '<span style="color: var(--color-danger);">Upload failed. Check browser console for details.</span>';
         });
 }
 </script>

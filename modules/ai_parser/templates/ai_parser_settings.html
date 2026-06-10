@@ -1,5 +1,5 @@
-<h3 style="margin-bottom: 15px; color: #333;">🤖 AI Document Parser</h3>
-<p style="color: #666; margin-bottom: 20px;">Configure AI provider for automatic invoice and expense parsing.</p>
+<h3 style="margin-bottom: 15px; color: var(--color-text);">🤖 AI Document Parser</h3>
+<p style="color: var(--color-text-muted); margin-bottom: 20px;">Configure AI provider for automatic invoice and expense parsing.</p>
 
 <div class="form-group">
     <label style="font-weight: 600; margin-bottom: 10px; display: block;">Active Provider</label>
@@ -11,7 +11,7 @@
                onchange="showAIProviderConfig('{{ p.id }}')">
         <span>{{ p.name }}
             {% if p.configured %}
-            <span style="color: #2e7d32; font-size: 12px; margin-left: 5px;">✓ configured</span>
+            <span style="color: var(--color-success); font-size: 12px; margin-left: 5px;">✓ configured</span>
             {% endif %}
         </span>
     </label>
@@ -21,7 +21,7 @@
 <!-- OpenAI config -->
 <div id="ai_config_openai" class="ai-provider-config"
      style="{% if cfg.provider != 'openai' %}display:none;{% endif %}
-            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
     <h4 style="margin-bottom: 10px;">OpenAI Settings</h4>
     <div class="form-group">
         <label for="ai_openai_api_key">API Key</label>
@@ -41,7 +41,7 @@
 <!-- Anthropic config -->
 <div id="ai_config_anthropic" class="ai-provider-config"
      style="{% if cfg.provider != 'anthropic' %}display:none;{% endif %}
-            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
     <h4 style="margin-bottom: 10px;">Anthropic Settings</h4>
     <div class="form-group">
         <label for="ai_anthropic_api_key">API Key</label>
@@ -61,7 +61,7 @@
 <!-- Google Document AI config -->
 <div id="ai_config_google_docai" class="ai-provider-config"
      style="{% if cfg.provider != 'google_docai' %}display:none;{% endif %}
-            background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
     <h4 style="margin-bottom: 10px;">Google Document AI Settings</h4>
     <div class="form-group">
         <label for="ai_google_project_id">GCP Project ID</label>
@@ -72,7 +72,7 @@
         <label for="ai_google_processor_id">Processor ID</label>
         <input type="text" id="ai_google_processor_id" name="ai_google_processor_id"
                value="{{ cfg.google_processor_id }}" placeholder="abc123def456">
-        <small style="display: block; margin-top: 5px; color: #666;">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             Create an Invoice Parser processor in <a href="https://console.cloud.google.com/ai/document-ai" target="_blank">Document AI Console</a>.
         </small>
     </div>
@@ -83,7 +83,7 @@
             <option value="us" {% if cfg.google_location == 'us' %}selected{% endif %}>US</option>
         </select>
     </div>
-    <small style="color: #666;">
+    <small style="color: var(--color-text-muted);">
         Authentication: uses Application Default Credentials or GOOGLE_APPLICATION_CREDENTIALS env var.
     </small>
 </div>
