@@ -4,9 +4,36 @@ Tax Management Module
 Handles tax forms (Modelo 349, 303, 130, 390, 100) and Social Security payments.
 """
 
+import csv
+import io
+
 from module_manager import BaseModule
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from datetime import datetime
+
+
+def _csv_safe(value):
+    """Neutralize spreadsheet formula injection in user-entered text."""
+    if value and value[0] in ('=', '+', '-', '@', '\t', '\r'):
+        return "'" + value
+    return value
+
+
+def build_ss_payments_csv(payments):
+    """Render SS payments to CSV text (Date, Description, Amount) with a total row."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(['Date', 'Description', 'Amount (EUR)'])
+    total = 0.0
+    for p in payments:
+        writer.writerow([
+            p.payment_date.isoformat(),
+            _csv_safe(p.description or ''),
+            f'{p.amount:.2f}',
+        ])
+        total += p.amount
+    writer.writerow(['', 'Total', f'{total:.2f}'])
+    return buf.getvalue()
 
 
 class TaxManagementModule(BaseModule):
@@ -132,6 +159,11 @@ class TaxManagementModule(BaseModule):
         @login_required
         def ss_payment_delete(id):
             return self._delete_ss_payment(id)
+
+        @bp.route('/ss-payments/export')
+        @login_required
+        def ss_payment_export():
+            return self._export_ss_payments()
 
         app.register_blueprint(bp)
 
@@ -351,6 +383,28 @@ class TaxManagementModule(BaseModule):
             self.logger.error('Error updating SS payment: %s', e)
             flash('Error processing form data. Please check your input.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
+
+    def _export_ss_payments(self):
+        """Export SS payments as a CSV download, optionally filtered by ?year=YYYY"""
+        year = request.args.get('year', type=int)
+        query = self.SSPayment.query
+        if year:
+            query = query.filter(
+                self._db.extract('year', self.SSPayment.payment_date) == year
+            )
+        payments = query.order_by(self.SSPayment.payment_date).all()
+
+        csv_text = build_ss_payments_csv(payments)
+        filename = f'ss_payments_{year}.csv' if year else 'ss_payments.csv'
+        self.core.log_activity(
+            'ss_payments_exported', 'tax',
+            f'{len(payments)} payments' + (f', year {year}' if year else '')
+        )
+        return Response(
+            csv_text,
+            mimetype='text/csv; charset=utf-8',
+            headers={'Content-Disposition': f'attachment; filename="{filename}"'}
+        )
 
     def _delete_ss_payment(self, id):
         """Delete a Social Security payment"""
