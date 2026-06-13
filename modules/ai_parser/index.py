@@ -478,7 +478,7 @@ class AIParserModule(BaseModule):
         <div style="display: flex; gap: 10px; align-items: end; margin-top: 8px;">
             <div style="flex: 1;">
                 <input type="file" id="ai_parse_file" accept=".pdf,.jpg,.jpeg,.png"
-                       style="padding: 8px; border: 1px dashed #90caf9; border-radius: 5px; background: white; width: 100%;">
+                       style="padding: 8px; border: 1px dashed #90caf9; border-radius: 5px; background: var(--color-surface); width: 100%;">
             </div>
             <button type="button" onclick="aiParseDocument('invoice')" class="btn btn-primary"
                     id="ai_parse_btn" style="white-space: nowrap;">

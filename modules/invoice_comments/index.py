@@ -111,7 +111,7 @@ class InvoiceCommentsModule(BaseModule):
 
 
 COMMENTS_TEMPLATE = '''
-<div style="margin-top: 30px; background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px;">
+<div style="margin-top: 30px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px;">
     <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #5b6bc0; border-bottom: 1px solid #eee; padding-bottom: 8px;">
         💬 Internal Comments ({{ comments|length }})
     </h3>
