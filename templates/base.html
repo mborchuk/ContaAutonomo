@@ -9,12 +9,17 @@
     {% endif %}
     <title>{% block title %}ContaAutónomo{% endblock %} · ContaAutónomo</title>
 
-    {# Apply saved theme before first paint to avoid a flash of the wrong theme. #}
+    {# Apply theme before first paint to avoid a flash. With no saved choice we
+       follow the OS (theme-auto), applying .dark when the OS prefers dark. #}
     <script>
         (function () {
+            var root = document.documentElement;
             var t = localStorage.getItem('theme');
-            if (t === 'dark') { document.documentElement.classList.add('dark'); document.documentElement.classList.remove('theme-auto'); }
-            else if (t === 'light') { document.documentElement.classList.remove('theme-auto'); }
+            if (t === 'dark') { root.classList.add('dark'); root.classList.remove('theme-auto'); }
+            else if (t === 'light') { root.classList.remove('theme-auto'); }
+            else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                root.classList.add('dark');  // auto + OS dark; keep theme-auto so it tracks OS
+            }
         })();
     </script>
 
@@ -152,6 +157,13 @@
     sync();
     if (btn) btn.addEventListener('click', toggle);
     window.__toggleTheme = toggle;
+
+    // While following the OS (no explicit choice), track live OS theme changes.
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function (e) {
+            if (root.classList.contains('theme-auto')) { root.classList.toggle('dark', e.matches); sync(); }
+        });
+    }
 
     // --- Responsive nav ---
     var navToggle = document.querySelector('.nav-toggle');

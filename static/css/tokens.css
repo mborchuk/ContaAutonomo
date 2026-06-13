@@ -110,7 +110,9 @@
 /* ============================================================================
    Dark theme — re-point the SAME semantic tokens. Components need no changes.
    ============================================================================ */
+:root { color-scheme: light; }
 html.dark {
+    color-scheme: dark;
     --color-bg:            var(--slate-900);
     --color-surface:       var(--slate-800);
     --color-surface-2:     #243044;
@@ -143,7 +145,6 @@ html.dark {
     --shadow-lg: 0 10px 30px rgba(0,0,0,.55);
 }
 
-/* Respect OS preference only when user has not explicitly chosen a theme. */
-@media (prefers-color-scheme: dark) {
-    html.theme-auto { color-scheme: dark; }
-}
+/* Auto-following the OS is handled in JS (the no-FOUC script adds .dark when
+   the OS prefers dark and the user has not made an explicit choice), so the
+   dark theme above is the single source for dark styling. */
