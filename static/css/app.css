@@ -303,8 +303,21 @@ tbody tr:hover { background: var(--color-surface-2); }
 }
 
 /* ============================================================================
-   Responsive — collapse nav under 900px
+   Responsive
+   Breakpoints:  1024 tablet landscape · 900 nav collapse · 768 phone/tablet
+   portrait (stack grids, forms, tables) · 560 small phone fine-tuning.
    ============================================================================ */
+
+/* Never let media overflow its container on any screen. */
+img, svg, video, canvas, pre { max-width: 100%; }
+
+/* ---- Tablet landscape ---- */
+@media (max-width: 1024px) {
+    .container { padding: var(--space-5); }
+    .nav-container { padding: 0 var(--space-4); }
+}
+
+/* ---- Nav collapses to hamburger ---- */
 @media (max-width: 900px) {
     .nav-toggle { display: flex; align-items: center; justify-content: center; }
     .nav-menu {
@@ -312,16 +325,46 @@ tbody tr:hover { background: var(--color-surface-2); }
         flex-direction: column; align-items: stretch; justify-content: flex-start;
         background: var(--color-surface); border-bottom: 1px solid var(--color-border);
         box-shadow: var(--shadow-md); padding: var(--space-2); gap: var(--space-1);
+        max-height: calc(100vh - var(--nav-height)); overflow-y: auto;
     }
     .nav-menu.open { display: flex; }
     .nav-dropdown-menu { position: static; box-shadow: none; border: none; min-width: 0; padding-left: var(--space-4); }
     .nav-dropdown:hover .nav-dropdown-menu { display: none; }
     .nav-dropdown.open .nav-dropdown-menu { display: block; }
-    .container { margin: var(--space-3); padding: var(--space-4); }
 }
 
+/* ---- Phone & tablet portrait: stack multi-column layouts ---- */
+@media (max-width: 768px) {
+    .container { margin: var(--space-3); padding: var(--space-4); }
+
+    /* Collapse any 2/3/4-column grid (inline or class-based) to one column.
+       !important beats the normal inline `grid-template-columns` declarations. */
+    [style*="grid-template-columns"],
+    .form-row, .form-row-full { grid-template-columns: 1fr !important; }
+
+    /* Filter bars: each control on its own full-width row (the inner <form>
+       is the real flex container, so stack its children with a gap). */
+    .filter-form, .filter-form form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-2); }
+    .filter-form input, .filter-form select, .filter-form .btn, .filter-form label {
+        width: 100% !important; margin: 0 !important;
+    }
+
+    /* Wide tables scroll horizontally instead of squashing. */
+    table {
+        display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap;
+    }
+
+    /* Bigger tap targets. */
+    .btn, .nav-btn { padding: var(--space-3) var(--space-4); }
+}
+
+/* ---- Small phone ---- */
 @media (max-width: 560px) {
     .container { padding: var(--space-3); }
-    table { display: block; overflow-x: auto; white-space: nowrap; }
     h1 { font-size: var(--fs-xl); }
+    h2 { font-size: var(--fs-lg); }
+    table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+    .nav-logo-text { display: none; }          /* keep the icon, drop the wordmark */
+    .nav-container { gap: var(--space-2); }
+    .theme-toggle { width: 40px; height: 40px; }
 }
