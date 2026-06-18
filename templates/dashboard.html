@@ -23,81 +23,79 @@
 <div class="card">
     <div class="card-header">Currency &amp; Information</div>
     <div class="card-body">
-        <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-                <td style="width: 15%; padding: 15px; border-right: 1px solid var(--color-border); vertical-align: top;">
-                    <div style="color: var(--color-text-muted); font-size: 12px; margin-bottom: 5px;">Current Date</div>
-                    <div style="font-size: 18px; font-weight: bold; color: var(--color-text);">{{ current_date }}</div>
-                </td>
-                <td style="width: 25%; padding: 15px; border-right: 1px solid var(--color-border); vertical-align: top;">
-                    <div style="color: var(--color-text-muted); font-size: 12px; margin-bottom: 10px;">Exchange Rates ({{ base_currency }} base)</div>
-                    <table style="width: 100%; font-size: 13px;">
+        <div class="ca-info-grid">
+            <div class="ca-info-col">
+                <div class="ca-info-label">Current Date</div>
+                <div style="font-size: var(--fs-md); font-weight: bold; color: var(--color-text);">{{ current_date }}</div>
+            </div>
+            <div class="ca-info-col">
+                <div class="ca-info-label">Exchange Rates ({{ base_currency }} base)</div>
+                <table style="width: 100%; font-size: var(--fs-sm); margin: 0;">
+                    {% for currency in tracked_currencies %}
+                    {% if currency != base_currency %}
+                    <tr>
+                        <td style="padding: 3px 0; color: var(--color-text); font-weight: 500; border: none;">{{ currency }}:</td>
+                        <td style="padding: 3px 0; text-align: right; color: var(--color-text-muted); border: none;">{{ "%.4f"|format(exchange_rates.get(currency, 0)) }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </table>
+            </div>
+            <div class="ca-info-col">
+                <div class="ca-info-label">Currency Converter</div>
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
+                    <input type="number" id="converter-amount" value="100" step="0.01"
+                           style="width: 80px; padding: 6px; font-size: 14px;"
+                           oninput="convertCurrency()">
+                    <select id="converter-from" style="flex: 1; padding: 6px; font-size: 13px;"
+                            onchange="convertCurrency()">
                         {% for currency in tracked_currencies %}
-                        {% if currency != base_currency %}
-                        <tr>
-                            <td style="padding: 3px 0; color: var(--color-text); font-weight: 500;">{{ currency }}:</td>
-                            <td style="padding: 3px 0; text-align: right; color: var(--color-text-muted);">{{ "%.4f"|format(exchange_rates.get(currency, 0)) }}</td>
-                        </tr>
-                        {% endif %}
+                        <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
                         {% endfor %}
-                    </table>
-                </td>
-                <td style="width: 25%; padding: 15px; border-right: 1px solid var(--color-border); vertical-align: top;">
-                    <div style="color: var(--color-text-muted); font-size: 12px; margin-bottom: 10px;">Currency Converter</div>
-                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-                        <input type="number" id="converter-amount" value="100" step="0.01"
-                               style="width: 80px; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px; font-size: 14px;"
-                               oninput="convertCurrency()">
-                        <select id="converter-from" style="flex: 1; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px; font-size: 13px;"
-                                onchange="convertCurrency()">
-                            {% for currency in tracked_currencies %}
-                            <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
-                        <input type="number" id="converter-result" readonly
-                               style="width: 80px; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px; font-size: 14px; background: var(--color-surface-3);">
-                        <select id="converter-to" style="flex: 1; padding: 6px; border: 1px solid var(--color-border); border-radius: 3px; font-size: 13px;"
-                                onchange="convertCurrency()">
-                            {% for currency in tracked_currencies %}
-                            <option value="{{ currency }}" {% if currency == base_currency %}selected{% endif %}>{{ currency }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </td>
-                <td style="width: 20%; padding: 15px; border-right: 1px solid var(--color-border); vertical-align: top;">
-                    <div style="color: var(--color-text-muted); font-size: 12px; margin-bottom: 10px;">Tax Deadlines</div>
-                    {% if tax_deadlines %}
-                    <div style="font-size: 11px;">
-                        {% for deadline in tax_deadlines %}
-                        <div style="margin-bottom: 8px;">
-                            <div style="font-weight: 500; color: var(--color-text);">Mod. {{ deadline.forms[0][0] }} — {{ deadline.forms[0][1] }}</div>
-                            <div style="color: var(--color-text-faint);">{{ deadline.date }}</div>
-                        </div>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="number" id="converter-result" readonly
+                           style="width: 80px; padding: 6px; font-size: 14px; background: var(--color-surface-3);">
+                    <select id="converter-to" style="flex: 1; padding: 6px; font-size: 13px;"
+                            onchange="convertCurrency()">
+                        {% for currency in tracked_currencies %}
+                        <option value="{{ currency }}" {% if currency == base_currency %}selected{% endif %}>{{ currency }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="ca-info-col">
+                <div class="ca-info-label">Tax Deadlines</div>
+                {% if tax_deadlines %}
+                <div style="font-size: 11px;">
+                    {% for deadline in tax_deadlines %}
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-weight: 500; color: var(--color-text);">Mod. {{ deadline.forms[0][0] }} — {{ deadline.forms[0][1] }}</div>
+                        <div style="color: var(--color-text-faint);">{{ deadline.date }}</div>
                     </div>
-                    {% else %}
-                    <div style="color: var(--color-text-faint); font-size: 11px;">No upcoming deadlines</div>
-                    {% endif %}
-                </td>
-                <td style="width: 15%; padding: 15px; vertical-align: top;">
-                    <div style="color: var(--color-text-muted); font-size: 12px; margin-bottom: 10px;">Upcoming Holidays</div>
-                    {% if holidays %}
-                    <div style="font-size: 11px;">
-                        {% for holiday in holidays %}
-                        <div style="margin-bottom: 8px;">
-                            <div style="font-weight: 500; color: var(--color-text);">{{ holiday.localName }}</div>
-                            <div style="color: var(--color-text-faint);">{{ holiday.date }}</div>
-                        </div>
-                        {% endfor %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="color: var(--color-text-faint); font-size: 11px;">No upcoming deadlines</div>
+                {% endif %}
+            </div>
+            <div class="ca-info-col">
+                <div class="ca-info-label">Upcoming Holidays</div>
+                {% if holidays %}
+                <div style="font-size: 11px;">
+                    {% for holiday in holidays %}
+                    <div style="margin-bottom: 8px;">
+                        <div style="font-weight: 500; color: var(--color-text);">{{ holiday.localName }}</div>
+                        <div style="color: var(--color-text-faint);">{{ holiday.date }}</div>
                     </div>
-                    {% else %}
-                    <div style="color: var(--color-text-faint); font-size: 11px;">No upcoming holidays</div>
-                    {% endif %}
-                </td>
-            </tr>
-        </table>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="color: var(--color-text-faint); font-size: 11px;">No upcoming holidays</div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 {% endif %}
