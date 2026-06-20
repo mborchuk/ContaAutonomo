@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p style="background: var(--color-surface); border: 1px solid var(--color-border);
+   border-radius: 4px; padding: 10px;">
+  <strong>ESTIMATE — not tax advice.</strong> Confirm with AEAT before filing.
+</p>
+
+<p>Recommended: <strong>{{ recommendation.recommended }}</strong>
+   (lower cuota diferencial).</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  {% for mode in ['individual', 'conjunta'] %}
+    {% set res = recommendation[mode] %}
+    <div style="background: var(--color-surface); border: 1px solid var(--color-border);
+         border-radius: 4px; padding: 15px;
+         {% if recommendation.recommended == mode %}outline: 2px solid var(--color-accent, #2a7);{% endif %}">
+      <h3>{{ mode.title() }}
+        {% if recommendation.recommended == mode %}✓{% endif %}</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          {% for line in res.lines %}
+            <tr style="border-bottom: 1px solid var(--color-border);
+                {% if line.total %}font-weight: 700;{% endif %}">
+              <td style="padding: 6px;">{{ line.label }}</td>
+              <td style="padding: 6px; text-align: right;">€{{ '%.2f'|format(line.amount) }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+</div>
+<p style="margin-top: 20px;"><a href="{{ url_for('tax_es_irpf.index', year=year) }}">← Back</a></p>
+{% endblock %}

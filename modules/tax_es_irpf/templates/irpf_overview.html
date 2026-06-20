@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}IRPF Estimator{% endblock %}
+{% block content %}
+<h1>🧮 IRPF Estimator (España)</h1>
+<p style="background: var(--color-surface); border: 1px solid var(--color-border);
+   border-radius: 4px; padding: 10px;">
+  <strong>ESTIMATE — not tax advice.</strong> Numbers are approximations to help
+  you plan. Confirm against AEAT (Renta WEB) before filing.
+</p>
+
+<form method="get" style="margin: 15px 0;">
+  <label for="year">Tax year:</label>
+  <select name="year" id="year" onchange="this.form.submit()">
+    {% for y in years %}
+      <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+{% if error %}
+  <p style="color: var(--color-danger, #c00);">{{ error }}</p>
+{% else %}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border);
+       border-radius: 4px; padding: 20px;">
+    <h3>Modelo 130 — {{ quarter }}T {{ year }}</h3>
+    <p style="font-size: 2em; margin: 10px 0;">
+      €{{ '%.2f'|format(m130.summary.modelo130_due) }}
+    </p>
+    <a href="{{ url_for('tax_es_irpf.modelo130', year=year, quarter=quarter) }}">
+      View line by line →</a>
+  </div>
+  <div style="background: var(--color-surface); border: 1px solid var(--color-border);
+       border-radius: 4px; padding: 20px;">
+    <h3>Modelo 100 — {{ year }}</h3>
+    <p style="font-size: 2em; margin: 10px 0;">
+      €{{ '%.2f'|format(m100.summary.modelo100_diferencial) }}
+      <small>{{ 'a ingresar' if m100.summary.a_ingresar else 'a devolver' }}</small>
+    </p>
+    <a href="{{ url_for('tax_es_irpf.modelo100', year=year) }}">
+      View line by line →</a>
+  </div>
+</div>
+{% for note in m100.notes %}
+  <p style="color: #888;"><em>{{ note }}</em></p>
+{% endfor %}
+{% endif %}
+{% endblock %}

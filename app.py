@@ -332,6 +332,10 @@ class Invoice(db.Model):
     pdf_storage_key = db.Column(db.String(500))  # Storage key for PDF (local path or remote ID)
     currency = db.Column(db.String(10), default='USD')  # Invoice currency
     payment_method = db.Column(db.String(100), default='Bank Transfer')
+    # IRPF retención withheld by Spanish B2B clients (used by tax_es_irpf
+    # estimator). Defaults to 0 so legacy invoices stay unaffected.
+    irpf_retention_pct = db.Column(db.Float, default=0)
+    irpf_retention_amount = db.Column(db.Float, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
     bank_id = db.Column(db.Integer, db.ForeignKey('bank.id'), nullable=True)
@@ -446,6 +450,10 @@ class Expense(db.Model):
     file_path = db.Column(db.String(500))
     invoice_number = db.Column(db.String(100))
     notes = db.Column(db.Text)
+    # IRPF deductibility (used by tax_es_irpf estimator). Default fully
+    # deductible so legacy expenses keep their current behaviour.
+    deductible = db.Column(db.Boolean, default=True)
+    deductible_pct = db.Column(db.Float, default=100)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
