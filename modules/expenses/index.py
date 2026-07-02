@@ -235,10 +235,17 @@ class ExpensesModule(BaseModule):
         contractors = repo.get_all_contractors()
         categories = repo.get_unique_categories()
 
+        # Module Expense model have no 'contractor' relationship (core backref
+        # live on a different mapped class), so template cannot reach
+        # expense.contractor. Build id->name map and let template look up by
+        # contractor_id — same trick report code already use.
+        contractors_map = {c.id: c.name for c in contractors}
+
         return render_template('expenses.html',
                              expenses_by_year=expenses_by_year,
                              years=years,
                              contractors=contractors,
+                             contractors_map=contractors_map,
                              categories=categories)
 
     def _create_expense(self):
