@@ -80,7 +80,7 @@
                 <tr>
                     <td>{{ expense.expense_date.strftime('%d/%m/%Y') }}</td>
                     <td>{{ expense.invoice_number or '-' }}</td>
-                    <td>{{ expense.contractor.name if expense.contractor else '-' }}</td>
+                    <td>{{ contractors_map.get(expense.contractor_id, '-') }}</td>
                     <td>{{ expense.category or '-' }}</td>
                     <td>{{ expense.description or '-' }}</td>
                     <td>{{ "%.2f"|format(expense.amount) }} {{ expense.currency }}</td>
