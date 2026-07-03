@@ -168,8 +168,9 @@ def test_annul_marks_cancelled_and_retains(app, client):
 # --- F2-D5: issue-blocking hooks -------------------------------------------
 
 def test_issue_hook_veto_aborts(app, monkeypatch):
-    import app as appmod
+    import sys
     from app import db, Invoice, Customer, _issue_invoice
+    appmod = sys.modules['app']
 
     class Vetoer:
         def on_invoice_issued(self, invoice, request):

@@ -11,7 +11,7 @@ Pure math live in calculator.py; box numbers live in boxes.py (versioned).
 This file only fetch data and render.
 """
 
-from datetime import datetime, date
+from datetime import datetime
 
 from flask import Blueprint, render_template, abort
 

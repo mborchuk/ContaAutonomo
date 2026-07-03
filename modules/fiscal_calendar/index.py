@@ -9,7 +9,7 @@ capability seam (F8 email plug in later) and always write the activity log.
 """
 
 import json
-from datetime import date, datetime
+from datetime import date
 
 from flask import Blueprint, render_template
 

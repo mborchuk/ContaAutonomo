@@ -39,8 +39,9 @@ def loaded_modules():
     needs loaded modules goes through this single instance. Enables the modules
     the suite exercises (expenses, tax_es_forms).
     """
-    import app as appmod
+    import sys
     from app import Settings
+    appmod = sys.modules['app']
 
     ctx = flask_app.app_context()
     ctx.push()
