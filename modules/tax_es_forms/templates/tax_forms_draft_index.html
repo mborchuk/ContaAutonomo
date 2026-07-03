@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Tax Drafts{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Modelo 303 / 130 Drafts</h1>
+    <span style="font-size: 12px; color: var(--color-text-muted);">Box table version: {{ table_version }}</span>
+</div>
+
+<div style="background: var(--color-warning-tint, var(--color-surface-3)); border: 1px solid var(--color-warning, var(--color-border)); padding: 12px 15px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;">
+    <strong>Estimate, not tax advice.</strong> These drafts add up the data already
+    in the app so you can transcribe the boxes into AEAT's portal. Always check the
+    figures and box numbers against the current official model before filing.
+    Régimen general / estimación directa only — módulos, recargo de equivalencia,
+    prorrata and criterio de caja are out of scope.
+</div>
+
+<table class="draftTable">
+    <thead>
+        <tr>
+            <th>Year</th>
+            <th>Q1</th>
+            <th>Q2</th>
+            <th>Q3</th>
+            <th>Q4</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for year in years %}
+        <tr>
+            <td style="font-weight: bold;">{{ year }}</td>
+            {% for q in [1, 2, 3, 4] %}
+            <td>
+                <a href="{{ url_for('tax_es_forms.draft_303', year=year, quarter=q) }}"
+                   class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">303</a>
+                <a href="{{ url_for('tax_es_forms.draft_130', year=year, quarter=q) }}"
+                   class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">130</a>
+            </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+.draftTable { width: 100%; border-collapse: collapse; margin-top: 0; font-size: 13px; }
+.draftTable th, .draftTable td { padding: 10px 8px; text-align: left; border-bottom: 1px solid var(--color-border); }
+.draftTable th { background: var(--color-surface-2); font-weight: bold; }
+</style>
+{% endblock %}

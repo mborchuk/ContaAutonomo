@@ -327,7 +327,7 @@ class Invoice(db.Model):
     quantity = db.Column(db.Float, default=1)
     unit_price_usd = db.Column(db.Float, nullable=True)
     notes = db.Column(db.Text)
-    status = db.Column(db.String(20), default='pending')
+    status = db.Column(db.String(20), default='draft')  # draft, issued, paid, cancelled (legacy: pending)
     pdf_hash = db.Column(db.String(64))  # SHA256 hash of the PDF file
     pdf_storage_key = db.Column(db.String(500))  # Storage key for PDF (local path or remote ID)
     currency = db.Column(db.String(10), default='USD')  # Invoice currency
@@ -335,7 +335,21 @@ class Invoice(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
     bank_id = db.Column(db.Integer, db.ForeignKey('bank.id'), nullable=True)
-    items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan')
+    # F2 — lifecycle: series + per-series sequence assigned at ISSUE time.
+    series = db.Column(db.String(20))
+    sequence_number = db.Column(db.Integer)
+    issued_at = db.Column(db.DateTime)
+    # F2-D3 — facturas rectificativas linkage.
+    rectifies_invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=True)
+    rectification_type = db.Column(db.String(20))  # 'sustitucion' | 'diferencias'
+    # F2-D4 — fiscal snapshot frozen at issue (so later customer/settings edits
+    # never change an issued invoice's meaning).
+    snap_vat_rate = db.Column(db.Float)
+    snap_vat_amount = db.Column(db.Float)
+    snap_taxable_base = db.Column(db.Float)
+    snap_customer = db.Column(db.Text)  # JSON: name, vat_number, country, tax_type
+    items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan',
+                            foreign_keys='InvoiceItem.invoice_id')
 
     def __repr__(self):
         return f'<Invoice {self.invoice_number}>'
@@ -348,6 +362,8 @@ class InvoiceItem(db.Model):
     quantity = db.Column(db.Float, nullable=False, default=1)
     unit_price_usd = db.Column(db.Float, nullable=False)
     subtotal_usd = db.Column(db.Float, nullable=False)
+    # F2-D4 — per-line VAT rate (nullable; defaults to the header rate at issue).
+    vat_rate = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
@@ -438,7 +454,7 @@ class Contractor(db.Model):
 class Expense(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     contractor_id = db.Column(db.Integer, db.ForeignKey('contractor.id'))
-    amount = db.Column(db.Float, nullable=False)
+    amount = db.Column(db.Float, nullable=False)  # gross total (kept for back-compat)
     currency = db.Column(db.String(10), default='EUR')
     category = db.Column(db.String(100))
     description = db.Column(db.Text)
@@ -446,6 +462,13 @@ class Expense(db.Model):
     file_path = db.Column(db.String(500))
     invoice_number = db.Column(db.String(100))
     notes = db.Column(db.Text)
+    # F4 — VAT breakdown & deductibility. NULL on legacy rows = "VAT unknown"
+    # (excluded from Modelo 303 deductible math with a visible nudge).
+    net_amount = db.Column(db.Float)          # taxable base (gross - vat)
+    vat_rate = db.Column(db.Float)            # IVA soportado rate, %
+    vat_amount = db.Column(db.Float)          # IVA soportado amount
+    deductible = db.Column(db.Boolean, default=True)
+    deductible_pct = db.Column(db.Float, default=100.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
@@ -1001,6 +1024,188 @@ def index():
                          sort_order=sort_order)
 
 
+# --- F2: Invoice lifecycle -------------------------------------------------- #
+
+LOCKED_INVOICE_STATUSES = ('issued', 'paid')
+
+
+def _invoice_locked(invoice):
+    """F2 — issued/paid invoices are read-only (change via rectificative)."""
+    return invoice is not None and invoice.status in LOCKED_INVOICE_STATUSES
+
+
+def _next_sequence_for_series(series):
+    """Next per-series sequence, derived from MAX (survives restart, no memory)."""
+    from sqlalchemy import func
+    max_seq = db.session.query(func.max(Invoice.sequence_number)).filter(
+        Invoice.series == series).scalar()
+    return (max_seq or 0) + 1
+
+
+def _build_customer_snapshot(invoice):
+    """Freeze the customer's fiscal identity as JSON at issue time."""
+    import json as _json
+    c = invoice.customer
+    return _json.dumps({
+        'name': c.name if c else invoice.client_name,
+        'vat_number': c.vat_number if c else None,
+        'country': c.country if c else None,
+        'tax_type': c.tax_type if c else None,
+    })
+
+
+def _issue_invoice(invoice, series=None, request_obj=None):
+    """Assign series+sequence, freeze the fiscal snapshot, mark issued.
+
+    Transactional: the on_invoice_issued hooks run before commit, so a vetoing
+    module (or a unique-number collision) rolls the whole transition back with
+    no sequence gap. Raises ValueError on failure.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    if _invoice_locked(invoice):
+        raise ValueError('Invoice is already issued')
+
+    app_settings = Settings.query.first()
+    default_vat = (app_settings.default_vat_rate
+                   if app_settings and app_settings.default_vat_rate is not None else 21.0)
+    tax_type = invoice.customer.tax_type if invoice.customer else None
+    rate = default_vat if tax_type == 'standard' else 0.0
+    base = invoice.amount_eur or 0.0
+
+    invoice.snap_vat_rate = rate
+    invoice.snap_taxable_base = base
+    invoice.snap_vat_amount = round(base * rate / 100.0, 2)
+    invoice.snap_customer = _build_customer_snapshot(invoice)
+    for item in invoice.items:
+        if item.vat_rate is None:
+            item.vat_rate = rate
+
+    series = series or invoice.series or str(invoice.invoice_date.year)
+    invoice.series = series
+
+    last_error = None
+    for _ in range(5):
+        seq = _next_sequence_for_series(series)
+        invoice.sequence_number = seq
+        invoice.invoice_number = f'{series}/{seq:04d}'
+        invoice.status = 'issued'
+        invoice.issued_at = datetime.utcnow()
+        try:
+            db.session.flush()  # surfaces unique-number collisions early
+            break
+        except IntegrityError as e:
+            last_error = e
+            db.session.rollback()
+            continue
+    else:
+        raise ValueError(f'Could not assign a unique invoice number: {last_error}')
+
+    # Issue-blocking hooks (may veto). Runs before commit -> abort is clean.
+    if module_manager:
+        module_manager.on_invoice_issued(invoice, request_obj)
+
+    db.session.commit()
+    return invoice
+
+
+@app.route('/issue/<int:id>', methods=['POST'])
+@login_required
+def issue_invoice(id):
+    invoice = Invoice.query.get_or_404(id)
+    if _invoice_locked(invoice):
+        flash('Invoice is already issued.', 'warning')
+        return redirect(url_for('view_invoice', id=id))
+    try:
+        _issue_invoice(invoice, series=request.form.get('series') or None,
+                       request_obj=request)
+        log_activity('invoice_issued', 'invoice', f'#{invoice.invoice_number}')
+        flash(f'Invoice issued as {invoice.invoice_number}. It is now locked; '
+              f'use Rectify to change it.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Issue failed for invoice %s: %s', id, e)
+        flash(f'Could not issue invoice: {e}', 'danger')
+    return redirect(url_for('view_invoice', id=id))
+
+
+@app.route('/annul/<int:id>', methods=['POST'])
+@login_required
+def annul_invoice(id):
+    invoice = Invoice.query.get_or_404(id)
+    if invoice.status not in LOCKED_INVOICE_STATUSES:
+        flash('Only issued invoices can be annulled.', 'warning')
+        return redirect(url_for('view_invoice', id=id))
+    try:
+        invoice.status = 'cancelled'
+        db.session.flush()
+        if module_manager:
+            module_manager.on_invoice_annulled(invoice, request)
+        db.session.commit()
+        log_activity('invoice_annulled', 'invoice', f'#{invoice.invoice_number}')
+        flash('Invoice annulled — retained for audit, excluded from income.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Annul failed for invoice %s: %s', id, e)
+        flash(f'Could not annul invoice: {e}', 'danger')
+    return redirect(url_for('view_invoice', id=id))
+
+
+@app.route('/rectify/<int:id>', methods=['POST'])
+@login_required
+def rectify_invoice(id):
+    original = Invoice.query.get_or_404(id)
+    if original.status not in LOCKED_INVOICE_STATUSES:
+        flash('Only issued invoices can be rectified.', 'warning')
+        return redirect(url_for('view_invoice', id=id))
+    rtype = request.form.get('rectification_type', 'sustitucion')
+    if rtype not in ('sustitucion', 'diferencias'):
+        rtype = 'sustitucion'
+    year = datetime.utcnow().year
+    try:
+        # New DRAFT pre-filled from the original; original is never mutated.
+        draft = Invoice(
+            invoice_number=f'RECT-{original.id}-{datetime.utcnow().strftime("%Y%m%d%H%M%S")}',
+            client_name=original.client_name,
+            amount_usd=original.amount_usd,
+            amount_eur=original.amount_eur,
+            exchange_rate=original.exchange_rate,
+            invoice_date=datetime.utcnow().date(),
+            due_date=original.due_date,
+            description=original.description,
+            quantity=original.quantity,
+            unit_price_usd=original.unit_price_usd,
+            notes=original.notes,
+            status='draft',
+            currency=original.currency,
+            payment_method=original.payment_method,
+            customer_id=original.customer_id,
+            bank_id=original.bank_id,
+            series=f'R{year}',
+            rectifies_invoice_id=original.id,
+            rectification_type=rtype,
+        )
+        db.session.add(draft)
+        db.session.flush()
+        for item in original.items:
+            db.session.add(InvoiceItem(
+                invoice_id=draft.id, description=item.description,
+                quantity=item.quantity, unit_price_usd=item.unit_price_usd,
+                subtotal_usd=item.subtotal_usd, vat_rate=item.vat_rate))
+        if module_manager:
+            module_manager.on_invoice_rectified(draft, original, request)
+        db.session.commit()
+        log_activity('invoice_rectified', 'invoice',
+                     f'#{original.invoice_number} -> rectificative draft #{draft.id}')
+        flash('Rectificative draft created. Edit it, then issue.', 'success')
+        return redirect(url_for('edit_invoice', id=draft.id))
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Rectify failed for invoice %s: %s', id, e)
+        flash(f'Could not create rectificative: {e}', 'danger')
+        return redirect(url_for('view_invoice', id=id))
+
+
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_invoice():
@@ -1011,7 +1216,9 @@ def create_invoice():
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            status = request.form['status']
+            # F2 — new invoices start as DRAFT (freely editable) unless the form
+            # explicitly sets a status. Issuing is a separate, one-way action.
+            status = request.form.get('status') or 'draft'
             notes = request.form.get('notes', '')
             bank_id = request.form.get('bank_id')
 
@@ -1276,9 +1483,9 @@ def create_invoice():
 def edit_invoice(id):
     invoice = Invoice.query.get_or_404(id)
 
-    # Prevent editing paid invoices
-    if invoice.status == 'paid':
-        flash('Cannot edit invoice with status PAID. Please change status first if needed.', 'danger')
+    # F2 — issued/paid invoices are immutable; changes go via a rectificative.
+    if _invoice_locked(invoice):
+        flash('This invoice is issued and locked. Use "Rectify" to correct it.', 'danger')
         return redirect(url_for('view_invoice', id=id))
 
     if request.method == 'POST':
@@ -1288,7 +1495,11 @@ def edit_invoice(id):
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            invoice.status = request.form['status']
+            # F2 — issuing must go through the Issue action (assigns series,
+            # sequence and the fiscal snapshot). Ignore a direct 'issued' here.
+            _new_status = request.form['status']
+            if _new_status != 'issued':
+                invoice.status = _new_status
             invoice.notes = request.form.get('notes', '')
             invoice.payment_method = request.form.get('payment_method', 'Bank Transfer')
             bank_id = request.form.get('bank_id')
@@ -1468,9 +1679,9 @@ def delete_invoice(id):
     # <img src="/delete/42"> and is not covered by CSRF protection.
     invoice = Invoice.query.get_or_404(id)
 
-    # Prevent deleting paid invoices
-    if invoice.status == 'paid':
-        flash('Cannot delete invoice with status PAID. Please change status first if needed.', 'danger')
+    # F2 — issued/paid invoices cannot be deleted; annul them instead.
+    if _invoice_locked(invoice):
+        flash('Issued invoices cannot be deleted. Use "Annul" to cancel it.', 'danger')
         return redirect(url_for('index'))
 
     # Delete PDF from storage
@@ -2287,6 +2498,29 @@ if __name__ == '__main__':
         if 'payment_methods' not in columns:
             with db.engine.connect() as conn:
                 conn.execute(text("ALTER TABLE settings ADD COLUMN payment_methods TEXT DEFAULT 'Bank Transfer,PayPal,Credit Card,Cash,Crypto'"))
+                conn.commit()
+
+        # F2 — invoice lifecycle: series/sequence, rectificative links, fiscal snapshot
+        inv_columns = [c['name'] for c in inspector.get_columns('invoice')]
+        for col, typedef in [('series', 'VARCHAR(20)'),
+                             ('sequence_number', 'INTEGER'),
+                             ('issued_at', 'DATETIME'),
+                             ('rectifies_invoice_id', 'INTEGER'),
+                             ('rectification_type', 'VARCHAR(20)'),
+                             ('snap_vat_rate', 'FLOAT'),
+                             ('snap_vat_amount', 'FLOAT'),
+                             ('snap_taxable_base', 'FLOAT'),
+                             ('snap_customer', 'TEXT')]:
+            if col not in inv_columns:
+                with db.engine.connect() as conn:
+                    conn.execute(text(f'ALTER TABLE invoice ADD COLUMN {col} {typedef}'))
+                    conn.commit()
+
+        # F2-D4 — per-line VAT rate on invoice items
+        item_columns = [c['name'] for c in inspector.get_columns('invoice_item')]
+        if 'vat_rate' not in item_columns:
+            with db.engine.connect() as conn:
+                conn.execute(text('ALTER TABLE invoice_item ADD COLUMN vat_rate FLOAT'))
                 conn.commit()
 
         # Initialize module system
