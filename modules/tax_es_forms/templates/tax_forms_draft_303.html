@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Modelo 303 · Q{{ draft.quarter }} {{ draft.year }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+    <h1>Modelo 303 (IVA) — Q{{ draft.quarter }} {{ draft.year }}</h1>
+    <div>
+        <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+</div>
+
+<!-- Non-dismissible estimate banner -->
+<div class="draft-banner">
+    <strong>Estimate, not tax advice.</strong> Devengo (accrual) basis; régimen
+    general only. Verify every box against the current official AEAT Modelo 303
+    before filing. Box table version: {{ draft.table_version }}.
+</div>
+
+{% if draft.meta.missing_expense_vat_count %}
+<div class="draft-warning">
+    ⚠ {{ draft.meta.missing_expense_vat_count }} expense(s) this quarter lack VAT
+    breakdown — deductible IVA (boxes 28/29/45) understates your real deductions.
+</div>
+{% endif %}
+
+<table class="boxTable">
+    <thead>
+        <tr><th style="width: 70px;">Box</th><th>Concept</th><th style="width: 160px; text-align: right;">Amount (EUR)</th></tr>
+    </thead>
+    <tbody>
+        {% for box in ['01', '03', '27', '28', '29', '45', '46', '71'] %}
+        <tr {% if box in ['46', '71'] %}class="box-result"{% endif %}>
+            <td style="font-weight: bold;">{{ box }}</td>
+            <td>{{ draft.labels[box] }}</td>
+            <td style="text-align: right;">
+                <span class="box-value" data-box="{{ box }}">{{ "%.2f"|format(draft.boxes[box]) }}</span>
+                <button type="button" class="copy-btn" title="Copy"
+                        onclick="copyBox(this, '{{ "%.2f"|format(draft.boxes[box]) }}')">⧉</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="font-size: 12px; color: var(--color-text-muted); margin-top: 15px;">
+    Box 71 (resultado de la liquidación) = box 27 (IVA devengado) − box 45 (IVA
+    deducible). A positive figure is payable to AEAT; a negative figure is to
+    compensate or refund.
+</p>
+
+<style>
+.draft-banner { background: var(--color-primary-tint); border: 1px solid var(--color-primary); color: var(--color-text); padding: 10px 14px; border-radius: 5px; margin-bottom: 12px; font-size: 13px; }
+.draft-warning { background: var(--color-surface-3); border: 1px solid var(--color-border); padding: 8px 14px; border-radius: 5px; margin-bottom: 12px; font-size: 13px; }
+.boxTable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.boxTable th, .boxTable td { padding: 9px 10px; border-bottom: 1px solid var(--color-border); }
+.boxTable th { background: var(--color-surface-2); text-align: left; }
+.boxTable tr.box-result { font-weight: bold; background: var(--color-surface-3); }
+.copy-btn { background: none; border: none; cursor: pointer; color: var(--color-text-muted); font-size: 14px; margin-left: 6px; }
+.copy-btn:hover { color: var(--color-primary); }
+@media print {
+    .copy-btn, .btn { display: none !important; }
+    .draft-banner { border: 1px solid #000; }
+}
+</style>
+
+<script>
+function copyBox(btn, value) {
+    navigator.clipboard.writeText(value).then(function () {
+        var old = btn.textContent;
+        btn.textContent = '✓';
+        setTimeout(function () { btn.textContent = old; }, 1000);
+    });
+}
+</script>
+{% endblock %}

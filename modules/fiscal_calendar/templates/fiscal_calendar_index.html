@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Fiscal Calendar{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Fiscal Calendar</h1>
+    <span style="font-size: 12px; color: var(--color-text-muted);">Data version: {{ version }}</span>
+</div>
+
+<p style="font-size: 13px; color: var(--color-text-muted); margin-bottom: 15px;">
+    Showing forms you file ({{ selected | join(', ') if selected else 'none selected' }}).
+    Change which forms in <a href="{{ url_for('settings') }}#fiscal_calendar">Settings → Fiscal Calendar</a>.
+    Verify dates against the official AEAT calendar before filing.
+</p>
+
+<table class="calTable">
+    <thead>
+        <tr>
+            <th>Form</th>
+            <th>Period</th>
+            <th>Window opens</th>
+            <th>Window closes</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for d in deadlines %}
+        {% set closed = d.window_end < today %}
+        {% set open = (d.window_start <= today) and (not closed) %}
+        <tr {% if open %}style="background: var(--color-warning-tint, var(--color-surface-3));"{% endif %}>
+            <td style="font-weight: bold;">Modelo {{ d.form }}</td>
+            <td>{{ d.period_label }}</td>
+            <td>{{ d.window_start.strftime('%d/%m/%Y') }}</td>
+            <td>{{ d.window_end.strftime('%d/%m/%Y') }}</td>
+            <td>
+                {% if open %}<span style="color: var(--color-warning, var(--color-primary)); font-weight: bold;">Open</span>
+                {% elif closed %}<span style="color: var(--color-text-muted);">Closed</span>
+                {% else %}Upcoming{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+.calTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.calTable th, .calTable td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--color-border); }
+.calTable th { background: var(--color-surface-2); font-weight: bold; }
+</style>
+{% endblock %}
