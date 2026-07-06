@@ -1,5 +1,4 @@
 """F8 — Invoice email: SMTP send (mocked), send log, overdue reminders."""
-import json
 from datetime import date
 
 import pytest
@@ -112,14 +111,14 @@ def test_overdue_reminder_fires_once_at_offset(email_module):
 def test_reminders_respect_optin_and_paid_status(email_module):
     from app import db, Invoice, Customer
 
-    paid = _invoice(db, Invoice, Customer, due=date(2026, 5, 1), status='paid')
+    _invoice(db, Invoice, Customer, due=date(2026, 5, 1), status='paid')
     assert email_module._run_overdue_reminders(today=date(2026, 5, 4)) == []
 
     # Global toggle off -> nothing, even for overdue unpaid.
     cfg = email_module._smtp_config()
     cfg['reminders_enabled'] = False
     email_module._save_smtp_config(cfg)
-    overdue = _invoice(db, Invoice, Customer, due=date(2026, 5, 2))
+    _invoice(db, Invoice, Customer, due=date(2026, 5, 2))
     assert email_module._run_overdue_reminders(today=date(2026, 5, 5)) == []
 
 

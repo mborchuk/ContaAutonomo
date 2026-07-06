@@ -12,7 +12,6 @@ import pytest
 
 from app import app as flask_app, db as _db  # noqa: E402
 from module_manager import ModuleManager  # noqa: E402
-from module_manager import ModuleManager  # noqa: E402
 
 
 @pytest.fixture

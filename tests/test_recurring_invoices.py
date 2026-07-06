@@ -92,7 +92,7 @@ def test_generation_idempotent_same_day(recurring_module, monkeypatch):
 
     monkeypatch.setattr('currency_converter.get_exchange_rate',
                         lambda d: (1.0, d))
-    tpl = _template(recurring_module, db, next_run=date(2026, 7, 1))
+    _template(recurring_module, db, next_run=date(2026, 7, 1))
     first = recurring_module._generate_due(today=date(2026, 7, 1))
     second = recurring_module._generate_due(today=date(2026, 7, 1))
     assert len(first) == 1
