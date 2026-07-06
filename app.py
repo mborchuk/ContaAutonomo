@@ -1124,9 +1124,10 @@ def issue_invoice(id):
               f'use Rectify to change it.', 'success')
     except Exception as e:
         db.session.rollback()
-        # Exception text may carry user input — keep it out of the log line
-        # (log injection); the traceback via exc_info has the details.
-        logger.error('Issue failed for invoice %s', id, exc_info=True)
+        # Exception text and route params may carry user input — keep both out
+        # of the log line (log injection); invoice.id is DB-derived and the
+        # traceback via exc_info has the details.
+        logger.error('Issue failed for invoice %s', invoice.id, exc_info=True)
         flash(f'Could not issue invoice: {e}', 'danger')
     return redirect(url_for('view_invoice', id=id))
 
@@ -1148,7 +1149,7 @@ def annul_invoice(id):
         flash('Invoice annulled — retained for audit, excluded from income.', 'success')
     except Exception as e:
         db.session.rollback()
-        logger.error('Annul failed for invoice %s', id, exc_info=True)
+        logger.error('Annul failed for invoice %s', invoice.id, exc_info=True)
         flash(f'Could not annul invoice: {e}', 'danger')
     return redirect(url_for('view_invoice', id=id))
 
@@ -1203,7 +1204,7 @@ def rectify_invoice(id):
         return redirect(url_for('edit_invoice', id=draft.id))
     except Exception as e:
         db.session.rollback()
-        logger.error('Rectify failed for invoice %s', id, exc_info=True)
+        logger.error('Rectify failed for invoice %s', original.id, exc_info=True)
         flash(f'Could not create rectificative: {e}', 'danger')
         return redirect(url_for('view_invoice', id=id))
 
