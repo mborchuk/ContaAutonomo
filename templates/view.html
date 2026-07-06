@@ -144,6 +144,24 @@
     <a href="{{ url_for('index') }}" class="btn btn-primary">Back to List</a>
     <a href="{{ url_for('preview_invoice_pdf', id=invoice.id) }}" target="_blank" class="btn btn-secondary">Preview PDF</a>
     <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success">Download PDF</a>
+
+    {# F2 — lifecycle actions #}
+    {% if invoice.status in ('draft', 'pending') %}
+        <form method="POST" action="{{ url_for('issue_invoice', id=invoice.id) }}" style="display:inline;"
+              onsubmit="return confirm('Issue this invoice? It becomes permanent and locked — corrections then require a rectificative.');">
+            <button type="submit" class="btn btn-success">Issue</button>
+        </form>
+    {% elif invoice.status in ('issued', 'paid') %}
+        <form method="POST" action="{{ url_for('rectify_invoice', id=invoice.id) }}" style="display:inline;">
+            <input type="hidden" name="rectification_type" value="sustitucion">
+            <button type="submit" class="btn btn-secondary">Rectify</button>
+        </form>
+        <form method="POST" action="{{ url_for('annul_invoice', id=invoice.id) }}" style="display:inline;"
+              onsubmit="return confirm('Annul this invoice? It is retained for audit but excluded from income.');">
+            <button type="submit" class="btn btn-danger">Annul</button>
+        </form>
+    {% endif %}
+
     {% if module_manager %}
         {% for action_html in module_manager.get_invoice_actions(invoice) %}
             {{ action_html|safe }}

@@ -29,10 +29,14 @@
             <div class="form-group">
                 <label for="status">Status *</label>
                 <select id="status" name="status" required>
-                    <option value="pending">Pending</option>
+                    <option value="draft" selected>Draft</option>
+                    <option value="pending">Pending (legacy)</option>
                     <option value="paid">Paid</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
+                <small style="display:block;margin-top:5px;color:var(--color-text-muted);">
+                    Draft invoices stay editable. Use <strong>Issue</strong> on the invoice to make it permanent and get its sequential number.
+                </small>
             </div>
 
             <div class="form-group">

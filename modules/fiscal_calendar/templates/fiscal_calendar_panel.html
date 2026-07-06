@@ -1,0 +1,23 @@
+{# Dashboard panel — included by dashboard.html with `data` in scope. #}
+<div style="display: flex; flex-direction: column; gap: 6px;">
+    {% for d in data.deadlines %}
+    <div style="display: flex; justify-content: space-between; align-items: center;
+                padding: 6px 8px; border-radius: 4px;
+                {% if d.state == 'open' %}background: var(--color-warning-tint, var(--color-surface-3));
+                {% elif d.days_to_start is not none and d.days_to_start <= 7 %}background: var(--color-surface-3);{% endif %}">
+        <span style="font-size: 13px;">
+            <strong>Modelo {{ d.form }}</strong> · {{ d.period_label }}
+        </span>
+        <span style="font-size: 12px; color: var(--color-text-muted);">
+            {% if d.state == 'open' %}
+                <span style="color: var(--color-warning, var(--color-primary)); font-weight: bold;">Open · file by {{ d.window_end.strftime('%d/%m') }}</span>
+            {% else %}
+                opens {{ d.window_start.strftime('%d/%m/%Y') }} ({{ d.days_to_start }}d)
+            {% endif %}
+        </span>
+    </div>
+    {% endfor %}
+</div>
+<p style="font-size: 11px; color: var(--color-text-muted); margin-top: 8px;">
+    <a href="{{ url_for('fiscal_calendar.calendar_index') }}">View full calendar →</a>
+</p>
