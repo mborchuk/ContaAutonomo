@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Recurring Invoices{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h1>Recurring Invoices</h1>
+    <a href="{{ url_for('recurring_invoices.recurring_create') }}" class="btn btn-success">+ New Template</a>
+</div>
+
+{% if templates %}
+<table class="recTable">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Cadence</th>
+            <th>Next run</th>
+            <th>Items</th>
+            <th>Currency</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for t in templates %}
+        <tr>
+            <td>{{ t.name }}</td>
+            <td>{{ t.cadence }}</td>
+            <td>{{ t.next_run_date.strftime('%d/%m/%Y') }}</td>
+            <td>{{ items_map[t.id] | length }}</td>
+            <td>{{ t.currency }}</td>
+            <td>
+                {% if t.active %}<span style="color: var(--color-success);">Active</span>
+                {% else %}<span style="color: var(--color-text-muted);">Paused</span>{% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('recurring_invoices.recurring_edit', id=t.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                <form method="POST" action="{{ url_for('recurring_invoices.recurring_toggle', id=t.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">{{ 'Pause' if t.active else 'Resume' }}</button>
+                </form>
+                <form method="POST" action="{{ url_for('recurring_invoices.recurring_delete', id=t.id) }}" style="display: inline;" onsubmit="return confirm('Delete this template? Generated invoices are kept.');">
+                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<style>
+.recTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.recTable th, .recTable td { padding: 9px 8px; text-align: left; border-bottom: 1px solid var(--color-border); }
+.recTable th { background: var(--color-surface-2); font-weight: bold; }
+</style>
+{% else %}
+<p style="text-align: center; color: var(--color-text-muted); padding: 40px;">
+    No recurring templates yet. <a href="{{ url_for('recurring_invoices.recurring_create') }}">Create one</a>
+    or press "Make recurring" on any invoice.
+</p>
+{% endif %}
+{% endblock %}

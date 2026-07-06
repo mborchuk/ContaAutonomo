@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if template else 'New' }} Recurring Template{% endblock %}
+
+{% block content %}
+<h1>{{ 'Edit' if template else 'New' }} Recurring Template</h1>
+
+<form method="POST">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div>
+            <div class="form-group">
+                <label for="name">Template Name *</label>
+                <input type="text" id="name" name="name" required
+                       value="{{ template.name if template else '' }}"
+                       placeholder="e.g. ACME monthly retainer">
+            </div>
+
+            <div class="form-group">
+                <label for="client_name">Client Name</label>
+                <input type="text" id="client_name" name="client_name"
+                       value="{{ template.client_name if template else '' }}"
+                       placeholder="Shown on the generated invoice">
+            </div>
+
+            <div class="form-group">
+                <label for="customer_id">Customer</label>
+                <select id="customer_id" name="customer_id">
+                    <option value="">-- No Customer --</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if template and template.customer_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="bank_id">Bank</label>
+                <select id="bank_id" name="bank_id">
+                    <option value="">-- No Bank --</option>
+                    {% for b in banks %}
+                    <option value="{{ b.id }}" {% if template and template.bank_id == b.id %}selected{% endif %}>{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" rows="3">{{ template.notes if template and template.notes else '' }}</textarea>
+            </div>
+        </div>
+
+        <div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+                <div class="form-group">
+                    <label for="cadence">Cadence *</label>
+                    <select id="cadence" name="cadence" required>
+                        {% for c in cadences %}
+                        <option value="{{ c }}" {% if template and template.cadence == c %}selected{% endif %}>{{ c | capitalize }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="next_run_date">Next run *</label>
+                    <input type="date" id="next_run_date" name="next_run_date" required
+                           value="{{ template.next_run_date.strftime('%Y-%m-%d') if template else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="currency">Currency *</label>
+                    <select id="currency" name="currency" required>
+                        {% for curr in tracked_currencies %}
+                        <option value="{{ curr }}" {% if template and template.currency == curr %}selected{% elif not template and curr == 'EUR' %}selected{% endif %}>{{ curr }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <fieldset style="border: 1px solid var(--color-border); border-radius: 5px; padding: 12px;">
+                <legend style="font-size: 13px; padding: 0 6px;">Items</legend>
+                <div id="items-container">
+                    {% for item in items %}
+                    <div class="item-row" style="display: grid; grid-template-columns: 3fr 1fr 1fr auto; gap: 8px; margin-bottom: 8px;">
+                        <input type="text" name="items[{{ loop.index0 }}][description]" value="{{ item.description }}" placeholder="Description" required>
+                        <input type="number" name="items[{{ loop.index0 }}][quantity]" value="{{ item.quantity }}" step="0.01" placeholder="Qty" required>
+                        <input type="number" name="items[{{ loop.index0 }}][unit_price]" value="{{ item.unit_price }}" step="0.01" placeholder="Price" required>
+                        <button type="button" class="btn btn-danger" style="padding: 4px 8px;" onclick="this.parentElement.remove()">×</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="addItemRow()">+ Add item</button>
+            </fieldset>
+
+            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 10px;">
+                Generated invoices enter as <strong>drafts</strong> — nothing is issued
+                automatically. Review and press Issue on each draft.
+            </p>
+        </div>
+    </div>
+
+    <div style="margin-top: 30px;">
+        <button type="submit" class="btn btn-success">{{ 'Update' if template else 'Create' }} Template</button>
+        <a href="{{ url_for('recurring_invoices.recurring_index') }}" class="btn btn-primary">Cancel</a>
+    </div>
+</form>
+
+<script>
+let itemSeq = {{ items | length }};
+function addItemRow() {
+    const container = document.getElementById('items-container');
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.style.cssText = 'display: grid; grid-template-columns: 3fr 1fr 1fr auto; gap: 8px; margin-bottom: 8px;';
+    row.innerHTML =
+        '<input type="text" name="items[' + itemSeq + '][description]" placeholder="Description" required>' +
+        '<input type="number" name="items[' + itemSeq + '][quantity]" value="1" step="0.01" placeholder="Qty" required>' +
+        '<input type="number" name="items[' + itemSeq + '][unit_price]" step="0.01" placeholder="Price" required>' +
+        '<button type="button" class="btn btn-danger" style="padding: 4px 8px;" onclick="this.parentElement.remove()">×</button>';
+    container.appendChild(row);
+    itemSeq++;
+}
+document.addEventListener('DOMContentLoaded', function () {
+    if (document.querySelectorAll('.item-row').length === 0) addItemRow();
+    const dateField = document.getElementById('next_run_date');
+    if (!dateField.value) dateField.value = new Date().toISOString().split('T')[0];
+});
+</script>
+{% endblock %}
