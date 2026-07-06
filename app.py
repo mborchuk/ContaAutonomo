@@ -1029,11 +1029,6 @@ def index():
 LOCKED_INVOICE_STATUSES = ('issued', 'paid')
 
 
-def _log_safe(value):
-    """Strip CR/LF/TAB so user-derived text can't forge log lines (log injection)."""
-    return str(value).replace('\r', ' ').replace('\n', ' ').replace('\t', ' ')
-
-
 def _invoice_locked(invoice):
     """F2 — issued/paid invoices are read-only (change via rectificative)."""
     return invoice is not None and invoice.status in LOCKED_INVOICE_STATUSES
@@ -1129,7 +1124,9 @@ def issue_invoice(id):
               f'use Rectify to change it.', 'success')
     except Exception as e:
         db.session.rollback()
-        logger.error('Issue failed for invoice %s: %s', id, _log_safe(e))
+        # Exception text may carry user input — keep it out of the log line
+        # (log injection); the traceback via exc_info has the details.
+        logger.error('Issue failed for invoice %s', id, exc_info=True)
         flash(f'Could not issue invoice: {e}', 'danger')
     return redirect(url_for('view_invoice', id=id))
 
@@ -1151,7 +1148,7 @@ def annul_invoice(id):
         flash('Invoice annulled — retained for audit, excluded from income.', 'success')
     except Exception as e:
         db.session.rollback()
-        logger.error('Annul failed for invoice %s: %s', id, _log_safe(e))
+        logger.error('Annul failed for invoice %s', id, exc_info=True)
         flash(f'Could not annul invoice: {e}', 'danger')
     return redirect(url_for('view_invoice', id=id))
 
@@ -1206,7 +1203,7 @@ def rectify_invoice(id):
         return redirect(url_for('edit_invoice', id=draft.id))
     except Exception as e:
         db.session.rollback()
-        logger.error('Rectify failed for invoice %s: %s', id, _log_safe(e))
+        logger.error('Rectify failed for invoice %s', id, exc_info=True)
         flash(f'Could not create rectificative: {e}', 'danger')
         return redirect(url_for('view_invoice', id=id))
 
