@@ -30,8 +30,16 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture
+def loaded_modules(_loaded_modules_session):
+    """Function-scoped wrapper: other tests' `app` fixture drops all tables on
+    teardown, so re-create them (idempotent) before each loaded-modules test."""
+    _db.create_all()
+    return _loaded_modules_session
+
+
 @pytest.fixture(scope='session')
-def loaded_modules():
+def _loaded_modules_session():
     """One shared ModuleManager for the whole session.
 
     Building more than one ModuleManager redefines the singleton
@@ -53,7 +61,8 @@ def loaded_modules():
     mm.discover_modules()
 
     enabled_model = mm._get_module_enabled_model()
-    for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar'):
+    for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar',
+                      'recurring_invoices', 'reta_advisor', 'invoice_email'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()

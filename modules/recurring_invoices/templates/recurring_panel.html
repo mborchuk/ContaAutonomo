@@ -1,0 +1,9 @@
+{# Dashboard nudge — included by dashboard.html with `data` in scope. #}
+<p style="font-size: 14px; margin: 0;">
+    <strong>{{ data.pending }}</strong> recurring draft{{ 's' if data.pending != 1 }}
+    awaiting review.
+</p>
+<p style="font-size: 11px; color: var(--color-text-muted); margin-top: 6px;">
+    <a href="{{ url_for('index') }}?status=draft">Review drafts →</a> ·
+    <a href="{{ url_for('recurring_invoices.recurring_index') }}">Manage templates</a>
+</p>
