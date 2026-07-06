@@ -29,7 +29,8 @@
             <div class="form-group">
                 <label for="status">Status *</label>
                 <select id="status" name="status" required>
-                    <option value="pending" {% if invoice.status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="draft" {% if invoice.status == 'draft' %}selected{% endif %}>Draft</option>
+                    <option value="pending" {% if invoice.status == 'pending' %}selected{% endif %}>Pending (legacy)</option>
                     <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>Paid</option>
                     <option value="cancelled" {% if invoice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
                 </select>

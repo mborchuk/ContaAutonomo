@@ -349,6 +349,29 @@ class BaseModule(ABC):
         """
         pass
 
+    def on_invoice_issued(self, invoice, request):
+        """
+        F2 — called when a draft invoice becomes ISSUED, before the transition
+        commits. Unlike the swallowed panel hooks, a raise here ABORTS the issue
+        (transactional) so compliance modules (e.g. verifactu) can veto.
+        """
+        pass
+
+    def on_invoice_rectified(self, new_invoice, original, request):
+        """
+        F2 — called when a rectificative draft is created from an issued invoice,
+        before commit. A raise aborts the rectification. `original` is never
+        mutated.
+        """
+        pass
+
+    def on_invoice_annulled(self, invoice, request):
+        """
+        F2 — called when an issued invoice is annulled (marked cancelled), before
+        commit. A raise aborts the annulment.
+        """
+        pass
+
     def get_invoice_templates(self):
         """
         Return invoice PDF templates provided by this module.
@@ -1421,8 +1444,13 @@ class InvoiceService:
         return Invoice.query.filter_by(invoice_number=invoice_number).first()
 
     def is_locked(self, invoice):
-        """Check if invoice is locked (PAID status = read-only)."""
-        return invoice and invoice.status == 'paid'
+        """Check if invoice is locked (read-only).
+
+        F2 — generalized from "PAID only" to "issued or later": both `issued`
+        and `paid` invoices are immutable; changes go through rectificatives.
+        Legacy `pending` and new `draft` invoices stay freely editable.
+        """
+        return invoice is not None and invoice.status in ('issued', 'paid')
 
     def update(self, invoice_id, **fields):
         """Update invoice fields. Raises ValueError if invoice is PAID.
@@ -2131,6 +2159,22 @@ class ModuleManager:
             except Exception as e:
                 logger.error("Module '%s' on_invoice_updated error: %s",
                              _sanitize_log(mod.module_id), e)
+
+    def on_invoice_issued(self, invoice, request):
+        """F2 — fan out the ISSUE transition. Issue-blocking: a raising module
+        propagates so the caller can roll back the transition."""
+        for mod in self.modules.values():
+            mod.on_invoice_issued(invoice, request)
+
+    def on_invoice_rectified(self, new_invoice, original, request):
+        """F2 — fan out rectification. Issue-blocking (propagates)."""
+        for mod in self.modules.values():
+            mod.on_invoice_rectified(new_invoice, original, request)
+
+    def on_invoice_annulled(self, invoice, request):
+        """F2 — fan out annulment. Issue-blocking (propagates)."""
+        for mod in self.modules.values():
+            mod.on_invoice_annulled(invoice, request)
 
     def get_invoice_templates(self):
         """Collect invoice PDF templates from core + all active modules.

@@ -57,6 +57,12 @@ class ExpensesModule(BaseModule):
             file_path = db.Column(db.String(500))
             invoice_number = db.Column(db.String(100))
             notes = db.Column(db.Text)
+            # F4 — must stay in sync with the core Expense model in app.py.
+            net_amount = db.Column(db.Float)
+            vat_rate = db.Column(db.Float)
+            vat_amount = db.Column(db.Float)
+            deductible = db.Column(db.Boolean, default=True)
+            deductible_pct = db.Column(db.Float, default=100.0)
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
         class Contractor(db.Model):
@@ -70,10 +76,109 @@ class ExpensesModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
 
+        class ExpensesConfig(db.Model):
+            __tablename__ = 'expenses_config'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            key = db.Column(db.String(100), unique=True, nullable=False)
+            value = db.Column(db.Text)
+
         self.Expense = Expense
         self.Contractor = Contractor
         self.Settings = Settings
-        return {}  # No new tables to create — all exist in core
+        self.ExpensesConfig = ExpensesConfig
+        # expenses_config is module-owned -> let the manager create it.
+        return {'ExpensesConfig': ExpensesConfig}
+
+    # F4 — seed category defaults (VAT rate % + deductible %). Shipped values;
+    # user override stored as JSON in expenses_config['category_defaults'].
+    SEED_CATEGORY_DEFAULTS = {
+        'Office Supplies': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Software': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Equipment': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Services': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Professional Services': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Telecommunications': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Utilities': {'vat_rate': 21.0, 'deductible_pct': 100.0},
+        'Travel': {'vat_rate': 10.0, 'deductible_pct': 100.0},
+        'Insurance': {'vat_rate': 0.0, 'deductible_pct': 100.0},   # exempt
+        'Social Security': {'vat_rate': 0.0, 'deductible_pct': 100.0},
+    }
+
+    def on_enable(self):
+        """F4 — add VAT/deductibility columns to the expense table (idempotent)."""
+        from sqlalchemy import inspect as sa_inspect, text
+        migrations = [
+            ('net_amount', 'FLOAT'),
+            ('vat_rate', 'FLOAT'),
+            ('vat_amount', 'FLOAT'),
+            ('deductible', 'BOOLEAN'),
+            ('deductible_pct', 'FLOAT'),
+        ]
+        try:
+            inspector = sa_inspect(self._db.engine)
+            cols = [c['name'] for c in inspector.get_columns('expense')]
+            with self._db.engine.connect() as conn:
+                for name, coltype in migrations:
+                    if name not in cols:
+                        conn.execute(text(
+                            f'ALTER TABLE expense ADD COLUMN {name} {coltype}'))
+                conn.commit()
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.error('Expense VAT migration failed: %s', e)
+
+    def get_category_defaults(self):
+        """Merged category defaults: seed values overlaid with user overrides."""
+        import json
+        defaults = {k: dict(v) for k, v in self.SEED_CATEGORY_DEFAULTS.items()}
+        try:
+            row = self.ExpensesConfig.query.filter_by(key='category_defaults').first()
+            if row and row.value:
+                defaults.update(json.loads(row.value))
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.warning('Reading category defaults failed: %s', e)
+        return defaults
+
+    # --- Settings panel (F4-D3): edit category VAT/deductible defaults ---- #
+
+    @property
+    def settings_tab(self):
+        return {'id': 'expenses', 'label': 'Expenses'}
+
+    def get_settings_html(self, settings):
+        import json
+        current = json.dumps(self.get_category_defaults(), indent=2, ensure_ascii=False)
+        return f'''
+        <h3>Expense Category VAT Defaults</h3>
+        <p style="font-size: 13px; color: var(--color-text-muted);">
+            JSON map of category → default VAT rate (%) and deductible (%). Applied
+            when picking a category on the expense form (never overwrites a field
+            you already touched).
+        </p>
+        <div class="form-group">
+            <textarea name="expense_category_defaults" rows="12"
+                      style="width: 100%; font-family: monospace; font-size: 12px;">{current}</textarea>
+        </div>
+        '''
+
+    def save_settings(self, settings, form):
+        import json
+        if 'expense_category_defaults' not in form:
+            return  # guard: unrelated tab save
+        raw = form.get('expense_category_defaults', '').strip()
+        try:
+            parsed = json.loads(raw) if raw else {}
+            if not isinstance(parsed, dict):
+                raise ValueError('must be a JSON object')
+        except (ValueError, TypeError) as e:
+            self.core.flash(f'Category defaults not saved (invalid JSON): {e}', 'danger')
+            return
+        row = self.ExpensesConfig.query.filter_by(key='category_defaults').first()
+        if not row:
+            row = self.ExpensesConfig(key='category_defaults')
+            self._db.session.add(row)
+        row.value = json.dumps(parsed, ensure_ascii=False)
+        self._db.session.commit()
 
     def register_routes(self, app):
         """Register expense routes"""
@@ -156,6 +261,12 @@ class ExpensesModule(BaseModule):
             'description': e.description,
             'expense_date': e.expense_date.isoformat() if e.expense_date else None,
             'invoice_number': e.invoice_number,
+            # F4 — VAT breakdown & deductibility.
+            'net_amount': e.net_amount,
+            'vat_rate': e.vat_rate,
+            'vat_amount': e.vat_amount,
+            'deductible': e.deductible,
+            'deductible_pct': e.deductible_pct,
         }
 
     def _api_expenses(self, request):
@@ -179,6 +290,14 @@ class ExpensesModule(BaseModule):
                     contractor_id = int(contractor_id)
                 except (TypeError, ValueError):
                     raise ApiError(400, 'bad_request', 'contractor_id must be an integer')
+            def _num(name):
+                v = body.get(name)
+                if v is None:
+                    return None
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    raise ApiError(400, 'bad_request', f'{name} must be a number')
             exp = repo.create(
                 amount=amount,
                 currency=body.get('currency', 'EUR'),
@@ -188,6 +307,12 @@ class ExpensesModule(BaseModule):
                 contractor_id=contractor_id,
                 invoice_number=body.get('invoice_number'),
                 notes=body.get('notes'),
+                # F4 fields (all optional).
+                net_amount=_num('net_amount'),
+                vat_rate=_num('vat_rate'),
+                vat_amount=_num('vat_amount'),
+                deductible=bool(body.get('deductible', True)),
+                deductible_pct=_num('deductible_pct') if body.get('deductible_pct') is not None else 100.0,
             )
             self.core.log_activity('expense_created', 'expense',
                                    {'id': exp.id, 'amount': amount,
@@ -248,6 +373,48 @@ class ExpensesModule(BaseModule):
                              contractors_map=contractors_map,
                              categories=categories)
 
+    @staticmethod
+    def _parse_vat_fields(form, gross):
+        """Build the VAT/deductibility kwargs from the submitted form.
+
+        Gross is authoritative. If net/vat not supplied but a rate is, split
+        gross by the rate (gross = net * (1 + rate)). Everything overridable.
+        Returns a dict of expense fields (values may be None = unknown).
+        """
+        def _f(name):
+            raw = form.get(name)
+            if raw in (None, ''):
+                return None
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return None
+
+        net = _f('net_amount')
+        vat_rate = _f('vat_rate')
+        vat_amount = _f('vat_amount')
+
+        if gross is not None and vat_rate is not None and net is None and vat_amount is None:
+            # Derive net + VAT from gross + rate.
+            net = round(gross / (1 + vat_rate / 100.0), 2) if vat_rate else gross
+            vat_amount = round(gross - net, 2)
+        elif gross is not None and net is not None and vat_amount is None:
+            vat_amount = round(gross - net, 2)
+
+        # Unchecked HTML checkboxes are omitted from the form, so absence = False.
+        deductible = form.get('deductible') not in (None, '', 'false', '0', 'off')
+        deductible_pct = _f('deductible_pct')
+        if deductible_pct is None:
+            deductible_pct = 100.0
+
+        return {
+            'net_amount': net,
+            'vat_rate': vat_rate,
+            'vat_amount': vat_amount,
+            'deductible': deductible,
+            'deductible_pct': deductible_pct,
+        }
+
     def _create_expense(self):
         """Create a new expense"""
         repo = self._get_repo()
@@ -256,18 +423,21 @@ class ExpensesModule(BaseModule):
         if request.method == 'POST':
             try:
                 file = request.files.get('file')
+                gross = float(request.form['amount'])
+                vat_fields = self._parse_vat_fields(request.form, gross)
                 repo.create_with_file(
                     app=self.core.app,
                     file=file,
                     storage=self.core,
                     contractor_id=request.form.get('contractor_id') or None,
-                    amount=float(request.form['amount']),
+                    amount=gross,
                     currency=request.form.get('currency', 'EUR'),
                     category=request.form.get('category'),
                     description=request.form.get('description'),
                     expense_date=datetime.strptime(request.form['expense_date'], '%Y-%m-%d').date(),
                     invoice_number=request.form.get('invoice_number'),
-                    notes=request.form.get('notes')
+                    notes=request.form.get('notes'),
+                    **vat_fields
                 )
                 flash('Expense created successfully!', 'success')
                 return redirect(url_for('expenses.expenses_index'))
@@ -279,7 +449,8 @@ class ExpensesModule(BaseModule):
         contractors = repo.get_all_contractors()
         tracked_currencies = settings_repo.get_tracked_currencies()
         return render_template('expense_form.html', expense=None,
-                             contractors=contractors, tracked_currencies=tracked_currencies)
+                             contractors=contractors, tracked_currencies=tracked_currencies,
+                             category_defaults=self.get_category_defaults())
 
     def _edit_expense(self, id):
         """Edit an existing expense"""
@@ -290,19 +461,22 @@ class ExpensesModule(BaseModule):
         if request.method == 'POST':
             try:
                 file = request.files.get('file')
+                gross = float(request.form['amount'])
+                vat_fields = self._parse_vat_fields(request.form, gross)
                 repo.update_with_file(
                     app=self.core.app,
                     expense=expense,
                     file=file,
                     storage=self.core,
                     contractor_id=request.form.get('contractor_id') or None,
-                    amount=float(request.form['amount']),
+                    amount=gross,
                     currency=request.form.get('currency', 'EUR'),
                     category=request.form.get('category'),
                     description=request.form.get('description'),
                     expense_date=datetime.strptime(request.form['expense_date'], '%Y-%m-%d').date(),
                     invoice_number=request.form.get('invoice_number'),
-                    notes=request.form.get('notes')
+                    notes=request.form.get('notes'),
+                    **vat_fields
                 )
                 flash('Expense updated successfully!', 'success')
                 return redirect(url_for('expenses.expenses_index'))
@@ -314,7 +488,8 @@ class ExpensesModule(BaseModule):
         contractors = repo.get_all_contractors()
         tracked_currencies = settings_repo.get_tracked_currencies()
         return render_template('expense_form.html', expense=expense,
-                             contractors=contractors, tracked_currencies=tracked_currencies)
+                             contractors=contractors, tracked_currencies=tracked_currencies,
+                             category_defaults=self.get_category_defaults())
 
     def _delete_expense(self, id):
         """Delete an expense"""
@@ -420,13 +595,20 @@ class ExpensesModule(BaseModule):
         for expense in expenses:
             amount_eur = self._convert_to(expense.amount, expense.currency, 'EUR',
                                           expense.expense_date)
+            vat_eur = None
+            if expense.vat_amount is not None:
+                vat_eur = self._convert_to(expense.vat_amount, expense.currency, 'EUR',
+                                           expense.expense_date)
             result.append({
                 'expense_date': expense.expense_date.strftime('%d/%m/%Y'),
                 'invoice_number': expense.invoice_number or '',
                 'contractor_name': contractors_map.get(expense.contractor_id, 'N/A'),
                 'category': expense.category or 'N/A',
                 'description': expense.description or '',
-                'amount_eur': amount_eur
+                'amount_eur': amount_eur,
+                # F4 — VAT split (None on legacy rows).
+                'vat_eur': vat_eur,
+                'deductible_pct': expense.deductible_pct,
             })
         return result
 
@@ -441,18 +623,41 @@ class ExpensesModule(BaseModule):
             self._db.extract('year', self.Expense.expense_date) == current_year
         ).all()
 
-        # Convert expenses to base currency
+        default_vat_rate = ((context.get('settings').default_vat_rate or 21.0) / 100.0
+                            if context.get('settings') and hasattr(context['settings'], 'default_vat_rate')
+                            else 0.21)
+
+        # Convert expenses to base currency. VAT paid (IVA soportado) now uses the
+        # real per-expense vat_amount × deductible_pct when F4 data is present;
+        # legacy rows (no vat_amount) fall back to the derived estimate and are
+        # counted so the user knows the deducible figure is approximate.
         total_expenses = 0
         vat_paid = 0
+        missing_vat_count = 0
         for expense in expenses_query:
             amount_base = self._convert_to(expense.amount, expense.currency,
                                            base_currency, expense.expense_date)
             total_expenses += amount_base
-            vat_rate = (context.get('settings').default_vat_rate or 21.0) / 100.0 if context.get('settings') and hasattr(context['settings'], 'default_vat_rate') else 0.21
-            vat_paid += amount_base * vat_rate
+            if expense.vat_amount is not None:
+                if getattr(expense, 'deductible', True):
+                    vat_base = self._convert_to(expense.vat_amount, expense.currency,
+                                                base_currency, expense.expense_date)
+                    pct = (expense.deductible_pct if expense.deductible_pct is not None else 100.0)
+                    vat_paid += vat_base * (pct / 100.0)
+            else:
+                missing_vat_count += 1
+                vat_paid += amount_base * default_vat_rate  # legacy estimate
 
         vat_collected = context.get('vat_collected', 0)
         vat_to_pay = vat_collected - vat_paid
+
+        notes = [
+            f"VAT: Collected {context['currency_symbol']}{vat_collected:.2f} - Paid {context['currency_symbol']}{vat_paid:.2f}"
+        ]
+        if missing_vat_count:
+            notes.append(
+                f"{missing_vat_count} expense(s) lack VAT data — IVA soportado "
+                f"estimated for those.")
 
         return {
             'summary_columns': [
@@ -461,9 +666,7 @@ class ExpensesModule(BaseModule):
             'breakdown_rows': [
                 {'label': 'VAT to Pay (IVA)', 'amount': vat_to_pay}
             ],
-            'notes': [
-                f"VAT: Collected {context['currency_symbol']}{vat_collected:.2f} - Paid {context['currency_symbol']}{vat_paid:.2f}"
-            ],
+            'notes': notes,
             'deductions': total_expenses,
             'tax_total': vat_to_pay
         }

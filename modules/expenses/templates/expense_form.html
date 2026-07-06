@@ -87,6 +87,42 @@
                 </div>
             </div>
 
+            <!-- F4 — VAT breakdown & deductibility. Gross (Amount) is authoritative;
+                 enter a VAT rate and net/VAT are computed, all overridable. -->
+            <fieldset style="border: 1px solid var(--color-border); border-radius: 5px; padding: 12px; margin-bottom: 15px;">
+                <legend style="font-size: 13px; padding: 0 6px;">VAT breakdown (IVA soportado)</legend>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div class="form-group">
+                        <label for="vat_rate">VAT rate %</label>
+                        <input type="number" id="vat_rate" name="vat_rate" step="0.01"
+                               value="{{ expense.vat_rate if expense and expense.vat_rate is not none else '' }}"
+                               placeholder="21">
+                    </div>
+                    <div class="form-group">
+                        <label for="net_amount">Net (base)</label>
+                        <input type="number" id="net_amount" name="net_amount" step="0.01"
+                               value="{{ expense.net_amount if expense and expense.net_amount is not none else '' }}"
+                               placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="vat_amount">VAT amount</label>
+                        <input type="number" id="vat_amount" name="vat_amount" step="0.01"
+                               value="{{ expense.vat_amount if expense and expense.vat_amount is not none else '' }}"
+                               placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="deductible_pct">Deductible %</label>
+                        <input type="number" id="deductible_pct" name="deductible_pct" step="0.01"
+                               value="{{ expense.deductible_pct if expense and expense.deductible_pct is not none else '100' }}">
+                    </div>
+                </div>
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                    <input type="checkbox" id="deductible" name="deductible"
+                           {% if not expense or expense.deductible %}checked{% endif %}>
+                    Deductible (IVA soportado)
+                </label>
+            </fieldset>
+
             <div class="form-group">
                 <label for="file">Upload File (Invoice/Receipt)</label>
                 <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png">
@@ -112,12 +148,51 @@
 </form>
 
 <script>
+const CATEGORY_DEFAULTS = {{ (category_defaults or {}) | tojson }};
+
 document.addEventListener('DOMContentLoaded', function() {
     const dateField = document.getElementById('expense_date');
     if (!dateField.value) {
         const today = new Date();
         dateField.value = today.toISOString().split('T')[0];
     }
+
+    // F4 — VAT auto-calculation. Gross (amount) + rate -> net + VAT.
+    const grossEl = document.getElementById('amount');
+    const rateEl = document.getElementById('vat_rate');
+    const netEl = document.getElementById('net_amount');
+    const vatEl = document.getElementById('vat_amount');
+    const round2 = (n) => Math.round(n * 100) / 100;
+
+    function recalcFromGrossRate() {
+        const gross = parseFloat(grossEl.value);
+        const rate = parseFloat(rateEl.value);
+        if (isNaN(gross) || isNaN(rate)) return;
+        const net = rate ? round2(gross / (1 + rate / 100)) : gross;
+        netEl.value = net;
+        vatEl.value = round2(gross - net);
+    }
+    grossEl.addEventListener('input', recalcFromGrossRate);
+    rateEl.addEventListener('input', recalcFromGrossRate);
+
+    // Category defaults: apply rate/deductible% on category change, but never
+    // clobber a field the user already typed into.
+    const catEl = document.getElementById('category');
+    const dedPctEl = document.getElementById('deductible_pct');
+    const userTouched = new Set();
+    [rateEl, dedPctEl].forEach(el => el.addEventListener('input', () => userTouched.add(el.id)));
+    function applyCategoryDefaults() {
+        const def = CATEGORY_DEFAULTS[catEl.value];
+        if (!def) return;
+        if (!userTouched.has('vat_rate') && (rateEl.value === '' )) {
+            rateEl.value = def.vat_rate;
+            recalcFromGrossRate();
+        }
+        if (!userTouched.has('deductible_pct') && def.deductible_pct != null) {
+            dedPctEl.value = def.deductible_pct;
+        }
+    }
+    catEl.addEventListener('change', applyCategoryDefaults);
 
     // AI prefill support
     const params = new URLSearchParams(window.location.search);

@@ -83,7 +83,16 @@
                     <td>{{ contractors_map.get(expense.contractor_id, '-') }}</td>
                     <td>{{ expense.category or '-' }}</td>
                     <td>{{ expense.description or '-' }}</td>
-                    <td>{{ "%.2f"|format(expense.amount) }} {{ expense.currency }}</td>
+                    <td>
+                        {{ "%.2f"|format(expense.amount) }} {{ expense.currency }}
+                        {% if expense.vat_amount is not none %}
+                        <span style="display: block; font-size: 11px; color: var(--color-text-muted);">
+                            incl. VAT {{ "%.2f"|format(expense.vat_amount) }}{% if expense.deductible_pct is not none and expense.deductible_pct != 100 %} · {{ "%.0f"|format(expense.deductible_pct) }}% ded.{% endif %}
+                        </span>
+                        {% else %}
+                        <span style="display: block; font-size: 11px; color: var(--color-warning, var(--color-text-muted));" title="No VAT breakdown — excluded from Modelo 303 deductions">⚠ no VAT data</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if expense.file_path %}
                         <a href="{{ url_for('expenses.expenses_preview', id=expense.id) }}" target="_blank" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
