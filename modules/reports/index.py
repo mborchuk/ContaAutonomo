@@ -63,7 +63,9 @@ class ReportsModule(BaseModule):
         """Collect available report sections from enabled modules."""
         sections = [
             {'id': 'income', 'title': 'Income (Invoices)',
-             'description': 'Invoice data: number, date, client, amount and status.'}
+             'description': 'Invoice data: number, date, client, IVA, amount and status.',
+             # Invoice PDFs can ride the report as a ZIP; checked by default in the UI.
+             'attach_invoices': True}
         ]
         mgr = self.core.module_manager
         if mgr:
@@ -73,6 +75,9 @@ class ReportsModule(BaseModule):
                     'title': s.get('title', s.get('id', 'Unknown')),
                     'description': s.get('description', ''),
                     'has_files': s.get('has_files', False),
+                    # Section may ask for its attach checkbox to start checked
+                    # (expenses receipts do; documents stay off by default).
+                    'attach_default': s.get('attach_default', False),
                 })
         return sections
 
@@ -163,6 +168,7 @@ class ReportsModule(BaseModule):
               "currency_mode": "base"|"original",
               "file_ids": {"documents": [1,2]},      # optional, per section
               "include_files": ["documents"]         # optional, attach files as ZIP
+                                                     # ("income" attaches invoice PDFs)
             }
         """
         # Auth: reuse the api module's constant-time token check.
@@ -280,6 +286,9 @@ class ReportsModule(BaseModule):
 
             # Per-section file selection from the form.
             file_ids, include_files_sids = {}, set()
+            # Core income section: attach invoice PDFs (checkbox checked by default).
+            if request.form.get('include_files_income') == '1':
+                include_files_sids.add('income')
             mgr = self.core.module_manager
             if mgr:
                 for section in mgr.get_report_sections():
@@ -340,6 +349,22 @@ class ReportsModule(BaseModule):
 
         if 'income' in selected_sections:
             invoices = invoice_repo.get_by_date_range(start_date, end_date, include_cancelled)
+
+            # IVA per invoice: prefer the F2 fiscal snapshot frozen at issue;
+            # fall back to deriving from the customer's tax_type + settings rate
+            # for legacy/draft invoices. eu_b2b = reverse charge (inversión del
+            # sujeto pasivo, Art. 194 Directiva 2006/112/EC) -> 0% + footnote.
+            default_vat_rate = (settings.default_vat_rate
+                                if settings and settings.default_vat_rate is not None
+                                else 21.0)
+            from app import Customer
+            customer_ids = {inv.customer_id for inv in invoices if inv.customer_id}
+            tax_type_map = {}
+            if customer_ids:
+                for cust in Customer.query.filter(Customer.id.in_(customer_ids)).all():
+                    tax_type_map[cust.id] = cust.tax_type
+
+            import json as _json
             for inv in invoices:
                 if currency_mode == 'original':
                     # Show amount in the invoice's own currency
@@ -354,6 +379,27 @@ class ReportsModule(BaseModule):
                     display_amount = inv.amount_eur if base_currency == 'EUR' else inv.amount_usd
                     display_currency = base_currency
 
+                # Resolve the tax_type: issued invoices carry it in the frozen
+                # snapshot; otherwise use the live customer.
+                tax_type = tax_type_map.get(inv.customer_id)
+                snap_customer = getattr(inv, 'snap_customer', None)
+                if snap_customer:
+                    try:
+                        tax_type = _json.loads(snap_customer).get('tax_type') or tax_type
+                    except (ValueError, TypeError):
+                        pass
+
+                snap_rate = getattr(inv, 'snap_vat_rate', None)
+                if snap_rate is not None:
+                    vat_rate = snap_rate
+                    vat_eur = getattr(inv, 'snap_vat_amount', None) or 0.0
+                elif tax_type == 'standard':
+                    vat_rate = default_vat_rate
+                    vat_eur = round((inv.amount_eur or 0.0) * vat_rate / 100.0, 2)
+                else:
+                    vat_rate = 0.0
+                    vat_eur = 0.0
+
                 income_data.append({
                     'invoice_number': inv.invoice_number,
                     'invoice_date': inv.invoice_date.strftime('%d/%m/%Y'),
@@ -361,7 +407,11 @@ class ReportsModule(BaseModule):
                     'amount': display_amount,
                     'currency': display_currency,
                     'amount_eur': inv.amount_eur,
-                    'status': inv.status
+                    'status': inv.status,
+                    'vat_rate': vat_rate,
+                    'vat_eur': vat_eur,
+                    # Intra-EU B2B: buyer self-assesses the VAT (reverse charge).
+                    'reverse_charge': tax_type == 'eu_b2b',
                 })
 
         # Collect data from enabled modules for selected sections
@@ -453,7 +503,11 @@ class ReportsModule(BaseModule):
                     if sid in include_files_sids:
                         include_files[sid] = section['files_fn']
 
-        if include_files:
+        # Income invoice PDFs (core section — handled here, not via files_fn).
+        attach_invoices = ('income' in selected_sections
+                           and 'income' in include_files_sids)
+
+        if include_files or attach_invoices:
             # Generate ZIP with PDF report + attached files
             import zipfile
             zip_buffer = io.BytesIO()
@@ -461,6 +515,24 @@ class ReportsModule(BaseModule):
                 # Add the PDF report
                 pdf_filename = f"report_{period_text.replace(' ', '_')}.pdf"
                 zf.writestr(pdf_filename, buffer.getvalue())
+
+                # Attach the period's invoice PDFs (skips invoices without a
+                # stored/generatable PDF; names are ZIP-safe).
+                if attach_invoices:
+                    invoices = invoice_repo.get_by_date_range(
+                        start_date, end_date, include_cancelled)
+                    for inv in invoices:
+                        try:
+                            pdf = self.core.invoice_service.get_pdf(inv.id)
+                            if not pdf:
+                                continue
+                            pdf_bytes, _name = pdf
+                            safe = (inv.invoice_number or f'invoice-{inv.id}')
+                            safe = safe.replace('/', '-').replace('\\', '-')
+                            zf.writestr(f"invoices/{safe}.pdf", pdf_bytes)
+                        except Exception as e:
+                            self.logger.error(
+                                'Error attaching invoice %s PDF: %s', inv.id, e)
 
                 # Add files from each section
                 for sid, files_fn in include_files.items():
@@ -474,8 +546,18 @@ class ReportsModule(BaseModule):
                         for f in files:
                             result = self.core.storage.get(f['storage_key'])
                             if result:
-                                file_bytes, _ = result
-                                zf.writestr(f"documents/{f['name']}", file_bytes)
+                                file_bytes, resolved_name = result
+                                # Folder per section: documents/, expenses/, ...
+                                safe_name = str(f['name']).replace('/', '-').replace('\\', '-')
+                                # Receipts can be images too (jpg/png/...). If the
+                                # section couldn't tell the type (opaque storage
+                                # key), borrow the extension from the filename the
+                                # storage backend resolved.
+                                if '.' not in safe_name.rsplit('_', 1)[-1] and \
+                                        resolved_name and '.' in resolved_name:
+                                    ext = resolved_name.rsplit('.', 1)[-1]
+                                    safe_name = f'{safe_name}.{ext}'
+                                zf.writestr(f"{sid}/{safe_name}", file_bytes)
                     except Exception as e:
                         self.logger.error('Error adding files for section %s: %s', sid, e)
 

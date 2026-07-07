@@ -62,7 +62,8 @@ def _loaded_modules_session():
 
     enabled_model = mm._get_module_enabled_model()
     for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar',
-                      'recurring_invoices', 'reta_advisor', 'invoice_email'):
+                      'recurring_invoices', 'reta_advisor', 'invoice_email',
+                      'reports'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()

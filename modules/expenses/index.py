@@ -549,8 +549,62 @@ class ExpensesModule(BaseModule):
             'id': 'expenses',
             'title': 'Expenses',
             'description': 'Expense records with contractor, category, invoice number and amounts in EUR.',
-            'query_fn': self._get_expenses_for_report
+            'query_fn': self._get_expenses_for_report,
+            # Receipt/invoice files uploaded on expenses can ride the report
+            # ZIP; attach is ON by default (same as income invoice PDFs).
+            'has_files': True,
+            'attach_default': True,
+            'files_fn': self._report_files,
+            'list_fn': self._report_list,
         }]
+
+    def _expenses_with_files(self, start_date, end_date, doc_ids=None):
+        query = self.Expense.query.filter(
+            self.Expense.expense_date >= start_date,
+            self.Expense.expense_date <= end_date,
+            self.Expense.file_path.isnot(None),
+        )
+        if doc_ids:
+            query = query.filter(self.Expense.id.in_(doc_ids))
+        return query.order_by(self.Expense.expense_date).all()
+
+    def _report_files(self, start_date, end_date, doc_ids=None):
+        """Expense receipt files for the report ZIP.
+
+        Returns list of dicts: {name: str, storage_key: str}. Names are
+        prefixed with date + expense id so same-named uploads never collide.
+        """
+        files = []
+        for e in self._expenses_with_files(start_date, end_date, doc_ids):
+            if '/' in e.file_path:
+                # Path-based key keeps the original filename (pdf/jpg/png/...).
+                base = e.file_path.split('/')[-1]
+            else:
+                # Opaque storage key (e.g. GDrive id) — no local filename and
+                # no way to know the type here; leave the extension off and let
+                # the ZIP writer borrow it from the storage-resolved filename.
+                base = f'receipt-{e.id}'
+            date_str = e.expense_date.strftime('%Y%m%d')
+            files.append({
+                'name': f'{date_str}_expense{e.id}_{base}',
+                'storage_key': e.file_path,
+            })
+        return files
+
+    def _report_list(self, start_date, end_date):
+        """Expense list for the report file picker (AJAX)."""
+        contractors_map = {c.id: c.name for c in self.Contractor.query.all()}
+        result = []
+        for e in self._expenses_with_files(start_date, end_date):
+            label = contractors_map.get(e.contractor_id) or e.category or 'Expense'
+            result.append({
+                'id': e.id,
+                'name': f'{label} — {e.amount:.2f} {e.currency}',
+                'date': e.expense_date.strftime('%d/%m/%Y'),
+                'category': e.category or '',
+                'files': 1,
+            })
+        return result
 
     def _convert_to(self, amount, from_currency, to_currency, when=None):
         """Convert an amount between currencies via the shared CurrencyService.
@@ -607,6 +661,7 @@ class ExpensesModule(BaseModule):
                 'description': expense.description or '',
                 'amount_eur': amount_eur,
                 # F4 — VAT split (None on legacy rows).
+                'vat_rate': expense.vat_rate,
                 'vat_eur': vat_eur,
                 'deductible_pct': expense.deductible_pct,
             })

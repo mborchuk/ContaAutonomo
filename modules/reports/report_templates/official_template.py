@@ -105,17 +105,32 @@ def generate_report(buffer, report_data, settings):
         base_currency = report_data.get('base_currency', 'EUR')
 
         if income_data:
+            # IVA % cell text: "21%", "0%", with "(1)" marker on reverse-charge
+            # rows (inversión del sujeto pasivo — footnote below the table).
+            def _iva_label(invoice):
+                rate = invoice.get('vat_rate')
+                if rate is None:
+                    return '—'
+                label = f"{rate:.0f}%" if float(rate).is_integer() else f"{rate:.2f}%"
+                if invoice.get('reverse_charge'):
+                    label += ' (1)'
+                return label
+
+            has_reverse_charge = any(inv.get('reverse_charge') for inv in income_data)
+            total_vat_eur = sum(inv.get('vat_eur') or 0 for inv in income_data)
+
             total_by_currency = {}
             if currency_mode == 'original':
                 # Original currency mode — show Currency column
                 income_table_data = [
-                    ['Invoice #', 'Date', 'Client', 'Currency', 'Amount', 'Status']
+                    ['Invoice #', 'Date', 'Client', 'Currency', 'IVA %',
+                     'IVA\n(EUR)', 'Amount', 'Status']
                 ]
                 total_by_currency = {}
                 for invoice in income_data:
                     client_name = invoice.get('client_name', '')
-                    if len(client_name) > 25:
-                        client_name = client_name[:22] + '...'
+                    if len(client_name) > 18:
+                        client_name = client_name[:15] + '...'
                     cur = invoice.get('currency', base_currency)
                     sym = get_currency_symbol(cur) + ' '
                     amt = invoice.get('amount', 0)
@@ -125,40 +140,47 @@ def generate_report(buffer, report_data, settings):
                         invoice.get('invoice_date', ''),
                         client_name,
                         cur,
+                        _iva_label(invoice),
+                        f"€ {invoice.get('vat_eur') or 0:.2f}",
                         f"{sym} {amt:.2f}",
                         invoice.get('status', '').upper()
                     ])
-                # Total rows per currency
+                # Total rows per currency (IVA total is EUR-based — shown once
+                # in the summary line below the table).
                 for cur, total in sorted(total_by_currency.items()):
                     sym = get_currency_symbol(cur) + ' '
                     income_table_data.append([
-                        '', '', '', f'TOTAL {cur}:', f"{sym} {total:.2f}", ''
+                        '', '', '', f'TOTAL {cur}:', '', '', f"{sym} {total:.2f}", ''
                     ])
-                col_widths = [2.5*cm, 2.3*cm, 5.5*cm, 2*cm, 2.5*cm, 2*cm]
+                col_widths = [2.1*cm, 1.9*cm, 3.2*cm, 1.6*cm, 1.4*cm, 1.9*cm, 2.4*cm, 1.8*cm]
             else:
                 # Base currency mode — single currency column
                 sym = get_currency_symbol(base_currency) + ' '
                 income_table_data = [
-                    ['Invoice #', 'Date', 'Client', f'Amount\n({base_currency})', 'Status']
+                    ['Invoice #', 'Date', 'Client', 'IVA %', 'IVA\n(EUR)',
+                     f'Amount\n({base_currency})', 'Status']
                 ]
                 total_income = 0
                 for invoice in income_data:
                     client_name = invoice.get('client_name', '')
-                    if len(client_name) > 30:
-                        client_name = client_name[:27] + '...'
+                    if len(client_name) > 24:
+                        client_name = client_name[:21] + '...'
                     amt = invoice.get('amount', 0)
                     total_income += amt
                     income_table_data.append([
                         invoice.get('invoice_number', ''),
                         invoice.get('invoice_date', ''),
                         client_name,
+                        _iva_label(invoice),
+                        f"€ {invoice.get('vat_eur') or 0:.2f}",
                         f"{sym} {amt:.2f}",
                         invoice.get('status', '').upper()
                     ])
                 income_table_data.append([
-                    '', '', 'TOTAL:', f"{sym} {total_income:.2f}", ''
+                    '', '', 'TOTAL:', '', f"€ {total_vat_eur:.2f}",
+                    f"{sym} {total_income:.2f}", ''
                 ])
-                col_widths = [2.5*cm, 2.3*cm, 7*cm, 2.7*cm, 2.3*cm]
+                col_widths = [2.3*cm, 1.9*cm, 4.4*cm, 1.4*cm, 1.9*cm, 2.5*cm, 1.9*cm]
 
             num_total_rows = len(total_by_currency) if total_by_currency else 1
 
@@ -167,8 +189,10 @@ def generate_report(buffer, report_data, settings):
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('ALIGN', (-3, -num_total_rows), (-3, -1), 'RIGHT'),
-                ('ALIGN', (-2, 0), (-2, -1), 'RIGHT'),
+                # IVA %, IVA (EUR) and Amount columns right-aligned; the
+                # TOTAL label column too (works for both currency modes).
+                ('ALIGN', (-4, 0), (-2, -1), 'RIGHT'),
+                ('ALIGN', (-5, -num_total_rows), (-5, -1), 'RIGHT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('FONTSIZE', (0, 1), (-1, -1), 9),
@@ -193,7 +217,17 @@ def generate_report(buffer, report_data, settings):
                 total_income = sum(inv.get('amount', 0) for inv in income_data)
                 sym = get_currency_symbol(base_currency) + ' '
                 summary_text = f"<b>Total Income:</b> {sym}{total_income:.2f}"
+            summary_text += f" &nbsp;|&nbsp; <b>Total IVA:</b> € {total_vat_eur:.2f}"
             story.append(Paragraph(summary_text, normal_style))
+
+            # Reverse-charge footnote — rows marked "(1)".
+            if has_reverse_charge:
+                story.append(Spacer(1, 0.2*cm))
+                story.append(Paragraph(
+                    "<i>(1) Inversión del sujeto pasivo – Artículo 194 Directiva "
+                    "2006/112/EC (reverse charge: VAT is self-assessed by the "
+                    "recipient; no IVA charged on the invoice).</i>",
+                    normal_style))
             story.append(Spacer(1, 1*cm))
         else:
             story.append(Paragraph("No income data for this period.", normal_style))
@@ -216,9 +250,24 @@ def generate_report(buffer, report_data, settings):
                 leading=11
             )
 
+            # IVA % cell text: F4 breakdown when present, em-dash for legacy
+            # rows without VAT data. Explicit 0% rows get the "(1)" marker.
+            def _expense_iva_label(expense):
+                rate = expense.get('vat_rate')
+                if rate is None:
+                    return '—'
+                label = f"{rate:.0f}%" if float(rate).is_integer() else f"{rate:.2f}%"
+                if rate == 0:
+                    label += ' (1)'
+                return label
+
+            has_zero_vat = any(e.get('vat_rate') == 0 for e in expenses_data)
+            total_expense_vat = sum(e.get('vat_eur') or 0 for e in expenses_data)
+
             # Expenses table
             expenses_table_data = [
-                ['Invoice #', 'Date', 'Contractor', 'Category', 'Description', 'Amount\n(EUR)']
+                ['Invoice #', 'Date', 'Contractor', 'Category', 'Description',
+                 'IVA %', 'IVA\n(EUR)', 'Amount\n(EUR)']
             ]
 
             total_expenses = 0
@@ -237,29 +286,35 @@ def generate_report(buffer, report_data, settings):
                 invoice_number = expense.get('invoice_number', '')
                 invoice_para = Paragraph(invoice_number, cell_style)
 
+                vat_eur = expense.get('vat_eur')
                 expenses_table_data.append([
                     invoice_para,
                     expense.get('expense_date', ''),
                     contractor_para,
                     category_para,
                     description_para,
+                    _expense_iva_label(expense),
+                    f"€ {vat_eur:.2f}" if vat_eur is not None else '—',
                     f"€ {expense.get('amount_eur', 0):.2f}"
                 ])
                 total_expenses += expense.get('amount_eur', 0)
 
             # Add total row
             expenses_table_data.append([
-                '', '', '', '', 'TOTAL:', f"€ {total_expenses:.2f}"
+                '', '', '', '', 'TOTAL:',
+                '', f"€ {total_expense_vat:.2f}", f"€ {total_expenses:.2f}"
             ])
 
-            expenses_table = Table(expenses_table_data, colWidths=[2.5*cm, 2*cm, 3*cm, 2.5*cm, 4.5*cm, 2.8*cm])
+            expenses_table = Table(expenses_table_data,
+                                   colWidths=[2*cm, 1.8*cm, 2.5*cm, 2*cm, 3.3*cm,
+                                              1.2*cm, 1.9*cm, 2.2*cm])
             expenses_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Align content to top for wrapped text
                 ('ALIGN', (4, -1), (4, -1), 'RIGHT'),  # Align TOTAL: to right
-                ('ALIGN', (5, 0), (5, -1), 'RIGHT'),
+                ('ALIGN', (5, 0), (7, -1), 'RIGHT'),   # IVA %, IVA (EUR), Amount
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('FONTSIZE', (0, 1), (-1, -1), 9),  # Smaller font for data rows
@@ -277,8 +332,19 @@ def generate_report(buffer, report_data, settings):
             story.append(Spacer(1, 0.5*cm))
 
             # Expenses summary
-            summary_text = f"<b>Total Expenses:</b> € {total_expenses:.2f}"
+            summary_text = (f"<b>Total Expenses:</b> € {total_expenses:.2f}"
+                            f" &nbsp;|&nbsp; <b>Total IVA soportado:</b> € {total_expense_vat:.2f}")
             story.append(Paragraph(summary_text, normal_style))
+
+            # 0% IVA footnote — cannot always tell exempt from reverse charge
+            # on expense rows, so the wording stays honest ("may include").
+            if has_zero_vat:
+                story.append(Spacer(1, 0.2*cm))
+                story.append(Paragraph(
+                    "<i>(1) 0% IVA — may include exempt operations or "
+                    "inversión del sujeto pasivo – Artículo 194 Directiva "
+                    "2006/112/EC (reverse charge).</i>",
+                    normal_style))
             story.append(Spacer(1, 1*cm))
         else:
             story.append(Paragraph("No expenses data for this period.", normal_style))

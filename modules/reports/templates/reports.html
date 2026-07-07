@@ -45,11 +45,23 @@
                 {% if section.description %}
                 <div style="color: var(--color-text-muted); font-size: 13px; margin-left: 26px;">{{ section.description }}</div>
                 {% endif %}
+                {% if section.attach_invoices %}
+                <div style="margin: 6px 0 0 26px;">
+                    <label class="check-label" style="font-size: 13px;">
+                        {# Invoice PDFs attach by default; untick to get a plain PDF report. #}
+                        <input type="checkbox" name="include_files_income" value="1" checked>
+                        📎 Attach invoice PDF files (ZIP archive)
+                    </label>
+                </div>
+                {% endif %}
                 {% if section.has_files %}
                 <div style="margin: 6px 0 0 26px;">
                     <label class="check-label" style="font-size: 13px;">
+                        {# Default comes from the section's attach_default flag:
+                           expenses receipts ON, documents OFF. #}
                         <input type="checkbox" name="include_files_{{ section.id }}" value="1"
-                               onchange="toggleFileList('{{ section.id }}', this.checked)">
+                               onchange="toggleFileList('{{ section.id }}', this.checked)"
+                               {% if section.attach_default %}checked{% endif %}>
                         📎 Include attached files (ZIP archive)
                     </label>
                     <div id="file-list-{{ section.id }}" style="display:none; margin-top:8px; padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; max-height:250px; overflow-y:auto;">
