@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+
+{% block title %}Bank Import{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Bank Import & Reconciliation</h1>
+</div>
+
+<!-- Upload -->
+<div class="note" style="margin-bottom: var(--space-5);">
+    <form method="POST" action="{{ url_for('bank_import.bank_upload') }}" enctype="multipart/form-data">
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="bank-file">Statement file</label>
+                <input type="file" id="bank-file" name="file" accept=".csv,.txt,.n43,.q43" required>
+            </div>
+            <div class="form-group">
+                <label for="bank-fmt">Format</label>
+                <select id="bank-fmt" name="fmt" onchange="document.getElementById('csv-mapping').style.display = this.value === 'csv' ? 'block' : 'none'">
+                    <option value="n43">Norma 43 (AEB43)</option>
+                    <option value="csv">CSV (column mapping)</option>
+                </select>
+            </div>
+        </div>
+        <div id="csv-mapping" style="display: none;">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="col_date">Date column *</label>
+                    <input type="text" id="col_date" name="col_date" placeholder="e.g. Fecha">
+                </div>
+                <div class="form-group">
+                    <label for="col_amount">Amount column *</label>
+                    <input type="text" id="col_amount" name="col_amount" placeholder="e.g. Importe">
+                </div>
+                <div class="form-group">
+                    <label for="col_description">Description column *</label>
+                    <input type="text" id="col_description" name="col_description" placeholder="e.g. Concepto">
+                </div>
+                <div class="form-group">
+                    <label for="col_counterparty">Counterparty column</label>
+                    <input type="text" id="col_counterparty" name="col_counterparty" placeholder="optional">
+                </div>
+                <div class="form-group">
+                    <label for="date_format">Date format</label>
+                    <input type="text" id="date_format" name="date_format" placeholder="%d/%m/%Y">
+                </div>
+                <div class="form-group">
+                    <label for="profile_name">Save as profile</label>
+                    <input type="text" id="profile_name" name="profile_name" placeholder="e.g. BBVA">
+                </div>
+            </div>
+            <label class="check-row">
+                <input type="checkbox" name="decimal_comma" value="1">
+                Amounts use decimal comma (1.234,56)
+            </label>
+            {% if csv_profiles %}
+            <p class="fine-print">Saved profiles:
+                {% for name, mapping in csv_profiles.items() %}
+                <a href="#" onclick='applyProfile({{ mapping | tojson }}); return false;'>{{ name }}</a>{% if not loop.last %} · {% endif %}
+                {% endfor %}
+            </p>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-success" style="margin-top: var(--space-3);">Import</button>
+    </form>
+</div>
+
+<!-- Unmatched movements + suggestions -->
+<h3>Unmatched movements ({{ unmatched | length }})</h3>
+{% if unmatched %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Date</th><th>Amount</th><th>Description</th><th>Suggested match</th><th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in unmatched %}
+        <tr>
+            <td>{{ m.date.strftime('%d/%m/%Y') }}</td>
+            <td style="{% if m.amount > 0 %}color: var(--color-success);{% endif %}">{{ "%.2f"|format(m.amount) }} {{ m.currency }}</td>
+            <td>{{ m.description[:80] }}{{ '…' if m.description|length > 80 }}</td>
+            <td>
+                {% set sugg = suggestions.get(m.id) %}
+                {% if sugg %}
+                <form method="POST" action="{{ url_for('bank_import.bank_confirm', movement_id=m.id) }}"
+                      style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                    <select name="invoice_id">
+                        {% for score, inv, reason in sugg %}
+                        <option value="{{ inv.id }}" title="{{ reason }}">
+                            {{ inv.invoice_number }} — €{{ "%.2f"|format(inv.amount_eur) }} ({{ score }}pts: {{ reason }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-success btn-sm"
+                            onclick="return confirm('Confirm match? The invoice will be marked PAID.');">✓ Confirm</button>
+                </form>
+                {% else %}
+                <span class="muted">no suggestion</span>
+                {% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('bank_import.bank_ignore', movement_id=m.id) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-secondary btn-sm">Ignore</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">Nothing to reconcile — import a statement above.</p>
+{% endif %}
+
+<!-- Batches -->
+<h3 style="margin-top: var(--space-5);">Recent imports</h3>
+{% if batches %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr><th>When</th><th>File</th><th>Format</th><th>Imported</th><th>Duplicates</th><th>Bad lines</th><th></th></tr>
+    </thead>
+    <tbody>
+        {% for b in batches %}
+        <tr>
+            <td>{{ b.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+            <td>{{ b.filename }}</td>
+            <td>{{ b.fmt }}</td>
+            <td>{{ b.imported }}</td>
+            <td>{{ b.skipped }}</td>
+            <td>
+                {% if batch_errors.get(b.id) %}
+                <details><summary>{{ batch_errors[b.id] | length }}</summary>
+                    <ul class="fine-print">
+                    {% for err in batch_errors[b.id][:10] %}<li>{{ err }}</li>{% endfor %}
+                    </ul>
+                </details>
+                {% else %}0{% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('bank_import.bank_batch_delete', batch_id=b.id) }}" style="display: inline;"
+                      onsubmit="return confirm('Undo this import? All its unmatched movements are removed.');">
+                    <button type="submit" class="btn btn-danger btn-sm">Undo</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<script>
+function applyProfile(mapping) {
+    document.getElementById('col_date').value = mapping.date || '';
+    document.getElementById('col_amount').value = mapping.amount || '';
+    document.getElementById('col_description').value = mapping.description || '';
+    document.getElementById('col_counterparty').value = mapping.counterparty || '';
+    document.getElementById('date_format').value = mapping.date_format || '';
+    document.querySelector('input[name="decimal_comma"]').checked = !!mapping.decimal_comma;
+}
+</script>
+{% endblock %}

@@ -6,18 +6,28 @@
 <style>
     .tabs {
         display: flex;
+        flex-wrap: wrap;
+        max-width: 100%;
+        gap: var(--space-1);
         border-bottom: 2px solid var(--color-primary);
         margin-bottom: 30px;
+        padding-bottom: var(--space-1);
     }
     .tab {
-        padding: 12px 24px;
+        flex: 1 1 128px;
+        min-width: 116px;
+        max-width: 180px;
+        padding: 12px 14px;
         cursor: pointer;
         background: var(--color-surface-2);
         color: var(--color-text-muted);
-        border: none;
+        border: 1px solid var(--color-border);
         border-bottom: 3px solid transparent;
-        font-size: 16px;
+        border-radius: var(--radius-md) var(--radius-md) 0 0;
+        font-size: var(--fs-sm);
         font-family: inherit;
+        line-height: 1.2;
+        text-align: center;
         transition: background .2s, color .2s;
     }
     .tab:hover {
@@ -27,7 +37,8 @@
     .tab.active {
         background: var(--color-surface);
         color: var(--color-primary);
-        border-bottom: 3px solid var(--color-primary);
+        border-color: var(--color-border);
+        border-bottom-color: var(--color-primary);
         font-weight: bold;
     }
     .tab-content {
@@ -75,23 +86,41 @@
         font-size: 12px;
         margin-left: 10px;
     }
+    @media (max-width: 768px) {
+        .tabs {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .tabs::-webkit-scrollbar {
+            display: none;
+        }
+        .tab {
+            flex: 0 0 auto;
+            min-width: 118px;
+            padding: 10px 14px;
+            font-size: var(--fs-sm);
+        }
+    }
 </style>
 
 <h1>Settings</h1>
 
-<div class="tabs">
-    <button class="tab active" onclick="showTab('general')">General Settings</button>
-    <button class="tab" onclick="showTab('business')">Business Information</button>
-    <button class="tab" onclick="showTab('customers')">Customers</button>
-    <button class="tab" onclick="showTab('contractors')">Contractors</button>
-    <button class="tab" onclick="showTab('banks')">Bank Accounts</button>
-    <button class="tab" onclick="showTab('defaults')">Default Settings</button>
-    <button class="tab" onclick="showTab('modules')">Modules</button>
-    <button class="tab" onclick="showTab('security')">Security</button>
+<div class="tabs" role="tablist" aria-label="Settings sections">
+    <button type="button" class="tab active" data-tab="general" role="tab" aria-selected="true" aria-controls="general" onclick="showTab('general', this)">General Settings</button>
+    <button type="button" class="tab" data-tab="business" role="tab" aria-selected="false" aria-controls="business" onclick="showTab('business', this)">Business Information</button>
+    <button type="button" class="tab" data-tab="customers" role="tab" aria-selected="false" aria-controls="customers" onclick="showTab('customers', this)">Customers</button>
+    <button type="button" class="tab" data-tab="contractors" role="tab" aria-selected="false" aria-controls="contractors" onclick="showTab('contractors', this)">Contractors</button>
+    <button type="button" class="tab" data-tab="banks" role="tab" aria-selected="false" aria-controls="banks" onclick="showTab('banks', this)">Bank Accounts</button>
+    <button type="button" class="tab" data-tab="defaults" role="tab" aria-selected="false" aria-controls="defaults" onclick="showTab('defaults', this)">Default Settings</button>
+    <button type="button" class="tab" data-tab="modules" role="tab" aria-selected="false" aria-controls="modules" onclick="showTab('modules', this)">Modules</button>
+    <button type="button" class="tab" data-tab="security" role="tab" aria-selected="false" aria-controls="security" onclick="showTab('security', this)">Security</button>
     {% if module_settings_panels %}
     {% for panel in module_settings_panels %}
     {% if panel.tab not in ('general', 'security') %}
-    <button class="tab" onclick="showTab('mod_{{ panel.tab }}')">{{ panel.tab_label|default(panel.tab) }}</button>
+    <button type="button" class="tab" data-tab="mod_{{ panel.tab }}" role="tab" aria-selected="false" aria-controls="mod_{{ panel.tab }}" onclick="showTab('mod_{{ panel.tab }}', this)">{{ panel.tab_label|default(panel.tab) }}</button>
     {% endif %}
     {% endfor %}
     {% endif %}
@@ -597,25 +626,25 @@
                     <form method="POST" action="{{ url_for('toggle_module', module_id=mod.module_id) }}">
                         {% if mod.enabled %}
                         <input type="hidden" name="action" value="disable">
-                        <button type="submit" class="btn btn-danger" style="padding: 6px 16px; font-size: 13px;"
+                        <button type="submit" class="btn btn-danger"
                                 onclick="return confirm('Disable this module? You will need to restart the app.')">
                             Disable
                         </button>
                         {% else %}
                         <input type="hidden" name="action" value="enable">
-                        <button type="submit" class="btn btn-success" style="padding: 6px 16px; font-size: 13px;">
+                        <button type="submit" class="btn btn-success">
                             Enable
                         </button>
                         {% endif %}
                     </form>
                 </div>
                 {% if mod.load_error %}
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border);">
                     <span style="color: var(--color-danger-fg); font-size: 12px; font-weight: 600;">⚠ Failed to load</span>
-                    <pre style="margin: 6px 0 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--color-danger-fg); background: rgba(0,0,0,0.04); padding: 6px; border-radius: 4px;">{{ mod.load_error }}</pre>
+                    <pre style="margin: 6px 0 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--color-danger-fg); background: var(--color-surface-3); padding: 6px; border-radius: 4px;">{{ mod.load_error }}</pre>
                 </div>
                 {% elif mod.enabled %}
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1);">
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border);">
                     <span style="color: var(--color-success-fg); font-size: 12px; font-weight: 500;">✓ Active</span>
                 </div>
                 {% endif %}
@@ -652,7 +681,7 @@
     <h2>Security</h2>
 
     <!-- Change Password Section -->
-    <div style="background: var(--color-surface); padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 30px;">
+    <div style="background: var(--color-surface); padding: 30px; border-radius: 8px; box-shadow: var(--shadow-sm); margin-bottom: var(--space-6);">
         <h3 style="margin-top: 0;">Change Password</h3>
         <div style="background: var(--color-warning-bg); border: 1px solid var(--amber-400); padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 14px;">
             <strong>⚠️ Important:</strong> Your password encrypts your backups. Don't forget it!
@@ -686,7 +715,7 @@
     </div>
 
     <!-- Session Info -->
-    <div style="background: var(--color-surface); padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background: var(--color-surface); padding: 30px; border-radius: 8px; box-shadow: var(--shadow-sm);">
         <h3 style="margin-top: 0;">Session</h3>
 
         {% if module_settings_panels %}
@@ -807,29 +836,29 @@ function updateBaseCurrencyOptions() {
     });
 }
 
-function showTab(tabName) {
+function showTab(tabName, trigger) {
     // Hide all tab contents
     const contents = document.querySelectorAll('.tab-content');
     contents.forEach(content => content.classList.remove('active'));
 
     // Remove active class from all tabs
     const tabs = document.querySelectorAll('.tab');
-    tabs.forEach(tab => tab.classList.remove('active'));
+    tabs.forEach(tab => {
+        tab.classList.remove('active');
+        tab.setAttribute('aria-selected', 'false');
+    });
 
     // Show selected tab content
-    document.getElementById(tabName).classList.add('active');
+    const panel = document.getElementById(tabName);
+    if (!panel) return;
+    panel.classList.add('active');
 
     // Add active class to clicked tab
-    if (event && event.target) {
-        event.target.classList.add('active');
-    } else {
-        // If called programmatically, find and activate the correct tab button
-        const tabButtons = document.querySelectorAll('.tab');
-        tabButtons.forEach(button => {
-            if (button.textContent.toLowerCase().includes(tabName)) {
-                button.classList.add('active');
-            }
-        });
+    const activeTab = trigger || document.querySelector('.tab[data-tab="' + tabName + '"]');
+    if (activeTab) {
+        activeTab.classList.add('active');
+        activeTab.setAttribute('aria-selected', 'true');
+        activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     }
 
     // Update URL hash without scrolling

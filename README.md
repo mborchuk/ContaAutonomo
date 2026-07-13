@@ -5,6 +5,9 @@ A self-hosted web application for freelancers and small businesses to manage inv
 ## Features
 
 - Invoice management with PDF generation and customizable templates
+- Invoice lifecycle: draft → issued → paid, with per-series sequential numbering,
+  a fiscal snapshot frozen at issue, rectificative invoices, and annulment
+- Expense tracking with VAT breakdown (net / rate / amount, deductibility)
 - Multi-currency support with ECB exchange rate conversion and 50+ currency symbols
 - Customer and contractor management
 - Configurable tax rates (VAT, income tax advance) per country
@@ -34,7 +37,15 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **PDF Verify** | Detect digital signatures in PDFs — shows signer info, clickable badge on documents and invoices |
 | **Invoice Comments** | Internal comments/notes on invoices (not visible on PDF) |
 | **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout and presets |
-| **AI Parser** | Parse invoice data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
+| **AI Parser** | Parse invoice and expense-receipt data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
+| **Fiscal Calendar** | Spanish AEAT filing deadlines as a dashboard panel with configurable reminders |
+| **Modelo 303/130 Drafts** | Box-level quarterly IVA/IRPF draft calculator (estimate, not tax advice) |
+| **RETA Advisor** | Contribution-bracket projection and year-end regularization forecast |
+| **Recurring Invoices** | Invoice templates on a monthly/quarterly cadence that generate drafts automatically |
+| **Invoice Email** | Send invoice PDFs via SMTP with send history and opt-in overdue reminders |
+| **Verifactu** | Tamper-evident, hash-chained billing records on issue/annul (RD 1007/2023 compliance assist) |
+| **Bank Import** | Norma 43 / CSV statement import with match suggestions and one-click reconciliation |
+| **E-Invoice (Facturae)** | Facturae 3.2.2 XML export for issued invoices with a readiness checklist |
 
 ## Quick Start
 

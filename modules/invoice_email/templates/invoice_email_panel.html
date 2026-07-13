@@ -1,28 +1,28 @@
 {# Invoice view panel — send form + history. Rendered by get_invoice_view_panels. #}
-<div style="margin-top: 20px; border: 1px solid var(--color-border); border-radius: 6px; padding: 15px;">
-    <h3 style="margin-top: 0;">📧 Email this invoice</h3>
+<div class="inline-panel">
+    <h3>📧 Email this invoice</h3>
 
     {% if not configured %}
-    <p style="font-size: 13px; color: var(--color-text-muted);">
+    <p class="muted">
         SMTP is not configured yet — set it up in
         <a href="{{ url_for('settings') }}#invoice_email">Settings → Email</a>.
     </p>
     {% else %}
     <form method="POST" action="{{ url_for('invoice_email.email_send', invoice_id=invoice.id) }}">
-        <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px;">
+        <div class="form-grid">
             <div class="form-group">
-                <label>Recipient</label>
-                <input type="email" name="recipient" required value="{{ recipient }}"
+                <label for="email-recipient-{{ invoice.id }}">Recipient</label>
+                <input type="email" id="email-recipient-{{ invoice.id }}" name="recipient" required value="{{ recipient }}"
                        placeholder="customer@example.com">
             </div>
             <div class="form-group">
-                <label>Subject</label>
-                <input type="text" name="subject" value="Invoice {invoice_number}">
+                <label for="email-subject-{{ invoice.id }}">Subject</label>
+                <input type="text" id="email-subject-{{ invoice.id }}" name="subject" value="Invoice {invoice_number}">
             </div>
         </div>
         <div class="form-group">
-            <label>Body <small style="color: var(--color-text-muted);">placeholders: {invoice_number} {client_name} {amount} {due_date}</small></label>
-            <textarea name="body" rows="4">Dear {client_name},
+            <label for="email-body-{{ invoice.id }}">Body <span class="fine-print">placeholders: {invoice_number} {client_name} {amount} {due_date}</span></label>
+            <textarea id="email-body-{{ invoice.id }}" name="body" rows="4">Dear {client_name},
 
 Please find attached invoice {invoice_number} for {amount}, due {due_date}.
 
@@ -33,32 +33,34 @@ Best regards</textarea>
     {% endif %}
 
     {% if history %}
-    <h4 style="margin-bottom: 6px;">Send history</h4>
-    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+    <h4 style="margin-bottom: var(--space-2);">Send history</h4>
+    <div class="table-wrap">
+    <table class="data-table">
         <thead>
             <tr>
-                <th style="text-align:left; padding: 4px; border-bottom: 1px solid var(--color-border);">When</th>
-                <th style="text-align:left; padding: 4px; border-bottom: 1px solid var(--color-border);">To</th>
-                <th style="text-align:left; padding: 4px; border-bottom: 1px solid var(--color-border);">Kind</th>
-                <th style="text-align:left; padding: 4px; border-bottom: 1px solid var(--color-border);">Status</th>
+                <th>When</th>
+                <th>To</th>
+                <th>Kind</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for log in history %}
             <tr>
-                <td style="padding: 4px;">{{ log.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
-                <td style="padding: 4px;">{{ log.recipient }}</td>
-                <td style="padding: 4px;">{{ log.kind }}</td>
-                <td style="padding: 4px;">
+                <td>{{ log.created_at.strftime('%d/%m/%Y %H:%M') }}</td>
+                <td>{{ log.recipient }}</td>
+                <td>{{ log.kind }}</td>
+                <td>
                     {% if log.status == 'sent' %}
-                    <span style="color: var(--color-success);">sent</span>
+                    <span class="status-badge status-sent">sent</span>
                     {% else %}
-                    <span style="color: var(--color-danger, red);" title="{{ log.error }}">failed</span>
+                    <span class="status-badge status-failed" title="{{ log.error }}">failed</span>
                     {% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% endif %}
 </div>

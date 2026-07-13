@@ -679,8 +679,12 @@ def dashboard():
 
     # Get current exchange rates for tracked currencies
     from datetime import date
-    from currency_converter import get_multiple_exchange_rates
+    from currency_converter import get_multiple_exchange_rates, refresh_ecb_rates
     today = date.today().strftime('%Y-%m-%d')
+    try:
+        refresh_ecb_rates()
+    except Exception as e:
+        logger.warning('Could not refresh ECB rates for dashboard: %s', e)
     exchange_rates = get_multiple_exchange_rates(today, tracked_currencies, base_currency=base_currency)
 
     # Currency symbols
@@ -1129,6 +1133,36 @@ def issue_invoice(id):
         # traceback via exc_info has the details.
         logger.error('Issue failed for invoice %s', invoice.id, exc_info=True)
         flash(f'Could not issue invoice: {e}', 'danger')
+    return redirect(url_for('view_invoice', id=id))
+
+
+def _mark_invoice_paid(invoice):
+    """issued/pending -> paid. The one legal forward transition on a locked
+    invoice (F2). Shared by the mark-paid route and bank reconciliation (F12).
+    Raises ValueError when the transition is not allowed."""
+    if invoice.status == 'paid':
+        return invoice
+    if invoice.status not in ('issued', 'pending'):
+        raise ValueError(f'Cannot mark a {invoice.status} invoice as paid')
+    invoice.status = 'paid'
+    db.session.commit()
+    log_activity('invoice_paid', 'invoice', f'#{invoice.invoice_number}')
+    return invoice
+
+
+@app.route('/mark-paid/<int:id>', methods=['POST'])
+@login_required
+def mark_invoice_paid(id):
+    invoice = Invoice.query.get_or_404(id)
+    try:
+        _mark_invoice_paid(invoice)
+        flash(f'Invoice {invoice.invoice_number} marked as paid.', 'success')
+    except ValueError as e:
+        flash(str(e), 'warning')
+    except Exception:
+        db.session.rollback()
+        logger.error('Mark-paid failed for invoice %s', invoice.id, exc_info=True)
+        flash('Could not mark invoice as paid.', 'danger')
     return redirect(url_for('view_invoice', id=id))
 
 

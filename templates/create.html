@@ -6,7 +6,7 @@
 <h1>Create New Invoice</h1>
 
 <form method="POST" action="{{ url_for('create_invoice') }}" enctype="multipart/form-data">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="form-grid">
         <!-- Left Column -->
         <div>
             <h2 style="margin-bottom: 20px; color: var(--color-primary);">Invoice Details</h2>
@@ -173,7 +173,7 @@ function addItem() {
     itemDiv.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <strong>Item ${itemCounter}</strong>
-            <button type="button" class="btn btn-danger" onclick="removeItem(${itemCounter})" style="padding: 5px 10px; font-size: 12px;">Remove</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeItem(${itemCounter})">Remove</button>
         </div>
 
         <div class="form-group">
@@ -181,7 +181,7 @@ function addItem() {
             <textarea name="items[${itemCounter}][description]" rows="2" placeholder="e.g., DevOps professional services (month)" required>${itemCounter === 1 ? defaultDescription : ''}</textarea>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+        <div class="form-grid-3">
             <div class="form-group">
                 <label>Quantity *</label>
                 <input type="number" name="items[${itemCounter}][quantity]" value="1" min="0" step="0.01" required onchange="updateItemTotal(${itemCounter})">

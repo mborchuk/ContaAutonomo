@@ -63,6 +63,7 @@
     /* ---- Semantic: feedback ---- */
     --color-success:    var(--green-700);  --color-success-bg: var(--green-100); --color-success-fg: var(--green-800);
     --color-danger:     var(--red-600);    --color-danger-bg:  var(--red-100);   --color-danger-fg:  var(--red-800);
+    --color-warning:    var(--amber-400);
     --color-warning-bg: var(--amber-100);  --color-warning-fg: var(--amber-800);
     --color-info:       var(--blue-600);
 
@@ -137,6 +138,7 @@ html.dark {
 
     --color-success-bg: #064e3b; --color-success-fg: #6ee7b7;
     --color-danger-bg:  #7f1d1d; --color-danger-fg:  #fca5a5;
+    --color-warning:    #f59e0b;
     --color-warning-bg: #78350f; --color-warning-fg: #fcd34d;
 
     --focus-ring: 0 0 0 3px rgba(129,140,248,.35), 0 0 0 5px #818cf8;

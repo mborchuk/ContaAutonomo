@@ -20,17 +20,17 @@
             </div>
             <div style="display: flex; gap: 6px; flex-wrap: wrap;">
                 <a href="{{ url_for('invoice_designer.designer_preview', id=tpl.id) }}" target="_blank"
-                   class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">👁 Preview</a>
+                   class="btn btn-secondary btn-sm">👁 Preview</a>
                 <a href="{{ url_for('invoice_designer.designer_edit', id=tpl.id) }}"
-                   class="btn btn-primary" style="padding: 4px 10px; font-size: 12px;">Edit</a>
+                   class="btn btn-primary btn-sm">Edit</a>
                 <form method="POST" action="{{ url_for('invoice_designer.designer_duplicate', id=tpl.id) }}" style="display:inline;">
-                    <button type="submit" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">📋 Duplicate</button>
+                    <button type="submit" class="btn btn-secondary btn-sm">📋 Duplicate</button>
                 </form>
                 <a href="{{ url_for('invoice_designer.designer_export', id=tpl.id) }}"
-                   class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">⬇ JSON</a>
+                   class="btn btn-secondary btn-sm">⬇ JSON</a>
                 <form method="POST" action="{{ url_for('invoice_designer.designer_delete', id=tpl.id) }}" style="display:inline;"
                       onsubmit="return confirm('Delete template «{{ tpl.name }}»?');">
-                    <button type="submit" class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;">Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                 </form>
             </div>
         </div>
@@ -53,7 +53,7 @@
         <span style="font-size: 13px; color: var(--color-text-muted);">📥 Import template from JSON:</span>
         <input type="text" name="import_name" placeholder="Template name (optional)" style="font-size: 13px; padding: 4px 8px; max-width: 200px;">
         <input type="file" name="json_file" accept=".json" required style="font-size: 13px;">
-        <button type="submit" class="btn btn-secondary" style="padding: 4px 12px; font-size: 13px;">Import</button>
+        <button type="submit" class="btn btn-secondary btn-sm">Import</button>
     </form>
 </div>
 {% endblock %}

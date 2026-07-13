@@ -11,7 +11,7 @@
 <!-- Filters -->
 <div style="background: var(--color-surface-3); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
     <form method="GET" action="{{ url_for('documents.documents_index') }}">
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+        <div class="form-grid-3">
             <div>
                 <label style="display: block; margin-bottom: 5px; font-size: 14px;">Search</label>
                 <input type="text" name="q" class="form-control" placeholder="Name, description, tags..."
@@ -72,7 +72,7 @@
         </select>
         <input type="text" name="bulk_category" id="bulkCategory" placeholder="Category" style="display:none; padding:4px 8px; font-size:12px; width:140px;">
         <input type="text" name="bulk_tag" id="bulkTag" placeholder="Tag" style="display:none; padding:4px 8px; font-size:12px; width:140px;">
-        <button type="submit" class="btn btn-primary" style="padding:4px 12px; font-size:12px;">Apply</button>
+        <button type="submit" class="btn btn-primary btn-sm">Apply</button>
     </form>
 </div>
 
@@ -148,7 +148,7 @@
                 </td>
                 <td style="white-space: nowrap; overflow: visible;">
                     <div class="action-dropdown" style="position: relative; display: inline-block;">
-                        <button class="btn btn-secondary action-dropdown-toggle" style="padding: 4px 10px; font-size: 12px;">⋮</button>
+                        <button class="btn btn-secondary action-dropdown-toggle btn-sm">⋮</button>
                         <div class="action-dropdown-menu" style="display:none; position:absolute; right:0; top:100%; background:var(--color-surface); border:1px solid var(--color-border); border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,.15); z-index:100; min-width:160px; padding:4px 0;">
                             {% set doc_files = files_by_doc.get(doc.id, []) %}
                             {% if doc_files %}
@@ -180,12 +180,12 @@
 <div style="display:flex; justify-content:center; gap:6px; margin-top:20px;">
     {% if page > 1 %}
     <a href="{{ url_for('documents.documents_index', page=page-1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
-       class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">← Prev</a>
+       class="btn btn-secondary btn-sm">← Prev</a>
     {% endif %}
     <span style="padding:6px 12px; font-size:13px; color:var(--color-text-muted);">Page {{ page }} of {{ total_pages }}</span>
     {% if page < total_pages %}
     <a href="{{ url_for('documents.documents_index', page=page+1, sort=sort_by, dir=sort_dir, q=request.args.get('q',''), category=request.args.get('category',''), year=request.args.get('year',''), tag=request.args.get('tag','')) }}"
-       class="btn btn-secondary" style="padding:4px 12px; font-size:12px;">Next →</a>
+       class="btn btn-secondary btn-sm">Next →</a>
     {% endif %}
 </div>
 {% endif %}

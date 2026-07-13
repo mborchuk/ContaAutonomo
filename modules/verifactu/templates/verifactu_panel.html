@@ -1,0 +1,63 @@
+{# Invoice view panel — QR + record trail for issued/annulled invoices. #}
+<div class="inline-panel">
+    <h3>🔏 Verifactu</h3>
+    <div class="verifactu-panel-grid">
+        <div>
+            <img src="{{ qr_url }}" alt="Verifactu QR" width="160" height="160"
+                 class="verifactu-qr">
+            <div class="fine-print">
+                AEAT-style QR (draft payload — verify spec before print use)
+            </div>
+        </div>
+        <div>
+            {% if records %}
+            <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Record</th>
+                        <th>Type</th>
+                        <th>When</th>
+                        <th>Hash</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in records %}
+                    <tr>
+                        <td>#{{ r.id }}</td>
+                        <td>{{ r.record_type }}</td>
+                        <td>{{ r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '' }}</td>
+                        <td class="mono">{{ r.record_hash[:12] }}…</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% else %}
+            <p class="muted">
+                No billing record for this invoice — it was issued before the
+                Verifactu module was enabled.
+            </p>
+            {% endif %}
+            <p class="fine-print">
+                <a href="{{ url_for('verifactu.verifactu_index') }}">Chain status →</a>
+            </p>
+        </div>
+    </div>
+</div>
+<style>
+.verifactu-panel-grid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+}
+.verifactu-qr {
+    background: var(--white);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+@media (max-width: 768px) {
+    .verifactu-panel-grid { grid-template-columns: 1fr; }
+}
+</style>

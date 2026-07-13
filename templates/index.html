@@ -15,22 +15,22 @@
 <div class="filter-form">
     <form method="GET" action="{{ url_for('index') }}" id="filter-form">
         <label>Filter by:</label>
-        <input type="text" name="invoice_number" placeholder="Invoice #" value="{{ request.args.get('invoice_number', '') }}">
-        <input type="text" name="client" placeholder="Client name" value="{{ request.args.get('client', '') }}" list="client-list" autocomplete="off">
+        <input type="text" name="invoice_number" aria-label="Invoice number" placeholder="Invoice #" value="{{ request.args.get('invoice_number', '') }}">
+        <input type="text" name="client" aria-label="Client name" placeholder="Client name" value="{{ request.args.get('client', '') }}" list="client-list" autocomplete="off">
         <datalist id="client-list">
             {% for customer in customers %}
             <option value="{{ customer.name }}">
             {% endfor %}
         </datalist>
-        <select name="status">
+        <select name="status" aria-label="Filter by status">
             <option value="">All Status</option>
             <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
             <option value="paid" {% if request.args.get('status') == 'paid' %}selected{% endif %}>Paid</option>
             <option value="cancelled" {% if request.args.get('status') == 'cancelled' %}selected{% endif %}>Cancelled</option>
         </select>
-        <input type="date" name="date_from" placeholder="From" value="{{ request.args.get('date_from', '') }}">
-        <input type="date" name="date_to" placeholder="To" value="{{ request.args.get('date_to', '') }}">
-        <select name="per_page" onchange="document.getElementById('filter-form').submit()">
+        <input type="date" name="date_from" aria-label="Date from" placeholder="From" value="{{ request.args.get('date_from', '') }}">
+        <input type="date" name="date_to" aria-label="Date to" placeholder="To" value="{{ request.args.get('date_to', '') }}">
+        <select name="per_page" aria-label="Results per page" onchange="document.getElementById('filter-form').submit()">
             <option value="10" {% if request.args.get('per_page', '20') == '10' %}selected{% endif %}>10 per page</option>
             <option value="20" {% if request.args.get('per_page', '20') == '20' %}selected{% endif %}>20 per page</option>
             <option value="50" {% if request.args.get('per_page', '20') == '50' %}selected{% endif %}>50 per page</option>

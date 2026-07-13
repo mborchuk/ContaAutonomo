@@ -260,11 +260,11 @@ class InvoiceEmailModule(BaseModule):
         test_url = url_for('invoice_email.email_test')
         return f'''
         <h3>SMTP Email Settings</h3>
-        <p style="font-size:13px;color:var(--color-text-muted);">
+        <p class="muted">
             Credentials are stored in the local database (plaintext, same as other
             provider API keys). Self-hosted, single-user posture.
         </p>
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;">
+        <div class="form-grid-3">
             <div class="form-group"><label>SMTP host</label>
                 <input type="text" name="smtp_host" value="{cfg['host']}"></div>
             <div class="form-group"><label>Port</label>
@@ -276,7 +276,7 @@ class InvoiceEmailModule(BaseModule):
                     <option value="none" {_sel('none')}>None</option>
                 </select></div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+        <div class="form-grid-3">
             <div class="form-group"><label>Username</label>
                 <input type="text" name="smtp_username" value="{cfg['username']}"></div>
             <div class="form-group"><label>Password</label>
@@ -284,12 +284,12 @@ class InvoiceEmailModule(BaseModule):
             <div class="form-group"><label>From address</label>
                 <input type="email" name="smtp_from" value="{cfg['from_addr']}"></div>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0;">
+        <label class="check-row" style="margin:8px 0;">
             <input type="checkbox" name="smtp_reminders_enabled" {checked}>
-            Send overdue payment reminders (due +{REMINDER_OFFSETS[0]} and +{REMINDER_OFFSETS[1]} days)
+            <span>Send overdue payment reminders (due +{REMINDER_OFFSETS[0]} and +{REMINDER_OFFSETS[1]} days)</span>
         </label>
         <input type="hidden" name="invoice_email_submitted" value="1">
-        <p style="font-size:12px;color:var(--color-text-muted);">
+        <p class="fine-print">
             Save settings first, then test: form posts to
             <code>{test_url}</code> via the button on the invoice view or an API call.
         </p>

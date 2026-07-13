@@ -3,47 +3,47 @@
 {% block title %}RETA Advisor{% endblock %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+<div class="page-header">
     <h1>RETA Quota Advisor — {{ current_year }}</h1>
-    <span style="font-size: 12px; color: var(--color-text-muted);">Bracket table version: {{ version }}</span>
+    <span class="fine-print">Bracket table version: {{ version }}</span>
 </div>
 
-<div class="reta-banner">
+<div class="note note-info">
     <strong>Estimate, not advice.</strong> Projection from your invoices/expenses,
     simple linear annualization. Regularization is settled by Seguridad Social after
     year end. Tarifa plana and pluriactividad are <em>not</em> modeled. Verify the
     bracket table against current official sources.
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 20px;">
-    <div class="reta-card">
-        <div class="reta-label">YTD net yield / month</div>
-        <div class="reta-value">€{{ "%.2f"|format(proj.monthly_net_yield) }}</div>
-        <div class="reta-sub">({{ proj.months_elapsed }} months, {{ proj.deduction_pct }}% deduction)</div>
+<div class="stat-grid" style="margin-bottom: var(--space-5);">
+    <div class="stat-card">
+        <h3>YTD net yield / month</h3>
+        <p class="stat-value">€{{ "%.2f"|format(proj.monthly_net_yield) }}</p>
+        <span class="compact-subtext">({{ proj.months_elapsed }} months, {{ proj.deduction_pct }}% deduction)</span>
     </div>
-    <div class="reta-card">
-        <div class="reta-label">Projected bracket quota</div>
-        <div class="reta-value">€{{ "%.2f"|format(proj.recommended_monthly_quota) }}/mo</div>
-        <div class="reta-sub">bracket {{ proj.bracket_index + 1 }} of {{ brackets|length }}</div>
+    <div class="stat-card">
+        <h3>Projected bracket quota</h3>
+        <p class="stat-value">€{{ "%.2f"|format(proj.recommended_monthly_quota) }}/mo</p>
+        <span class="compact-subtext">bracket {{ proj.bracket_index + 1 }} of {{ brackets|length }}</span>
     </div>
-    <div class="reta-card">
-        <div class="reta-label">Current quota</div>
-        <div class="reta-value">€{{ "%.2f"|format(proj.current_monthly_quota) }}/mo</div>
-        <div class="reta-sub">from Settings → Social Security</div>
+    <div class="stat-card">
+        <h3>Current quota</h3>
+        <p class="stat-value">€{{ "%.2f"|format(proj.current_monthly_quota) }}/mo</p>
+        <span class="compact-subtext">from Settings → Social Security</span>
     </div>
-    <div class="reta-card {% if proj.regularization_delta > 0 %}reta-owe{% endif %}">
-        <div class="reta-label">Regularization forecast</div>
-        <div class="reta-value">
+    <div class="stat-card {% if proj.regularization_delta > 0 %}is-highlighted{% endif %}">
+        <h3>Regularization forecast</h3>
+        <p class="stat-value">
             {% if proj.regularization_delta > 0 %}~€{{ "%.2f"|format(proj.regularization_delta) }} to pay
             {% elif proj.regularization_delta < 0 %}~€{{ "%.2f"|format(-proj.regularization_delta) }} refund
             {% else %}on track{% endif %}
-        </div>
-        <div class="reta-sub">projected €{{ "%.2f"|format(proj.projected_annual_quota) }} vs paying €{{ "%.2f"|format(proj.paid_projection) }}</div>
+        </p>
+        <span class="compact-subtext">projected €{{ "%.2f"|format(proj.projected_annual_quota) }} vs paying €{{ "%.2f"|format(proj.paid_projection) }}</span>
     </div>
 </div>
 
 {% if proj.recommended_monthly_quota != proj.current_monthly_quota and proj.current_monthly_quota > 0 %}
-<div class="reta-nudge">
+<div class="note">
     💡 Your projected bracket differs from what you pay. You can change your
     contribution base up to 6 times per year — consider adjusting before the next
     window to reduce the year-end regularization.
@@ -51,13 +51,14 @@
 {% endif %}
 
 <h3>Bracket ladder (monthly net yield → monthly quota)</h3>
-<table class="retaTable">
+<div class="table-wrap">
+<table class="data-table">
     <thead>
         <tr><th>#</th><th>From (€/mo)</th><th>To (€/mo)</th><th>Quota (€/mo)</th><th></th></tr>
     </thead>
     <tbody>
         {% for lo, hi, quota in brackets %}
-        <tr {% if loop.index0 == proj.bracket_index %}class="reta-current"{% endif %}>
+        <tr {% if loop.index0 == proj.bracket_index %}class="is-highlighted"{% endif %}>
             <td>{{ loop.index }}</td>
             <td>{{ "%.2f"|format(lo) }}</td>
             <td>{{ "%.2f"|format(hi) if hi is not none else '∞' }}</td>
@@ -67,8 +68,9 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
-<h3 style="margin-top: 25px;">Advisor settings</h3>
+<h3 style="margin-top: var(--space-5);">Advisor settings</h3>
 <form method="POST" style="max-width: 400px;">
     <div class="form-group">
         <label for="deduction_pct">Generic deduction % (7 general / 3 corporate)</label>
@@ -77,18 +79,4 @@
     </div>
     <button type="submit" class="btn btn-success">Save</button>
 </form>
-
-<style>
-.reta-banner { background: var(--color-primary-tint); border: 1px solid var(--color-primary); padding: 10px 14px; border-radius: 5px; margin-bottom: 16px; font-size: 13px; }
-.reta-card { background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 6px; padding: 14px; }
-.reta-card.reta-owe { border-color: var(--color-warning, var(--color-danger, var(--color-border))); }
-.reta-label { font-size: 12px; color: var(--color-text-muted); }
-.reta-value { font-size: 20px; font-weight: bold; margin: 4px 0; }
-.reta-sub { font-size: 11px; color: var(--color-text-muted); }
-.reta-nudge { background: var(--color-surface-3); border: 1px solid var(--color-border); padding: 10px 14px; border-radius: 5px; margin-bottom: 20px; font-size: 13px; }
-.retaTable { width: 100%; border-collapse: collapse; font-size: 13px; }
-.retaTable th, .retaTable td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--color-border); }
-.retaTable th { background: var(--color-surface-2); }
-.retaTable tr.reta-current { background: var(--color-primary-tint); font-weight: bold; }
-</style>
 {% endblock %}

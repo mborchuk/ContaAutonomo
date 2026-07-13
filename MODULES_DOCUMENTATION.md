@@ -19,12 +19,47 @@ Technical reference for the Autónomos application architecture.
 
 | Model | Table | Description |
 |-------|-------|-------------|
-| `Customer` | `customer` | Client information |
-| `Invoice` | `invoice` | Invoice records |
-| `InvoiceItem` | `invoice_item` | Line items for invoices |
+| `Customer` | `customer` | Client information (name, VAT number, structured address, `tax_type`) |
+| `Invoice` | `invoice` | Invoice records, including lifecycle fields (`series`, `sequence_number`, `issued_at`, rectificative linkage) and the fiscal snapshot (`snap_vat_rate`, `snap_vat_amount`, `snap_taxable_base`, `snap_customer`) |
+| `InvoiceItem` | `invoice_item` | Line items for invoices; optional per-line `vat_rate` (defaults to the header rate at issue) |
 | `Bank` | `bank` | Bank account details |
 | `Settings` | `settings` | Application configuration (single row) |
 | `Contractor` | `contractor` | Contractor/vendor info |
+| `Expense` | `expense` | Expense records with VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`, `deductible`, `deductible_pct`) |
+
+### Invoice Lifecycle
+
+Invoices move through an explicit lifecycle. Issued and paid invoices are
+immutable; corrections go through rectificative invoices.
+
+```mermaid
+stateDiagram-v2
+    [*] --> draft: create
+    draft --> issued: Issue (assigns series/sequence,\nfreezes fiscal snapshot)
+    issued --> paid: Mark paid / bank reconciliation
+    issued --> cancelled: Annul (retained for audit)
+    issued --> issued: Rectify (creates a linked\nnew draft, original untouched)
+    paid --> cancelled: Annul
+```
+
+Key rules:
+
+- **Draft** invoices behave like the legacy `pending` status: freely editable
+  and deletable. Legacy `pending` invoices keep those semantics unchanged.
+- **Issue** is one-way. It assigns the next sequential number for the series
+  (derived from `MAX(sequence_number)`, collision-safe) and freezes the fiscal
+  snapshot, so later edits to the customer or tax settings never change the
+  meaning of an issued invoice.
+- **Issued/paid** invoices cannot be edited or deleted — enforced in the core
+  routes, in `InvoiceService`, and in the REST API. The only forward
+  transitions are *Mark paid* and *Annul*.
+- **Rectify** creates a new draft pre-filled from the original, linked via
+  `rectifies_invoice_id` + `rectification_type` (`sustitucion` | `diferencias`),
+  in a dedicated `R<year>` series. The original invoice is never mutated.
+- The lifecycle hooks (`on_invoice_issued`, `on_invoice_rectified`,
+  `on_invoice_annulled`) run **inside the transition transaction**: a raising
+  module aborts the transition. This is how the Verifactu module guarantees a
+  billing record exists for every issued invoice.
 
 ### Core Routes
 
@@ -32,9 +67,14 @@ Technical reference for the Autónomos application architecture.
 |-------|-------------|
 | `/` | Dashboard (clickable invoice rows navigate to view) |
 | `/invoices` | Invoice list with filters, sorting, pagination (clickable rows) |
-| `/create` | Create invoice (calls `module_manager.on_invoice_created` after commit) |
-| `/edit/<id>` | Edit invoice (calls `module_manager.on_invoice_updated` after commit) |
+| `/create` | Create invoice — defaults to `draft` (calls `module_manager.on_invoice_created` after commit) |
+| `/edit/<id>` | Edit invoice — blocked for issued/paid (calls `module_manager.on_invoice_updated` after commit) |
 | `/view/<id>` | View invoice (renders `module_manager.get_invoice_actions` + `get_invoice_view_panels`) |
+| `/issue/<id>` | POST — issue a draft: sequential number + fiscal snapshot; fires `on_invoice_issued` (blocking) |
+| `/mark-paid/<id>` | POST — mark an issued/pending invoice as paid |
+| `/rectify/<id>` | POST — create a linked rectificative draft; fires `on_invoice_rectified` (blocking) |
+| `/annul/<id>` | POST — annul an issued invoice (kept, excluded from income); fires `on_invoice_annulled` (blocking) |
+| `/delete/<id>` | POST — delete invoice (drafts and legacy `pending` only) |
 | `/generate-pdf/<id>` | Generate/download invoice PDF |
 | `/preview-pdf/<id>` | Preview invoice PDF in browser |
 | `/settings` | Settings (all tabs — each saves independently) |
@@ -163,11 +203,11 @@ Safe, controlled API for modules to interact with invoices.
 | `get(invoice_id)` | Get invoice by ID |
 | `get_all(**filters)` | Query invoices with filters |
 | `get_by_number(invoice_number)` | Get invoice by number |
-| `is_locked(invoice)` | True if PAID |
+| `is_locked(invoice)` | True if the invoice is **issued or paid** (immutable — corrections go through a rectificative) |
 | `has_pdf(invoice_or_id)` | True if PDF exists on disk. Accepts Invoice object or int ID. |
 | `get_pdf_path(invoice_or_id)` | Filesystem path to PDF or None. Accepts Invoice object or int ID. |
-| `update(invoice_id, **fields)` | Update fields (raises `ValueError` if PAID) |
-| `attach_pdf(invoice_or_id, file_data, filename)` | Save PDF, compute hash. Accepts Invoice object or int ID. Raises `ValueError` if PAID + sealed. Logs file size, hash, replaced/new status. |
+| `update(invoice_id, **fields)` | Update fields (raises `ValueError` if locked) |
+| `attach_pdf(invoice_or_id, file_data, filename)` | Save PDF, compute hash. Accepts Invoice object or int ID. Raises `ValueError` if locked + sealed. Logs file size, hash, replaced/new status. |
 
 Prefer passing Invoice objects instead of IDs to avoid unnecessary DB queries.
 
@@ -236,23 +276,39 @@ svc.set_active_provider(None)   # revert to default ECB
 
 ### Expenses (`expenses`)
 
-Track business expenses with file uploads, categories, and contractor linking.
+Track business expenses with file uploads, categories, contractor linking, and
+a full VAT breakdown.
 
-- Routes: `/expenses/`, `/expenses/add`, `/expenses/edit/<id>`, `/expenses/delete/<id>`
-- Models: `Expense` (extends core model)
+- Routes: `/expenses/`, `/expenses/create`, `/expenses/edit/<id>`, `/expenses/delete/<id>`, download/preview per expense
+- Models: `Expense` (extends the core model), `ExpensesConfig` (category defaults)
+- VAT breakdown: `net_amount`, `vat_rate`, `vat_amount`, `deductible`,
+  `deductible_pct`. The form auto-splits gross + rate into net + VAT; category
+  defaults apply on selection without overwriting user input. Legacy rows keep
+  `NULL` VAT fields ("unknown") and are surfaced with a "no VAT data" hint.
+- AI parsing: "Parse receipt with AI" on the create form — one upload prefills
+  the form (including VAT fields) and becomes the attached receipt (requires
+  the `ai_parser` module)
 - Nav: Expenses (with group support)
-- Reports: contributes expense data to financial reports
-- Settings: expense-related options in General tab
+- Reports: expense data including the VAT split; receipt files can be attached
+  to report ZIPs
+- Settings: category VAT/deductibility defaults (Expenses tab)
+- API: expenses CRUD including the VAT fields
 
 ### Tax Management (`tax_management`)
 
-Spanish tax forms and Social Security payment tracking.
+Spanish tax forms, Social Security payments, and the filing workflow.
 
-- Routes: `/tax-forms/`, upload, download, delete, SS payment CRUD
-- Models: `TaxForm`, `SSPayment` (extend core models)
-- Nav: Tax Forms
-- Dashboard: SS data for tax obligations panel
-- Reports: SS payments section in financial reports
+- Routes: `/tax-forms/` (upload, download, delete, SS payment CRUD),
+  `/tax-forms/obligations` (filing workflow), `/tax-forms/obligations/record`
+- Models: `TaxForm` (now with `status`, `amount`, `filed_date`, `payment_date`),
+  `SSPayment`
+- Filing workflow: obligations view crosses the fiscal calendar dataset with
+  recorded filings — each period shows pending / filed / paid / **overdue**,
+  with an inline record action and a link to the evidence PDF. Uploading a
+  form for the same period links automatically. Existing rows were backfilled
+  to `filed`.
+- Dashboard: SS data plus an overdue-unfiled-obligations note on the tax panel
+- Reports: SS payments section and a Tax Filings history section
 - Settings: `social_security_monthly` in General tab
 
 ### Documents (`documents`)
@@ -384,11 +440,17 @@ Detect and display digital signature information in PDF files.
 
 ### AI Parser (`ai_parser`)
 
-Parse invoice data from PDFs and images using AI providers.
+Parse invoice and expense-receipt data from PDFs and images using AI providers.
 
-- Routes: `/ai-parser/parse` (GET/POST), `/ai-parser/settings` (POST)
+- Routes: `/ai-parser/parse` (GET/POST, accepts `doc_type=invoice|expense`),
+  `/ai-parser/settings` (POST)
 - Models: `AIParserConfig` (provider, API key, model)
-- Supported providers: OpenAI (GPT-4), Anthropic (Claude), Google (Gemini)
+- Supported providers: OpenAI (GPT-4), Anthropic (Claude), Google Document AI
+- Expense parsing extracts the VAT breakdown (`net_amount`, `vat_rate`,
+  `vat_amount`) alongside date, amount, contractor and category; providers are
+  instructed to return `null` rather than guess missing VAT data
+- The expense create form embeds a parse button (see Expenses) — one upload
+  prefills the form and doubles as the attached receipt
 - Settings: dedicated "AI Parser" tab with provider selection, API key, model config
 
 ### Invoice Designer (`invoice_designer`)
@@ -446,6 +508,152 @@ app data. Full reference: [`modules/api/README.md`](api/README.md).
 - New hook: `BaseModule.get_api_routes()` lets any module contribute endpoints.
 - Settings: API tab (view / rotate token).
 - `on_enable()`: adds the idempotent `settings.api_token` column and mints a token.
+
+### Fiscal Calendar (`fiscal_calendar`)
+
+Spanish AEAT filing deadlines as local, versioned data — no external API.
+
+- Data: `calendar_data.py` ships deadline windows for Modelos 303/130/349/111
+  (quarterly; Q4 files in January of the following year) and 390/100 (annual).
+  Annual update is a one-file edit; verify against the official AEAT calendar.
+- Routes: `/fiscal-calendar/` (year view)
+- Dashboard panel: upcoming/open filing windows for the user's selected forms
+- Settings: "which forms do I file" checkboxes (defaults inferred from
+  `TaxForm` history)
+- Scheduler: daily reminder job at T-14/T-7/T-1 before a window closes;
+  idempotent across restarts; delivers through the `notify` capability
+  (e.g. email when `invoice_email` is enabled) and always writes the activity log
+
+### Modelo 303/130 Drafts (`tax_es_forms`)
+
+Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
+fraccionado), computed from data already in the app. Estimate only — every page
+carries a non-dismissible "not tax advice" banner.
+
+- Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
+  `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF
+- Engine (`calculator.py`, pure functions): IVA repercutido prefers the frozen
+  fiscal snapshot on issued invoices; IVA soportado uses the expense VAT
+  breakdown (`vat_amount` × `deductible_pct`); Modelo 130 is cumulative
+  year-to-date with prior-quarter payments estimated
+- Box mapping lives in `boxes.py`, versioned (`BOX_TABLE_VERSION`) — verify
+  against the current official AEAT models before each fiscal year
+- Integrations: dashboard tax panel (display-only) and REST endpoints
+  (`/api/v1/m/tax_es_forms/draft/303|130/<year>/<q>`)
+
+### RETA Advisor (`reta_advisor`)
+
+Projects the RETA contribution bracket from real income/expenses and forecasts
+the year-end regularization. Estimate only.
+
+- Routes: `/reta-advisor/` (bracket ladder, projection cards, settings)
+- Engine (`engine.py`, pure): YTD income − expenses (net where known) − generic
+  deduction (7%/3%), linear annualization, 15-bracket lookup, regularization
+  delta vs. actual `SSPayment` totals or the configured quota
+- Bracket table in `brackets.py`, versioned — verify against Seguridad
+  Social/BOE sources annually
+- Tax panel contribution is display-only (`tax_total = 0`) — `tax_management`
+  keeps owning the Social Security amount, so nothing is double-counted
+- Not modeled: tarifa plana, pluriactividad
+
+### Recurring Invoices (`recurring_invoices`)
+
+Invoice templates with a monthly/quarterly cadence that generate **drafts** on
+schedule. Drafts are never auto-issued — issuing stays a deliberate user action.
+
+- Models: `RecurringInvoice` (items as JSON, cadence, `next_run_date`, active),
+  `RecurringGeneration` (log of generated drafts)
+- Routes: `/recurring-invoices/` (list, create, edit, pause/resume, delete),
+  plus a "Make recurring" action on every invoice view (creates the template
+  paused for review)
+- Scheduler: daily job at 06:00; idempotent (persisted `next_run_date`);
+  catch-up capped at 12 periods; generated drafts fire `on_invoice_created`
+- Dashboard panel: count of generated drafts awaiting review
+- API: `/api/v1/m/recurring_invoices/templates`
+
+### Invoice Email (`invoice_email`)
+
+Send invoice PDFs by SMTP and optionally remind about overdue payments.
+
+- Models: `InvoiceEmailConfig` (SMTP settings as JSON), `EmailLog` (send history)
+- Settings tab "Email": host/port/security (STARTTLS/SSL/none), credentials,
+  from-address, reminders toggle. Credentials are stored in the local database
+  (same posture as the AI provider API keys).
+- Invoice view panel: send form with placeholders (`{invoice_number}`,
+  `{client_name}`, `{amount}`, `{due_date}`), PDF attached when available,
+  per-invoice send history with failure details
+- Scheduler: opt-in overdue reminders at due +3 and +10 days, idempotent via
+  the send log; skips paid/cancelled/draft invoices
+- Declares the `notify` capability (`method='email'`) — other modules
+  (e.g. `fiscal_calendar`) send email notifications without any coupling
+
+### Verifactu (`verifactu`)
+
+Tamper-evident, hash-chained billing records for issued and annulled invoices
+(RD 1007/2023 compliance assist).
+
+```mermaid
+sequenceDiagram
+    participant Core as app.py (lifecycle)
+    participant VF as verifactu
+    participant DB as verifactu_record (append-only)
+
+    Core->>VF: on_invoice_issued(invoice)  [inside the transaction]
+    VF->>DB: build payload → hash(prev_hash + payload) → sign → append
+    Note over Core,DB: record failure ⇒ the issue is rolled back
+```
+
+- Model: `VerifactuRecord` — append-only; `record_hash = SHA-256(prev_hash +
+  canonical payload)`, HMAC-SHA256 signature. No update/delete path exists.
+- Hooks: `on_invoice_issued` → *alta*, `on_invoice_annulled` → *anulación*;
+  rectificative linkage is embedded in the alta payload. Hooks are
+  issue-blocking by design.
+- Routes: `/verifactu/` (chain health, loud alarm on a broken chain),
+  `/verifactu/export` (NDJSON of the full log),
+  `/verifactu/qr/<invoice_id>.svg` (AEAT-style QR, rendered with ReportLab)
+- Invoice view panel: QR + record trail for issued/annulled invoices
+- **Status**: record format, QR payload and signature are a versioned draft
+  (`CHAIN_SPEC_VERSION`) pending verification against the official AEAT
+  technical annexes. VERI*FACTU real-time submission is scaffolded and gated
+  on AEAT test-environment access. See `modules/verifactu/README.md`.
+
+### Bank Import (`bank_import`)
+
+Import bank statements and reconcile movements against invoices and expenses.
+
+- Models: `ImportBatch`, `BankMovement` (unique dedup hash), `BankImportConfig`
+  (saved CSV column-mapping profiles)
+- Parsers (`parsers.py`, pure): Norma 43 / AEB43 (fixed-width, latin-1) and
+  generic CSV with a per-bank column mapping (date/amount/description columns,
+  date format, decimal-comma amounts). Bad lines are reported per batch; good
+  lines still import.
+- Matching (`matching.py`, pure): ranked suggestions — amount + invoice number
+  in the description scores highest, then amount + close date. Nothing is
+  auto-matched; the user confirms.
+- Confirming a match marks the invoice paid through the **normal core
+  transition** (`_mark_invoice_paid`), so lifecycle semantics and logging hold.
+- Routes: `/bank-import/` (upload, unmatched list with suggestions, batch
+  history), confirm/ignore/link-expense actions, batch undo (blocked once any
+  movement in the batch is matched)
+- Dashboard panel: unmatched movement count; API: `/api/v1/m/bank_import/movements`
+
+### E-Invoice / Facturae (`einvoice`)
+
+Facturae 3.2.2 XML export for issued invoices (Phase 1 of RD 238/2026 support).
+
+- Generator (`facturae.py`, pure): FileHeader/Parties (AddressInSpain vs.
+  OverseasAddress, ISO 3166-1 alpha-3 country codes), InvoiceHeader with the
+  rectificative `Corrective` block, TaxesOutputs from the frozen fiscal
+  snapshot, per-line VAT rates
+- Readiness check: per-invoice checklist of missing party data (seller NIF and
+  address in Settings, customer VAT and address); shown as an invoice view
+  panel until the invoice is export-ready
+- Routes: "Facturae XML" action on issued invoices →
+  `/einvoice/facturae/<id>.xml`; API: `/api/v1/m/einvoice/facturae/<id>`
+- **Known gap**: output is **unsigned** — legally valid Facturae requires an
+  XAdES signature and no XAdES library is currently in the dependency set.
+  The follow-up plan and Phase 2 design notes (exchange, status messages) are
+  in `modules/einvoice/README.md`.
 
 ---
 
@@ -554,6 +762,9 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `get_edit_form_html(invoice)` | HTML to inject into invoice edit form |
 | `on_invoice_created(invoice, request)` | Called after new invoice is committed |
 | `on_invoice_updated(invoice, request)` | Called after existing invoice is committed |
+| `on_invoice_issued(invoice, request)` | Called when a draft becomes issued, **before commit**. Raising aborts the transition (compliance veto). |
+| `on_invoice_rectified(new_invoice, original, request)` | Called when a rectificative draft is created, before commit. Raising aborts. |
+| `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
 | `get_invoice_templates()` | Invoice PDF templates provided by this module |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
