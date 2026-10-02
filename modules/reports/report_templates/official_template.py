@@ -8,10 +8,30 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,
+                                Spacer, CondPageBreak)
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from datetime import datetime
 from currency_converter import get_currency_symbol
+
+
+def _append_section_table(story, section_start, table, width, keep_rows=2):
+    """Append a section's table, keeping its heading attached to real rows.
+
+    Inserts a CondPageBreak before the section heading (at `section_start`)
+    sized to the heading flowables plus the table's first `keep_rows` rows
+    (header + first data row by default; None = the whole table). A heading or
+    header row can therefore never be left alone at the bottom of a page.
+    Continuation pages repeat the header row via the table's repeatRows.
+    """
+    table.wrap(width, 10 ** 6)
+    row_heights = table._rowHeights if keep_rows is None else table._rowHeights[:keep_rows]
+    needed = sum(row_heights)
+    for flowable in story[section_start:]:
+        needed += (flowable.wrap(width, 10 ** 6)[1]
+                   + flowable.getSpaceBefore() + flowable.getSpaceAfter())
+    story.insert(section_start, CondPageBreak(needed))
+    story.append(table)
 
 
 def generate_report(buffer, report_data, settings):
@@ -97,6 +117,7 @@ def generate_report(buffer, report_data, settings):
 
     # === INCOME SECTION ===
     if report_data.get('show_income', True):
+        section_start = len(story)
         story.append(Paragraph("INCOME SUMMARY", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
@@ -162,7 +183,7 @@ def generate_report(buffer, report_data, settings):
 
             num_total_rows = len(total_by_currency) if total_by_currency else 1
 
-            income_table = Table(income_table_data, colWidths=col_widths)
+            income_table = Table(income_table_data, colWidths=col_widths, repeatRows=1)
             income_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -182,7 +203,7 @@ def generate_report(buffer, report_data, settings):
                 ('LINEABOVE', (0, -num_total_rows), (-1, -num_total_rows), 2, colors.HexColor('#4caf50')),
             ]))
 
-            story.append(income_table)
+            _append_section_table(story, section_start, income_table, doc.width)
             story.append(Spacer(1, 0.5*cm))
 
             # Income summary text
@@ -201,6 +222,7 @@ def generate_report(buffer, report_data, settings):
 
     # === EXPENSES SECTION ===
     if report_data.get('show_expenses', True):
+        section_start = len(story)
         story.append(Paragraph("EXPENSES SUMMARY", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
@@ -252,7 +274,8 @@ def generate_report(buffer, report_data, settings):
                 '', '', '', '', 'TOTAL:', f"€ {total_expenses:.2f}"
             ])
 
-            expenses_table = Table(expenses_table_data, colWidths=[2.5*cm, 2*cm, 3*cm, 2.5*cm, 4.5*cm, 2.8*cm])
+            expenses_table = Table(expenses_table_data, colWidths=[2.5*cm, 2*cm, 3*cm, 2.5*cm, 4.5*cm, 2.8*cm],
+                                   repeatRows=1)
             expenses_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -273,7 +296,7 @@ def generate_report(buffer, report_data, settings):
                 ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#f44336')),
             ]))
 
-            story.append(expenses_table)
+            _append_section_table(story, section_start, expenses_table, doc.width)
             story.append(Spacer(1, 0.5*cm))
 
             # Expenses summary
@@ -289,6 +312,7 @@ def generate_report(buffer, report_data, settings):
     total_ss = sum(p.get('amount', 0) for p in ss_data)
 
     if ss_data:
+        section_start = len(story)
         story.append(Paragraph("SOCIAL SECURITY PAYMENTS", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
@@ -315,7 +339,7 @@ def generate_report(buffer, report_data, settings):
 
         ss_table_data.append(['', 'TOTAL:', f"€ {total_ss:.2f}"])
 
-        ss_table = Table(ss_table_data, colWidths=[3*cm, 11*cm, 3*cm])
+        ss_table = Table(ss_table_data, colWidths=[3*cm, 11*cm, 3*cm], repeatRows=1)
         ss_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -336,7 +360,7 @@ def generate_report(buffer, report_data, settings):
             ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#4caf50')),
         ]))
 
-        story.append(ss_table)
+        _append_section_table(story, section_start, ss_table, doc.width)
         story.append(Spacer(1, 0.5*cm))
 
         summary_text = f"<b>Total Social Security:</b> € {total_ss:.2f}"
@@ -346,6 +370,7 @@ def generate_report(buffer, report_data, settings):
     # === EXTRA SECTIONS (from any module) ===
     for extra in report_data.get('extra_sections', []):
         title = extra.get('title', 'Additional Data').upper()
+        section_start = len(story)
         story.append(Paragraph(title, heading_style))
         story.append(Spacer(1, 0.3*cm))
 
@@ -401,7 +426,7 @@ def generate_report(buffer, report_data, settings):
             w = c.get('width')
             col_widths.append(w * cm if w else available / len(col_defs))
 
-        extra_table = Table(table_data, colWidths=col_widths)
+        extra_table = Table(table_data, colWidths=col_widths, repeatRows=1)
         style_cmds = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -426,11 +451,12 @@ def generate_report(buffer, report_data, settings):
             ])
         extra_table.setStyle(TableStyle(style_cmds))
 
-        story.append(extra_table)
+        _append_section_table(story, section_start, extra_table, doc.width)
         story.append(Spacer(1, 1*cm))
 
     # === FINAL SUMMARY ===
     if report_data.get('show_summary', True):
+        section_start = len(story)
         story.append(Paragraph("FINANCIAL SUMMARY", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
@@ -467,7 +493,8 @@ def generate_report(buffer, report_data, settings):
             ('LINEABOVE', (0, -1), (-1, -1), 2, colors.HexColor('#2196f3') if net_profit >= 0 else colors.HexColor('#f44336')),
         ]))
 
-        story.append(summary_table)
+        _append_section_table(story, section_start, summary_table, doc.width,
+                              keep_rows=None)
         story.append(Spacer(1, 1*cm))
 
     # Footer

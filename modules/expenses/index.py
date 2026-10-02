@@ -549,8 +549,49 @@ class ExpensesModule(BaseModule):
             'id': 'expenses',
             'title': 'Expenses',
             'description': 'Expense records with contractor, category, invoice number and amounts in EUR.',
-            'query_fn': self._get_expenses_for_report
+            'query_fn': self._get_expenses_for_report,
+            'has_files': True,
+            'attach_default': True,
+            'files_fn': self._report_files,
+            'list_fn': self._report_list,
         }]
+
+    def _expenses_with_files(self, start_date, end_date, doc_ids=None):
+        query = self.Expense.query.filter(
+            self.Expense.expense_date >= start_date,
+            self.Expense.expense_date <= end_date,
+            self.Expense.file_path.isnot(None),
+            self.Expense.file_path != '',
+        )
+        if doc_ids:
+            query = query.filter(self.Expense.id.in_(doc_ids))
+        return query.order_by(self.Expense.expense_date).all()
+
+    def _report_files(self, start_date, end_date, doc_ids=None):
+        """Invoice/receipt files for the report ZIP: [{name, storage_key}].
+
+        Names are prefixed with date + expense id so same-named uploads never
+        collide. Opaque storage keys (e.g. Google Drive ids) carry no filename,
+        so the extension is left for the report to take from the backend.
+        """
+        files = []
+        for e in self._expenses_with_files(start_date, end_date, doc_ids):
+            base = e.file_path.split('/')[-1] if '/' in e.file_path else f'invoice-{e.id}'
+            files.append({
+                'name': f"{e.expense_date.strftime('%Y%m%d')}_expense{e.id}_{base}",
+                'storage_key': e.file_path,
+            })
+        return files
+
+    def _report_list(self, start_date, end_date):
+        """Expenses with an attached file, for the report file picker."""
+        contractors = {c.id: c.name for c in self.Contractor.query.all()}
+        return [{
+            'id': e.id,
+            'name': f"{contractors.get(e.contractor_id) or e.category or 'Expense'}"
+                    f" — {e.amount:.2f} {e.currency}",
+            'date': e.expense_date.strftime('%d/%m/%Y'),
+        } for e in self._expenses_with_files(start_date, end_date)]
 
     def _convert_to(self, amount, from_currency, to_currency, when=None):
         """Convert an amount between currencies via the shared CurrencyService.
