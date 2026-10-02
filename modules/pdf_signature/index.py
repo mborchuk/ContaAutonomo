@@ -795,7 +795,7 @@ class PDFSignatureModule(BaseModule):
                 module.logger.warning('PDF Signature: invoice #%s is locked', invoice.invoice_number)
                 flash('Cannot sign a paid invoice', 'warning')
                 return redirect(url_for('view_invoice', id=invoice_id))
-            sig = module._get_invoice_sig(invoice_id)
+            sig = module._get_invoice_sig(invoice.id)
             module.logger.info(
                 'PDF Signature: triggering sign for invoice #%s (has_visual=%s, has_digital=%s)',
                 invoice.invoice_number, sig.has_visual, sig.has_digital,
