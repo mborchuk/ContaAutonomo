@@ -39,7 +39,8 @@
             {% for section in available_sections %}
             <div style="margin: 10px 0 10px 2px;">
                 <label class="check-label">
-                    <input type="checkbox" name="sections" value="{{ section.id }}" checked>
+                    <input type="checkbox" name="sections" value="{{ section.id }}"
+                           {% if section.selected_default %}checked{% endif %}>
                     <strong>{{ section.title }}</strong>
                 </label>
                 {% if section.description %}
@@ -49,11 +50,13 @@
                 <div style="margin: 6px 0 0 26px;">
                     <label class="check-label" style="font-size: 13px;">
                         <input type="checkbox" name="include_files_{{ section.id }}" value="1"
-                               onchange="toggleFileList('{{ section.id }}', this.checked)">
+                               class="include-files-toggle" data-section="{{ section.id }}"
+                               onchange="toggleFileList('{{ section.id }}', this.checked)"
+                               {% if section.attach_default %}checked{% endif %}>
                         📎 Include attached files (ZIP archive)
                     </label>
                     <div id="file-list-{{ section.id }}" style="display:none; margin-top:8px; padding:10px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:4px; max-height:250px; overflow-y:auto;">
-                        <div style="color:var(--color-text-faint); font-size:12px;">Loading documents...</div>
+                        <div style="color:var(--color-text-faint); font-size:12px;">Loading files...</div>
                     </div>
                 </div>
                 {% endif %}
@@ -188,31 +191,53 @@ function toggleFileList(sectionId, show) {
     .then(function(r) { return r.ok ? r.json() : null; })
     .then(function(data) {
         if (!data || !data.files || !data.files.length) {
-            box.innerHTML = '<div style="color:var(--color-text-faint);font-size:12px;">No documents found for this period.</div>';
+            box.innerHTML = '<div style="color:var(--color-text-faint);font-size:12px;">No files found for this period.</div>';
             return;
         }
         var html = '<div style="margin-bottom:6px;font-size:11px;color:var(--color-text-faint);">'
             + '<a href="#" onclick="toggleDocAll(\'' + sectionId + '\',true);return false;">Select all</a> · '
             + '<a href="#" onclick="toggleDocAll(\'' + sectionId + '\',false);return false;">Deselect all</a>'
-            + ' (' + data.files.length + ' documents)</div>';
+            + ' (' + data.files.length + ' items)</div>';
         data.files.forEach(function(f) {
             html += '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">'
-                + '<input type="checkbox" name="file_ids_' + sectionId + '" value="' + f.id + '" checked style="width:14px;height:14px;">'
-                + '<span>' + f.name + '</span>'
-                + '<span style="color:var(--color-text-faint);margin-left:auto;">' + f.date + '</span>'
+                + '<input type="checkbox" name="file_ids_' + sectionId + '" value="' + escapeHtml(f.id) + '" checked style="width:14px;height:14px;">'
+                + '<span>' + escapeHtml(f.name) + '</span>'
+                + '<span style="color:var(--color-text-faint);margin-left:auto;">' + escapeHtml(f.date) + '</span>'
                 + '</label>';
         });
         box.innerHTML = html;
     })
-    .catch(function() { box.innerHTML = '<div style="color:var(--color-danger);font-size:12px;">Failed to load documents.</div>'; });
+    .catch(function() { box.innerHTML = '<div style="color:var(--color-danger);font-size:12px;">Failed to load files.</div>'; });
+}
+
+function escapeHtml(value) {
+    var div = document.createElement('div');
+    div.textContent = value == null ? '' : String(value);
+    return div.innerHTML.replace(/"/g, '&quot;');
 }
 
 function toggleDocAll(sectionId, state) {
     document.querySelectorAll('input[name="file_ids_' + sectionId + '"]').forEach(function(cb) { cb.checked = state; });
 }
 
+// Reload every open file list for the current period. Selected ids are
+// filtered by date server-side, so a list loaded for another period would
+// silently attach nothing.
+function refreshOpenFileLists() {
+    document.querySelectorAll('.include-files-toggle').forEach(function(cb) {
+        if (cb.checked) toggleFileList(cb.dataset.section, true);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     updatePeriodOptions();
+    ['year', 'period_type', 'quarter'].forEach(function(id) {
+        document.getElementById(id).addEventListener('change', refreshOpenFileLists);
+    });
+    document.querySelectorAll('input[name="quarters"]').forEach(function(cb) {
+        cb.addEventListener('change', refreshOpenFileLists);
+    });
+    refreshOpenFileLists();  // attach boxes that start checked (e.g. expenses)
 });
 </script>
 

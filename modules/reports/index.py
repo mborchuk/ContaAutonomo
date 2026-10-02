@@ -63,7 +63,8 @@ class ReportsModule(BaseModule):
         """Collect available report sections from enabled modules."""
         sections = [
             {'id': 'income', 'title': 'Income (Invoices)',
-             'description': 'Invoice data: number, date, client, amount and status.'}
+             'description': 'Invoice data: number, date, client, amount and status.',
+             'selected_default': True, 'attach_default': False}
         ]
         mgr = self.core.module_manager
         if mgr:
@@ -73,6 +74,10 @@ class ReportsModule(BaseModule):
                     'title': s.get('title', s.get('id', 'Unknown')),
                     'description': s.get('description', ''),
                     'has_files': s.get('has_files', False),
+                    # Per-section UI defaults: whether the section checkbox and
+                    # its "attach files" checkbox start checked.
+                    'selected_default': s.get('selected_default', True),
+                    'attach_default': s.get('attach_default', False),
                 })
         return sections
 
@@ -471,13 +476,26 @@ class ReportsModule(BaseModule):
                             files = files_fn(start_date, end_date, doc_ids=selected_ids)
                         except TypeError:
                             files = files_fn(start_date, end_date)  # fallback for modules without doc_ids param
-                        for f in files:
-                            result = self.core.storage.get(f['storage_key'])
-                            if result:
-                                file_bytes, _ = result
-                                zf.writestr(f"documents/{f['name']}", file_bytes)
                     except Exception as e:
-                        self.logger.error('Error adding files for section %s: %s', sid, e)
+                        self.logger.error('Error listing files for section %s: %s', sid, e)
+                        continue
+                    for f in files:
+                        # One unreadable file must not drop the rest of the section.
+                        try:
+                            result = self.core.storage.get(f['storage_key'])
+                        except Exception as e:
+                            self.logger.error('Error reading file for section %s: %s', sid, e)
+                            continue
+                        if not result:
+                            continue
+                        file_bytes, resolved_name = result
+                        name = str(f['name']).replace('/', '-').replace('\\', '-')
+                        # Files may be PDFs or images; when the section could not
+                        # tell the type (opaque storage key), take the extension
+                        # from the name the storage backend resolved.
+                        if '.' not in name and resolved_name and '.' in resolved_name:
+                            name = f"{name}.{resolved_name.rsplit('.', 1)[-1]}"
+                        zf.writestr(f"{sid}/{name}", file_bytes)
 
             zip_buffer.seek(0)
             zip_filename = f"report_{period_text.replace(' ', '_')}.zip"

@@ -6,10 +6,14 @@
 <style>
     .tabs {
         display: flex;
+        /* Core tabs plus one per module settings tab: wrap instead of
+           overflowing the page width. */
+        flex-wrap: wrap;
         border-bottom: 2px solid var(--color-primary);
         margin-bottom: 30px;
     }
     .tab {
+        white-space: nowrap;
         padding: 12px 24px;
         cursor: pointer;
         background: var(--color-surface-2);
