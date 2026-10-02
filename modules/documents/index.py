@@ -699,17 +699,39 @@ class DocumentsModule(BaseModule):
                                categories=categories, doc_files=doc_files,
                                all_tags=self._get_all_tags())
 
+    def _storage_delete_quiet(self, storage_key):
+        """Delete a stored file, tolerating missing/unresolvable keys.
+
+        A file already gone from the backend (e.g. removed in Google Drive)
+        must never block deleting the database record.
+        """
+        try:
+            self.core.storage.delete(storage_key)
+        except Exception as e:
+            self.logger.warning('Storage delete failed for %s: %s',
+                                storage_key, e)
+
+    def _delete_document_children(self, doc):
+        """Remove everything referencing the document, storage files included.
+
+        document_file, document_history and document_note all carry a NOT NULL
+        FK to document.id (and SQLite runs with foreign_keys=ON), so every
+        child row must go before the document itself can be deleted.
+        """
+        for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
+            self._storage_delete_quiet(df.file_path)
+            self._db.session.delete(df)
+        if doc.file_path and doc.file_path != '_multi_':
+            self._storage_delete_quiet(doc.file_path)
+        self.DocumentHistory.query.filter_by(document_id=doc.id).delete(
+            synchronize_session=False)
+        self.DocumentNote.query.filter_by(document_id=doc.id).delete(
+            synchronize_session=False)
+
     def _delete_document(self, id):
         doc = self.Document.query.get_or_404(id)
         try:
-            # Delete all attached files from storage
-            doc_files = self.DocumentFile.query.filter_by(document_id=doc.id).all()
-            for df in doc_files:
-                self.core.storage.delete(df.file_path)
-                self._db.session.delete(df)
-            # Also delete legacy file_path if it's a real key
-            if doc.file_path and doc.file_path != '_multi_':
-                self.core.storage.delete(doc.file_path)
+            self._delete_document_children(doc)
             self._db.session.delete(doc)
             self._db.session.commit()
             flash('Document deleted.', 'success')
@@ -964,11 +986,7 @@ class DocumentsModule(BaseModule):
 
         if action == 'delete':
             for doc in docs:
-                for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
-                    self.core.storage.delete(df.file_path)
-                    self._db.session.delete(df)
-                if doc.file_path and doc.file_path != '_multi_':
-                    self.core.storage.delete(doc.file_path)
+                self._delete_document_children(doc)
                 self._db.session.delete(doc)
             self._db.session.commit()
             flash(f'{len(docs)} document(s) deleted.', 'success')
