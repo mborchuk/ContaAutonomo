@@ -300,11 +300,14 @@ PDF financial reports collecting data dynamically from all enabled modules.
 - Features:
   - User selects which sections to include via checkboxes
   - Income section always available from core; other sections from enabled modules
-  - "Include attached files (ZIP archive)" option with selectable document checklist
+  - "Include attached files (ZIP archive)" option per section, with a selectable file checklist; files land in a per-section folder in the ZIP (`expenses/`, `documents/`)
+  - Expense invoices/receipts (PDF or image) can be attached — **enabled by default**
+  - The Documents section is **unselected by default** (its file attachment is also off by default)
+  - Section defaults are declared by the module: `selected_default` (section checkbox, default `True`) and `attach_default` (attach checkbox, default `False`)
   - PDF signing checkboxes (when pdf_signature module enabled)
   - Collects data via `module_manager.get_report_sections()`
   - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
-  - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns` and `total_field`
+  - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns`, `total_field`, and for file attachments `has_files`, `files_fn`, `list_fn`
 
 ### External Storage (`external_storage`)
 

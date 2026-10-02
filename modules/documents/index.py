@@ -1080,6 +1080,7 @@ class DocumentsModule(BaseModule):
             'id': 'documents',
             'title': 'Documents',
             'description': 'Documents with amounts. Optionally include attached files as ZIP archive.',
+            'selected_default': False,
             'query_fn': self._report_query,
             'columns': [
                 {'key': 'date', 'label': 'Date', 'width': 3},
