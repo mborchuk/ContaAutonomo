@@ -1,0 +1,4 @@
+# Code owners are requested automatically as reviewers on pull requests.
+# Combined with the main-branch ruleset, changes from contributors need an
+# approving review from a code owner before they can be merged.
+* @mborchuk

@@ -1,0 +1,37 @@
+# Dependabot version updates.
+# Security updates are enabled separately in the repository settings and are
+# raised as soon as an advisory is published, independent of this schedule.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One PR for all minor/patch bumps; major versions stay separate PRs so
+      # breaking changes are reviewed individually.
+      python-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "docker"
