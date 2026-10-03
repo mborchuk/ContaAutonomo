@@ -16,6 +16,14 @@
     <strong>Estimate, not tax advice.</strong> Cumulative year-to-date, estimación
     directa, fixed 20% pago fraccionado. Verify every box against the current
     official AEAT Modelo 130 before filing. Box table version: {{ draft.table_version }}.
+    {% if draft.meta.source == 'tax_es_irpf' %}
+    Calculated by the IRPF Estimator: income by invoice date (unpaid included),
+    expenses without VAT, Social Security payments, equipment as set in
+    Settings → IRPF.
+    {% else %}
+    Enable the IRPF Estimator module for Social Security, retenciones and
+    equipment depreciation.
+    {% endif %}
 </div>
 
 <div class="table-wrap">
@@ -24,7 +32,7 @@
         <tr><th>Box</th><th>Concept</th><th class="text-right">Amount (EUR)</th></tr>
     </thead>
     <tbody>
-        {% for box in ['01', '02', '03', '04', '05', '07'] %}
+        {% for box in ['01', '02', '03', '04', '05', '06', '07'] %}
         <tr {% if box == '07' %}class="box-result"{% endif %}>
             <td><strong>{{ box }}</strong></td>
             <td>{{ draft.labels[box] }}</td>
@@ -41,7 +49,8 @@
 
 <p class="fine-print">
     Box 07 (resultado) = box 04 (20% of the year-to-date rendimiento) − box 05
-    (pago fraccionado already declared in earlier quarters, estimated). Negative
+    (pago fraccionado already declared in earlier quarters, estimated) − box 06
+    (retenciones). Negative
     quarters show 0.00 — Modelo 130 has no refund at box 07.
 </p>
 

@@ -159,7 +159,22 @@ class TaxEsFormsModule(BaseModule):
         result['table_version'] = BOX_TABLE_VERSION
         return result
 
+    def _irpf_module(self):
+        mm = getattr(self.core, 'module_manager', None)
+        return mm.modules.get('tax_es_irpf') if mm else None
+
     def _draft_130(self, year, quarter):
+        # One owner for Modelo 130 (owner decision 2026-10-03): when the IRPF
+        # Estimator is enabled its figures are shown here too.
+        irpf = self._irpf_module()
+        if irpf is not None:
+            boxes, rate = irpf.modelo130_boxes(year, quarter)
+            return {
+                'form': '130', 'boxes': boxes, 'irpf_rate': rate,
+                'labels': MODELO_130_BOXES, 'year': year, 'quarter': quarter,
+                'table_version': BOX_TABLE_VERSION,
+                'meta': {'basis': 'cumulative_ytd', 'source': 'tax_es_irpf'},
+            }
         _, irpf_rate = self._rates()
         invoices_ytd = self._invoices_in(year, up_to_quarter=quarter)
         expenses_ytd = self._expenses_in(year, up_to_quarter=quarter)
@@ -170,6 +185,7 @@ class TaxEsFormsModule(BaseModule):
             prior_income=prior_income, prior_expenses=prior_expenses,
             convert_expense=self._convert_to_eur)
         result['labels'] = MODELO_130_BOXES
+        result['meta']['source'] = 'tax_es_forms'
         result['year'] = year
         result['quarter'] = quarter
         result['table_version'] = BOX_TABLE_VERSION
