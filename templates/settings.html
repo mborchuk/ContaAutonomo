@@ -638,6 +638,9 @@
                         {% if mod.required_by %}
                         <div style="font-size: 12px; color: var(--color-text-muted);">Required by: {{ mod.required_by|join(', ') }}</div>
                         {% endif %}
+                        {% if mod.provides %}
+                        <div style="font-size: 12px; color: var(--color-text-muted);">Replaces: {{ mod.provides|join(', ') }}</div>
+                        {% endif %}
                     </div>
                     <form method="POST" action="{{ url_for('toggle_module', module_id=mod.module_id) }}">
                         {% if mod.enabled %}

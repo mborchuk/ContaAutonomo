@@ -73,8 +73,23 @@ class BaseModule(ABC):
 
     @property
     def dependencies(self):
-        """Module ids that must be enabled for this module to work correctly.
-        Returns a list of module_id strings (default: none)."""
+        """What must be enabled for this module to work correctly: module ids
+        or roles (see `provides`). A role is satisfied by any enabled module
+        that provides it. Returns a list of strings (default: none)."""
+        return []
+
+    @property
+    def provides(self):
+        """Module ids this module can stand in for, e.g. ['expenses'] for an
+        alternative expenses module. Every module fills its own id already.
+        Returns a list of module ids (default: none)."""
+        return []
+
+    @property
+    def interface(self):
+        """Attribute names other modules use on this module (methods, model
+        classes). A module that `provides` this one's id must have all of
+        them, or it is not used in its place. Returns a list (default: none)."""
         return []
 
     @property
@@ -1811,33 +1826,69 @@ class ModuleManager:
                                      and mod_id not in self.modules
                                      and not load_error),
                 'dependencies': self.declared_dependencies(mod_id),
+                'provides': self._instance_attr(mod_id, 'provides'),
                 'required_by': self.required_by(mod_id),
                 'missing_dependencies': (self.missing_dependencies(mod_id)
                                          if self.is_enabled(mod_id) else []),
             })
         return result
 
-    def declared_dependencies(self, module_id):
-        """Module ids a module declares in `dependencies` (empty if unknown)."""
+    def _instance_attr(self, module_id, attr):
         cls = self.discovered.get(module_id)
         if not cls:
             return []
         try:
-            return list(cls(self.core).dependencies or [])
+            return list(getattr(cls(self.core), attr) or [])
         except Exception:
             return []
 
+    def declared_dependencies(self, module_id):
+        """Module ids or roles a module declares in `dependencies`."""
+        return self._instance_attr(module_id, 'dependencies')
+
+    def providers(self, role):
+        """Discovered modules that fill `role`: the module named like the role
+        first (the native one), then the others in id order."""
+        found = sorted(m for m in self.discovered
+                       if m != role and role in self._instance_attr(m, 'provides'))
+        return ([role] if role in self.discovered else []) + found
+
+    def provider_of(self, role):
+        """The loaded module filling `role` (a module id), or None — the
+        native one first. Other modules look each other up through this, so
+        any module can be replaced by one that `provides` its id and has its
+        `interface`."""
+        interface = self._instance_attr(role, 'interface')
+        for module_id in self.providers(role):
+            instance = self.modules.get(module_id)
+            if instance is None:
+                continue
+            missing = [n for n in interface if not hasattr(instance, n)]
+            if missing:
+                logger.warning("Module '%s' provides '%s' but lacks %s",
+                               _sanitize_log(module_id), _sanitize_log(role),
+                               ', '.join(missing))
+                continue
+            return instance
+        return None
+
+    def _satisfied(self, dep, without=None):
+        return any(self.is_enabled(p) for p in self.providers(dep) if p != without)
+
     def missing_dependencies(self, module_id):
-        """Return the list of declared dependencies of a module that are not
-        currently enabled. Empty list means all dependencies satisfied."""
+        """Declared dependencies of a module that no enabled module satisfies.
+        Empty list means all dependencies satisfied."""
         return [d for d in self.declared_dependencies(module_id)
-                if not self.is_enabled(d)]
+                if not self._satisfied(d)]
 
     def required_by(self, module_id):
-        """Enabled modules that declare `module_id` as a dependency."""
+        """Enabled modules that would lose a dependency if `module_id` were
+        disabled (it is their only enabled provider)."""
         return [m for m in self.discovered
                 if m != module_id and self.is_enabled(m)
-                and module_id in self.declared_dependencies(m)]
+                and any(module_id in self.providers(d)
+                        and not self._satisfied(d, without=module_id)
+                        for d in self.declared_dependencies(m))]
 
     def _set_enabled(self, module_id, enabled):
         ModuleEnabled = self._get_module_enabled_model()
@@ -1858,11 +1909,12 @@ class ModuleManager:
             return []
         enabled = []
         for dep in self.declared_dependencies(module_id):
-            if dep not in self.discovered:
+            candidates = self.providers(dep)
+            if not candidates:
                 logger.warning("Module '%s' depends on unknown module '%s'",
                                _sanitize_log(module_id), _sanitize_log(dep))
-            elif not self.is_enabled(dep):
-                enabled += self.enable_module(dep, _chain + (module_id,))
+            elif not self._satisfied(dep):
+                enabled += self.enable_module(candidates[0], _chain + (module_id,))
         self._set_enabled(module_id, True)
         enabled.append(module_id)
 
@@ -1892,12 +1944,13 @@ class ModuleManager:
                 if not self.is_enabled(module_id):
                     continue
                 for dep in self.missing_dependencies(module_id):
-                    if dep in self.discovered:
-                        self._set_enabled(dep, True)
-                        enabled.append(dep)
+                    candidates = self.providers(dep)
+                    if candidates:
+                        self._set_enabled(candidates[0], True)
+                        enabled.append(candidates[0])
                         changed = True
                         logger.info("Module '%s' enabled: required by '%s'",
-                                    _sanitize_log(dep), _sanitize_log(module_id))
+                                    _sanitize_log(candidates[0]), _sanitize_log(module_id))
         return enabled
 
     def disable_module(self, module_id):

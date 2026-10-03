@@ -6,7 +6,7 @@ import pytest
 from module_manager import BaseModule, valid_capability
 
 
-def fake(module_id, deps=(), caps=()):
+def fake(module_id, deps=(), caps=(), provides=(), interface=(), attrs=None):
     class Fake(BaseModule):
         @property
         def module_id(self):
@@ -20,8 +20,18 @@ def fake(module_id, deps=(), caps=()):
         def dependencies(self):
             return list(deps)
 
+        @property
+        def provides(self):
+            return list(provides)
+
+        @property
+        def interface(self):
+            return list(interface)
+
         def get_capabilities(self):
             return list(caps)
+    for name, value in (attrs or {}).items():
+        setattr(Fake, name, value)
     return Fake
 
 
@@ -35,6 +45,11 @@ def mm(app, loaded_modules, monkeypatch):
         'fake_d': fake('fake_d', ['no_such_module']),
         'fake_e': fake('fake_e', ['fake_f']),
         'fake_f': fake('fake_f', ['fake_e']),
+        # fake_store is a native module; fake_alt can stand in for it.
+        'fake_store': fake('fake_store', interface=['read'], attrs={'read': lambda self: 'native'}),
+        'fake_alt': fake('fake_alt', provides=['fake_store'], attrs={'read': lambda self: 'alt'}),
+        'fake_broken': fake('fake_broken', provides=['fake_store']),
+        'fake_user': fake('fake_user', ['fake_store']),
     }
     monkeypatch.setattr(loaded_modules, 'discovered', {**loaded_modules.discovered, **fakes})
     yield loaded_modules
@@ -71,6 +86,48 @@ def test_unknown_dependency_is_logged_not_fatal(mm, caplog):
     with caplog.at_level(logging.WARNING, logger='module_manager'):
         assert mm.enable_module('fake_d') == ['fake_d']
     assert "depends on unknown module 'no_such_module'" in caplog.text
+
+
+def test_an_alternative_module_satisfies_the_dependency(mm):
+    mm.enable_module('fake_alt')
+    assert mm.enable_module('fake_user') == ['fake_user']
+    assert not mm.is_enabled('fake_store')
+    mm.modules['fake_alt'] = mm.discovered['fake_alt'](mm.core)
+    assert mm.provider_of('fake_store').read() == 'alt'
+
+
+def test_native_module_is_enabled_when_no_alternative_is(mm):
+    assert mm.enable_module('fake_user') == ['fake_store', 'fake_user']
+
+
+def test_last_provider_cannot_be_disabled(mm):
+    mm.enable_module('fake_alt')
+    mm.enable_module('fake_store')
+    mm.enable_module('fake_user')
+    assert mm.disable_module('fake_store') == []  # fake_alt still provides it
+    assert mm.disable_module('fake_alt') == ['fake_user']
+
+
+def test_provider_without_the_interface_is_not_used(mm, caplog):
+    mm.modules['fake_broken'] = mm.discovered['fake_broken'](mm.core)
+    with caplog.at_level(logging.WARNING, logger='module_manager'):
+        assert mm.provider_of('fake_store') is None
+    assert "lacks read" in caplog.text
+
+
+def test_loaded_modules_have_their_declared_interface(loaded_modules):
+    for module_id, instance in loaded_modules.modules.items():
+        missing = [n for n in instance.interface if not hasattr(instance, n)]
+        assert not missing, f'{module_id} lacks {missing}'
+
+
+def test_expense_columns_the_tax_modules_read_exist():
+    """The expenses contract: tax modules read these core columns directly."""
+    from app import Expense
+    for column in ('expense_date', 'amount', 'currency', 'net_amount', 'vat_amount',
+                   'vat_rate', 'deductible', 'deductible_pct', 'category',
+                   'reverse_charge', 'description'):
+        assert hasattr(Expense, column), column
 
 
 def test_toggle_route_refuses_to_disable_a_needed_module(loaded_modules, client):
@@ -123,3 +180,13 @@ def test_bundled_modules_declare_valid_capabilities(loaded_modules):
     for module_id, module in loaded_modules.modules.items():
         for cap in module.get_capabilities():
             assert valid_capability(cap), module_id
+
+
+def test_modules_look_each_other_up_through_provider_of():
+    """A direct modules.get('x') would bypass a replacement module."""
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    offenders = [str(p.relative_to(root)) for p in [root / 'app.py', *root.glob('modules/*/*.py')]
+                 if re.search(r"\.modules\.get\(\s*['\"]", p.read_text())]
+    assert not offenders, offenders

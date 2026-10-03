@@ -45,6 +45,11 @@ class TaxManagementModule(BaseModule):
         return 'tax_management'
 
     @property
+    def interface(self):
+        # Used by IRPF Estimator, Spanish Tax Forms and RETA Advisor.
+        return ['filed_boxes', 'SSPayment']
+
+    @property
     def name(self):
         return 'Tax Management'
 
@@ -598,7 +603,7 @@ class TaxManagementModule(BaseModule):
         # Which forms does the user file? Prefer fiscal_calendar's selection,
         # else infer from TaxForm history, else all.
         selected = None
-        fc = self.core.module_manager.modules.get('fiscal_calendar') \
+        fc = self.core.module_manager.provider_of('fiscal_calendar') \
             if self.core.module_manager else None
         if fc:
             try:

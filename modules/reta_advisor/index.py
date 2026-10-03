@@ -126,7 +126,7 @@ class RetaAdvisorModule(BaseModule):
 
     def _paid_ytd(self, year):
         """Actual SS payments this year via tax_management, if enabled."""
-        tm = self.core.module_manager.modules.get('tax_management')
+        tm = self.core.module_manager.provider_of('tax_management')
         if not tm or not hasattr(tm, 'SSPayment'):
             return None
         try:

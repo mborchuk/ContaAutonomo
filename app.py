@@ -1482,7 +1482,7 @@ def create_invoice():
 
                 # Auto-sign PDF if pdf_signature module requested it
                 try:
-                    pdf_sig_mod = module_manager.modules.get('pdf_signature')
+                    pdf_sig_mod = module_manager.provider_of('pdf_signature')
                     if pdf_sig_mod:
                         sig_rec = pdf_sig_mod.PDFSignatureInvoice.query.filter_by(
                             invoice_id=invoice.id

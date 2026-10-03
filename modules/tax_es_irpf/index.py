@@ -47,6 +47,11 @@ class TaxEsIrpfModule(BaseModule):
         return 'tax_es_irpf'
 
     @property
+    def interface(self):
+        # Used by Spanish Tax Forms (Modelo 303 equipment, Modelo 130 draft).
+        return ['is_equipment', 'modelo130_boxes']
+
+    @property
     def name(self):
         return 'IRPF Estimator (España)'
 
@@ -147,14 +152,14 @@ class TaxEsIrpfModule(BaseModule):
 
     def _tax_management(self):
         mm = getattr(self.core, 'module_manager', None)
-        return mm.modules.get('tax_management') if mm else None
+        return mm.provider_of('tax_management') if mm else None
 
     def _ss_model(self):
         """tax_management's SSPayment model, if that module is enabled."""
         mm = getattr(self.core, 'module_manager', None)
         if mm is None:
             return None
-        tm = mm.modules.get('tax_management')
+        tm = mm.provider_of('tax_management')
         return getattr(tm, 'SSPayment', None) if tm else None
 
     def on_enable(self):
