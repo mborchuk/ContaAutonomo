@@ -36,6 +36,8 @@ def available_years() -> list[int]:
 
 @lru_cache(maxsize=None)
 def _load_file(year: int) -> dict[str, Any]:
+    # int() keeps any caller-supplied value from shaping the path.
+    year = int(year)
     path = os.path.join(_PARAMS_DIR, f"es_irpf_{year}.json")
     if not os.path.isfile(path):
         raise ParamsNotFoundError(f"No IRPF params for year {year}: {path}")

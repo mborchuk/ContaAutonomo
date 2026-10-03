@@ -373,3 +373,9 @@ def test_low_income_deduction_optional(engine):
         year=2026, quarter=1, ytd_income=20000, ytd_deductible_expenses=5000,
         low_income_deduction=True))
     assert base.summary['modelo130_due'] - with_ded.summary['modelo130_due'] == 100.0
+
+
+def test_params_year_cannot_shape_the_file_path():
+    from modules.tax_es_irpf.params_store import _load_file
+    with pytest.raises(ValueError):
+        _load_file('../../../../etc/passwd')
