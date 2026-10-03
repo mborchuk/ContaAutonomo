@@ -795,9 +795,40 @@ if pdf_sig:
     signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
 ```
 
+### Dependencies
+
+A module that cannot work correctly without another declares it:
+
+```python
+@property
+def dependencies(self):
+    return ['expenses', 'tax_management']
+```
+
+- **Enabling** a module (Settings → Modules) enables its dependencies first,
+  recursively; the message lists what else was switched on.
+- **Disabling** a module that an enabled module depends on is refused; the
+  message names the modules that need it.
+- **At start-up** missing dependencies of enabled modules are enabled
+  (`ModuleManager.ensure_dependencies()`), so existing installations become
+  consistent when a dependency is declared later.
+- The Modules tab shows "Requires" and "Required by" for each module.
+
+Declared today: `tax_es_forms` → `expenses`, `tax_management`, `tax_es_irpf`;
+`tax_es_irpf` → `expenses`, `tax_management`; `reta_advisor` →
+`tax_management`. Optional integrations (external storage for backups, PDF
+signing for documents, email for fiscal reminders, AI receipt parsing) are not
+dependencies: they use the capabilities below or check whether the other module
+is loaded, and work without it.
+
 ### Capabilities System
 
-For loose coupling, modules declare **capabilities** — what they can do — and other modules discover them by type:
+For loose coupling, modules declare **capabilities** — what they can do — and other modules discover them by type.
+Contract: each capability is a dict with a non-empty string `type` and a callable `action`
+(`module_manager.valid_capability`); `find_capabilities` skips and logs entries that break it.
+Types in use: `notify` (`action(subject=, body=)`, invoice_email), `pdf_sign` (`action(pdf_bytes)` → bytes,
+pdf_signature), `pdf_verify`, `file_badge` (`action(document_file)` → HTML) and `file_badge_script`
+(`action()` → HTML) from pdf_verify; `document_view_panel` is read by documents but no module provides it yet.
 
 ```python
 # In your module — declare what you can do:

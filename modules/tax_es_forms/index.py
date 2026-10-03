@@ -52,6 +52,12 @@ class TaxEsFormsModule(BaseModule):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        # Expenses feed 303; filed returns and Social Security come from Tax Forms;
+        # Modelo 130 is calculated by the IRPF Estimator (owner decision 2026-10-03).
+        return ['expenses', 'tax_management', 'tax_es_irpf']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'Tax Drafts', 'endpoint': 'tax_es_forms.drafts_index',
