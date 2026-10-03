@@ -23,6 +23,13 @@ import importlib.util
 from abc import ABC, abstractmethod
 
 
+def valid_capability(cap):
+    """The capability contract: a dict with a string 'type' and a callable
+    'action' (see BaseModule.get_capabilities)."""
+    return (isinstance(cap, dict) and isinstance(cap.get('type'), str)
+            and bool(cap['type']) and callable(cap.get('action')))
+
+
 class BaseModule(ABC):
     """
     Base class for all modules. Every module must inherit from this
@@ -1803,37 +1810,61 @@ class ModuleManager:
                 'restart_required': (self.is_enabled(mod_id)
                                      and mod_id not in self.modules
                                      and not load_error),
+                'dependencies': self.declared_dependencies(mod_id),
+                'required_by': self.required_by(mod_id),
                 'missing_dependencies': (self.missing_dependencies(mod_id)
                                          if self.is_enabled(mod_id) else []),
             })
         return result
 
-    def missing_dependencies(self, module_id):
-        """Return the list of declared dependencies of a module that are not
-        currently enabled. Empty list means all dependencies satisfied."""
+    def declared_dependencies(self, module_id):
+        """Module ids a module declares in `dependencies` (empty if unknown)."""
         cls = self.discovered.get(module_id)
         if not cls:
             return []
         try:
-            deps = cls(self.core).dependencies or []
+            return list(cls(self.core).dependencies or [])
         except Exception:
             return []
-        return [d for d in deps if not self.is_enabled(d)]
 
-    def enable_module(self, module_id):
-        """Enable a module"""
-        missing = self.missing_dependencies(module_id)
-        if missing:
-            logger.warning("Module '%s' enabled but depends on disabled module(s): %s",
-                           _sanitize_log(module_id), _sanitize_log(', '.join(missing)))
+    def missing_dependencies(self, module_id):
+        """Return the list of declared dependencies of a module that are not
+        currently enabled. Empty list means all dependencies satisfied."""
+        return [d for d in self.declared_dependencies(module_id)
+                if not self.is_enabled(d)]
+
+    def required_by(self, module_id):
+        """Enabled modules that declare `module_id` as a dependency."""
+        return [m for m in self.discovered
+                if m != module_id and self.is_enabled(m)
+                and module_id in self.declared_dependencies(m)]
+
+    def _set_enabled(self, module_id, enabled):
         ModuleEnabled = self._get_module_enabled_model()
         record = ModuleEnabled.query.filter_by(module_id=module_id).first()
         if record:
-            record.enabled = True
-        else:
-            record = ModuleEnabled(module_id=module_id, enabled=True)
-            self.db.session.add(record)
+            record.enabled = enabled
+        else:  # persist the choice, or enabled_by_default would win on restart
+            self.db.session.add(ModuleEnabled(module_id=module_id, enabled=enabled))
         self.db.session.commit()
+
+    def enable_module(self, module_id, _chain=()):
+        """Enable a module and, first, every module it depends on.
+
+        Returns the ids enabled by this call (dependencies first), so the
+        caller can tell the user what else was switched on.
+        """
+        if module_id in _chain:  # dependency cycle: stop here
+            return []
+        enabled = []
+        for dep in self.declared_dependencies(module_id):
+            if dep not in self.discovered:
+                logger.warning("Module '%s' depends on unknown module '%s'",
+                               _sanitize_log(module_id), _sanitize_log(dep))
+            elif not self.is_enabled(dep):
+                enabled += self.enable_module(dep, _chain + (module_id,))
+        self._set_enabled(module_id, True)
+        enabled.append(module_id)
 
         # Load the module now only while the app is still being set up. Once
         # it has served a request Flask refuses new blueprints, so the module
@@ -1844,24 +1875,51 @@ class ModuleManager:
                             _sanitize_log(module_id))
             else:
                 self._load_module(module_id)
+        return enabled
+
+    def ensure_dependencies(self):
+        """Enable the missing dependencies of every enabled module (persisted).
+
+        Runs before modules load, so installations where a dependency was
+        disabled — or declared later — get a consistent set. Returns the ids
+        it enabled.
+        """
+        enabled = []
+        changed = True
+        while changed:
+            changed = False
+            for module_id in list(self.discovered):
+                if not self.is_enabled(module_id):
+                    continue
+                for dep in self.missing_dependencies(module_id):
+                    if dep in self.discovered:
+                        self._set_enabled(dep, True)
+                        enabled.append(dep)
+                        changed = True
+                        logger.info("Module '%s' enabled: required by '%s'",
+                                    _sanitize_log(dep), _sanitize_log(module_id))
+        return enabled
 
     def disable_module(self, module_id):
-        """Disable a module"""
-        ModuleEnabled = self._get_module_enabled_model()
-        record = ModuleEnabled.query.filter_by(module_id=module_id).first()
-        if record:
-            record.enabled = False
-        else:  # persist the choice, or enabled_by_default would win on restart
-            self.db.session.add(ModuleEnabled(module_id=module_id, enabled=False))
-        self.db.session.commit()
+        """Disable a module unless an enabled module depends on it.
+
+        Returns the ids of the enabled modules that need it; the module is
+        disabled only when that list is empty.
+        """
+        needed_by = self.required_by(module_id)
+        if needed_by:
+            return needed_by
+        self._set_enabled(module_id, False)
 
         # Remove from active modules
         if module_id in self.modules:
             self.modules[module_id].on_disable()
             del self.modules[module_id]
+        return []
 
     def load_enabled_modules(self):
-        """Load all enabled modules"""
+        """Load all enabled modules (their dependencies enabled first)"""
+        self.ensure_dependencies()
         for mod_id in self.discovered:
             if self.is_enabled(mod_id):
                 self._load_module(mod_id)
@@ -1959,6 +2017,11 @@ class ModuleManager:
             except Exception:
                 continue
             for cap in caps:
+                if not valid_capability(cap):
+                    logger.warning("Module '%s' declares an invalid capability "
+                                   "(needs a string 'type' and a callable 'action')",
+                                   _sanitize_log(mod_id))
+                    continue
                 if cap.get('type') != cap_type:
                     continue
                 # Apply filters

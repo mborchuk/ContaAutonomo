@@ -61,6 +61,12 @@ class TaxEsIrpfModule(BaseModule):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        # Expenses feed box 02; Social Security payments and filed returns come
+        # from Tax Forms (tax_management).
+        return ['expenses', 'tax_management']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'IRPF Estimator', 'endpoint': 'tax_es_irpf.index',

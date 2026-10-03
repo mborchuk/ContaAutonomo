@@ -632,6 +632,12 @@
                         <h4 style="margin: 0 0 5px 0; color: var(--color-text);">{{ mod.name }}</h4>
                         <p style="margin: 0 0 8px 0; color: var(--color-text-muted); font-size: 13px;">{{ mod.description }}</p>
                         <span style="font-size: 11px; color: var(--color-text-faint);">v{{ mod.version }}</span>
+                        {% if mod.dependencies %}
+                        <div style="font-size: 12px; color: var(--color-text-muted); margin-top: 4px;">Requires: {{ mod.dependencies|join(', ') }}</div>
+                        {% endif %}
+                        {% if mod.required_by %}
+                        <div style="font-size: 12px; color: var(--color-text-muted);">Required by: {{ mod.required_by|join(', ') }}</div>
+                        {% endif %}
                     </div>
                     <form method="POST" action="{{ url_for('toggle_module', module_id=mod.module_id) }}">
                         {% if mod.enabled %}

@@ -43,6 +43,11 @@ class RetaAdvisorModule(BaseModule):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        # Actual Social Security payments come from Tax Forms (tax_management).
+        return ['tax_management']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'RETA Advisor', 'endpoint': 'reta_advisor.reta_index',
