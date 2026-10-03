@@ -5,7 +5,7 @@ def test_enable_while_serving_defers_load_without_error(loaded_modules, client):
     from app import db
 
     mm = loaded_modules
-    module_id = 'tax_es_irpf'  # has a blueprint; not enabled by the fixture
+    module_id = 'invoice_comments'  # has a blueprint; not enabled by the fixture
     model = mm._get_module_enabled_model()
     assert module_id in mm.discovered and module_id not in mm.modules
 

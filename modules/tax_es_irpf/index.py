@@ -21,6 +21,7 @@ import json
 from datetime import date, datetime
 
 from flask import Blueprint, render_template, request
+from markupsafe import escape
 
 from module_manager import BaseModule
 
@@ -31,6 +32,7 @@ from .engine import (
     default_retencion_rate,
     minimo_for_region,
 )
+from .depreciation import depreciation_in_year
 from .params_store import available_years, load_params
 
 # Quarter → last calendar day (month, day), used for cumulative YTD windows.
@@ -89,8 +91,9 @@ class TaxEsIrpfModule(BaseModule):
             ascendientes75 = db.Column(db.Integer, default=0)
             uses_mutualidad = db.Column(db.Boolean, default=False)
             low_income_deduction = db.Column(db.Boolean, default=False)
-            # 5% difícil justificación inside M130 box 02 (default ON per AEAT).
-            apply_dificil_justif_m130 = db.Column(db.Boolean, default=True)
+            # 5% difícil justificación inside M130 box 02. Default OFF: the
+            # owner's gestor applies it only in the annual Modelo 100.
+            apply_dificil_justif_m130 = db.Column(db.Boolean, default=False)
             eds_eligible = db.Column(db.Boolean, default=True)  # prior INCN ≤ limit
             inicio_reduction_eligible = db.Column(db.Boolean, default=False)
             regional_deduction_inputs_json = db.Column(db.Text, default='{}')
@@ -100,6 +103,11 @@ class TaxEsIrpfModule(BaseModule):
             spouse_deductible_expenses = db.Column(db.Float, default=0.0)
             spouse_retenciones = db.Column(db.Float, default=0.0)
             spouse_pagos_fraccionados = db.Column(db.Float, default=0.0)
+            # Equipment (bienes de inversión): 'depreciate' or 'expense'.
+            equipment_method = db.Column(db.String(20), default='depreciate')
+            depreciation_rate = db.Column(db.Float, default=25.0)   # % per year
+            equipment_threshold = db.Column(db.Float, default=300.0)  # EUR net
+            equipment_categories = db.Column(db.String(200), default='Equipment')
 
         class IrpfQuarter(db.Model):
             __tablename__ = 'irpfes_quarter'
@@ -147,7 +155,11 @@ class TaxEsIrpfModule(BaseModule):
         # expense.deductible*) are core schema: schema_migrations.CORE_COLUMNS.
         migrations = {
             'irpfes_profile': [
-                ('apply_dificil_justif_m130', 'BOOLEAN DEFAULT 1'),
+                ('apply_dificil_justif_m130', 'BOOLEAN DEFAULT 0'),
+                ('equipment_method', "VARCHAR(20) DEFAULT 'depreciate'"),
+                ('depreciation_rate', 'FLOAT DEFAULT 25.0'),
+                ('equipment_threshold', 'FLOAT DEFAULT 300.0'),
+                ('equipment_categories', "VARCHAR(200) DEFAULT 'Equipment'"),
             ],
         }
         inspector = sa_inspect(self._db.engine)
@@ -206,10 +218,14 @@ class TaxEsIrpfModule(BaseModule):
         return start
 
     def _sum_income(self, year, profile, end_dt):
-        """Sum paid-invoice income (EUR) and IRPF retenciones in a window."""
+        """Sum income (EUR) and IRPF retenciones in a window.
+
+        Devengo: every invoice dated in the window counts, paid or not, except
+        cancelled ones (owner decision 2026-10-03).
+        """
         start_dt = self._year_start(year, profile)
         invoices = self.Invoice.query.filter(
-            self.Invoice.status == 'paid',
+            self.Invoice.status != 'cancelled',
             self.Invoice.invoice_date >= start_dt,
             self.Invoice.invoice_date <= end_dt,
         ).all()
@@ -224,23 +240,52 @@ class TaxEsIrpfModule(BaseModule):
                 retenciones += (inv.amount_eur or 0.0) * (pct / 100.0)
         return income, retenciones
 
+    def _equipment_rule(self, profile):
+        """(depreciate?, annual rate %, threshold EUR, category names)."""
+        categories = {c.strip().lower()
+                      for c in (profile.equipment_categories or 'Equipment').split(',')
+                      if c.strip()}
+        return ((profile.equipment_method or 'depreciate') == 'depreciate',
+                profile.depreciation_rate if profile.depreciation_rate is not None else 25.0,
+                profile.equipment_threshold if profile.equipment_threshold is not None else 300.0,
+                categories)
+
+    def _expense_net_eur(self, exp):
+        """VAT-excluded, deductible share of an expense in EUR (0 if not deductible).
+
+        VAT already deducted on Modelo 303 is not an IRPF expense, so the net
+        amount is used; legacy rows without VAT data fall back to the amount.
+        """
+        if getattr(exp, 'deductible', True) is False:
+            return 0.0
+        pct = getattr(exp, 'deductible_pct', None)
+        pct = 100.0 if pct is None else pct
+        net = exp.net_amount if getattr(exp, 'net_amount', None) is not None else exp.amount
+        return (self._to_eur(net or 0.0, exp.currency or 'EUR', exp.expense_date)
+                or 0.0) * (pct / 100.0)
+
     def _sum_expenses(self, year, profile, end_dt):
-        """Sum deductible expenses (EUR) in a window, honouring deductible_pct."""
+        """Deductible expenses (EUR) from the year start to `end_dt`.
+
+        Equipment at or above the threshold is depreciated (when the profile
+        says so) instead of deducted in full; its yearly share is added for
+        assets bought this year or earlier.
+        """
         start_dt = self._year_start(year, profile)
-        expenses = self.Expense.query.filter(
-            self.Expense.expense_date >= start_dt,
-            self.Expense.expense_date <= end_dt,
-        ).all()
+        quarter = (end_dt.month - 1) // 3 + 1
+        depreciate, rate, threshold, categories = self._equipment_rule(profile)
+
         total = 0.0
-        for exp in expenses:
-            deductible = getattr(exp, 'deductible', True)
-            if deductible is False:
-                continue
-            pct = getattr(exp, 'deductible_pct', None)
-            pct = 100.0 if pct is None else pct
-            amount_eur = self._to_eur(exp.amount or 0.0, exp.currency or 'EUR',
-                                      exp.expense_date)
-            total += amount_eur * (pct / 100.0)
+        for exp in self.Expense.query.filter(
+                self.Expense.expense_date <= end_dt).all():
+            net_eur = self._expense_net_eur(exp)
+            is_asset = (depreciate and net_eur >= threshold
+                        and (exp.category or '').strip().lower() in categories)
+            if is_asset:
+                total += depreciation_in_year(net_eur, exp.expense_date,
+                                              year, quarter, rate)
+            elif exp.expense_date >= start_dt:
+                total += net_eur
         return total
 
     def _sum_reta(self, year, profile, end_dt):
@@ -363,6 +408,24 @@ class TaxEsIrpfModule(BaseModule):
             spouse_retenciones=profile.spouse_retenciones or 0.0,
             spouse_pagos_fraccionados=profile.spouse_pagos_fraccionados or 0.0,
         )
+
+    def modelo130_boxes(self, year, quarter):
+        """Modelo 130 boxes 01–07 for one quarter (used by Tax Drafts)."""
+        profile = self._get_profile()
+        inp = self._build_modelo130_input(year, quarter, profile)
+        result = self._engine(year).compute_modelo130(inp)
+        net = result.summary['rendimiento_neto_ytd']
+        rate = self._params(year)['modelo130']['rate']
+        expenses = inp.ytd_income - net  # includes 5% difícil justificación
+        return {
+            '01': round(inp.ytd_income, 2),
+            '02': round(expenses, 2),
+            '03': round(net, 2),
+            '04': round(max(0.0, net) * rate, 2),
+            '05': round(inp.prior_payments, 2),
+            '06': round(inp.ytd_retenciones, 2),
+            '07': result.summary['modelo130_due'],
+        }, rate
 
     def _current_quarter(self, today=None):
         today = today or date.today()
@@ -593,6 +656,10 @@ class TaxEsIrpfModule(BaseModule):
         inicio = 'checked' if profile.inicio_reduction_eligible else ''
         mutualidad = 'checked' if profile.uses_mutualidad else ''
         dificil = 'checked' if profile.apply_dificil_justif_m130 else ''
+        depreciate, rate, threshold, _ = self._equipment_rule(profile)
+        dep_sel = ' selected' if depreciate else ''
+        exp_sel = '' if depreciate else ' selected'
+        categories = escape(profile.equipment_categories or 'Equipment')
         start = profile.start_date.isoformat() if profile.start_date else ''
         return f'''
         <h3>🧮 IRPF Estimator (España)</h3>
@@ -617,7 +684,27 @@ class TaxEsIrpfModule(BaseModule):
             <label><input type="checkbox" name="irpf_inicio" {inicio}> Eligible for 20% inicio-actividad reduction</label>
         </div>
         <div class="form-group">
-            <label><input type="checkbox" name="irpf_dificil_m130" {dificil}> Apply 5% difícil justificación inside Modelo 130 box 02 (default ON, per AEAT)</label>
+            <label><input type="checkbox" name="irpf_dificil_m130" {dificil}> Apply 5% difícil justificación inside Modelo 130 box 02 (off by default: applied in Modelo 100)</label>
+        </div>
+        <h4>Equipment (bienes de inversión) in Modelo 130 / 100</h4>
+        <div class="form-group">
+            <label for="irpf_equipment_method">Treatment</label>
+            <select id="irpf_equipment_method" name="irpf_equipment_method">
+                <option value="depreciate"{dep_sel}>Depreciate (amortización)</option>
+                <option value="expense"{exp_sel}>Deduct in full when bought</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="irpf_depreciation_rate">Depreciation rate (% per year, full quarter from the quarter of purchase)</label>
+            <input type="number" step="0.01" min="0" max="100" id="irpf_depreciation_rate" name="irpf_depreciation_rate" value="{rate}">
+        </div>
+        <div class="form-group">
+            <label for="irpf_equipment_threshold">Deduct in full below (EUR, net)</label>
+            <input type="number" step="0.01" min="0" id="irpf_equipment_threshold" name="irpf_equipment_threshold" value="{threshold}">
+        </div>
+        <div class="form-group">
+            <label for="irpf_equipment_categories">Expense categories treated as equipment (comma-separated)</label>
+            <input type="text" id="irpf_equipment_categories" name="irpf_equipment_categories" value="{categories}">
         </div>
         <div class="form-group">
             <label><input type="checkbox" name="irpf_low_income" {low_income}> Apply art. 110.3.c low-income deduction (Modelo 130)</label>
@@ -648,5 +735,19 @@ class TaxEsIrpfModule(BaseModule):
         profile.low_income_deduction = 'irpf_low_income' in form
         profile.uses_mutualidad = 'irpf_mutualidad' in form
         profile.apply_dificil_justif_m130 = 'irpf_dificil_m130' in form
+        method = form.get('irpf_equipment_method', 'depreciate')
+        profile.equipment_method = method if method in ('depreciate', 'expense') else 'depreciate'
+        for field_name, attr, low, high in [
+                ('irpf_depreciation_rate', 'depreciation_rate', 0.0, 100.0),
+                ('irpf_equipment_threshold', 'equipment_threshold', 0.0, None)]:
+            try:
+                value = float(form.get(field_name, ''))
+            except (TypeError, ValueError):
+                continue  # empty or non-numeric: keep the stored value
+            if value >= low and (high is None or value <= high):
+                setattr(profile, attr, value)
+        categories = (form.get('irpf_equipment_categories') or '').strip()
+        if categories:
+            profile.equipment_categories = categories[:200]
         self._db.session.commit()
         self.logger.info('IRPF settings saved: region=%s', profile.region)

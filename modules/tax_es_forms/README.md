@@ -53,6 +53,12 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
 
 **Modelo 130**
 
+- When the **IRPF Estimator** (`tax_es_irpf`) is enabled, the page and the API
+  show its figures — one Modelo 130 calculation in the app: income by invoice
+  date (unpaid included, cancelled excluded), expenses without VAT, Social
+  Security payments, equipment depreciation and retenciones (box 06), as set
+  in Settings → IRPF. `meta.source` says which module produced the boxes.
+- Without the IRPF Estimator, the fallback below applies.
 - Cumulative year-to-date, as the official model requires: income minus
   expenses (net amounts where known, gross for legacy rows), 20% of the
   positive result, minus the estimated payments from earlier quarters of the
