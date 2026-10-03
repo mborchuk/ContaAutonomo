@@ -18,3 +18,13 @@ tax_forms/
 Dockerfile
 docker-compose.yml
 .dockerignore
+# Local environments and build output (never part of the image)
+.venv/
+venv/
+build/
+dist/
+*.spec
+.pytest_cache/
+# Runtime data (mounted as volumes, never baked into the image)
+invoice_logos/
+pdf_signature_files/

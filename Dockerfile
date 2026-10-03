@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.14-slim@sha256:0741d101873c12ab927e6f8653feb8862b9bd58771177acb1b885b95141f91b4
 
 WORKDIR /app
 
@@ -14,7 +14,7 @@ COPY requirements.txt .
 # pip is only needed at build time. Removing it from the runtime image also
 # removes its vendored copies of setuptools and msgpack, which carry CVEs the
 # app never uses.
-RUN pip install --no-cache-dir -r requirements.txt && \
+RUN pip install --no-cache-dir --require-hashes -r requirements.txt && \
     pip uninstall -y pip
 
 COPY . .

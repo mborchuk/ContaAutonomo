@@ -3,6 +3,8 @@
 # raised as soon as an advisory is published, independent of this schedule.
 version: 2
 updates:
+  # requirements*.in are the inputs; Dependabot recompiles the hashed
+  # requirements*.txt locks with pip-compile.
   - package-ecosystem: pip
     directory: "/"
     schedule:
