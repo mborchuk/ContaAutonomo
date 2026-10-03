@@ -227,10 +227,12 @@ def get_exchange_rate(date_str):
         return rate, actual_date
 
     # Fallback to exchangerate-api (uses latest rate, not historical)
-    logger.warning('ECB data not available for %s, trying alternative source', date_str)
+    # date_str can come from a form: strip CR/LF before logging (log injection).
+    safe_date = str(date_str).replace('\n', '').replace('\r', '')
+    logger.warning('ECB data not available for %s, trying alternative source', safe_date)
     rate = get_exchange_rate_exchangerate_api(date_str)
     if rate:
-        logger.info('Using current fallback exchange rate for %s', date_str)
+        logger.info('Using current fallback exchange rate for %s', safe_date)
         return rate, "current"
 
     logger.error('Could not fetch exchange rate from any source')

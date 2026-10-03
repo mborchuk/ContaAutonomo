@@ -105,3 +105,15 @@ def test_ecb_feed_is_parsed_once_for_many_lookups(monkeypatch):
 def test_currency_symbol_fallback():
     assert cc.get_currency_symbol('EUR') == '€'
     assert cc.get_currency_symbol('XOF') == 'XOF'  # unknown -> code itself
+
+
+def test_fallback_logging_strips_line_breaks_from_date(monkeypatch, caplog):
+    """A form-supplied date must not forge extra log lines (log injection)."""
+    import logging
+    import currency_converter as cc
+    monkeypatch.setattr(cc, 'get_exchange_rate_ecb', lambda d: (None, None))
+    monkeypatch.setattr(cc, 'get_exchange_rate_exchangerate_api', lambda d: 0.9)
+    with caplog.at_level(logging.INFO, logger=cc.logger.name):
+        cc.get_exchange_rate('2026-01-15\nFAKE ENTRY\r')
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages and all('\n' not in m and '\r' not in m for m in messages)

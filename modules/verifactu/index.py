@@ -17,7 +17,7 @@ README.md). Compliance assist, not legal advice.
 import json
 from datetime import datetime
 
-from flask import Blueprint, render_template, request, Response, url_for
+from flask import Blueprint, render_template, Response, url_for
 
 from module_manager import BaseModule
 

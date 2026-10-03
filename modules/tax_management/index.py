@@ -363,7 +363,7 @@ class TaxManagementModule(BaseModule):
                 try:
                     target.amount = float(raw_amount)
                 except (TypeError, ValueError):
-                    pass
+                    pass  # amount is optional: ignore a non-numeric value
             status = request.form.get('status')
             if status in ('pending', 'filed', 'paid'):
                 target.status = status
