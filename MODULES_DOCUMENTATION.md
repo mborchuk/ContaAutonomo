@@ -775,11 +775,11 @@ The login page automatically renders:
 - Password form (always visible if password provider is configured)
 - "Sign in with X" buttons for each external provider (`is_external=True`)
 
-External provider buttons appear below a divider. Each button triggers a POST to `/auth/login` with `auth_provider=<provider_id>`.
+External provider buttons appear below a divider. Each button triggers a POST to `/login` with `auth_provider=<provider_id>`.
 
 ### OAuth Flow
 
-1. User clicks "Sign in with Google" → POST to `/auth/login` with `auth_provider=google`
+1. User clicks "Sign in with Google" → POST to `/login` with `auth_provider=google`
 2. Provider returns `AuthResult(False, redirect_url='https://accounts.google.com/...')`
 3. User redirected to Google → authenticates → redirected back to callback URL
 4. Callback route calls provider again → returns `AuthResult(True, identity={...})`
