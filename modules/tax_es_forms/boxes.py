@@ -32,9 +32,16 @@ MODELO_303_BOXES = {
     "27": "Total cuota IVA devengado",
     "28": "Base — cuotas IVA soportado deducible (operaciones interiores corrientes)",
     "29": "Cuota IVA soportado deducible (operaciones interiores corrientes)",
+    "30": "Base — cuotas IVA soportado deducible (bienes de inversión)",
+    "31": "Cuota IVA soportado deducible (bienes de inversión)",
     "45": "Total a deducir",
     "46": "Resultado régimen general (27 − 45)",
-    "71": "Resultado de la liquidación",
+    "59": "Entregas intracomunitarias de bienes y servicios (clientes UE)",
+    "120": "Operaciones no sujetas por reglas de localización (clientes fuera de la UE)",
+    "110": "Cuotas a compensar pendientes de periodos anteriores",
+    "78": "Cuotas a compensar de periodos anteriores aplicadas en este periodo",
+    "87": "Cuotas a compensar pendientes para periodos posteriores (110 − 78)",
+    "71": "Resultado de la liquidación (46 − 78)",
 }
 
 # --- Modelo 130 (IRPF pago fraccionado, estimación directa) ---

@@ -9,10 +9,9 @@ Devengo (accrual) basis: invoices count by invoice_date; cancelled excluded.
 IVA repercutido only on `standard` customers (eu_b2b / non_eu = reverse charge
 or export, no output VAT) — same rule the dashboard already use.
 
-IVA soportado (input VAT) need per-expense VAT amount. Until F4 add VAT fields to
-Expense, expenses have no VAT split, so deductible IVA = 0 and every expense in
-the period is counted as "missing VAT data" (surfaced to user). Code already
-read `vat_amount` / `deductible_pct` if present, so it light up free when F4 land.
+IVA soportado (input VAT) needs the per-expense VAT amount (F4). Expenses
+without VAT data are counted as "missing VAT data" (surfaced to the user);
+expenses with zero Spanish VAT are left out of the deductible base.
 """
 
 from datetime import date
@@ -54,6 +53,17 @@ def _invoice_base_eur(invoice):
 
 
 def _customer_tax_type(invoice):
+    """VAT treatment of the invoice's customer: the snapshot frozen at issue,
+    else the customer's current setting."""
+    snap = getattr(invoice, "snap_customer", None)
+    if snap:
+        import json
+        try:
+            tax_type = json.loads(snap).get("tax_type")
+            if tax_type:
+                return tax_type
+        except (ValueError, AttributeError):
+            pass  # malformed snapshot: fall back to the customer
     customer = getattr(invoice, "customer", None)
     return getattr(customer, "tax_type", None) if customer else None
 
@@ -88,7 +98,8 @@ def _invoice_output_vat(invoice, vat_rate):
     return 0.0, 0.0
 
 
-def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None):
+def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
+                       is_equipment=None, carried_forward=0.0):
     """Compute Modelo 303 (IVA) figures for a single quarter.
 
     Args:
@@ -98,30 +109,41 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None):
             quarter. Need .amount, .currency, .expense_date; optionally
             .vat_amount / .deductible / .deductible_pct (F4).
         vat_rate: output VAT rate as a fraction (e.g. 0.21).
-        convert_expense: optional fn(amount, currency, when) -> EUR. Only used
-            when an expense actually carries VAT data.
+        convert_expense: optional fn(amount, currency, when) -> EUR.
+        is_equipment: optional fn(expense, net_eur) -> bool; True puts the
+            expense in boxes 30/31 (bienes de inversión) instead of 28/29.
+        carried_forward: VAT credit from earlier periods (box 110).
 
     Returns:
         dict with box values, subtotals, and a `meta` block.
     """
     base_devengado = 0.0
     cuota_devengado = 0.0
+    base_eu_b2b = 0.0      # box 59: entregas intracomunitarias / EU B2B services
+    base_not_subject = 0.0  # box 120: services located outside Spain (non-EU)
     for inv in invoices:
         if not _active(inv):
             continue
         base, cuota = _invoice_output_vat(inv, vat_rate)
         base_devengado += base
         cuota_devengado += cuota
+        if not cuota:
+            tax_type = _customer_tax_type(inv)
+            if tax_type == "eu_b2b":
+                base_eu_b2b += _invoice_base_eur(inv)
+            elif tax_type == "non_eu":
+                base_not_subject += _invoice_base_eur(inv)
 
-    base_deducible = 0.0
-    cuota_deducible = 0.0
+    deducible = {"current": [0.0, 0.0], "equipment": [0.0, 0.0]}
     missing_vat_count = 0
     for exp in expenses:
         vat_amount = getattr(exp, "vat_amount", None)
         if vat_amount is None:
-            # F4 not present (or receipt had no VAT captured) -> cannot deduct.
+            # Receipt had no VAT captured -> cannot deduct.
             missing_vat_count += 1
             continue
+        if not vat_amount:
+            continue  # no Spanish VAT paid: nothing to deduct, not in the base
         deductible = getattr(exp, "deductible", True)
         if not deductible:
             continue
@@ -134,22 +156,34 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None):
             net_eur = convert_expense(net, currency, when) if net is not None else 0.0
         else:
             vat_eur, net_eur = vat_amount, (net or 0.0)
-        base_deducible += net_eur * (pct / 100.0)
-        cuota_deducible += vat_eur * (pct / 100.0)
+        kind = ("equipment" if is_equipment is not None and is_equipment(exp, net_eur)
+                else "current")
+        deducible[kind][0] += net_eur * (pct / 100.0)
+        deducible[kind][1] += vat_eur * (pct / 100.0)
 
     total_devengado = cuota_devengado
-    total_deducir = cuota_deducible
-    resultado = total_devengado - total_deducir
+    total_deducir = deducible["current"][1] + deducible["equipment"][1]
+    resultado = total_devengado - total_deducir  # 46 = 64 = 66 (100% State)
+    carried = max(0.0, carried_forward or 0.0)
+    applied = min(carried, max(0.0, resultado))   # 78
+    liquidacion = resultado - applied             # 69 = 71
 
     boxes = {
         "01": _round2(base_devengado),
         "03": _round2(cuota_devengado),
         "27": _round2(total_devengado),
-        "28": _round2(base_deducible),
-        "29": _round2(cuota_deducible),
+        "28": _round2(deducible["current"][0]),
+        "29": _round2(deducible["current"][1]),
+        "30": _round2(deducible["equipment"][0]),
+        "31": _round2(deducible["equipment"][1]),
         "45": _round2(total_deducir),
         "46": _round2(resultado),
-        "71": _round2(resultado),
+        "59": _round2(base_eu_b2b),
+        "120": _round2(base_not_subject),
+        "110": _round2(carried),
+        "78": _round2(applied),
+        "87": _round2(carried - applied),
+        "71": _round2(liquidacion),
     }
     return {
         "form": "303",
