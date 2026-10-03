@@ -637,13 +637,13 @@ class TaxEsIrpfModule(BaseModule):
             try:
                 profile.start_date = datetime.strptime(start, '%Y-%m-%d').date()
             except ValueError:
-                pass
+                pass  # malformed date from the form: keep the stored value
         for field_name, attr in [('irpf_age', 'age'),
                                  ('irpf_descendientes', 'descendientes')]:
             try:
                 setattr(profile, attr, int(form.get(field_name, 0) or 0))
             except (TypeError, ValueError):
-                pass
+                pass  # non-numeric input: keep the stored value
         profile.inicio_reduction_eligible = 'irpf_inicio' in form
         profile.low_income_deduction = 'irpf_low_income' in form
         profile.uses_mutualidad = 'irpf_mutualidad' in form
