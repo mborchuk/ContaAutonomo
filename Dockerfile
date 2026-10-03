@@ -14,7 +14,7 @@ COPY requirements.txt .
 # pip is only needed at build time. Removing it from the runtime image also
 # removes its vendored copies of setuptools and msgpack, which carry CVEs the
 # app never uses.
-RUN pip install --no-cache-dir -r requirements.txt gunicorn && \
+RUN pip install --no-cache-dir -r requirements.txt && \
     pip uninstall -y pip
 
 COPY . .

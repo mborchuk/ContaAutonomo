@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Docker entrypoint — initializes the database, then starts gunicorn.
+Docker entrypoint — initializes the database once, then starts gunicorn.
 
 Schema migrations run through app.init_database() (schema_migrations.py),
 the same routine `python app.py` and gunicorn workers use. Module tables are
@@ -22,18 +22,8 @@ def init():
 if __name__ == '__main__':
     init()
 
-    workers = os.environ.get('GUNICORN_WORKERS', '2')
-    bind = os.environ.get('GUNICORN_BIND', '0.0.0.0:5000')
-
-    cmd = [
-        'gunicorn',
-        'app:app',
-        '--bind', bind,
-        '--workers', workers,
-        '--timeout', '120',
-        '--access-logfile', '-',
-        '--error-logfile', '-',
-    ]
-
+    # Bind address, worker count and per-worker initialisation come from
+    # gunicorn.conf.py (GUNICORN_BIND, GUNICORN_WORKERS, GUNICORN_THREADS).
+    cmd = ['gunicorn', '--config', 'gunicorn.conf.py', 'app:app']
     print(f'[entrypoint] Starting gunicorn: {" ".join(cmd)}')
     os.execvp('gunicorn', cmd)

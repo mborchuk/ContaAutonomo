@@ -7,7 +7,7 @@ services:
       - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in .env or environment}
       - DATABASE_URL=sqlite:///invoices.db
       - FLASK_DEBUG=0
-      - GUNICORN_WORKERS=2
+      - GUNICORN_WORKERS=1
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
     volumes:
       - app_data:/app/instance

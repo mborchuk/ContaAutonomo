@@ -20,3 +20,4 @@ pyhanko
 Pillow
 pypdf>=4.0.0
 asn1crypto>=1.5.0
+gunicorn>=26.2.0
