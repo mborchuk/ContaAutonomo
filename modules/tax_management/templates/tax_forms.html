@@ -57,7 +57,13 @@
 
 <!-- Tax Forms Table -->
 <div class="card">
-    <div class="card-header">Uploaded Tax Forms</div>
+    <div class="card-header">Uploaded Tax Forms
+        <form method="POST" action="{{ url_for('tax_management.tax_forms_read_boxes') }}" style="display: inline; float: right;"
+              title="Read the declared boxes from every uploaded Modelo 130 / 303 / 349 PDF">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Read filed boxes</button>
+        </form>
+    </div>
     <div class="card-body">
 
     {% if forms_by_year %}
@@ -102,7 +108,14 @@
                         <td><strong>Modelo {{ form.form_type }}</strong></td>
                         <td>{{ form.year }}</td>
                         <td>{% if form.quarter %}Q{{ form.quarter }}{% else %}-{% endif %}</td>
-                        <td>{{ form.original_filename }}</td>
+                        <td>{{ form.original_filename }}
+                            {% set shown = {'130': ['01', '02', '05', '07'], '303': ['28', '29', '30', '31', '59', '120', '71', '87'], '349': ['02']}.get(form.form_type, []) %}
+                            {% if form.boxes %}
+                            <div style="font-size: var(--fs-sm); color: var(--color-text-muted);">
+                                {% for box in shown if box in form.boxes %}[{{ box }}] {{ "%.2f"|format(form.boxes[box]) }}{% if not loop.last %} · {% endif %}{% endfor %}
+                            </div>
+                            {% endif %}
+                        </td>
                         <td>{{ form.uploaded_at.strftime('%d/%m/%Y %H:%M') }}</td>
                         <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             {{ form.notes if form.notes else '-' }}

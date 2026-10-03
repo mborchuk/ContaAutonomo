@@ -6,6 +6,7 @@ Handles tax forms (Modelo 349, 303, 130, 390, 100) and Social Security payments.
 
 import csv
 import io
+import json
 
 from module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
@@ -75,6 +76,7 @@ class TaxManagementModule(BaseModule):
             ('amount', 'FLOAT'),
             ('filed_date', 'DATE'),
             ('payment_date', 'DATE'),
+            ('filed_boxes', 'TEXT'),  # JSON {box: amount} read from the AEAT PDF
         ]
         try:
             inspector = sa_inspect(self._db.engine)
@@ -124,6 +126,15 @@ class TaxManagementModule(BaseModule):
             amount = db.Column(db.Float)
             filed_date = db.Column(db.Date)
             payment_date = db.Column(db.Date)
+            # Boxes read from the filed AEAT PDF, JSON {"01": 51789.62, ...}.
+            filed_boxes = db.Column(db.Text)
+
+            @property
+            def boxes(self):
+                try:
+                    return json.loads(self.filed_boxes) if self.filed_boxes else {}
+                except ValueError:
+                    return {}
 
             def __repr__(self):
                 if self.quarter:
@@ -165,6 +176,11 @@ class TaxManagementModule(BaseModule):
         @login_required
         def tax_forms_upload():
             return self._upload_tax_form()
+
+        @bp.route('/read-boxes', methods=['POST'])
+        @login_required
+        def tax_forms_read_boxes():
+            return self._read_all_filed_boxes()
 
         @bp.route('/download/<int:id>')
         @login_required
@@ -236,6 +252,7 @@ class TaxManagementModule(BaseModule):
             'original_filename': f.original_filename,
             'uploaded_at': f.uploaded_at.isoformat() if f.uploaded_at else None,
             'notes': f.notes,
+            'filed_boxes': f.boxes,
         } for f in forms]
         return {'data': data, 'total': len(data)}, 200
 
@@ -337,6 +354,11 @@ class TaxManagementModule(BaseModule):
                 subfolder = f'tax_forms/{year}/Q{quarter}'
             filename = f'{form_type}-Q{quarter}.{ext}' if quarter else f'{form_type}.{ext}'
 
+            pdf_bytes = None
+            if ext == 'pdf':
+                pdf_bytes = file.stream.read()
+                file.stream.seek(0)
+
             file_path = self.core.save_file(file, subfolder, filename)
 
             if existing:
@@ -364,6 +386,8 @@ class TaxManagementModule(BaseModule):
                     target.amount = float(raw_amount)
                 except (TypeError, ValueError):
                     pass  # amount is optional: ignore a non-numeric value
+            if pdf_bytes:
+                self._store_filed_boxes(target, pdf_bytes, announce=True)
             status = request.form.get('status')
             if status in ('pending', 'filed', 'paid'):
                 target.status = status
@@ -379,6 +403,55 @@ class TaxManagementModule(BaseModule):
             flash('Error processing form data. Please check your input.', 'danger')
 
         return redirect(url_for('tax_management.tax_forms_index'))
+
+    # --- Filed boxes (what was actually declared) ---
+
+    def _store_filed_boxes(self, tax_form, pdf_bytes, announce=False):
+        """Read the AEAT boxes from a filed PDF onto `tax_form`. True if stored.
+
+        Nothing is stored when the PDF is not a recognised AEAT form or names
+        another form, year or quarter than the record.
+        """
+        from .aeat_pdf import read_filed_form
+        parsed = read_filed_form(pdf_bytes)
+        if not parsed or parsed['form'] != tax_form.form_type:
+            return False
+        if ((parsed['year'] and parsed['year'] != tax_form.year)
+                or (parsed['quarter'] and parsed['quarter'] != tax_form.quarter)):
+            if announce:
+                flash(f"The PDF is Modelo {parsed['form']} {parsed['quarter']}T "
+                      f"{parsed['year']}, not the period selected; boxes not read.",
+                      'warning')
+            return False
+        tax_form.filed_boxes = json.dumps(parsed['boxes'], sort_keys=True)
+        if tax_form.amount is None:
+            result_box = {'130': '19', '303': '71'}.get(tax_form.form_type)
+            if result_box and result_box in parsed['boxes']:
+                tax_form.amount = parsed['boxes'][result_box]
+        if announce:
+            flash(f'Read {len(parsed["boxes"])} boxes from the filed form.', 'info')
+        return True
+
+    def _read_all_filed_boxes(self):
+        """Re-read the boxes of every uploaded Modelo 130/303/349 PDF."""
+        read = 0
+        for tax_form in self.TaxForm.query.filter(
+                self.TaxForm.form_type.in_(('130', '303', '349'))).all():
+            if not (tax_form.original_filename or '').lower().endswith('.pdf'):
+                continue
+            stored = self.core.storage.get(tax_form.file_path) if tax_form.file_path else None
+            if stored and self._store_filed_boxes(tax_form, stored[0]):
+                read += 1
+        self._db.session.commit()
+        self.core.log_activity('tax_forms_boxes_read', 'tax', f'{read} forms')
+        flash(f'Read the filed boxes of {read} forms.', 'success')
+        return redirect(url_for('tax_management.tax_forms_index'))
+
+    def filed_boxes(self, form_type, year, quarter=None):
+        """Boxes declared on the filed form for a period, or {} if unknown."""
+        tax_form = self.TaxForm.query.filter_by(
+            form_type=form_type, year=year, quarter=quarter).first()
+        return tax_form.boxes if tax_form else {}
 
     def _download_tax_form(self, id):
         """Download a tax form"""
