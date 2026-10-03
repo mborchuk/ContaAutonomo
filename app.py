@@ -588,7 +588,7 @@ def edit_customer(id):
     return render_template('customer_form.html', customer=customer)
 
 
-@app.route('/customers/<int:id>/delete')
+@app.route('/customers/<int:id>/delete', methods=['POST'])
 @login_required
 def delete_customer(id):
     customer = Customer.query.get_or_404(id)
@@ -2102,7 +2102,7 @@ def edit_bank(id):
     return render_template('bank_form.html', bank=bank)
 
 
-@app.route('/settings/banks/<int:id>/delete')
+@app.route('/settings/banks/<int:id>/delete', methods=['POST'])
 @login_required
 def delete_bank(id):
     """Delete a bank"""
@@ -2120,7 +2120,7 @@ def delete_bank(id):
     return redirect(url_for('settings') + '#banks')
 
 
-@app.route('/settings/banks/<int:id>/set-default')
+@app.route('/settings/banks/<int:id>/set-default', methods=['POST'])
 @login_required
 def set_default_bank(id):
     """Set a bank as default"""
@@ -2136,7 +2136,7 @@ def set_default_bank(id):
     return redirect(url_for('settings') + '#banks')
 
 
-@app.route('/settings/customers/<int:id>/set-default')
+@app.route('/settings/customers/<int:id>/set-default', methods=['POST'])
 @login_required
 def set_default_customer(id):
     """Set a customer as default"""
