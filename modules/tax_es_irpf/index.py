@@ -254,6 +254,13 @@ class TaxEsIrpfModule(BaseModule):
                 profile.equipment_threshold if profile.equipment_threshold is not None else 300.0,
                 categories)
 
+    def is_equipment(self, exp, net_eur):
+        """Equipment (bien de inversión): an equipment category, at or above
+        the threshold. Shared with Modelo 303 boxes 30/31."""
+        _, _, threshold, categories = self._equipment_rule(self._get_profile())
+        return (net_eur >= threshold
+                and (exp.category or '').strip().lower() in categories)
+
     def _expense_net_eur(self, exp):
         """VAT-excluded, deductible share of an expense in EUR (0 if not deductible).
 

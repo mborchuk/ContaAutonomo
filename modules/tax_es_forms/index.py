@@ -147,12 +147,37 @@ class TaxEsFormsModule(BaseModule):
 
     # --- Computation entry points (shared by pages + API) ---------------- #
 
+    @staticmethod
+    def _default_is_equipment(exp, net_eur):
+        """Without the IRPF Estimator: category "Equipment", 300 EUR net or more."""
+        return (exp.category or '').strip().lower() == 'equipment' and net_eur >= 300.0
+
+    def _carried_forward(self, year, quarter):
+        """VAT credit carried into this quarter (box 110), from the filed
+        Modelo 303 of the previous quarter: its box 87 plus its negative
+        result when compensated (no refund requested in box 73)."""
+        mm = getattr(self.core, 'module_manager', None)
+        tm = mm.modules.get('tax_management') if mm else None
+        prev_year, prev_quarter = (year, quarter - 1) if quarter > 1 else (year - 1, 4)
+        boxes = tm.filed_boxes('303', prev_year, prev_quarter) if tm else {}
+        if not boxes:
+            return 0.0, None
+        carried = boxes.get('87', 0.0)
+        if boxes.get('71', 0.0) < 0 and '73' not in boxes:
+            carried += -boxes['71']
+        return carried, f'filed Modelo 303 {prev_quarter}T {prev_year}'
+
     def _draft_303(self, year, quarter):
         vat_rate, _ = self._rates()
         invoices = self._invoices_in(year, quarter=quarter)
         expenses = self._expenses_in(year, quarter=quarter)
-        result = compute_modelo_303(invoices, expenses, vat_rate,
-                                    convert_expense=self._convert_to_eur)
+        irpf = self._irpf_module()
+        carried, carried_from = self._carried_forward(year, quarter)
+        result = compute_modelo_303(
+            invoices, expenses, vat_rate, convert_expense=self._convert_to_eur,
+            is_equipment=irpf.is_equipment if irpf else self._default_is_equipment,
+            carried_forward=carried)
+        result['meta']['carried_from'] = carried_from
         result['labels'] = MODELO_303_BOXES
         result['year'] = year
         result['quarter'] = quarter
