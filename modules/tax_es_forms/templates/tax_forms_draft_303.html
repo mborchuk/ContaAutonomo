@@ -18,6 +18,10 @@
     before filing. Box table version: {{ draft.table_version }}.
 </div>
 
+{% for check in draft.meta.checks %}
+<div class="note note-warning">⚠ {{ check }}</div>
+{% endfor %}
+
 {% if draft.meta.missing_expense_vat_count %}
 <div class="note note-warning">
     ⚠ {{ draft.meta.missing_expense_vat_count }} expense(s) this quarter lack VAT
