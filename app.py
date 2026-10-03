@@ -88,6 +88,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Scheduler leader lock: one process per deployment runs scheduled jobs.
 app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
     'SCHEDULER_LOCK_PATH', os.path.join(app.instance_path, 'scheduler.lock'))
+# Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+app.config['BACKUP_KEY_FILE'] = os.environ.get(
+    'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
 
 from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
 
@@ -135,18 +138,18 @@ except ImportError:
     logger.warning('flask-wtf not installed — CSRF protection disabled')
 
 # --- Rate limiting ---
-try:
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=[],
-        storage_uri='memory://',
-    )
-except ImportError:
-    limiter = None
-    logger.warning('flask-limiter not installed — rate limiting disabled')
+from rate_limit import limiter
+limiter.init_app(app)
+
+# --- Client address behind a reverse proxy ---
+# With TRUSTED_PROXY_COUNT=N, trust the last N X-Forwarded-For / -Proto hops
+# so rate limits and login lockout see the client, not the proxy. Leave 0
+# when the app is reached directly: the headers can then be forged.
+_trusted_proxies = int(os.environ.get('TRUSTED_PROXY_COUNT', '0') or 0)
+if _trusted_proxies > 0:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_trusted_proxies,
+                            x_proto=_trusted_proxies)
 
 # --- Optional Sentry error tracking (env-gated) ---
 _sentry_dsn = os.environ.get('SENTRY_DSN')
@@ -417,7 +420,7 @@ class Settings(db.Model):
     show_currency_panel = db.Column(db.Boolean, default=True)  # Show currency/holidays panel on dashboard
     show_tax_panel = db.Column(db.Boolean, default=True)  # Show tax obligations panel on dashboard
     # Backup settings
-    auto_backup_enabled = db.Column(db.Boolean, default=False)  # Enable automatic backup on startup
+    auto_backup_enabled = db.Column(db.Boolean, default=True)  # Enable automatic backup on startup
     backup_retention_count = db.Column(db.Integer, default=5)  # Number of backups to keep (deprecated, use daily_backup_retention_count)
     daily_backup_retention_count = db.Column(db.Integer, default=4)  # Number of daily backups to keep
     # Social Security settings
@@ -2168,9 +2171,8 @@ def set_default_customer(id):
 # ============================================================================
 
 # Register Auth Blueprint (must be first)
-from auth_routes import auth_bp, _apply_rate_limits
+from auth_routes import auth_bp
 app.register_blueprint(auth_bp)
-_apply_rate_limits()  # apply rate limits after app is ready
 
 # Exempt auth routes from CSRF (login/setup have no session to protect)
 if csrf:
