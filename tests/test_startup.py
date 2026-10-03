@@ -95,3 +95,29 @@ def test_gunicorn_initialises_workers_and_one_scheduler(tmp_path, workers, boote
     assert text.count('Booting worker') == booted, text[-3000:]
     # bootstrap() ran without GUNICORN_WORKERS, and only one process leads.
     assert text.count('Scheduler: this process') == 1, text[-3000:]
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='flock needs POSIX')
+def test_bootstrap_initialises_under_an_exclusive_start_up_lock(app, tmp_path, monkeypatch):
+    """Parallel workers must not run create_all/migrations at the same time."""
+    import fcntl
+    import app as appmod
+
+    lock_path = str(tmp_path / 'init.lock')
+    monkeypatch.setitem(app.config, 'INIT_LOCK_PATH', lock_path)
+    monkeypatch.setattr(appmod, 'module_manager', None)
+
+    class Probe(Exception):
+        pass
+
+    def init_database_probe():
+        with open(lock_path, 'a') as other:  # what a second worker would do
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        raise Probe
+
+    monkeypatch.setattr(appmod, 'init_database', init_database_probe)
+    with pytest.raises(Probe):
+        appmod.bootstrap()
+    with open(lock_path, 'a') as again:  # released afterwards
+        fcntl.flock(again, fcntl.LOCK_EX | fcntl.LOCK_NB)
