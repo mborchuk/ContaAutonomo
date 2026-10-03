@@ -483,6 +483,10 @@ class Expense(db.Model):
     vat_amount = db.Column(db.Float)          # IVA soportado amount
     deductible = db.Column(db.Boolean, default=True)
     deductible_pct = db.Column(db.Float, default=100.0)
+    # Reverse charge (inversión del sujeto pasivo): service bought from a
+    # supplier in another EU country ('eu') or outside the EU ('non_eu') with
+    # no Spanish VAT invoiced; the buyer self-assesses it on Modelo 303.
+    reverse_charge = db.Column(db.String(10))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):

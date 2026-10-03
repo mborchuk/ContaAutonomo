@@ -70,6 +70,8 @@ CORE_COLUMNS = {
         ('vat_amount', 'FLOAT'),
         ('deductible', 'BOOLEAN'),
         ('deductible_pct', 'FLOAT'),
+        # Reverse charge on purchases: '' / 'eu' / 'non_eu'.
+        ('reverse_charge', 'VARCHAR(10)'),
     ],
 }
 
