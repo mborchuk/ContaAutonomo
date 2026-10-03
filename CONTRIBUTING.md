@@ -49,7 +49,10 @@ python -m pytest
   lifecycle state, or data deletion. Bug fixes should include a regression
   test that fails without the fix.
 - **Schema changes** use the existing idempotent `ALTER TABLE` pattern — they
-  must run safely on both a fresh and an existing database.
+  must run safely on both a fresh and an existing database. A new column on a
+  core model goes into `CORE_COLUMNS` in `schema_migrations.py`, the one
+  routine every entry point runs; module columns go in the module's
+  `on_enable()`.
 - **Tax logic** must state its scope and carry "estimate, not tax advice"
   framing; cite the official source (AEAT, BOE, Seguridad Social) for any
   rates, boxes, or deadlines you add or change.
