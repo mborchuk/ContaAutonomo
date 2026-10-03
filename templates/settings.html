@@ -432,11 +432,15 @@
                     <a href="{{ url_for('view_customer', id=customer.id) }}" class="btn btn-primary">View</a>
                     <a href="{{ url_for('edit_customer', id=customer.id) }}" class="btn btn-success">Edit</a>
                     {% if not customer.is_default %}
-                    <a href="{{ url_for('set_default_customer', id=customer.id) }}" class="btn btn-success">Set as Default</a>
+                    <form method="POST" action="{{ url_for('set_default_customer', id=customer.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-success">Set as Default</button>
+                    </form>
                     {% endif %}
-                    <a href="{{ url_for('delete_customer', id=customer.id) }}"
-                       class="btn btn-danger"
-                       onclick="return confirm('Delete this customer?')">Delete</a>
+                    <form method="POST" action="{{ url_for('delete_customer', id=customer.id) }}" style="display: inline;" onsubmit="return confirm('Delete this customer?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
                 </div>
             </div>
             {% endfor %}
@@ -521,11 +525,15 @@
                 <div class="bank-actions">
                     <a href="{{ url_for('edit_bank', id=bank.id) }}" class="btn btn-success">Edit</a>
                     {% if not bank.is_default %}
-                    <a href="{{ url_for('set_default_bank', id=bank.id) }}" class="btn btn-success">Set as Default</a>
+                    <form method="POST" action="{{ url_for('set_default_bank', id=bank.id) }}" style="display: inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-success">Set as Default</button>
+                    </form>
                     {% endif %}
-                    <a href="{{ url_for('delete_bank', id=bank.id) }}"
-                       class="btn btn-danger"
-                       onclick="return confirm('Delete this bank account? This will fail if any invoices use it.')">Delete</a>
+                    <form method="POST" action="{{ url_for('delete_bank', id=bank.id) }}" style="display: inline;" onsubmit="return confirm('Delete this bank account? This will fail if any invoices use it.');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
                 </div>
             </div>
             {% endfor %}
@@ -705,10 +713,10 @@
 
         <p style="color: var(--color-text-muted); margin-bottom: 20px;">Manage your current session.</p>
 
-        <a href="{{ url_for('auth.logout') }}" class="btn btn-danger"
-           onclick="return confirm('Are you sure you want to logout?')">
-            Logout
-        </a>
+        <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to logout?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Logout</button>
+        </form>
     </div>
 </div>
 
