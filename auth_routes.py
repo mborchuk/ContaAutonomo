@@ -212,7 +212,7 @@ def _apply_rate_limits():
         pass  # limiter not available or app not ready yet
 
 
-@auth_bp.route('/logout')
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Logout — notify providers and modules."""
     _activity('logout', 'auth')
