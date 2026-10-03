@@ -65,6 +65,15 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   result, unless a refund was requested); applied to a positive result;
   box 71 = 46 − 78.
 
+**Modelo 349**
+
+- One line per EU business customer (`eu_b2b`) with invoices in the quarter
+  (cancelled excluded): country and number from its VAT number (spaces
+  removed), key S (services), taxable base. Box 01 = number of lines, box
+  02 = total — the page warns when it differs from Modelo 303 box 59 or a
+  customer has no VAT number. Page `/tax-forms-draft/349/<year>/<q>`, API
+  `GET /api/v1/m/tax_es_forms/draft/349/<year>/<q>`.
+
 **Modelo 130**
 
 - When the **IRPF Estimator** (`tax_es_irpf`) is enabled, the page and the API

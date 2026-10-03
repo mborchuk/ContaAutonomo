@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Modelo 349 · Q{{ draft.quarter }} {{ draft.year }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Modelo 349 (operaciones intracomunitarias) — Q{{ draft.quarter }} {{ draft.year }}</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+</div>
+
+<div class="note note-info">
+    <strong>Estimate, not tax advice.</strong> One line per EU business customer
+    (customers with VAT type "EU B2B"), key S (services), from the invoices of the
+    quarter except cancelled ones. Verify against the current official AEAT
+    Modelo 349 before filing. Box table version: {{ draft.table_version }}.
+</div>
+
+{% for warning in draft.meta.warnings %}
+<div class="note note-warning">⚠ {{ warning }}</div>
+{% endfor %}
+
+{% if draft.boxes['02'] != draft.box_59 %}
+<div class="note note-warning">
+    ⚠ The total ({{ "%.2f"|format(draft.boxes['02']) }}) differs from Modelo 303
+    box 59 ({{ "%.2f"|format(draft.box_59) }}) for the same quarter.
+</div>
+{% endif %}
+
+<div class="table-wrap">
+<table class="data-table boxTable">
+    <thead>
+        <tr><th>Box</th><th>Concept</th><th class="text-right">Value</th></tr>
+    </thead>
+    <tbody>
+        <tr><td><strong>01</strong></td><td>Número total de operadores intracomunitarios</td>
+            <td class="text-right"><span class="box-value" data-box="01">{{ draft.boxes['01'] }}</span></td></tr>
+        <tr class="box-result"><td><strong>02</strong></td><td>Importe de las operaciones intracomunitarias</td>
+            <td class="text-right"><span class="box-value" data-box="02">{{ "%.2f"|format(draft.boxes['02']) }}</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr><th>Country</th><th>NIF comunitario</th><th>Name</th><th>Key</th><th class="text-right">Base imponible</th></tr>
+    </thead>
+    <tbody>
+        {% for op in draft.operators %}
+        <tr>
+            <td>{{ op.country }}</td>
+            <td>{{ op.vat_number }}</td>
+            <td>{{ op.name }}</td>
+            <td>{{ op.key }}</td>
+            <td class="text-right">{{ "%.2f"|format(op.base) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No operations with EU business customers this quarter.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}
