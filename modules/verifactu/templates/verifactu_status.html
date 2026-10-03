@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Verifactu{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Verifactu — Billing Record Chain</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('verifactu.verifactu_export') }}" class="btn btn-secondary">⬇ Export records</a>
+    </div>
+</div>
+
+{% if chain_ok %}
+<div class="note note-info">
+    ✅ <strong>Chain intact</strong> — {{ record_count }} record(s), every hash links and verifies.
+</div>
+{% else %}
+<div class="note note-danger">
+    🚨 <strong>CHAIN BROKEN at record index {{ bad_index }}</strong>: {{ bad_reason }}.<br>
+    This is a legal-integrity problem, not a cosmetic one. Records were modified
+    or removed outside the app. Export the log now and investigate — do not
+    keep issuing invoices until resolved.
+</div>
+{% endif %}
+
+<p class="fine-print">
+    Spec version: {{ spec_version }} — record format, QR content and chaining are a
+    versioned draft. <strong>Verify against the current AEAT technical
+    specifications (RD 1007/2023) before relying on this for compliance.</strong>
+    Compliance assist, not legal advice.
+</p>
+
+<h3>Latest records</h3>
+{% if records %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr><th>#</th><th>Type</th><th>Invoice</th><th>Created</th><th>Hash</th><th>Submitted</th></tr>
+    </thead>
+    <tbody>
+        {% for r in records %}
+        <tr>
+            <td>{{ r.id }}</td>
+            <td>{{ r.record_type }}</td>
+            <td>{{ r.invoice_number }}</td>
+            <td>{{ r.created_at.strftime('%d/%m/%Y %H:%M') if r.created_at else '' }}</td>
+            <td class="mono fine-print">{{ r.record_hash[:16] }}…</td>
+            <td>{{ r.submitted_at.strftime('%d/%m/%Y %H:%M') if r.submitted_at else '— (local conservation)' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">
+    No records yet. A record is appended automatically every time an invoice is
+    issued or annulled.
+</p>
+{% endif %}
+{% endblock %}

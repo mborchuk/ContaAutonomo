@@ -87,8 +87,24 @@ class MyModule(BaseModule):
         return 'My Module'
 
     @property
-    def de
-ml')
+    def description(self):
+        return 'What this module does'
+
+    @property
+    def nav_items(self):
+        return [
+            {'label': 'My Module', 'endpoint': 'my_module.index', 'icon': '🔧'}
+        ]
+
+    def register_routes(self, app):
+        bp = Blueprint('my_module', __name__,
+                       template_folder='templates',
+                       url_prefix='/my-module')
+
+        @bp.route('/')
+        @self.core.login_required
+        def index():
+            return render_template('my_page.html')
 
         app.register_blueprint(bp)
 ```
@@ -160,6 +176,9 @@ Every module must inherit from `BaseModule` and implement required properties.
 | `get_edit_form_html(invoice)` | `Invoice` | `str` or `None` | HTML to inject into invoice edit form |
 | `on_invoice_created(invoice, request)` | `Invoice`, `Request` | `None` | Called after new invoice is committed |
 | `on_invoice_updated(invoice, request)` | `Invoice`, `Request` | `None` | Called after existing invoice is committed |
+| `on_invoice_issued(invoice, request)` | `Invoice`, `Request` | `None` | Called when a draft becomes issued, **before commit** — raising aborts the transition |
+| `on_invoice_rectified(new_invoice, original, request)` | `Invoice`, `Invoice`, `Request` | `None` | Called when a rectificative draft is created, before commit — raising aborts |
+| `on_invoice_annulled(invoice, request)` | `Invoice`, `Request` | `None` | Called when an issued invoice is annulled, before commit — raising aborts |
 | `get_invoice_templates()` | — | `list[dict]` | Invoice PDF templates provided by this module |
 | `get_tax_obligations(context)` | `dict` | `dict` or `None` | Tax obligation data for dashboard |
 | `get_settings_html(settings)` | `Settings` | `str` or `None` | HTML to inject into settings tab |
@@ -248,13 +267,17 @@ This service enforces business rules (PAID invoices are read-only) and logs all 
 
 | Method | Args | Returns | Description |
 |--------|------|---------|-------------|
-| `update(invoice_id, **fields)` | `int`, kwargs | `Invoice` | Update fields. Raises `ValueError` if PAID. |
-| `attach_pdf(invoice_or_id, file_data, original_filename)` | `Invoice` or `int`, file, `str` | `str` (path) | Save PDF to `invoices_pdf/`, compute SHA-256 hash. Raises `ValueError` if PAID + sealed PDF exists. |
+| `update(invoice_id, **fields)` | `int`, kwargs | `Invoice` | Update fields. Raises `ValueError` if the invoice is locked (issued or paid). |
+| `attach_pdf(invoice_or_id, file_data, original_filename)` | `Invoice` or `int`, file, `str` | `str` (path) | Save PDF to `invoices_pdf/`, compute SHA-256 hash. Raises `ValueError` if locked + a sealed PDF exists. |
 
 ### Protection Rules
 
-- **PAID invoices cannot be modified** — `update()` raises `ValueError`
-- **PAID invoices with existing PDF + hash cannot have PDF replaced** — `attach_pdf()` raises `ValueError`
+- **Issued and paid invoices are locked** — `is_locked()` returns `True` and
+  `update()` raises `ValueError`. Corrections to an issued invoice go through
+  a rectificative (`/rectify/<id>`); the only forward transitions are
+  *mark paid* and *annul*.
+- **Locked invoices with an existing PDF + hash cannot have the PDF replaced** — `attach_pdf()` raises `ValueError`
+- Draft and legacy `pending` invoices remain freely editable
 - All write operations are logged via `core.activity_logger` with detailed info (file size, hash, replaced/new)
 - Fields `id` and `pdf_hash` cannot be set via `update()`
 
@@ -269,7 +292,7 @@ all_paid = svc.get_all(status='paid')
 has_file = svc.has_pdf(invoice)       # pass object — avoids extra DB query
 has_file = svc.has_pdf(42)            # or pass ID
 
-# Write (raises ValueError if PAID)
+# Write (raises ValueError if the invoice is locked — issued or paid)
 svc.update(42, description='Updated description')
 
 # Attach PDF — pass object when you already have it

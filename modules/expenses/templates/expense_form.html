@@ -5,8 +5,23 @@
 {% block content %}
 <h1>{{ 'Edit' if expense else 'Create' }} Expense</h1>
 
+{# F11 — in-form AI receipt parse: one upload both prefills the form and
+   becomes the attached receipt. Only shown when ai_parser is enabled. #}
+{% if module_manager and module_manager.modules.get('ai_parser') %}
+<div class="note" id="ai-parse-block">
+    <label class="check-row" style="cursor: pointer;">
+        📷 <strong>Parse receipt with AI</strong> — photo or PDF prefills the form
+        <input type="file" id="ai-parse-file" accept="image/*,.pdf" capture="environment"
+               style="display: none;">
+        <button type="button" class="btn btn-secondary" id="ai-parse-btn"
+                onclick="document.getElementById('ai-parse-file').click()">Choose file / take photo</button>
+    </label>
+    <span id="ai-parse-status" class="fine-print"></span>
+</div>
+{% endif %}
+
 <form method="POST" enctype="multipart/form-data">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="form-grid">
         <!-- Left Column -->
         <div>
             <div class="form-group">
@@ -26,7 +41,7 @@
                     </option>
                     {% endfor %}
                 </select>
-                <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
+                <small class="helper-text">
                     <a href="{{ url_for('settings') }}#contractors" target="_blank">Manage contractors in Settings</a>
                 </small>
             </div>
@@ -67,7 +82,7 @@
 
         <!-- Right Column -->
         <div>
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 15px;">
+            <div class="expense-amount-grid">
                 <div class="form-group">
                     <label for="amount">Amount *</label>
                     <input type="number" id="amount" name="amount" step="0.01"
@@ -89,9 +104,9 @@
 
             <!-- F4 — VAT breakdown & deductibility. Gross (Amount) is authoritative;
                  enter a VAT rate and net/VAT are computed, all overridable. -->
-            <fieldset style="border: 1px solid var(--color-border); border-radius: 5px; padding: 12px; margin-bottom: 15px;">
-                <legend style="font-size: 13px; padding: 0 6px;">VAT breakdown (IVA soportado)</legend>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <fieldset class="form-fieldset">
+                <legend>VAT breakdown (IVA soportado)</legend>
+                <div class="form-grid">
                     <div class="form-group">
                         <label for="vat_rate">VAT rate %</label>
                         <input type="number" id="vat_rate" name="vat_rate" step="0.01"
@@ -116,7 +131,7 @@
                                value="{{ expense.deductible_pct if expense and expense.deductible_pct is not none else '100' }}">
                     </div>
                 </div>
-                <label style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                <label class="check-row">
                     <input type="checkbox" id="deductible" name="deductible"
                            {% if not expense or expense.deductible %}checked{% endif %}>
                     Deductible (IVA soportado)
@@ -127,7 +142,7 @@
                 <label for="file">Upload File (Invoice/Receipt)</label>
                 <input type="file" id="file" name="file" accept=".pdf,.jpg,.jpeg,.png">
                 {% if expense and expense.file_path %}
-                <small style="display: block; margin-top: 5px; color: var(--color-success);">
+                <small class="helper-text">
                     Current file: <a href="{{ url_for('expenses.expenses_file', filename=expense.file_path.split('/')[-1]) }}" target="_blank">View</a>
                 </small>
                 {% endif %}
@@ -141,7 +156,7 @@
         </div>
     </div>
 
-    <div style="margin-top: 30px;">
+    <div class="action-row" style="margin-top: var(--space-5);">
         <button type="submit" class="btn btn-success">{{ 'Update' if expense else 'Create' }} Expense</button>
         <a href="{{ url_for('expenses.expenses_index') }}" class="btn btn-primary">Cancel</a>
     </div>
@@ -194,28 +209,97 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     catEl.addEventListener('change', applyCategoryDefaults);
 
-    // AI prefill support
+    // Shared prefill: used by the legacy sessionStorage path and the F11
+    // in-form parse. Nothing auto-saves — every field stays editable.
+    function prefillFromData(data) {
+        if (!data) return;
+        if (data.expense_date) document.getElementById('expense_date').value = data.expense_date;
+        if (data.amount) document.getElementById('amount').value = data.amount;
+        if (data.currency) document.getElementById('currency').value = data.currency;
+        if (data.category) document.getElementById('category').value = data.category;
+        if (data.description) document.getElementById('description').value = data.description;
+        if (data.invoice_number) document.getElementById('invoice_number').value = data.invoice_number;
+        // F11-D2 — VAT trio (confidence-aware: nulls leave fields for
+        // category defaults; explicit values recalc nothing else).
+        if (data.vat_rate != null) rateEl.value = data.vat_rate;
+        if (data.net_amount != null) netEl.value = data.net_amount;
+        if (data.vat_amount != null) vatEl.value = data.vat_amount;
+        if (data.vat_rate != null && data.net_amount == null && data.vat_amount == null) {
+            recalcFromGrossRate();
+        }
+        if (data.contractor_name) {
+            // Try to select a matching contractor; fall back to a note.
+            const sel = document.getElementById('contractor_id');
+            const wanted = data.contractor_name.toLowerCase();
+            let matched = false;
+            for (const opt of sel.options) {
+                if (opt.text.trim().toLowerCase() === wanted) {
+                    sel.value = opt.value; matched = true; break;
+                }
+            }
+            if (!matched) {
+                document.getElementById('notes').value =
+                    (document.getElementById('notes').value || '') +
+                    'Contractor: ' + data.contractor_name;
+            }
+        }
+    }
+
+    // AI prefill support (legacy path: parsed on the AI Parser page)
     const params = new URLSearchParams(window.location.search);
     if (params.get('ai_prefill') === '1') {
         try {
             const data = JSON.parse(sessionStorage.getItem('ai_parsed_data'));
-            if (data) {
-                if (data.expense_date) document.getElementById('expense_date').value = data.expense_date;
-                if (data.amount) document.getElementById('amount').value = data.amount;
-                if (data.currency) document.getElementById('currency').value = data.currency;
-                if (data.category) document.getElementById('category').value = data.category;
-                if (data.description) document.getElementById('description').value = data.description;
-                if (data.invoice_number) document.getElementById('invoice_number').value = data.invoice_number;
-                if (data.contractor_name) {
-                    document.getElementById('notes').value =
-                        (document.getElementById('notes').value || '') +
-                        'Contractor: ' + data.contractor_name;
-                }
-                sessionStorage.removeItem('ai_parsed_data');
-            }
+            prefillFromData(data);
+            sessionStorage.removeItem('ai_parsed_data');
         } catch(e) { console.warn('AI prefill failed:', e); }
+    }
+
+    // F11 — in-form parse: POST to the ai_parser endpoint, prefill, and put
+    // the same file into the receipt input (one upload serves both).
+    const parseInput = document.getElementById('ai-parse-file');
+    if (parseInput) {
+        parseInput.addEventListener('change', async function () {
+            const file = parseInput.files[0];
+            if (!file) return;
+            const statusEl = document.getElementById('ai-parse-status');
+            const btn = document.getElementById('ai-parse-btn');
+            statusEl.textContent = 'Parsing…';
+            btn.disabled = true;
+            try {
+                const fd = new FormData();
+                fd.append('file', file);
+                fd.append('doc_type', 'expense');
+                const resp = await fetch('/ai-parser/parse', {method: 'POST', body: fd});
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    statusEl.textContent = '✗ ' + (data.error || 'Parse failed');
+                    return;
+                }
+                prefillFromData(data);
+                // D3 — attach the parsed file as the expense receipt.
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                document.getElementById('file').files = dt.files;
+                statusEl.textContent = '✓ Form prefilled — review before saving. Receipt attached.';
+            } catch (e) {
+                statusEl.textContent = '✗ Parse failed: ' + e;
+            } finally {
+                btn.disabled = false;
+            }
+        });
     }
 });
 </script>
+<style>
+.expense-amount-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr);
+    gap: var(--space-4);
+}
+@media (max-width: 768px) {
+    .expense-amount-grid { grid-template-columns: 1fr; }
+}
+</style>
 
 {% endblock %}

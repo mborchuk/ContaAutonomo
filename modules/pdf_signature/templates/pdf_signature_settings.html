@@ -52,8 +52,7 @@
         <input type="file" id="pdf_sig_image_file" accept=".png,.jpg,.jpeg"
                style="font-size: 14px;"
                {% if not pillow_available %}disabled{% endif %}>
-        <button type="button" onclick="uploadSignatureImage()" class="btn btn-sm"
-                style="padding: 6px 14px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+        <button type="button" onclick="uploadSignatureImage()" class="btn btn-primary btn-sm"
                 {% if not pillow_available %}disabled{% endif %}>
             Upload
         </button>
@@ -94,8 +93,7 @@
         <input type="file" id="pdf_sig_cert_file" accept=".pfx,.p12"
                style="font-size: 14px;"
                {% if not pyhanko_available %}disabled{% endif %}>
-        <button type="button" onclick="uploadCertificate()" class="btn btn-sm"
-                style="padding: 6px 14px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px;"
+        <button type="button" onclick="uploadCertificate()" class="btn btn-primary btn-sm"
                 {% if not pyhanko_available %}disabled{% endif %}>
             Upload
         </button>
