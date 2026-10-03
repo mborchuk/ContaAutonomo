@@ -89,21 +89,8 @@ def _store_session_identity(identity):
         'provider': identity.get('provider', 'password'),
     }
     session.permanent = True
-
-    # Store encryption token if password-based
-    if identity.get('provider') == 'password':
-        try:
-            password = request.form.get('password', '')
-            if password:
-                key = auth_manager.get_encryption_key(password)
-                session['_enc_token'] = key.decode('utf-8') if isinstance(key, bytes) else key
-        except Exception:
-            session.pop('_enc_token', None)
-
-
-def get_encryption_password():
-    """Get encryption key from session for backup operations."""
-    return session.get('_enc_token') or session.get('_password')
+    # No key material in the session: Flask's session cookie is signed, not
+    # encrypted. Backups use the backup key (backup module).
 
 
 @auth_bp.route('/setup', methods=['GET', 'POST'])
@@ -127,13 +114,6 @@ def setup():
         try:
             auth_manager.setup_password(password)
             _store_session_identity({'name': 'Admin', 'provider': 'password'})
-
-            # Store encryption token
-            try:
-                key = auth_manager.get_encryption_key(password)
-                session['_enc_token'] = key.decode('utf-8') if isinstance(key, bytes) else key
-            except Exception:
-                pass  # encryption token not critical for setup
 
             flash('Account created successfully!', 'success')
             return redirect(url_for('dashboard'))
@@ -249,13 +229,6 @@ def security():
 
             try:
                 auth_manager.change_password(current_password, new_password)
-
-                # Update encryption token
-                try:
-                    key = auth_manager.get_encryption_key(new_password)
-                    session['_enc_token'] = key.decode('utf-8') if isinstance(key, bytes) else key
-                except Exception:
-                    pass  # encryption token update not critical
 
                 flash('Password changed successfully!', 'success')
                 _activity('password_changed', 'auth')

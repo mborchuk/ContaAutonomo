@@ -132,14 +132,21 @@ def test_restore_round_trip_database_and_files(bk):
             assert f.read() == folder
 
 
-def test_restore_legacy_app_password_backup_with_session_key(bk, app):
-    legacy_token = 'synthetic-derived-login-key'
-    ok, filename = bk._create_full_backup(password=legacy_token)
+def test_restore_legacy_app_password_backup_with_login_password(bk, tmp_path, monkeypatch):
+    """Backups made with the old 'app_password' method restore when the owner
+    types the login password; no key is kept in the session any more."""
+    from auth import auth_manager
+
+    monkeypatch.setattr(auth_manager, 'config_file', str(tmp_path / 'auth_config.json'))
+    auth_manager.setup_password('synthetic-login-pass')
+    legacy_key = auth_manager.get_encryption_key('synthetic-login-pass').decode()
+    ok, filename = bk._create_full_backup(password=legacy_key)
     assert ok, filename
-    with app.test_request_context():
-        from flask import session
-        session['_enc_token'] = legacy_token
-        ok, msg = bk._restore_full_backup(filename, bk._decryption_candidates())
+
+    ok, msg = bk._restore_full_backup(filename, bk._decryption_candidates())
+    assert not ok
+    ok, msg = bk._restore_full_backup(
+        filename, bk._decryption_candidates('synthetic-login-pass'))
     assert ok, msg
 
 
