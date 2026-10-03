@@ -1,0 +1,184 @@
+{
+  "year": 2025,
+  "modelo130": {
+    "rate": 0.2,
+    "low_income_deduction_max": 100,
+    "apply_5pct_dificil_justif": true
+  },
+  "retencion": {
+    "general": 0.15,
+    "new_professional": 0.07,
+    "new_window_years": 3
+  },
+  "eds": {
+    "dificil_justificacion_pct": 0.05,
+    "dificil_justificacion_cap": 2000,
+    "incn_limit": 600000
+  },
+  "inicio_actividad": {
+    "reduction_pct": 0.2,
+    "base_cap": 100000,
+    "years": 2,
+    "applies_in": "modelo100"
+  },
+  "tributacion_conjunta": {
+    "biparental": 3400,
+    "monoparental": 2150,
+    "applies_in": "modelo100"
+  },
+  "state_scale": [
+    {
+      "upto": 12450,
+      "rate": 0.095
+    },
+    {
+      "upto": 20200,
+      "rate": 0.12
+    },
+    {
+      "upto": 35200,
+      "rate": 0.15
+    },
+    {
+      "upto": 60000,
+      "rate": 0.185
+    },
+    {
+      "upto": 300000,
+      "rate": 0.225
+    },
+    {
+      "upto": null,
+      "rate": 0.245
+    }
+  ],
+  "default_region": "valenciana",
+  "regional_scales": {
+    "supletoria": [
+      {
+        "upto": 12450,
+        "rate": 0.095
+      },
+      {
+        "upto": 20200,
+        "rate": 0.12
+      },
+      {
+        "upto": 35200,
+        "rate": 0.15
+      },
+      {
+        "upto": 60000,
+        "rate": 0.185
+      },
+      {
+        "upto": 300000,
+        "rate": 0.225
+      },
+      {
+        "upto": null,
+        "rate": 0.245
+      }
+    ],
+    "valenciana": [
+      {
+        "upto": 12000,
+        "rate": 0.09
+      },
+      {
+        "upto": 22000,
+        "rate": 0.12
+      },
+      {
+        "upto": 32000,
+        "rate": 0.15
+      },
+      {
+        "upto": 42000,
+        "rate": 0.175
+      },
+      {
+        "upto": 52000,
+        "rate": 0.2
+      },
+      {
+        "upto": 62000,
+        "rate": 0.225
+      },
+      {
+        "upto": 72000,
+        "rate": 0.25
+      },
+      {
+        "upto": 100000,
+        "rate": 0.265
+      },
+      {
+        "upto": 150000,
+        "rate": 0.275
+      },
+      {
+        "upto": 200000,
+        "rate": 0.285
+      },
+      {
+        "upto": null,
+        "rate": 0.295
+      }
+    ]
+  },
+  "minimo_estatal": {
+    "contribuyente": 5550,
+    "age65": 1150,
+    "age75": 1400,
+    "descendientes": [
+      2400,
+      2700,
+      4000,
+      4500
+    ],
+    "descendiente_menor3": 2800,
+    "ascendiente65": 1150,
+    "ascendiente75": 1400
+  },
+  "minimo_autonomico": {
+    "valenciana": {
+      "contribuyente": 6105,
+      "age65": 1265,
+      "age75": 1540,
+      "descendientes": [
+        2640,
+        2970,
+        4400,
+        4950
+      ],
+      "descendiente_menor3": 3080,
+      "ascendiente65": 1265,
+      "ascendiente75": 1540
+    }
+  },
+  "reta": {
+    "fully_deductible": true,
+    "mutualidad_deduction_cap": null
+  },
+  "regional_deductions": {
+    "valenciana": [
+      {
+        "id": "alquiler_vivienda",
+        "label": "Arrendamiento vivienda habitual",
+        "type": "percent_of",
+        "input": "rent_paid",
+        "pct": 0.2,
+        "max": 800,
+        "income_limit": 30000
+      }
+    ]
+  },
+  "foral_regions": [
+    "alava",
+    "gipuzkoa",
+    "bizkaia",
+    "navarra"
+  ],
+  "source": "AEAT/BOE 2025 figures; validated vs real M100-2025 & M130-4T-2024 filings. ESTIMATE, not tax advice."
+}
