@@ -25,6 +25,7 @@ from .boxes import (
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
+    compute_modelo_349,
     quarter_of,
 )
 
@@ -184,6 +185,14 @@ class TaxEsFormsModule(BaseModule):
         result['table_version'] = BOX_TABLE_VERSION
         return result
 
+    def _draft_349(self, year, quarter):
+        result = compute_modelo_349(self._invoices_in(year, quarter=quarter))
+        result['year'] = year
+        result['quarter'] = quarter
+        result['table_version'] = BOX_TABLE_VERSION
+        result['box_59'] = self._draft_303(year, quarter)['boxes']['59']
+        return result
+
     def _irpf_module(self):
         mm = getattr(self.core, 'module_manager', None)
         return mm.modules.get('tax_es_irpf') if mm else None
@@ -264,6 +273,14 @@ class TaxEsFormsModule(BaseModule):
             draft = module._draft_130(year, quarter)
             return render_template('tax_forms_draft_130.html', draft=draft)
 
+        @bp.route('/349/<int:year>/<int:quarter>')
+        @login_required
+        def draft_349(year, quarter):
+            if quarter not in (1, 2, 3, 4):
+                abort(404)
+            draft = module._draft_349(year, quarter)
+            return render_template('tax_forms_draft_349.html', draft=draft)
+
         app.register_blueprint(bp)
 
     # --- REST API (F5-D4) ------------------------------------------------- #
@@ -273,6 +290,9 @@ class TaxEsFormsModule(BaseModule):
             {'path': 'draft/303/<int:year>/<int:quarter>', 'methods': ['GET'],
              'handler': self._api_draft_303,
              'summary': 'Modelo 303 (IVA) draft boxes for a quarter'},
+            {'path': 'draft/349/<int:year>/<int:quarter>', 'methods': ['GET'],
+             'handler': self._api_draft_349,
+             'summary': 'Modelo 349 (intra-EU operations) draft for a quarter'},
             {'path': 'draft/130/<int:year>/<int:quarter>', 'methods': ['GET'],
              'handler': self._api_draft_130,
              'summary': 'Modelo 130 (IRPF) draft boxes for a quarter'},
@@ -286,6 +306,10 @@ class TaxEsFormsModule(BaseModule):
     def _api_draft_303(self, request, year=None, quarter=None):
         self._api_validate_quarter(quarter)
         return self._draft_303(year, quarter), 200
+
+    def _api_draft_349(self, request, year=None, quarter=None):
+        self._api_validate_quarter(quarter)
+        return self._draft_349(year, quarter), 200
 
     def _api_draft_130(self, request, year=None, quarter=None):
         self._api_validate_quarter(quarter)
