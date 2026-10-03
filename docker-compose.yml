@@ -9,6 +9,10 @@ services:
       - FLASK_DEBUG=0
       - GUNICORN_WORKERS=1
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
+      # Backup encryption key; empty = key file instance/backup.key (created on first backup)
+      - BACKUP_KEY=${BACKUP_KEY:-}
+      # Set to the number of reverse proxies in front of the app (0 = direct access)
+      - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-0}
     volumes:
       - app_data:/app/instance
       - app_backups:/app/backups
