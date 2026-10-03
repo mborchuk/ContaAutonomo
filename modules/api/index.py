@@ -23,6 +23,7 @@ from datetime import date, datetime
 from functools import wraps
 
 from flask import Blueprint, jsonify, request
+from werkzeug.wrappers import Response as WerkzeugResponse
 from sqlalchemy import inspect as sa_inspect, text
 
 from module_manager import BaseModule
@@ -463,7 +464,12 @@ class ApiModule(BaseModule):
         if isinstance(result, tuple):
             data, status = result
             return jsonify(data), status
-        return result  # already a Flask Response
+        if isinstance(result, WerkzeugResponse):
+            return result  # e.g. a PDF from send_file; the handler set its mimetype
+        # Anything else (including a bare string from a module handler) is
+        # JSON-encoded: Flask would otherwise serve a str as text/html, letting
+        # request data be reflected as HTML.
+        return jsonify(result), 200
 
     # ------------------------------------------------------------------ #
     # Handlers
