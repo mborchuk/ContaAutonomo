@@ -85,6 +85,9 @@ if not _secret:
 app.config['SECRET_KEY'] = _secret
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Scheduler leader lock: one process per deployment runs scheduled jobs.
+app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
+    'SCHEDULER_LOCK_PATH', os.path.join(app.instance_path, 'scheduler.lock'))
 
 from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
 
@@ -2454,17 +2457,30 @@ def _apply_currency_provider(s, mgr):
         svc.set_active_provider(None)
 
 
-# Auto-initialize modules when imported by gunicorn workers (not via python app.py)
-if module_manager is None and os.environ.get('GUNICORN_WORKERS'):
-    try:
-        with app.app_context():
-            init_database()
-            init_module_manager()
-            s = Settings.query.first()
-            if s and module_manager:
-                _apply_log_settings(s, module_manager)
-    except Exception as e:
-        logging.getLogger(__name__).error('Auto-init failed: %s', e)
+def bootstrap():
+    """Prepare this process to serve: database, modules, scheduler, settings.
+
+    Called once per process by every serving entry point — `python app.py`
+    and each gunicorn worker (post_worker_init in gunicorn.conf.py) — and a
+    no-op on repeated calls. Importing app.py alone initialises nothing, so
+    tests and tools can import it safely.
+    """
+    if module_manager is not None:
+        return module_manager
+    with app.app_context():
+        init_database()
+        mgr = init_module_manager()
+        s = Settings.query.first()
+        if s:
+            _apply_log_settings(s, mgr)
+            _apply_currency_provider(s, mgr)
+    return mgr
+
+
+def shutdown():
+    """Stop the scheduler so no new job starts while the process exits."""
+    if module_manager is not None:
+        module_manager.core.scheduler.stop()
 
 
 if __name__ == '__main__':
@@ -2476,17 +2492,7 @@ if __name__ == '__main__':
     )
     app.logger.setLevel(logging.INFO)
 
-    with app.app_context():
-        init_database()
-
-        # Initialize module system
-        mgr = init_module_manager()
-        s = Settings.query.first()
-
-        # Apply log settings from DB
-        if s and mgr:
-            _apply_log_settings(s, mgr)
-            _apply_currency_provider(s, mgr)
+    bootstrap()
 
     # Graceful shutdown: on SIGTERM/SIGINT stop the scheduler so an
     # in-flight job (e.g. a backup) isn't killed mid-write, then exit.
@@ -2495,8 +2501,7 @@ if __name__ == '__main__':
     def _graceful_shutdown(signum, _frame):
         logger.info('Shutdown signal %s received — stopping scheduler', signum)
         try:
-            if module_manager is not None:
-                module_manager.core.scheduler.stop()
+            shutdown()
         except Exception as e:
             logger.warning('Scheduler stop during shutdown failed: %s', e)
         raise SystemExit(0)
