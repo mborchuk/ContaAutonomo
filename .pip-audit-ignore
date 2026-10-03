@@ -1,0 +1,4 @@
+# Accepted pip-audit findings (vulnerabilities with a fixed version) that must
+# not fail CI. One advisory ID per line (PYSEC-…, GHSA-… or CVE-…), with a
+# trailing comment: reason, who accepted it, review date. Empty means no
+# exceptions.

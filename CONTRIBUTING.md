@@ -32,6 +32,12 @@ pip install -r requirements.txt -r requirements-dev.txt
 FLASK_DEBUG=1 python app.py      # http://127.0.0.1:5000
 ```
 
+Dependencies are locked with hashes. Add or change a dependency in
+`requirements.in` (runtime) or `requirements-dev.in` (tests), then run
+`make lock` (needs Docker; compiles on the image's Python) and commit both
+the `.in` and the regenerated `.txt` files. Never edit the `.txt` files by
+hand. Use Python 3.14, the version of the image and CI.
+
 Run the test suite (in-memory SQLite, no network required):
 
 ```bash
