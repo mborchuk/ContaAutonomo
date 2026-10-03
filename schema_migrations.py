@@ -54,6 +54,9 @@ CORE_COLUMNS = {
         ('snap_vat_amount', 'FLOAT'),
         ('snap_taxable_base', 'FLOAT'),
         ('snap_customer', 'TEXT'),
+        # IRPF retención withheld by Spanish B2B clients (tax_es_irpf).
+        ('irpf_retention_pct', 'FLOAT DEFAULT 0'),
+        ('irpf_retention_amount', 'FLOAT DEFAULT 0'),
     ],
     'invoice_item': [
         # F2-D4 — per-line VAT rate.
