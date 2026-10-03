@@ -228,8 +228,12 @@ See `modules/tax_poland/` for a complete real-world example with progressive bra
 1. Set a strong `SECRET_KEY` environment variable
 2. Use Docker (`docker compose up -d`) or gunicorn behind a reverse proxy:
    ```bash
-   gunicorn -w 2 -b 0.0.0.0:5000 app:app
+   gunicorn app:app        # from the repository root; reads gunicorn.conf.py
    ```
+   `gunicorn.conf.py` initialises each worker (migrations, modules, scheduler)
+   and defaults to one worker with 4 threads (`GUNICORN_WORKERS`,
+   `GUNICORN_THREADS`, `GUNICORN_BIND`). Only one process runs scheduled jobs
+   (lock file `instance/scheduler.lock`, override with `SCHEDULER_LOCK_PATH`).
 3. Use a reverse proxy (nginx/Caddy) with HTTPS
 4. Enable the Backup module with daily scheduling
 5. Consider External Storage module for S3/GCS backups

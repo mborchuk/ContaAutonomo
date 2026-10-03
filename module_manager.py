@@ -837,14 +837,23 @@ class TaskScheduler:
     Job types:
         'interval' – run every *interval* seconds
         'daily'    – run once per day at *time_str* (HH:MM, 24-h, local)
+
+    One runner per deployment: every gunicorn worker starts a scheduler, but
+    only the process holding an exclusive lock on *lock_path* (default
+    ``app.config['SCHEDULER_LOCK_PATH']``) runs jobs. The others keep retrying, so
+    when the leader exits another worker takes over.
     """
 
-    def __init__(self, app):
+    def __init__(self, app, lock_path=None):
         self._app = app
         self._jobs = {}          # job_id -> dict
         self._lock = __import__('threading').Lock()
         self._running = False
         self._thread = None
+        self._lock_path = (lock_path
+                           or app.config.get('SCHEDULER_LOCK_PATH')
+                           or os.path.join(app.instance_path, 'scheduler.lock'))
+        self._leader_file = None
 
     # ---- public API used by modules ----
 
@@ -920,8 +929,40 @@ class TaskScheduler:
         self._thread.start()
 
     def stop(self):
-        """Signal the scheduler to stop."""
+        """Signal the scheduler to stop; leadership is released when the
+        loop exits (after any running job), or when the process ends."""
         self._running = False
+
+    @property
+    def is_leader(self):
+        """True when this process runs the scheduled jobs."""
+        return self._leader_file is not None
+
+    def _try_lead(self):
+        """Take the deployment-wide scheduler lock if it is free."""
+        if self._leader_file is not None:
+            return True
+        try:
+            import fcntl
+        except ImportError:  # no flock (Windows): single-process deployment
+            self._leader_file = False
+            return True
+        os.makedirs(os.path.dirname(self._lock_path), exist_ok=True)
+        f = open(self._lock_path, 'a')
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            f.close()
+            return False
+        self._leader_file = f
+        logger.info('Scheduler: this process (pid %s) runs scheduled jobs',
+                    os.getpid())
+        return True
+
+    def _release_lead(self):
+        f, self._leader_file = self._leader_file, None
+        if f:
+            f.close()  # closing the descriptor releases the flock
 
     # ---- internals ----
 
@@ -939,9 +980,13 @@ class TaskScheduler:
 
     def _loop(self):
         import time as _time
-        while self._running:
-            self._tick()
-            _time.sleep(30)
+        try:
+            while self._running:
+                if self._try_lead():
+                    self._tick()
+                _time.sleep(30)
+        finally:
+            self._release_lead()
 
     def _tick(self):
         from datetime import datetime
