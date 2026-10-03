@@ -1799,6 +1799,10 @@ class ModuleManager:
                 'version': version,
                 'enabled': self.is_enabled(mod_id),
                 'load_error': load_error,
+                # Enabled but not running in this process: needs a restart.
+                'restart_required': (self.is_enabled(mod_id)
+                                     and mod_id not in self.modules
+                                     and not load_error),
                 'missing_dependencies': (self.missing_dependencies(mod_id)
                                          if self.is_enabled(mod_id) else []),
             })
@@ -1831,9 +1835,15 @@ class ModuleManager:
             self.db.session.add(record)
         self.db.session.commit()
 
-        # Load the module if discovered
+        # Load the module now only while the app is still being set up. Once
+        # it has served a request Flask refuses new blueprints, so the module
+        # loads at the next start (the choice is saved above).
         if module_id in self.discovered and module_id not in self.modules:
-            self._load_module(module_id)
+            if getattr(self.app, '_got_first_request', False):
+                logger.info("Module '%s' enabled; it loads after a restart",
+                            _sanitize_log(module_id))
+            else:
+                self._load_module(module_id)
 
     def disable_module(self, module_id):
         """Disable a module"""
