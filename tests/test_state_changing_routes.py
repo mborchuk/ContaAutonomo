@@ -36,7 +36,7 @@ def _state(kind, row_id):
 
 
 @pytest.mark.parametrize('path,kind', ROUTES)
-def test_get_does_not_change_state(client, rows, path, kind):
+def test_get_does_not_change_state(loaded_modules, client, rows, path, kind):
     _auth(client)
     before = _state(kind, rows[kind])
     resp = client.get(path.format(**rows))
@@ -45,7 +45,7 @@ def test_get_does_not_change_state(client, rows, path, kind):
 
 
 @pytest.mark.parametrize('path,kind', ROUTES)
-def test_post_without_csrf_token_is_rejected(app, client, rows, path, kind):
+def test_post_without_csrf_token_is_rejected(loaded_modules, app, client, rows, path, kind):
     app.config['WTF_CSRF_ENABLED'] = True
     _auth(client)
     before = _state(kind, rows[kind])
@@ -54,7 +54,7 @@ def test_post_without_csrf_token_is_rejected(app, client, rows, path, kind):
 
 
 @pytest.mark.parametrize('path,kind', ROUTES)
-def test_post_changes_state(client, rows, path, kind):
+def test_post_changes_state(loaded_modules, client, rows, path, kind):
     _auth(client)
     before = _state(kind, rows[kind])
     resp = client.post(path.format(**rows))
@@ -62,7 +62,7 @@ def test_post_changes_state(client, rows, path, kind):
     assert _state(kind, rows[kind]) != before
 
 
-def test_logout_requires_post(client):
+def test_logout_requires_post(loaded_modules, client):
     _auth(client)
     client.get('/logout')
     with client.session_transaction() as sess:
