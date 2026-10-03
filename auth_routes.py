@@ -11,6 +11,7 @@ from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session)
 from functools import wraps
 from auth import auth_manager, auth_service
+from rate_limit import limiter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ def get_encryption_password():
 
 
 @auth_bp.route('/setup', methods=['GET', 'POST'])
+@limiter.limit('3/minute', methods=['POST'])
 def setup():
     """First-time setup page (password-based)."""
     if not auth_manager.is_first_run():
@@ -146,6 +148,7 @@ def setup():
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@limiter.limit('5/minute', methods=['POST'])
 def login():
     """Login page — supports multiple auth providers."""
     if auth_manager.is_first_run():
@@ -197,19 +200,6 @@ def login():
     # Render login page with all available providers
     providers = auth_service.available_providers()
     return render_template('login.html', auth_providers=providers)
-
-
-def _apply_rate_limits():
-    """Apply rate limits after app is fully initialized (avoids circular import)."""
-    global login, setup
-    try:
-        from importlib import import_module
-        limiter = import_module('app').limiter
-        if limiter:
-            login = limiter.limit('5/minute')(login)
-            setup = limiter.limit('3/minute')(setup)
-    except (ImportError, RuntimeError, AttributeError):
-        pass  # limiter not available or app not ready yet
 
 
 @auth_bp.route('/logout')

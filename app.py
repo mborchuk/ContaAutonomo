@@ -132,18 +132,18 @@ except ImportError:
     logger.warning('flask-wtf not installed — CSRF protection disabled')
 
 # --- Rate limiting ---
-try:
-    from flask_limiter import Limiter
-    from flask_limiter.util import get_remote_address
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=[],
-        storage_uri='memory://',
-    )
-except ImportError:
-    limiter = None
-    logger.warning('flask-limiter not installed — rate limiting disabled')
+from rate_limit import limiter
+limiter.init_app(app)
+
+# --- Client address behind a reverse proxy ---
+# With TRUSTED_PROXY_COUNT=N, trust the last N X-Forwarded-For / -Proto hops
+# so rate limits and login lockout see the client, not the proxy. Leave 0
+# when the app is reached directly: the headers can then be forged.
+_trusted_proxies = int(os.environ.get('TRUSTED_PROXY_COUNT', '0') or 0)
+if _trusted_proxies > 0:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_trusted_proxies,
+                            x_proto=_trusted_proxies)
 
 # --- Optional Sentry error tracking (env-gated) ---
 _sentry_dsn = os.environ.get('SENTRY_DSN')
@@ -2161,9 +2161,8 @@ def set_default_customer(id):
 # ============================================================================
 
 # Register Auth Blueprint (must be first)
-from auth_routes import auth_bp, _apply_rate_limits
+from auth_routes import auth_bp
 app.register_blueprint(auth_bp)
-_apply_rate_limits()  # apply rate limits after app is ready
 
 # Exempt auth routes from CSRF (login/setup have no session to protect)
 if csrf:

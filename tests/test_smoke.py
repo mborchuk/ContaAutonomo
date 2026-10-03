@@ -13,9 +13,10 @@ def test_health_endpoint(client):
 
 
 def test_login_page_reachable(client):
-    # First run redirects to /auth/setup; otherwise renders the login page.
-    resp = client.get('/auth/login')
-    assert resp.status_code in (200, 302)
+    # The auth blueprint has no URL prefix. First run redirects to /setup;
+    # otherwise the login page renders.
+    resp = client.get('/login')
+    assert resp.status_code == 200 or resp.headers['Location'].endswith('/setup')
 
 
 def test_dashboard_requires_auth(client):
