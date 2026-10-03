@@ -179,6 +179,7 @@ class TaxEsFormsModule(BaseModule):
             is_equipment=irpf.is_equipment if irpf else self._default_is_equipment,
             carried_forward=carried)
         result['meta']['carried_from'] = carried_from
+        result['meta']['checks'] = self._data_checks(invoices, expenses)
         result['labels'] = MODELO_303_BOXES
         result['year'] = year
         result['quarter'] = quarter
@@ -192,6 +193,28 @@ class TaxEsFormsModule(BaseModule):
         result['table_version'] = BOX_TABLE_VERSION
         result['box_59'] = self._draft_303(year, quarter)['boxes']['59']
         return result
+
+    # Categories that never carry VAT (exempt or not a purchase).
+    _NO_VAT_CATEGORIES = {'insurance', 'social security'}
+
+    def _data_checks(self, invoices, expenses):
+        """Things in the data the owner should look at before filing."""
+        checks = []
+        unpaid = [i for i in invoices if getattr(i, 'status', None) not in ('paid', 'cancelled')]
+        if unpaid:
+            checks.append(
+                f'{len(unpaid)} invoice(s) of this quarter are not marked paid — '
+                'they are still counted (invoice date): '
+                + ', '.join(i.invoice_number for i in unpaid))
+        unmarked = [e for e in expenses
+                    if e.vat_amount == 0 and not getattr(e, 'reverse_charge', None)
+                    and (e.category or '').strip().lower() not in self._NO_VAT_CATEGORIES]
+        if unmarked:
+            checks.append(
+                f'{len(unmarked)} expense(s) without Spanish VAT are not marked '
+                '"Reverse charge" — if the supplier is outside Spain, mark them: '
+                + ', '.join((e.description or '?').splitlines()[0][:40] for e in unmarked))
+        return checks
 
     def _irpf_module(self):
         mm = getattr(self.core, 'module_manager', None)
