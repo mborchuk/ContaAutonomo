@@ -289,7 +289,7 @@ def compute_modelo_130(invoices_ytd, expenses_ytd, irpf_rate,
 
 
 def _vat_id(vat_number):
-    """('CZ', '17378702') from 'CZ 173 78 702'; ('', '') when unusable."""
+    """('CZ', '12345678') from 'CZ 123 45 678'; ('', '') when unusable."""
     raw = "".join(ch for ch in (vat_number or "") if ch.isalnum()).upper()
     if len(raw) < 3 or not raw[:2].isalpha():
         return "", ""
