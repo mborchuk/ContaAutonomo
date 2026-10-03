@@ -12,9 +12,16 @@ permissions:
   contents: read
   security-events: write
 
+# Gates (owner decision 2026-10-03): a job fails on CRITICAL or HIGH findings
+# that have a fix available. Accepted exceptions live in .trivyignore and
+# .pip-audit-ignore, each with a reason and a review date. Every job also
+# publishes its full report (all severities) before the gate runs.
+
 env:
   # Pin Trivy version explicitly — do NOT use trivy-action (compromised March 2026)
   TRIVY_VERSION: "0.69.3"
+  # sha256 of trivy_${TRIVY_VERSION}_Linux-64bit.deb from the release's checksums.txt
+  TRIVY_DEB_SHA256: "a484057aafde31089cf2558ca0f79a4bc835125a5ee6834183a5bcf0735af358"
 
 jobs:
   dependency-audit:
@@ -25,25 +32,46 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
-      - name: Install dependencies
+      - name: Install pip-audit
         run: |
           python -m pip install --upgrade pip
-          pip install pip-audit safety
+          pip install pip-audit
 
+      # Report: every known vulnerability in the locked dependencies.
       - name: pip-audit (PyPI advisory DB)
-        run: pip-audit -r requirements.txt --desc --output pip-audit-results.txt || true
-
-      - name: safety check (Safety DB)
-        run: safety check -r requirements.txt --output text || true
+        run: |
+          pip-audit -r requirements.txt --require-hashes --disable-pip --desc \
+            --format json --output pip-audit-results.json || true
+          pip-audit -r requirements.txt --require-hashes --disable-pip --desc || true
 
       - name: Upload audit results
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: dependency-audit
-          path: pip-audit-results.txt
+          path: pip-audit-results.json
+
+      # Gate: fail on any vulnerability that has a fixed version, unless
+      # accepted in .pip-audit-ignore. pip-audit reports no severity; a fix
+      # being available is the actionable signal.
+      - name: Fail on fixable vulnerabilities
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          ignore = {l.split('#')[0].strip()
+                    for l in pathlib.Path('.pip-audit-ignore').read_text().splitlines()}
+          ignore.discard('')
+          report = json.load(open('pip-audit-results.json'))
+          bad = [(d['name'], d['version'], v['id'], v['fix_versions'])
+                 for d in report['dependencies'] for v in d.get('vulns', [])
+                 if v.get('fix_versions') and v['id'] not in ignore
+                 and not ignore & set(v.get('aliases', []))]
+          for name, version, vid, fixes in bad:
+              print(f'::error::{name} {version}: {vid} (fixed in {", ".join(fixes)})')
+          sys.exit(1 if bad else 0)
+          PY
 
   codeql:
     name: CodeQL Analysis
@@ -70,11 +98,12 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Install bandit
         run: pip install bandit[toml]
 
+      # Report: all severities.
       - name: Run bandit
         run: bandit -r . -x ./.venv,./instance,./backups,./__pycache__ -f json -o bandit-results.json || true
 
@@ -89,6 +118,10 @@ jobs:
           name: bandit-results
           path: bandit-results.json
 
+      # Gate: HIGH severity at medium or high confidence (bandit has no CRITICAL).
+      - name: Fail on high-severity findings
+        run: bandit -q -r . -x ./.venv,./instance,./backups,./__pycache__,./tests -lll -ii
+
   trivy-fs:
     name: Trivy Filesystem Scan
     runs-on: ubuntu-latest
@@ -100,12 +133,10 @@ jobs:
       - name: Install Trivy CLI
         run: |
           wget -qO- "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" -O trivy.deb
+          echo "${TRIVY_DEB_SHA256}  trivy.deb" | sha256sum --check --strict
           sudo dpkg -i trivy.deb
           rm trivy.deb
           trivy --version
-
-      - name: Run Trivy (filesystem)
-        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format table .
 
       - name: Trivy SARIF output
         run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-fs.sarif .
@@ -117,6 +148,9 @@ jobs:
           sarif_file: trivy-fs.sarif
           category: trivy-filesystem
 
+      - name: Fail on fixable CRITICAL/HIGH (filesystem)
+        run: trivy fs --severity CRITICAL,HIGH --ignore-unfixed --ignorefile .trivyignore --exit-code 1 --format table .
+
   trivy-docker:
     name: Trivy Docker Image Scan
     runs-on: ubuntu-latest
@@ -127,15 +161,13 @@ jobs:
       - name: Install Trivy CLI
         run: |
           wget -qO- "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.deb" -O trivy.deb
+          echo "${TRIVY_DEB_SHA256}  trivy.deb" | sha256sum --check --strict
           sudo dpkg -i trivy.deb
           rm trivy.deb
           trivy --version
 
       - name: Build image
         run: docker build -t contaautonomo:scan .
-
-      - name: Run Trivy (image)
-        run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format table contaautonomo:scan
 
       - name: Trivy SARIF output
         run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-image.sarif contaautonomo:scan
@@ -146,3 +178,6 @@ jobs:
         with:
           sarif_file: trivy-image.sarif
           category: trivy-docker
+
+      - name: Fail on fixable CRITICAL/HIGH (image)
+        run: trivy image --severity CRITICAL,HIGH --ignore-unfixed --ignorefile .trivyignore --exit-code 1 --format table contaautonomo:scan

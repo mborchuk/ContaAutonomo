@@ -1,0 +1,3 @@
+# Accepted Trivy findings (CRITICAL/HIGH with a fix available) that must not
+# fail CI. One vulnerability ID per line, preceded by a comment with the
+# reason, who accepted it and a review date. Empty means no exceptions.

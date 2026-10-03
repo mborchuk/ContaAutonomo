@@ -51,7 +51,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.14 (the version of the Docker image and CI)
 - pip
 
 ### Installation
