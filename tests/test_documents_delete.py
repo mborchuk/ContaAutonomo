@@ -1,8 +1,6 @@
 """Documents module: deleting a document with children must not hit the
 FOREIGN KEY constraint (document_file / document_history / document_note all
 reference document.id and SQLite runs with foreign_keys=ON)."""
-from datetime import datetime
-
 import pytest
 
 

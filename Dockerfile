@@ -11,7 +11,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt gunicorn
+# pip is only needed at build time. Removing it from the runtime image also
+# removes its vendored copies of setuptools and msgpack, which carry CVEs the
+# app never uses.
+RUN pip install --no-cache-dir -r requirements.txt gunicorn && \
+    pip uninstall -y pip
 
 COPY . .
 
