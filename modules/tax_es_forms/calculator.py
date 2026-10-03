@@ -286,3 +286,48 @@ def compute_modelo_130(invoices_ytd, expenses_ytd, irpf_rate,
         "irpf_rate": irpf_rate,
         "meta": {"basis": "cumulative_ytd"},
     }
+
+
+def _vat_id(vat_number):
+    """('CZ', '17378702') from 'CZ 173 78 702'; ('', '') when unusable."""
+    raw = "".join(ch for ch in (vat_number or "") if ch.isalnum()).upper()
+    if len(raw) < 3 or not raw[:2].isalpha():
+        return "", ""
+    return raw[:2], raw[2:]
+
+
+def compute_modelo_349(invoices):
+    """Modelo 349 (operaciones intracomunitarias) for a quarter.
+
+    One line per EU business customer: country code and number from its VAT
+    number, key "S" (services — the only operations the app invoices), and the
+    sum of the taxable bases. The total must equal Modelo 303 box 59.
+
+    Args:
+        invoices: invoice-like objects already filtered to the quarter.
+    """
+    operators = {}
+    warnings = []
+    for inv in invoices:
+        if not _active(inv) or _customer_tax_type(inv) != "eu_b2b":
+            continue
+        base, cuota = _invoice_output_vat(inv, 0.0)
+        if cuota:
+            continue
+        customer = getattr(inv, "customer", None)
+        name = getattr(customer, "name", None) or getattr(inv, "client_name", "")
+        country, number = _vat_id(getattr(customer, "vat_number", None))
+        if not number:
+            warnings.append(f"{name}: no EU VAT number — line incomplete")
+        key = (country, number, name)
+        operators[key] = operators.get(key, 0.0) + _invoice_base_eur(inv)
+
+    lines = [{"country": c, "vat_number": n, "name": name, "key": "S",
+              "base": _round2(total)}
+             for (c, n, name), total in sorted(operators.items(), key=lambda kv: kv[0][2])]
+    return {
+        "form": "349",
+        "boxes": {"01": len(lines), "02": _round2(sum(l["base"] for l in lines))},
+        "operators": lines,
+        "meta": {"warnings": warnings},
+    }
