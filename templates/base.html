@@ -80,7 +80,10 @@
             </div>
 
             <div class="nav-actions">
-                <a href="{{ url_for('auth.logout') }}" class="nav-btn nav-btn-primary">Logout</a>
+                <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="nav-btn nav-btn-primary">Logout</button>
+                </form>
             </div>
         </nav>
     </header>
