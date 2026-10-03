@@ -49,7 +49,16 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
 - *IVA soportado (input VAT)*: per-expense `vat_amount` × `deductible_pct`,
   skipping non-deductible expenses. Legacy expenses without VAT data are
   excluded and counted — the page shows how many, so the user knows the
-  deduction figure is understated.
+  deduction figure is understated. Expenses with zero Spanish VAT are not in
+  the deductible base. Equipment (bienes de inversión: an equipment category
+  at or above the threshold set in Settings → IRPF; default "Equipment",
+  300 EUR net) goes to boxes 30/31, everything else to 28/29.
+- *Box 59 / 120*: taxable base of invoices to EU business customers
+  (`eu_b2b`) and to customers outside the EU (`non_eu`).
+- *Box 110 / 78 / 87*: the credit carried from the previous quarter's
+  **filed** Modelo 303 uploaded in Tax Forms (its box 87 plus its negative
+  result, unless a refund was requested); applied to a positive result;
+  box 71 = 46 − 78.
 
 **Modelo 130**
 
