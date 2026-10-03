@@ -202,7 +202,7 @@ def login():
     return render_template('login.html', auth_providers=providers)
 
 
-@auth_bp.route('/logout')
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Logout — notify providers and modules."""
     _activity('logout', 'auth')

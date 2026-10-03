@@ -236,6 +236,9 @@ class BackupModule(BaseModule):
         import threading
 
         def _deferred_startup_backup():
+            # Every worker loads this module; only the scheduler leader backs up.
+            if not self.core.scheduler.is_leader:
+                return
             with self.core.app.app_context():
                 try:
                     self._perform_startup_backup()

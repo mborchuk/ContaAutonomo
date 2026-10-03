@@ -47,10 +47,10 @@
     <h2 style="margin-top: 0;">Session</h2>
     <p style="color: var(--color-text-muted); margin-bottom: 20px;">Manage your current session.</p>
 
-    <a href="{{ url_for('auth.logout') }}" class="btn btn-danger"
-       onclick="return confirm('Are you sure you want to logout?')">
-        Logout
-    </a>
+    <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to logout?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">Logout</button>
+    </form>
 </div>
 
 <style>
