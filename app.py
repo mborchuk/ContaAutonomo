@@ -2379,6 +2379,27 @@ def toggle_module(module_id):
 # MODULE MANAGER INITIALIZATION
 # ============================================================================
 
+def init_database():
+    """Create tables, apply core schema migrations and ensure the Settings row.
+
+    Idempotent; every entry point (python app.py, docker_entrypoint.py,
+    gunicorn workers) calls it before loading modules. Needs an app context.
+    """
+    from schema_migrations import run_migrations
+    run_migrations(db.engine, db.metadata)
+
+    if not Settings.query.first():
+        db.session.add(Settings(
+            tracked_currencies='USD,EUR,GBP,CZK',
+            base_currency='EUR',
+            default_currency='EUR',
+            default_vat_rate=21.0,
+            default_irpf_rate=20.0,
+        ))
+        db.session.commit()
+        logging.getLogger(__name__).info('Created default Settings row (first run)')
+
+
 def init_module_manager():
     """Initialize the module manager, discover and load enabled modules"""
     global module_manager
@@ -2471,7 +2492,7 @@ def _apply_currency_provider(s, mgr):
 if module_manager is None and os.environ.get('GUNICORN_WORKERS'):
     try:
         with app.app_context():
-            db.create_all()
+            init_database()
             init_module_manager()
             s = Settings.query.first()
             if s and module_manager:
@@ -2490,92 +2511,11 @@ if __name__ == '__main__':
     app.logger.setLevel(logging.INFO)
 
     with app.app_context():
-        db.create_all()
-
-        # Migrate: add social_security_monthly column if missing
-        from sqlalchemy import inspect as sa_inspect, text
-        inspector = sa_inspect(db.engine)
-        columns = [c['name'] for c in inspector.get_columns('settings')]
-        if 'social_security_monthly' not in columns:
-            with db.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE settings ADD COLUMN social_security_monthly FLOAT DEFAULT 0.0'))
-                conn.commit()
-
-        # Migrate: add log settings columns if missing
-        columns = [c['name'] for c in inspector.get_columns('settings')]
-        for col, typedef in [('log_path', "VARCHAR(500) DEFAULT ''"),
-                             ('log_retention_days', 'INTEGER DEFAULT 30'),
-                             ('log_use_external_storage', 'BOOLEAN DEFAULT 0'),
-                             ('log_storage', "VARCHAR(10) DEFAULT 'file'")]:
-            if col not in columns:
-                with db.engine.connect() as conn:
-                    conn.execute(text(f'ALTER TABLE settings ADD COLUMN {col} {typedef}'))
-                    conn.commit()
-
-        # Migrate: add pdf_storage_key column to invoice if missing
-        inv_columns = [c['name'] for c in inspector.get_columns('invoice')]
-        if 'pdf_storage_key' not in inv_columns:
-            with db.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE invoice ADD COLUMN pdf_storage_key VARCHAR(500)'))
-                conn.commit()
-
-        # Migrate: add tax rate columns if missing
-        columns = [c['name'] for c in inspector.get_columns('settings')]
-        for col, typedef in [('default_vat_rate', 'FLOAT DEFAULT 21.0'),
-                             ('default_irpf_rate', 'FLOAT DEFAULT 20.0'),
-                             ('currency_provider', "VARCHAR(50) DEFAULT 'ecb'"),
-                             ('currency_provider_api_key', "VARCHAR(200) DEFAULT ''")]:
-            if col not in columns:
-                with db.engine.connect() as conn:
-                    conn.execute(text(f'ALTER TABLE settings ADD COLUMN {col} {typedef}'))
-                    conn.commit()
-
-        # Migrate: add payment_methods column if missing
-        columns = [c['name'] for c in inspector.get_columns('settings')]
-        if 'payment_methods' not in columns:
-            with db.engine.connect() as conn:
-                conn.execute(text("ALTER TABLE settings ADD COLUMN payment_methods TEXT DEFAULT 'Bank Transfer,PayPal,Credit Card,Cash,Crypto'"))
-                conn.commit()
-
-        # F2 — invoice lifecycle: series/sequence, rectificative links, fiscal snapshot
-        inv_columns = [c['name'] for c in inspector.get_columns('invoice')]
-        for col, typedef in [('series', 'VARCHAR(20)'),
-                             ('sequence_number', 'INTEGER'),
-                             ('issued_at', 'DATETIME'),
-                             ('rectifies_invoice_id', 'INTEGER'),
-                             ('rectification_type', 'VARCHAR(20)'),
-                             ('snap_vat_rate', 'FLOAT'),
-                             ('snap_vat_amount', 'FLOAT'),
-                             ('snap_taxable_base', 'FLOAT'),
-                             ('snap_customer', 'TEXT')]:
-            if col not in inv_columns:
-                with db.engine.connect() as conn:
-                    conn.execute(text(f'ALTER TABLE invoice ADD COLUMN {col} {typedef}'))
-                    conn.commit()
-
-        # F2-D4 — per-line VAT rate on invoice items
-        item_columns = [c['name'] for c in inspector.get_columns('invoice_item')]
-        if 'vat_rate' not in item_columns:
-            with db.engine.connect() as conn:
-                conn.execute(text('ALTER TABLE invoice_item ADD COLUMN vat_rate FLOAT'))
-                conn.commit()
+        init_database()
 
         # Initialize module system
         mgr = init_module_manager()
-
-        # Ensure default Settings row exists (first run)
         s = Settings.query.first()
-        if not s:
-            s = Settings(
-                tracked_currencies='USD,EUR,GBP,CZK',
-                base_currency='EUR',
-                default_currency='EUR',
-                default_vat_rate=21.0,
-                default_irpf_rate=20.0,
-            )
-            db.session.add(s)
-            db.session.commit()
-            logger.info('Created default Settings row (first run)')
 
         # Apply log settings from DB
         if s and mgr:
