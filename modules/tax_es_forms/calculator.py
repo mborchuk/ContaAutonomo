@@ -208,6 +208,7 @@ def compute_modelo_130(invoices_ytd, expenses_ytd, irpf_rate,
         "03": _round2(rendimiento),
         "04": _round2(pago),
         "05": _round2(prior_pago),
+        "06": 0.0,  # retenciones not modelled here; see tax_es_irpf
         "07": _round2(resultado),
     }
     return {

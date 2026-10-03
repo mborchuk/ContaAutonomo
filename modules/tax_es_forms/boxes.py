@@ -45,5 +45,6 @@ MODELO_130_BOXES = {
     "03": "Rendimiento (01 − 02)",
     "04": "20% del rendimiento (casilla 03, si es positivo)",
     "05": "Pagos fraccionados de trimestres anteriores",
-    "07": "Resultado — pago fraccionado del trimestre (04 − 05)",
+    "06": "Retenciones e ingresos a cuenta (acumulado del ejercicio)",
+    "07": "Resultado — pago fraccionado del trimestre (04 − 05 − 06)",
 }
