@@ -61,6 +61,9 @@ class BaseModule(ABC):
         """Module version"""
         return '0.1.0'
 
+    # Enabled on an installation that has never toggled the module.
+    enabled_by_default = False
+
     @property
     def dependencies(self):
         """Module ids that must be enabled for this module to work correctly.
@@ -1769,7 +1772,10 @@ class ModuleManager:
         """Check if a module is enabled"""
         ModuleEnabled = self._get_module_enabled_model()
         record = ModuleEnabled.query.filter_by(module_id=module_id).first()
-        return record.enabled if record else False
+        if record:
+            return record.enabled
+        mod_class = self.discovered.get(module_id)
+        return bool(getattr(mod_class, 'enabled_by_default', False))
 
     def get_all_module_states(self):
         """Get list of all discovered modules with their enabled state"""
@@ -1835,7 +1841,9 @@ class ModuleManager:
         record = ModuleEnabled.query.filter_by(module_id=module_id).first()
         if record:
             record.enabled = False
-            self.db.session.commit()
+        else:  # persist the choice, or enabled_by_default would win on restart
+            self.db.session.add(ModuleEnabled(module_id=module_id, enabled=False))
+        self.db.session.commit()
 
         # Remove from active modules
         if module_id in self.modules:

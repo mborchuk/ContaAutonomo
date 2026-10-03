@@ -9,6 +9,8 @@ services:
       - FLASK_DEBUG=0
       - GUNICORN_WORKERS=1
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
+      # Backup encryption key; empty = key file instance/backup.key (created on first backup)
+      - BACKUP_KEY=${BACKUP_KEY:-}
     volumes:
       - app_data:/app/instance
       - app_backups:/app/backups
