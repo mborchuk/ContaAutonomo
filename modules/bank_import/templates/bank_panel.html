@@ -1,0 +1,8 @@
+{# Dashboard nudge — unmatched bank movements. #}
+<p style="font-size: 14px; margin: 0;">
+    <strong>{{ data.count }}</strong> bank movement{{ 's' if data.count != 1 }}
+    awaiting reconciliation.
+</p>
+<p class="fine-print" style="margin-top: var(--space-2);">
+    <a href="{{ url_for('bank_import.bank_index') }}">Reconcile →</a>
+</p>

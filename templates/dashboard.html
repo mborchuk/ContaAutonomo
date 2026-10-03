@@ -44,10 +44,10 @@
             <div class="ca-info-col">
                 <div class="ca-info-label">Currency Converter</div>
                 <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 8px;">
-                    <input type="number" id="converter-amount" value="100" step="0.01"
+                    <input type="number" id="converter-amount" aria-label="Amount to convert" value="100" step="0.01"
                            style="width: 80px; padding: 6px; font-size: 14px;"
                            oninput="convertCurrency()">
-                    <select id="converter-from" style="flex: 1; padding: 6px; font-size: 13px;"
+                    <select id="converter-from" aria-label="Convert from currency" style="flex: 1; padding: 6px; font-size: 13px;"
                             onchange="convertCurrency()">
                         {% for currency in tracked_currencies %}
                         <option value="{{ currency }}" {% if currency == 'USD' %}selected{% endif %}>{{ currency }}</option>
@@ -55,9 +55,9 @@
                     </select>
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="number" id="converter-result" readonly
+                    <input type="number" id="converter-result" aria-label="Converted amount" aria-live="polite" readonly
                            style="width: 80px; padding: 6px; font-size: 14px; background: var(--color-surface-3);">
-                    <select id="converter-to" style="flex: 1; padding: 6px; font-size: 13px;"
+                    <select id="converter-to" aria-label="Convert to currency" style="flex: 1; padding: 6px; font-size: 13px;"
                             onchange="convertCurrency()">
                         {% for currency in tracked_currencies %}
                         <option value="{{ currency }}" {% if currency == base_currency %}selected{% endif %}>{{ currency }}</option>
@@ -261,7 +261,7 @@
                 <tr class="clickable-row" data-href="{{ url_for('view_invoice', id=invoice.id) }}">
                     <td>{{ invoice.invoice_number }}</td>
                     <td>
-                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;">
+                        <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success btn-sm">
                             {{ invoice.invoice_number }}.pdf
                         </a>
                     </td>
@@ -286,9 +286,9 @@
                     <td>{{ "%.4f"|format(invoice.display_rate) }}</td>
                     <td>
                         {% if invoice.status == 'paid' %}
-                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">View</a>
+                        <a href="{{ url_for('view_invoice', id=invoice.id) }}" class="btn btn-primary btn-sm">View</a>
                         {% else %}
-                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
+                        <a href="{{ url_for('edit_invoice', id=invoice.id) }}" class="btn btn-primary btn-sm">Edit</a>
                         {% endif %}
                     </td>
                 </tr>

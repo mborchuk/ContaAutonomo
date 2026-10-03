@@ -58,8 +58,37 @@ class TaxManagementModule(BaseModule):
     @property
     def nav_items(self):
         return [
-            {'label': 'Tax Forms', 'endpoint': 'tax_management.tax_forms_index', 'icon': '📋'}
+            {'label': 'Tax Forms', 'endpoint': 'tax_management.tax_forms_index', 'icon': '📋'},
+            {'label': 'Obligations', 'endpoint': 'tax_management.obligations_index',
+             'icon': '✅', 'group': 'System'},
         ]
+
+    def on_enable(self):
+        """F10 — filing-workflow columns on tax_form (idempotent migration).
+
+        Existing rows backfill to status='filed': they carry an evidence PDF,
+        so "filed" is the honest historical default.
+        """
+        from sqlalchemy import inspect as sa_inspect, text
+        migrations = [
+            ('status', "VARCHAR(20) DEFAULT 'filed'"),
+            ('amount', 'FLOAT'),
+            ('filed_date', 'DATE'),
+            ('payment_date', 'DATE'),
+        ]
+        try:
+            inspector = sa_inspect(self._db.engine)
+            cols = [c['name'] for c in inspector.get_columns('tax_form')]
+            with self._db.engine.connect() as conn:
+                for name, typedef in migrations:
+                    if name not in cols:
+                        conn.execute(text(
+                            f'ALTER TABLE tax_form ADD COLUMN {name} {typedef}'))
+                conn.execute(text(
+                    "UPDATE tax_form SET status='filed' WHERE status IS NULL"))
+                conn.commit()
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.error('Tax form workflow migration failed: %s', e)
 
     @property
     def settings_panels(self):
@@ -88,6 +117,13 @@ class TaxManagementModule(BaseModule):
             original_filename = db.Column(db.String(200))
             uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
             notes = db.Column(db.Text)
+            # F10 — filing workflow: pending -> filed -> paid, with amount and
+            # evidence. Rows created by upload default to 'filed' (they carry a
+            # PDF); record-only rows (no file) use file_path=''.
+            status = db.Column(db.String(20), default='filed')
+            amount = db.Column(db.Float)
+            filed_date = db.Column(db.Date)
+            payment_date = db.Column(db.Date)
 
             def __repr__(self):
                 if self.quarter:
@@ -144,6 +180,16 @@ class TaxManagementModule(BaseModule):
         @login_required
         def tax_forms_delete(id):
             return self._delete_tax_form(id)
+
+        @bp.route('/obligations')
+        @login_required
+        def obligations_index():
+            return self._obligations_view()
+
+        @bp.route('/obligations/record', methods=['POST'])
+        @login_required
+        def obligations_record():
+            return self._record_filing()
 
         @bp.route('/ss-payments/add', methods=['POST'])
         @login_required
@@ -305,9 +351,24 @@ class TaxManagementModule(BaseModule):
                     form_type=form_type, year=year,
                     quarter=int(quarter) if quarter else None,
                     file_path=file_path, original_filename=file.filename,
-                    notes=notes
+                    notes=notes, status='filed',
+                    filed_date=datetime.utcnow().date(),
                 )
                 self._db.session.add(new_form)
+
+            # F10 — optional workflow fields on upload.
+            target = existing or new_form
+            raw_amount = request.form.get('amount')
+            if raw_amount not in (None, ''):
+                try:
+                    target.amount = float(raw_amount)
+                except (TypeError, ValueError):
+                    pass
+            status = request.form.get('status')
+            if status in ('pending', 'filed', 'paid'):
+                target.status = status
+                if status == 'paid' and not target.payment_date:
+                    target.payment_date = datetime.utcnow().date()
 
             self._db.session.commit()
             flash(f'Tax form {form_type} {"updated" if existing else "uploaded"} successfully!', 'success')
@@ -446,14 +507,158 @@ class TaxManagementModule(BaseModule):
             'order': 10
         }]
 
+    # --- F10: obligations workflow ---------------------------------------- #
+
+    def _obligation_rows(self, year, today=None):
+        """Cross the fiscal-calendar dataset with recorded TaxForms.
+
+        One row per obligation instance (form × period) for `year`, each with
+        its filing status: pending / filed / paid / overdue. The calendar
+        dataset ships with the fiscal_calendar module but is plain data — safe
+        to import whether or not that module is enabled.
+        """
+        from datetime import date as _date
+        from modules.fiscal_calendar.calendar_data import all_deadlines
+
+        today = today or _date.today()
+
+        # Which forms does the user file? Prefer fiscal_calendar's selection,
+        # else infer from TaxForm history, else all.
+        selected = None
+        fc = self.core.module_manager.modules.get('fiscal_calendar') \
+            if self.core.module_manager else None
+        if fc:
+            try:
+                selected = fc._selected_forms()
+            except Exception:  # pragma: no cover - defensive
+                selected = None
+        if selected is None:
+            rows = self._db.session.query(self.TaxForm.form_type).distinct().all()
+            selected = {r[0] for r in rows if r[0]} or None
+
+        forms = {f.form_type + f'|{f.year}|{f.quarter or 0}': f
+                 for f in self.TaxForm.query.filter_by(year=year).all()}
+
+        out = []
+        for entry in all_deadlines():
+            if entry['year'] != year:
+                continue
+            if selected is not None and entry['form'] not in selected:
+                continue
+            key = f"{entry['form']}|{entry['year']}|{entry['quarter'] or 0}"
+            tax_form = forms.get(key)
+            if tax_form and tax_form.status in ('filed', 'paid'):
+                status = tax_form.status
+            elif today > entry['window_end']:
+                status = 'overdue'
+            else:
+                status = 'pending'
+            out.append({
+                'form': entry['form'],
+                'period_label': entry['period_label'],
+                'quarter': entry['quarter'],
+                'window_start': entry['window_start'],
+                'window_end': entry['window_end'],
+                'status': status,
+                'tax_form': tax_form,
+            })
+        return out
+
+    def _obligations_view(self):
+        year = request.args.get('year', type=int) or datetime.now().year
+        rows = self._obligation_rows(year)
+        years = sorted({y for (y,) in
+                        self._db.session.query(self.TaxForm.year).distinct()}
+                       | {datetime.now().year, year}, reverse=True)
+        # Yearly totals per form type (F10-D3: "what did I pay in 303s?").
+        totals = {}
+        for f in self.TaxForm.query.filter_by(year=year).all():
+            if f.amount:
+                totals[f.form_type] = totals.get(f.form_type, 0.0) + f.amount
+        return render_template('tax_obligations.html', rows=rows, year=year,
+                               years=years, totals=totals)
+
+    def _record_filing(self):
+        """Record a filing for an obligation: status + amount, evidence optional.
+
+        Links to an existing uploaded TaxForm when one matches; otherwise
+        creates a record-only row (file_path='' — evidence can be uploaded
+        later through the normal upload flow, which updates the same row).
+        """
+        try:
+            form_type = request.form['form_type']
+            year = int(request.form['year'])
+            quarter = request.form.get('quarter') or None
+            status = request.form.get('status', 'filed')
+            if status not in ('pending', 'filed', 'paid'):
+                status = 'filed'
+            amount = request.form.get('amount')
+
+            query = self.TaxForm.query.filter_by(form_type=form_type, year=year)
+            query = query.filter_by(quarter=int(quarter) if quarter else None)
+            tax_form = query.first()
+            if not tax_form:
+                tax_form = self.TaxForm(form_type=form_type, year=year,
+                                        quarter=int(quarter) if quarter else None,
+                                        file_path='')
+                self._db.session.add(tax_form)
+            tax_form.status = status
+            if amount not in (None, ''):
+                tax_form.amount = float(amount)
+            if status in ('filed', 'paid') and not tax_form.filed_date:
+                tax_form.filed_date = datetime.utcnow().date()
+            if status == 'paid' and not tax_form.payment_date:
+                tax_form.payment_date = datetime.utcnow().date()
+            self._db.session.commit()
+            self.core.log_activity(
+                'tax_filing_recorded', 'system',
+                f'{form_type} {year}' + (f' Q{quarter}' if quarter else '')
+                + f' -> {status}')
+            flash(f'Filing recorded: {form_type} {year}'
+                  + (f' Q{quarter}' if quarter else '') + f' — {status}.',
+                  'success')
+        except (KeyError, TypeError, ValueError) as e:
+            self._db.session.rollback()
+            self.logger.error('Record filing failed: %s', e)
+            flash('Could not record filing. Check the input.', 'danger')
+        return redirect(url_for('tax_management.obligations_index',
+                                year=request.form.get('year')))
+
     def get_report_sections(self):
-        """Provide SS data for financial reports"""
+        """Provide SS data + filings history for financial reports"""
         return [{
             'id': 'ss_payments',
             'title': 'Social Security Payments',
             'description': 'Monthly Social Security (autónomo) payments with dates and amounts.',
             'query_fn': self._get_ss_for_report
+        }, {
+            'id': 'tax_filings',
+            'title': 'Tax Filings',
+            'description': 'Recorded tax filings (form, period, status, amount).',
+            'query_fn': self._get_filings_for_report,
+            'columns': [
+                {'key': 'form_type', 'label': 'Form', 'width': 2.5},
+                {'key': 'period', 'label': 'Period', 'width': 3},
+                {'key': 'status', 'label': 'Status', 'width': 2.5},
+                {'key': 'filed_date', 'label': 'Filed', 'width': 3},
+                {'key': 'amount_eur', 'label': 'Amount (EUR)', 'width': 3},
+            ],
+            'total_field': 'amount_eur',
         }]
+
+    def _get_filings_for_report(self, start_date, end_date, doc_ids=None):
+        """Filings whose period falls inside the report window (by year)."""
+        forms = self.TaxForm.query.filter(
+            self.TaxForm.year >= start_date.year,
+            self.TaxForm.year <= end_date.year,
+        ).order_by(self.TaxForm.year, self.TaxForm.quarter).all()
+        return [{
+            'form_type': f.form_type,
+            'period': f'{f.year}' + (f' Q{f.quarter}' if f.quarter else ' (annual)'),
+            'status': (f.status or 'filed').upper(),
+            'filed_date': f.filed_date.strftime('%d/%m/%Y') if f.filed_date else '',
+            'amount_eur': f.amount or 0.0,
+        } for f in forms]
 
     def _get_ss_for_report(self, start_date, end_date):
         """Query SS payments for a date range (used by reports)"""
@@ -515,12 +720,25 @@ class TaxManagementModule(BaseModule):
             ss_monthly = settings.social_security_monthly
             ss_annual = ss_monthly * 12
 
+        # F10 — surface unfiled-overdue obligations on the dashboard panel.
+        notes = []
+        try:
+            overdue = [r for r in self._obligation_rows(current_year)
+                       if r['status'] == 'overdue']
+            if overdue:
+                labels = ', '.join(f"{r['form']} {r['period_label']}"
+                                   for r in overdue[:4])
+                notes.append(f'⚠ {len(overdue)} overdue unfiled obligation(s): '
+                             f'{labels}.')
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.warning('Overdue obligations check failed: %s', e)
+
         return {
             'summary_columns': [],
             'breakdown_rows': [
                 {'label': f'Social Security (€{ss_monthly:.2f}/month)', 'amount': ss_annual}
             ],
-            'notes': [],
+            'notes': notes,
             'deductions': 0,
             'tax_total': ss_annual
         }

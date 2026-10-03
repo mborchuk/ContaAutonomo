@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Tax Obligations{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Tax Obligations — {{ year }}</h1>
+    <form method="GET" action="{{ url_for('tax_management.obligations_index') }}" class="page-actions">
+        <select name="year" onchange="this.form.submit()">
+            {% for y in years %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<p class="fine-print">
+    Deadlines come from the fiscal calendar dataset — verify against the official
+    AEAT calendar. Recording a filing here answers "did I file Q1?" at a glance;
+    upload the evidence PDF via <a href="{{ url_for('tax_management.tax_forms_index') }}">Tax Forms</a>
+    and it links automatically (same form + period).
+</p>
+
+{% if rows %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Form</th>
+            <th>Period</th>
+            <th>Filing window</th>
+            <th>Status</th>
+            <th>Amount (EUR)</th>
+            <th>Evidence</th>
+            <th>Record</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in rows %}
+        <tr {% if r.status == 'overdue' %}class="is-highlighted"{% endif %}>
+            <td><strong>Modelo {{ r.form }}</strong></td>
+            <td>{{ r.period_label }}</td>
+            <td>{{ r.window_start.strftime('%d/%m') }} – {{ r.window_end.strftime('%d/%m/%Y') }}</td>
+            <td>
+                {% if r.status == 'paid' %}<span class="status-badge status-sent">paid</span>
+                {% elif r.status == 'filed' %}<span class="status-badge status-sent">filed</span>
+                {% elif r.status == 'overdue' %}<span class="status-badge status-failed">overdue</span>
+                {% else %}<span class="status-badge">pending</span>{% endif %}
+            </td>
+            <td>{{ "%.2f"|format(r.tax_form.amount) if r.tax_form and r.tax_form.amount else '—' }}</td>
+            <td>
+                {% if r.tax_form and r.tax_form.file_path %}
+                <a href="{{ url_for('tax_management.tax_forms_preview', id=r.tax_form.id) }}" target="_blank">📄 view</a>
+                {% else %}—{% endif %}
+            </td>
+            <td>
+                <form method="POST" action="{{ url_for('tax_management.obligations_record') }}"
+                      style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                    <input type="hidden" name="form_type" value="{{ r.form }}">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    <input type="hidden" name="quarter" value="{{ r.quarter or '' }}">
+                    <input type="number" name="amount" step="0.01" aria-label="Paid amount" placeholder="amount"
+                           value="{{ r.tax_form.amount if r.tax_form and r.tax_form.amount else '' }}"
+                           style="width: 90px; padding: 4px;">
+                    <select name="status" aria-label="Filing status" style="padding: 4px;">
+                        <option value="filed" {% if r.status == 'filed' %}selected{% endif %}>filed</option>
+                        <option value="paid" {% if r.status == 'paid' %}selected{% endif %}>paid</option>
+                        <option value="pending" {% if r.status in ('pending', 'overdue') %}selected{% endif %}>pending</option>
+                    </select>
+                    <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if totals %}
+<h3 style="margin-top: var(--space-5);">Recorded totals {{ year }}</h3>
+<div class="stat-grid">
+    {% for form, total in totals.items() %}
+    <div class="stat-card">
+        <h3>Modelo {{ form }}</h3>
+        <p class="stat-value">€{{ "%.2f"|format(total) }}</p>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% else %}
+<p class="empty-state">
+    No obligations for {{ year }} — either the fiscal calendar has no data for this
+    year or no forms are selected in Settings → Fiscal Calendar.
+</p>
+{% endif %}
+{% endblock %}

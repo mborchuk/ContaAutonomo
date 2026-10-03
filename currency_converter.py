@@ -10,6 +10,10 @@ import sys
 import time as _time
 import threading as _threading
 import xml.etree.ElementTree as _ET
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 # --- ECB feed cache ---
@@ -17,7 +21,10 @@ import xml.etree.ElementTree as _ET
 # lookup (invoice create, dashboard load), blocking the worker 2-5s. ECB updates
 # rates once per business day, so cache the raw feed in memory for 4 hours.
 _ECB_HIST_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml"
-_ecb_cache = {'content': None, 'ts': 0.0}
+_ecb_cache = {'content': None, 'root': None, 'ts': 0.0}
+_ecb_parsed_cache = {'content_id': None, 'available_data': None}
+_ecb_rate_cache = {}
+_ecb_multi_cache = {}
 _ECB_TTL = 14400  # seconds (4 hours)
 _ecb_lock = _threading.Lock()
 
@@ -33,8 +40,73 @@ def _get_ecb_xml_root():
             resp.raise_for_status()
             content = resp.content
             _ecb_cache['content'] = content
+            _ecb_cache['root'] = _ET.fromstring(content)
             _ecb_cache['ts'] = now
-    return _ET.fromstring(content)
+            _ecb_parsed_cache['content_id'] = None
+            _ecb_parsed_cache['available_data'] = None
+            _ecb_rate_cache.clear()
+            _ecb_multi_cache.clear()
+            logger.info('Fetched ECB exchange-rate feed')
+        elif _ecb_cache.get('root') is None:
+            _ecb_cache['root'] = _ET.fromstring(content)
+    return _ecb_cache['root']
+
+
+def refresh_ecb_rates():
+    """Force-refresh the cached ECB feed once.
+
+    Dashboard calls this at the start of a page render so every page reload gets
+    fresh ECB data, while all rate lookups during that render reuse the same
+    parsed feed.
+    """
+    with _ecb_lock:
+        resp = requests.get(_ECB_HIST_URL, timeout=10)
+        resp.raise_for_status()
+        content = resp.content
+        _ecb_cache['content'] = content
+        _ecb_cache['root'] = _ET.fromstring(content)
+        _ecb_cache['ts'] = _time.time()
+        _ecb_parsed_cache['content_id'] = None
+        _ecb_parsed_cache['available_data'] = None
+        _ecb_rate_cache.clear()
+        _ecb_multi_cache.clear()
+        logger.info('Refreshed ECB exchange-rate feed')
+
+
+def _get_ecb_available_data():
+    """Return parsed ECB data once per cached feed.
+
+    Shape: [(cube_date, cube_date_str, {'USD': 1.08, ...}), ...], newest first.
+    """
+    root = _get_ecb_xml_root()
+    content_id = id(_ecb_cache['content'])
+    with _ecb_lock:
+        if (_ecb_parsed_cache['content_id'] == content_id
+                and _ecb_parsed_cache['available_data'] is not None):
+            return _ecb_parsed_cache['available_data']
+
+        ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',
+              'xmlns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
+
+        available_data = []
+        for day_cube in root.findall('.//xmlns:Cube[@time]', ns):
+            cube_date_str = day_cube.get('time')
+            cube_date = datetime.strptime(cube_date_str, '%Y-%m-%d')
+
+            day_rates = {}
+            for currency_cube in day_cube.findall('xmlns:Cube[@currency]', ns):
+                currency = currency_cube.get('currency')
+                rate = float(currency_cube.get('rate'))
+                day_rates[currency] = rate
+
+            if day_rates:
+                available_data.append((cube_date, cube_date_str, day_rates))
+
+        available_data.sort(reverse=True)
+        _ecb_parsed_cache['content_id'] = content_id
+        _ecb_parsed_cache['available_data'] = available_data
+        logger.debug('Parsed ECB exchange-rate feed with %d days', len(available_data))
+        return available_data
 
 
 # Comprehensive currency code → symbol mapping.
@@ -79,45 +151,36 @@ def get_exchange_rate_ecb(date_str):
     Returns:
         Tuple of (exchange rate as float, actual date used) or (None, None) if failed
     """
+    if date_str in _ecb_rate_cache:
+        return _ecb_rate_cache[date_str]
+
     try:
-        # ECB publishes daily rates in XML format (cached 4h)
-        root = _get_ecb_xml_root()
-
-        # ECB XML namespace
-        ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',
-              'xmlns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
-
         target_date = datetime.strptime(date_str, '%Y-%m-%d')
-
-        # Collect all available dates with USD rates
-        available_rates = []
-        for day_cube in root.findall('.//xmlns:Cube[@time]', ns):
-            cube_date_str = day_cube.get('time')
-            cube_date = datetime.strptime(cube_date_str, '%Y-%m-%d')
-
-            # Find USD rate for this date
-            for currency_cube in day_cube.findall('xmlns:Cube[@currency="USD"]', ns):
-                rate = float(currency_cube.get('rate'))
-                available_rates.append((cube_date, cube_date_str, rate))
-
-        if not available_rates:
+        available_data = _get_ecb_available_data()
+        if not available_data:
             return None, None
 
-        # Sort by date (most recent first)
-        available_rates.sort(reverse=True)
-
         # Find exact match or nearest earlier date
-        for cube_date, cube_date_str, rate in available_rates:
-            if cube_date <= target_date:
+        for cube_date, cube_date_str, day_rates in available_data:
+            rate = day_rates.get('USD')
+            if rate and cube_date <= target_date:
                 # ECB gives EUR to USD, we need USD to EUR
-                return 1 / rate, cube_date_str
+                result = (1 / rate, cube_date_str)
+                _ecb_rate_cache[date_str] = result
+                return result
 
         # If requested date is before all available dates, use oldest available
-        oldest_date, oldest_date_str, oldest_rate = available_rates[-1]
-        return 1 / oldest_rate, oldest_date_str
+        for _cube_date, cube_date_str, day_rates in reversed(available_data):
+            rate = day_rates.get('USD')
+            if rate:
+                result = (1 / rate, cube_date_str)
+                _ecb_rate_cache[date_str] = result
+                return result
+
+        return None, None
 
     except Exception as e:
-        print(f"ECB method failed: {e}")
+        logger.warning('ECB method failed: %s', e)
         return None, None
 
 
@@ -145,7 +208,7 @@ def get_exchange_rate_exchangerate_api(date_str):
         return None
 
     except Exception as e:
-        print(f"Exchangerate-api method failed: {e}")
+        logger.warning('Exchangerate-api method failed: %s', e)
         return None
 
 
@@ -159,23 +222,18 @@ def get_exchange_rate(date_str):
     Returns:
         Tuple of (exchange rate as float, actual date used as string)
     """
-    # Try ECB first (official source)
     rate, actual_date = get_exchange_rate_ecb(date_str)
     if rate:
-        if actual_date != date_str:
-            print(f"✓ Using European Central Bank rate from {actual_date} (nearest available date)")
-        else:
-            print(f"✓ Using European Central Bank rate")
         return rate, actual_date
 
     # Fallback to exchangerate-api (uses latest rate, not historical)
-    print(f"⚠ ECB data not available for {date_str}, trying alternative source...")
+    logger.warning('ECB data not available for %s, trying alternative source', date_str)
     rate = get_exchange_rate_exchangerate_api(date_str)
     if rate:
-        print(f"✓ Using current exchange rate (historical rate not available)")
+        logger.info('Using current fallback exchange rate for %s', date_str)
         return rate, "current"
 
-    print("Error: Could not fetch exchange rate from any source")
+    logger.error('Could not fetch exchange rate from any source')
     return 1.0, "fallback"
 
 
@@ -191,38 +249,20 @@ def get_multiple_exchange_rates(date_str, currencies, base_currency='EUR'):
     Returns:
         Dictionary with currency codes as keys and exchange rates as values
     """
+    currencies = tuple(dict.fromkeys(c.strip().upper() for c in currencies if c))
+    base_currency = base_currency.strip().upper()
+    cache_key = (date_str, base_currency, currencies)
+    if cache_key in _ecb_multi_cache:
+        return dict(_ecb_multi_cache[cache_key])
+
     rates = {}
 
     try:
-        # Use European Central Bank as primary source (cached 4h)
-        root = _get_ecb_xml_root()
-
-        ns = {'gesmes': 'http://www.gesmes.org/xml/2002-09-01',
-              'xmlns': 'http://www.ecb.int/vocabulary/2002-08-01/eurofxref'}
-
         target_date = datetime.strptime(date_str, '%Y-%m-%d')
-
-        # Collect all available dates with rates
-        available_data = []
-        for day_cube in root.findall('.//xmlns:Cube[@time]', ns):
-            cube_date_str = day_cube.get('time')
-            cube_date = datetime.strptime(cube_date_str, '%Y-%m-%d')
-
-            # Get all currency rates for this date
-            day_rates = {}
-            for currency_cube in day_cube.findall('xmlns:Cube[@currency]', ns):
-                currency = currency_cube.get('currency')
-                rate = float(currency_cube.get('rate'))
-                day_rates[currency] = rate
-
-            if day_rates:
-                available_data.append((cube_date, cube_date_str, day_rates))
+        available_data = _get_ecb_available_data()
 
         if not available_data:
             raise Exception("No ECB data available")
-
-        # Sort by date (most recent first)
-        available_data.sort(reverse=True)
 
         # Find exact match or nearest earlier date
         selected_rates = None
@@ -262,10 +302,11 @@ def get_multiple_exchange_rates(date_str, currencies, base_currency='EUR'):
                 else:
                     rates[currency] = 0.0
 
+        _ecb_multi_cache[cache_key] = dict(rates)
         return rates
 
     except Exception as e:
-        print(f"ECB method failed for multiple rates: {e}")
+        logger.warning('ECB method failed for multiple rates: %s', e)
         # Fallback to exchangerate-api
         try:
             url = f"https://api.exchangerate-api.com/v4/latest/{base_currency}"
@@ -286,7 +327,7 @@ def get_multiple_exchange_rates(date_str, currencies, base_currency='EUR'):
             return rates
 
         except Exception as e2:
-            print(f"Fallback method also failed: {e2}")
+            logger.warning('Fallback method also failed: %s', e2)
             # Return default rates
             return {currency: 1.0 if currency == base_currency else 0.0 for currency in currencies}
 

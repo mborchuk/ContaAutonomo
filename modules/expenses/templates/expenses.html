@@ -3,18 +3,18 @@
 {% block title %}Expenses{% endblock %}
 
 {% block content %}
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+<div class="page-header">
     <h1>Expenses</h1>
     <a href="{{ url_for('expenses.expenses_create') }}" class="btn btn-success">+ Add Expense</a>
 </div>
 
 <!-- Filters -->
-<div style="background: var(--color-surface-3); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+<div class="filter-form">
     <form method="GET" action="{{ url_for('expenses.expenses_index') }}">
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-            <div>
-                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Contractor</label>
-                <select name="contractor_id" class="form-control">
+        <div class="form-grid-4">
+            <div class="form-group">
+                <label for="exp-filter-contractor">Contractor</label>
+                <select id="exp-filter-contractor" name="contractor_id" class="form-control">
                     <option value="">All Contractors</option>
                     {% for contractor in contractors %}
                     <option value="{{ contractor.id }}" {% if request.args.get('contractor_id')|int == contractor.id %}selected{% endif %}>
@@ -23,25 +23,25 @@
                     {% endfor %}
                 </select>
             </div>
-            <div>
-                <label style="display: block; margin-bottom: 5px; font-size: 14px;">Category</label>
-                <select name="category" class="form-control">
+            <div class="form-group">
+                <label for="exp-filter-category">Category</label>
+                <select id="exp-filter-category" name="category" class="form-control">
                     <option value="">All Categories</option>
                     {% for cat in categories %}
                     <option value="{{ cat }}" {% if request.args.get('category') == cat %}selected{% endif %}>{{ cat }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div>
-                <label style="display: block; margin-bottom: 5px; font-size: 14px;">From Date</label>
-                <input type="date" name="date_from" class="form-control" value="{{ request.args.get('date_from', '') }}">
+            <div class="form-group">
+                <label for="exp-filter-from">From Date</label>
+                <input type="date" id="exp-filter-from" name="date_from" class="form-control" value="{{ request.args.get('date_from', '') }}">
             </div>
-            <div>
-                <label style="display: block; margin-bottom: 5px; font-size: 14px;">To Date</label>
-                <input type="date" name="date_to" class="form-control" value="{{ request.args.get('date_to', '') }}">
+            <div class="form-group">
+                <label for="exp-filter-to">To Date</label>
+                <input type="date" id="exp-filter-to" name="date_to" class="form-control" value="{{ request.args.get('date_to', '') }}">
             </div>
         </div>
-        <div style="margin-top: 15px;">
+        <div class="action-row">
             <button type="submit" class="btn btn-primary">Apply Filters</button>
             <a href="{{ url_for('expenses.expenses_index') }}" class="btn btn-secondary">Clear</a>
         </div>
@@ -50,6 +50,7 @@
 
 <!-- Expenses Table -->
 {% if expenses_by_year %}
+<div class="table-wrap">
 <table class="expenseTable">
     <thead>
         <tr>
@@ -65,14 +66,14 @@
     </thead>
     <tbody>
         {% for year in years %}
-            <tr style="background: var(--color-primary-tint);">
-                <td colspan="8" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
+            <tr class="table-year">
+                <td colspan="8">
                     {{ year }}
                 </td>
             </tr>
             {% for quarter in [4, 3, 2, 1] if quarter in expenses_by_year[year] %}
-                <tr style="background: var(--color-surface-3);">
-                    <td colspan="8" style="padding: 8px 12px; font-weight: 500; font-size: 13px; color: var(--color-text-muted);">
+                <tr class="table-section">
+                    <td colspan="8">
                         Quarter {{ quarter }}
                     </td>
                 </tr>
@@ -86,26 +87,28 @@
                     <td>
                         {{ "%.2f"|format(expense.amount) }} {{ expense.currency }}
                         {% if expense.vat_amount is not none %}
-                        <span style="display: block; font-size: 11px; color: var(--color-text-muted);">
+                        <span class="compact-subtext">
                             incl. VAT {{ "%.2f"|format(expense.vat_amount) }}{% if expense.deductible_pct is not none and expense.deductible_pct != 100 %} · {{ "%.0f"|format(expense.deductible_pct) }}% ded.{% endif %}
                         </span>
                         {% else %}
-                        <span style="display: block; font-size: 11px; color: var(--color-warning, var(--color-text-muted));" title="No VAT breakdown — excluded from Modelo 303 deductions">⚠ no VAT data</span>
+                        <span class="status-badge status-missing" title="No VAT breakdown — excluded from Modelo 303 deductions">no VAT data</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if expense.file_path %}
-                        <a href="{{ url_for('expenses.expenses_preview', id=expense.id) }}" target="_blank" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" title="Preview">👁</a>
-                        <a href="{{ url_for('expenses.expenses_download', id=expense.id) }}" class="btn btn-success" style="padding: 4px 8px; font-size: 12px;" title="Download">📥</a>
+                        <a href="{{ url_for('expenses.expenses_preview', id=expense.id) }}" target="_blank" class="btn btn-secondary btn-sm" title="Preview">👁</a>
+                        <a href="{{ url_for('expenses.expenses_download', id=expense.id) }}" class="btn btn-success btn-sm" title="Download">📥</a>
                         {% else %}
                         -
                         {% endif %}
                     </td>
-                    <td>
-                        <a href="{{ url_for('expenses.expenses_edit', id=expense.id) }}" class="btn btn-primary" style="padding: 4px 8px; font-size: 12px;">Edit</a>
-                        <form method="POST" action="{{ url_for('expenses.expenses_delete', id=expense.id) }}" style="display: inline;" onsubmit="return confirm('Delete this expense?');">
-                            <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                    <td class="nowrap">
+                        <div class="action-row">
+                        <a href="{{ url_for('expenses.expenses_edit', id=expense.id) }}" class="btn btn-primary btn-sm">Edit</a>
+                        <form method="POST" action="{{ url_for('expenses.expenses_delete', id=expense.id) }}" onsubmit="return confirm('Delete this expense?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -113,12 +116,10 @@
         {% endfor %}
     </tbody>
 </table>
+</div>
 
 <style>
-.expenseTable { width: 100%; border-collapse: collapse; margin-top: 0; font-size: 13px; }
-.expenseTable th, .expenseTable td { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--color-border); white-space: nowrap; }
-.expenseTable th { background: var(--color-surface-2); font-weight: bold; position: sticky; top: 0; z-index: 10; font-size: 12px; }
-.expenseTable tbody tr:hover:not([style*="background: var(--color-primary-tint)"]):not([style*="background: var(--color-surface-3)"]) { background: var(--color-surface-2); }
+.expenseTable th, .expenseTable td { white-space: nowrap; }
 .expenseTable th:nth-child(1), .expenseTable td:nth-child(1) { width: 90px; }
 .expenseTable th:nth-child(2), .expenseTable td:nth-child(2) { width: 100px; }
 .expenseTable th:nth-child(3), .expenseTable td:nth-child(3) { width: 150px; }
@@ -130,7 +131,7 @@
 </style>
 
 {% else %}
-<p style="text-align: center; color: var(--color-text-muted); padding: 40px;">No expenses found. <a href="{{ url_for('expenses.expenses_create') }}">Add your first expense</a></p>
+<p class="empty-state">No expenses found. <a href="{{ url_for('expenses.expenses_create') }}">Add your first expense</a></p>
 {% endif %}
 
 {% endblock %}
