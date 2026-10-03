@@ -9,6 +9,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from functools import wraps
 import io
+from contextlib import contextmanager
 import os
 import sys
 import hashlib
@@ -88,6 +89,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Scheduler leader lock: one process per deployment runs scheduled jobs.
 app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
     'SCHEDULER_LOCK_PATH', os.path.join(app.instance_path, 'scheduler.lock'))
+# Start-up lock: worker processes initialise the database one at a time.
+app.config['INIT_LOCK_PATH'] = os.path.join(
+    os.path.dirname(app.config['SCHEDULER_LOCK_PATH']), 'init.lock')
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
@@ -2507,7 +2511,9 @@ def bootstrap():
     """
     if module_manager is not None:
         return module_manager
-    with app.app_context():
+    # Workers start in parallel: one at a time creates tables and runs
+    # migrations, or two of them race on CREATE TABLE in a fresh database.
+    with _init_lock(), app.app_context():
         init_database()
         mgr = init_module_manager()
         s = Settings.query.first()
@@ -2515,6 +2521,24 @@ def bootstrap():
             _apply_log_settings(s, mgr)
             _apply_currency_provider(s, mgr)
     return mgr
+
+
+@contextmanager
+def _init_lock():
+    """Exclusive, blocking file lock for process start-up (no-op without flock)."""
+    try:
+        import fcntl
+    except ImportError:  # Windows: single-process deployments only
+        yield
+        return
+    path = app.config['INIT_LOCK_PATH']
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'a') as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 
 
 def shutdown():
