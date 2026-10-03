@@ -653,6 +653,10 @@
                     <span style="color: var(--color-danger-fg); font-size: 12px; font-weight: 600;">⚠ Failed to load</span>
                     <pre style="margin: 6px 0 0 0; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--color-danger-fg); background: var(--color-surface-3); padding: 6px; border-radius: 4px;">{{ mod.load_error }}</pre>
                 </div>
+                {% elif mod.restart_required %}
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border);">
+                    <span style="color: var(--color-text-muted); font-size: 12px; font-weight: 500;">↻ Enabled — restart the application to load it</span>
+                </div>
                 {% elif mod.enabled %}
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--color-border);">
                     <span style="color: var(--color-success-fg); font-size: 12px; font-weight: 500;">✓ Active</span>
