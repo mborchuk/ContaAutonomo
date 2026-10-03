@@ -136,6 +136,15 @@
                            {% if not expense or expense.deductible %}checked{% endif %}>
                     Deductible (IVA soportado)
                 </label>
+                <div class="form-group">
+                    <label for="reverse_charge">Reverse charge (inversión del sujeto pasivo)</label>
+                    <select id="reverse_charge" name="reverse_charge">
+                        <option value="" {% if not expense or not expense.reverse_charge %}selected{% endif %}>No — Spanish VAT on the invoice</option>
+                        <option value="eu" {% if expense and expense.reverse_charge == 'eu' %}selected{% endif %}>Supplier in another EU country</option>
+                        <option value="non_eu" {% if expense and expense.reverse_charge == 'non_eu' %}selected{% endif %}>Supplier outside the EU</option>
+                    </select>
+                    <small style="color: var(--color-text-muted);">For invoices without Spanish VAT that say "reverse charge". Leave VAT at 0: the VAT is declared and deducted on Modelo 303.</small>
+                </div>
             </fieldset>
 
             <div class="form-group">
