@@ -12,6 +12,7 @@ from datetime import datetime, date
 from pathlib import Path
 from io import BytesIO
 import os, re, json, shutil, zipfile
+from markupsafe import escape
 import logging
 
 logger = logging.getLogger(__name__)
@@ -38,10 +39,21 @@ def _sanitize_for_log(value, max_length=200):
     return cleaned
 
 
-FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf']
+FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf',
+                'invoice_logos', 'pdf_signature_files']
+
+# Encryption methods: 'key' (default) — the deployment's backup key, from the
+# BACKUP_KEY environment variable or the key file app.config['BACKUP_KEY_FILE'];
+# 'custom' — a password stored in backup_config; 'none'. The legacy
+# 'app_password' (key derived from the login password, only available inside
+# a logged-in request) is migrated to 'key' because unattended backups could
+# never use it.
+DEFAULT_ENCRYPT_METHOD = 'key'
 
 
 class BackupModule(BaseModule):
+
+    enabled_by_default = True
 
     @property
     def module_id(self):
@@ -77,7 +89,7 @@ class BackupModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
             backup_path = db.Column(db.String(500), default='')
-            encrypt_method = db.Column(db.String(20), default='app_password')
+            encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
             custom_password = db.Column(db.String(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
             updated_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -118,13 +130,8 @@ class BackupModule(BaseModule):
             password = None
             if encrypt:
                 cfg = module._get_config()
-                if cfg.encrypt_method == 'none':
-                    password = None  # no encryption even if requested
-                elif cfg.encrypt_method == 'custom' and cfg.custom_password:
-                    password = cfg.custom_password
-                else:
-                    password = session.get('_enc_token') or session.get('_password')
-                if encrypt and cfg.encrypt_method != 'none' and not password:
+                password = module._encryption_password(cfg)
+                if cfg.encrypt_method != 'none' and not password:
                     flash('No password available for encryption.', 'danger')
                     return redirect(url_for('settings') + '#security')
             prefix = 'manual_'
@@ -148,14 +155,8 @@ class BackupModule(BaseModule):
         @_rl('10/minute')
         @login_required
         def restore_backup(filename):
-            cfg = module._get_config()
-            if cfg.encrypt_method == 'none':
-                password = None
-            elif cfg.encrypt_method == 'custom' and cfg.custom_password:
-                password = cfg.custom_password
-            else:
-                password = session.get('_enc_token') or session.get('_password')
-            ok, msg = module._restore_full_backup(filename, password)
+            ok, msg = module._restore_full_backup(
+                filename, module._decryption_candidates())
             if ok:
                 module.core.log_activity('backup_restored', 'backup', filename)
             flash(msg, 'success' if ok else 'danger')
@@ -231,6 +232,15 @@ class BackupModule(BaseModule):
         except Exception as e:
             logger.debug('backup_config migration: %s', e)  # table may not exist yet
 
+        # Legacy 'app_password' cannot encrypt unattended backups: use the key.
+        cfg = self._get_config()
+        if cfg.encrypt_method == 'app_password':
+            cfg.encrypt_method = DEFAULT_ENCRYPT_METHOD
+            self._db.session.commit()
+            logger.info('Backup encryption switched from app_password to the '
+                        'backup key; earlier backups still restore with the '
+                        'login password')
+
         # Defer the startup backup ~60s instead of running it inline: a large
         # DB + many files could otherwise delay the app becoming available.
         import threading
@@ -264,11 +274,47 @@ class BackupModule(BaseModule):
         cfg = self.BackupConfig.query.first()
         if not cfg:
             cfg = self.BackupConfig(
-                backup_path='', encrypt_method='app_password',
+                backup_path='', encrypt_method=DEFAULT_ENCRYPT_METHOD,
                 use_external_storage=True)
             self._db.session.add(cfg)
             self._db.session.commit()
         return cfg
+
+    def _backup_key(self):
+        """The deployment's backup key: BACKUP_KEY, else the key file
+        (created on first use, readable by the owner only)."""
+        key = os.environ.get('BACKUP_KEY', '').strip()
+        if key:
+            return key
+        path = Path(self.core.app.config['BACKUP_KEY_FILE'])
+        if not path.exists():
+            import secrets
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write(secrets.token_urlsafe(32) + '\n')
+            logger.warning('Created backup key file %s — copy it to a password '
+                           'manager; encrypted backups cannot be restored '
+                           'without it', path)
+        return path.read_text().strip()
+
+    def _encryption_password(self, cfg):
+        """Password used to encrypt a new backup (None = unencrypted)."""
+        if cfg.encrypt_method == 'none':
+            return None
+        if cfg.encrypt_method == 'custom':
+            return cfg.custom_password or None
+        return self._backup_key()
+
+    def _decryption_candidates(self):
+        """Passwords to try on an encrypted backup, most likely first."""
+        cfg = self._get_config()
+        candidates = [self._encryption_password(cfg), self._backup_key()]
+        try:  # backups made with the legacy 'app_password' method
+            candidates.append(session.get('_enc_token'))
+        except RuntimeError:
+            pass  # no request context
+        return [c for i, c in enumerate(candidates) if c and c not in candidates[:i]]
 
     def _backup_dir(self):
         cfg = self._get_config()
@@ -295,11 +341,9 @@ class BackupModule(BaseModule):
         auto_ck = 'checked' if settings and settings.auto_backup_enabled else ''
         bp = cfg.backup_path or ''
         enc_none = 'checked' if cfg.encrypt_method == 'none' else ''
-        enc_app = 'checked' if cfg.encrypt_method == 'app_password' else ''
         enc_cust = 'checked' if cfg.encrypt_method == 'custom' else ''
-        # Default to app_password if not set to any known value
-        if not enc_none and not enc_cust:
-            enc_app = 'checked'
+        # Default to the backup key if not set to any known value
+        enc_key = '' if enc_none or enc_cust else 'checked'
         cp = cfg.custom_password or ''
         cp_show = 'block' if cfg.encrypt_method == 'custom' else 'none'
         ext_ok = self._is_external_storage_enabled()
@@ -308,10 +352,16 @@ class BackupModule(BaseModule):
         RS = ('width:auto!important;padding:0!important;'
               'margin-right:8px;vertical-align:middle;')
         return self._render_settings(
-            auto_ck, bp, enc_none, enc_app, enc_cust, cp, cp_show,
+            auto_ck, bp, enc_none, enc_key, enc_cust, cp, cp_show,
             ext_ok, use_ext, backups, RS)
 
-    def _render_settings(self, auto_ck, bp, enc_none, enc_app, enc_cust,
+    def _key_source(self):
+        """Where the backup key comes from, for the settings page (never the key)."""
+        if os.environ.get('BACKUP_KEY', '').strip():
+            return 'the BACKUP_KEY environment variable'
+        return f"the key file {self.core.app.config['BACKUP_KEY_FILE']}"
+
+    def _render_settings(self, auto_ck, bp, enc_none, enc_key, enc_cust,
                          cp, cp_show, ext_ok, use_ext, backups, RS):
         h = []
         a = h.append
@@ -326,7 +376,8 @@ class BackupModule(BaseModule):
         a(f'<input type="checkbox" name="auto_backup_enabled" {auto_ck}'
           f' style="{RS}"> Enable automatic daily backup</label>')
         a('<small style="display:block;margin-top:4px;margin-left:24px;'
-          'color:#666;">Runs once per day on startup.</small></div>')
+          'color:#666;">Runs about a minute after start-up and daily at '
+          '03:00, at most once per day.</small></div>')
 
         # custom backup path
         a('<div class="form-group">')
@@ -362,9 +413,12 @@ class BackupModule(BaseModule):
           f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
           f' style="{RS}"> No encryption</label>')
         a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
-          f' value="app_password" {enc_app}'
+          f' value="key" {enc_key}'
           f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
-          f' style="{RS}"> Use application password</label>')
+          f' style="{RS}"> Use the backup key (recommended)</label>')
+        a('<small style="display:block;margin:-4px 0 8px 24px;color:#666;">'
+          f'Read from {escape(self._key_source())}. Keep a copy in a password '
+          'manager: encrypted backups cannot be restored without it.</small>')
         a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
           f' value="custom" {enc_cust}'
           f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'block\'"'
@@ -513,7 +567,9 @@ class BackupModule(BaseModule):
                 settings.daily_backup_retention_count = 4
             cfg = self._get_config()
             cfg.backup_path = form.get('bk_backup_path', '').strip()
-            cfg.encrypt_method = form.get('bk_encrypt_method', 'app_password')
+            method = form.get('bk_encrypt_method', DEFAULT_ENCRYPT_METHOD)
+            cfg.encrypt_method = (method if method in ('key', 'custom', 'none')
+                                  else DEFAULT_ENCRYPT_METHOD)
             cfg.custom_password = form.get('bk_custom_password', '').strip()
             cfg.use_external_storage = form.get('bk_use_external_storage') == 'on'
             cfg.updated_at = datetime.utcnow()
@@ -543,7 +599,16 @@ class BackupModule(BaseModule):
             if password:
                 data = self._encrypt_bytes(data, password)
 
-            (backup_dir / filename).write_bytes(data)
+            # Exclusive create: never overwrite a backup made the same second.
+            stem, n = filename, 1
+            while True:
+                try:
+                    with open(backup_dir / filename, 'xb') as f:
+                        f.write(data)
+                    break
+                except FileExistsError:
+                    n += 1
+                    filename = stem.replace(ts, f'{ts}_{n}', 1)
             logger.info('Backup saved locally: %s', backup_dir / filename)
 
             cfg = self._get_config()
@@ -587,23 +652,31 @@ class BackupModule(BaseModule):
             data['tables'][table_name] = rows
         return json.dumps(data, indent=2, ensure_ascii=False)
 
-    def _restore_full_backup(self, filename, password=None):
+    def _restore_full_backup(self, filename, passwords=()):
+        """Restore a backup; *passwords* are tried in order on an encrypted one."""
+        if isinstance(passwords, str):
+            passwords = [passwords]
         try:
             file_path = self._get_backup_file_path(filename)
             if not file_path:
                 return False, 'Backup file not found'
             raw = file_path.read_bytes()
             if filename.endswith('.enc'):
-                if not password:
+                if not passwords:
                     return False, 'Password required to decrypt this backup'
-                try:
-                    raw = self._decrypt_bytes(raw, password)
-                except Exception:
+                for password in passwords:
+                    try:
+                        raw = self._decrypt_bytes(raw, password)
+                        break
+                    except Exception:
+                        continue
+                else:
                     return False, 'Decryption failed. Wrong password?'
-            db_path = Path('instance/invoices.db')
-            if db_path.exists():
+            # Safety copy of the current SQLite file before it is overwritten.
+            db_file = self._db.engine.url.database
+            if db_file and db_file != ':memory:' and os.path.exists(db_file):
                 ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-                shutil.copy2(db_path, f'instance/invoices.db.backup_{ts}')
+                shutil.copy2(db_file, f'{db_file}.backup_{ts}')
             app_root = Path(self.core.app_path)
             with zipfile.ZipFile(BytesIO(raw), 'r') as zf:
                 if 'db_backup.json' in zf.namelist():
@@ -640,7 +713,10 @@ class BackupModule(BaseModule):
         try:
             tables = json_data.get('tables', json_data)
             db = self._db
-            inspector = sa_inspect(db.engine)
+            # Inspect through the session's own connection: an engine-level
+            # inspector checks out (and on return rolls back) a connection,
+            # which on a shared connection undoes the deletes below.
+            inspector = sa_inspect(db.session.connection())
             existing = set(inspector.get_table_names())
             skip = {'backup_config', 'module_enabled'}
 
@@ -905,15 +981,7 @@ class BackupModule(BaseModule):
                 logger.info('Daily backup already exists, skipping...')
                 return
             cfg = self._get_config()
-            if cfg.encrypt_method == 'none':
-                password = None
-            elif cfg.encrypt_method == 'custom' and cfg.custom_password:
-                password = cfg.custom_password
-            else:
-                try:
-                    password = session.get('_enc_token') or session.get('_password')
-                except RuntimeError:
-                    password = None
+            password = self._encryption_password(cfg)
             if not password and cfg.encrypt_method != 'none':
                 logger.warning('Automatic backup skipped: no password available')
                 return
@@ -937,12 +1005,7 @@ class BackupModule(BaseModule):
             if not self._should_create_backup():
                 return
             cfg = self._get_config()
-            if cfg.encrypt_method == 'none':
-                password = None
-            elif cfg.encrypt_method == 'custom' and cfg.custom_password:
-                password = cfg.custom_password
-            else:
-                password = None
+            password = self._encryption_password(cfg)
             if not password and cfg.encrypt_method != 'none':
                 logger.warning('Scheduled backup skipped: no password available')
                 return

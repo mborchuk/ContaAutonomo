@@ -88,6 +88,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Scheduler leader lock: one process per deployment runs scheduled jobs.
 app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
     'SCHEDULER_LOCK_PATH', os.path.join(app.instance_path, 'scheduler.lock'))
+# Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+app.config['BACKUP_KEY_FILE'] = os.environ.get(
+    'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
 
 from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
 
@@ -413,7 +416,7 @@ class Settings(db.Model):
     show_currency_panel = db.Column(db.Boolean, default=True)  # Show currency/holidays panel on dashboard
     show_tax_panel = db.Column(db.Boolean, default=True)  # Show tax obligations panel on dashboard
     # Backup settings
-    auto_backup_enabled = db.Column(db.Boolean, default=False)  # Enable automatic backup on startup
+    auto_backup_enabled = db.Column(db.Boolean, default=True)  # Enable automatic backup on startup
     backup_retention_count = db.Column(db.Integer, default=5)  # Number of backups to keep (deprecated, use daily_backup_retention_count)
     daily_backup_retention_count = db.Column(db.Integer, default=4)  # Number of daily backups to keep
     # Social Security settings
