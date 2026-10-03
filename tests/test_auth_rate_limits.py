@@ -52,9 +52,9 @@ def test_limits_are_per_client_address(auth_client):
 def test_trusted_proxy_count_enables_proxy_fix(count, expected):
     env = dict(os.environ, TRUSTED_PROXY_COUNT=count, FLASK_DEBUG='1',
                DATABASE_URL='sqlite:///:memory:')
+    script = ('from werkzeug.middleware.proxy_fix import ProxyFix; import app; '
+              'print(isinstance(app.app.wsgi_app, ProxyFix))')
     out = subprocess.run(
-        [sys.executable, '-c',
-         'from werkzeug.middleware.proxy_fix import ProxyFix; import app; '
-         'print(isinstance(app.app.wsgi_app, ProxyFix))'],
+        [sys.executable, '-c', script],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert out.stdout.strip().splitlines()[-1] == expected, out.stderr[-2000:]
