@@ -19,10 +19,10 @@ RELEASE_SCHEMAS = ['schema_v1_0_0.sql', 'schema_v1_4_0.sql']
 
 
 def _core_tables():
-    import app as core
-    models = (core.Settings, core.Customer, core.Bank, core.Contractor,
-              core.Invoice, core.InvoiceItem, core.Expense, core.TaxForm,
-              core.Document, core.SSPayment)
+    from app import (Bank, Contractor, Customer, Document, Expense, Invoice,
+                     InvoiceItem, Settings, SSPayment, TaxForm)
+    models = (Settings, Customer, Bank, Contractor, Invoice, InvoiceItem,
+              Expense, TaxForm, Document, SSPayment)
     # Mapper columns, not table columns: modules extend some core tables
     # (extend_existing=True) with columns they migrate themselves.
     return {m.__table__.name: {c.name for c in m.__mapper__.columns}
