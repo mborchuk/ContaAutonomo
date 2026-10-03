@@ -21,7 +21,12 @@ class _FakeResp:
 
 def _reset_cache():
     cc._ecb_cache['content'] = None
+    cc._ecb_cache['root'] = None
     cc._ecb_cache['ts'] = 0.0
+    cc._ecb_parsed_cache['content_id'] = None
+    cc._ecb_parsed_cache['available_data'] = None
+    cc._ecb_rate_cache.clear()
+    cc._ecb_multi_cache.clear()
 
 
 def test_ecb_feed_is_cached(monkeypatch):
@@ -61,6 +66,54 @@ def test_multiple_rates_use_cache(monkeypatch):
     assert calls['n'] == 1  # shared cache across both code paths
 
 
+def test_repeated_rate_lookups_do_not_print_success_spam(monkeypatch, capsys):
+    def fake_get(url, timeout=10):
+        return _FakeResp()
+
+    monkeypatch.setattr(cc.requests, 'get', fake_get)
+    _reset_cache()
+
+    cc.get_exchange_rate('2026-03-17')
+    cc.get_exchange_rate('2026-03-17')
+
+    assert 'Using European Central Bank rate' not in capsys.readouterr().out
+
+
+def test_ecb_feed_is_parsed_once_for_many_lookups(monkeypatch):
+    calls = {'network': 0, 'parse': 0}
+    real_fromstring = cc._ET.fromstring
+
+    def fake_get(url, timeout=10):
+        calls['network'] += 1
+        return _FakeResp()
+
+    def fake_fromstring(content):
+        calls['parse'] += 1
+        return real_fromstring(content)
+
+    monkeypatch.setattr(cc.requests, 'get', fake_get)
+    monkeypatch.setattr(cc._ET, 'fromstring', fake_fromstring)
+    _reset_cache()
+
+    cc.get_exchange_rate('2026-03-17')
+    cc.get_exchange_rate('2026-03-18')
+    cc.get_multiple_exchange_rates('2026-03-17', ['USD', 'GBP'], base_currency='EUR')
+
+    assert calls == {'network': 1, 'parse': 1}
+
+
 def test_currency_symbol_fallback():
     assert cc.get_currency_symbol('EUR') == '€'
     assert cc.get_currency_symbol('XOF') == 'XOF'  # unknown -> code itself
+
+
+def test_fallback_logging_strips_line_breaks_from_date(monkeypatch, caplog):
+    """A form-supplied date must not forge extra log lines (log injection)."""
+    import logging
+    import currency_converter as cc
+    monkeypatch.setattr(cc, 'get_exchange_rate_ecb', lambda d: (None, None))
+    monkeypatch.setattr(cc, 'get_exchange_rate_exchangerate_api', lambda d: 0.9)
+    with caplog.at_level(logging.INFO, logger=cc.logger.name):
+        cc.get_exchange_rate('2026-01-15\nFAKE ENTRY\r')
+    messages = [r.getMessage() for r in caplog.records]
+    assert messages and all('\n' not in m and '\r' not in m for m in messages)

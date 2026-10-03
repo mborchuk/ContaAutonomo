@@ -12,7 +12,7 @@
 {% endif %}
 
 <div style="background: var(--color-surface-2); padding: 20px; border-radius: 5px;">
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="form-grid">
         <!-- Left Column -->
         <div>
             <h2 style="margin-bottom: 20px; color: var(--color-primary);">Invoice Details</h2>
@@ -83,7 +83,7 @@
                 <textarea rows="2" readonly style="background: var(--color-border);">{{ item.description }}</textarea>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div class="form-grid-3">
                 <div class="form-group">
                     <label>Quantity</label>
                     <input type="number" value="{{ item.quantity }}" readonly style="background: var(--color-border);">
@@ -108,7 +108,7 @@
                 <textarea rows="2" readonly style="background: var(--color-border);">{{ invoice.description }}</textarea>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div class="form-grid-3">
                 <div class="form-group">
                     <label>Quantity</label>
                     <input type="number" value="{{ invoice.quantity or 1 }}" readonly style="background: var(--color-border);">
@@ -152,6 +152,11 @@
             <button type="submit" class="btn btn-success">Issue</button>
         </form>
     {% elif invoice.status in ('issued', 'paid') %}
+        {% if invoice.status == 'issued' %}
+        <form method="POST" action="{{ url_for('mark_invoice_paid', id=invoice.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-success">Mark paid</button>
+        </form>
+        {% endif %}
         <form method="POST" action="{{ url_for('rectify_invoice', id=invoice.id) }}" style="display:inline;">
             <input type="hidden" name="rectification_type" value="sustitucion">
             <button type="submit" class="btn btn-secondary">Rectify</button>

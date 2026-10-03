@@ -1,82 +1,88 @@
 {% extends "base.html" %}
 {% block title %}System Logs{% endblock %}
 {% block content %}
+<style>
+/* page-only: fixed column widths for log table */
+.logTable { table-layout: fixed; }
+.logTable th:nth-child(1) { width: 170px; }
+.logTable th:nth-child(2) { width: 110px; }
+.logTable th:nth-child(3) { width: 160px; }
+</style>
+
 <h1>System Logs</h1>
 
-<div class="filter-form" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
-    <form method="GET" style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;width:100%;">
-        <div>
-            <label style="font-size:13px;display:block;margin-bottom:4px;">Category</label>
-            <select name="category" style="padding:8px;border:1px solid var(--color-border);border-radius:4px;">
-                <option value="">All</option>
-                {% for c in categories %}
-                <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
-                {% endfor %}
-            </select>
+<div class="filter-form">
+    <form method="GET">
+        <div class="form-grid-4">
+            <div class="form-group">
+                <label for="log-category">Category</label>
+                <select id="log-category" name="category">
+                    <option value="">All</option>
+                    {% for c in categories %}
+                    <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="log-date-from">From</label>
+                <input type="date" id="log-date-from" name="date_from" value="{{ filters.date_from }}">
+            </div>
+            <div class="form-group">
+                <label for="log-date-to">To</label>
+                <input type="date" id="log-date-to" name="date_to" value="{{ filters.date_to }}">
+            </div>
+            <div class="form-group">
+                <label for="log-search">Search</label>
+                <input type="text" id="log-search" name="search" value="{{ filters.search }}" placeholder="Search logs...">
+            </div>
         </div>
-        <div>
-            <label style="font-size:13px;display:block;margin-bottom:4px;">From</label>
-            <input type="date" name="date_from" value="{{ filters.date_from }}"
-                   style="padding:8px;border:1px solid var(--color-border);border-radius:4px;">
-        </div>
-        <div>
-            <label style="font-size:13px;display:block;margin-bottom:4px;">To</label>
-            <input type="date" name="date_to" value="{{ filters.date_to }}"
-                   style="padding:8px;border:1px solid var(--color-border);border-radius:4px;">
-        </div>
-        <div style="flex:1;min-width:200px;">
-            <label style="font-size:13px;display:block;margin-bottom:4px;">Search</label>
-            <input type="text" name="search" value="{{ filters.search }}" placeholder="Search logs..."
-                   style="padding:8px;border:1px solid var(--color-border);border-radius:4px;width:100%;">
-        </div>
-        <div>
-            <button type="submit" class="btn btn-primary" style="padding:8px 16px;">Filter</button>
-            <a href="{{ url_for('system_logs') }}" class="btn btn-secondary" style="padding:8px 16px;">Reset</a>
+        <div class="action-row">
+            <button type="submit" class="btn btn-primary">Filter</button>
+            <a href="{{ url_for('system_logs') }}" class="btn btn-secondary">Reset</a>
         </div>
     </form>
 </div>
 
 {% if entries %}
-<table style="table-layout:fixed;width:100%;">
+<div class="table-wrap">
+<table class="data-table logTable">
     <thead>
         <tr>
-            <th style="width:170px;">Timestamp</th>
-            <th style="width:100px;">Category</th>
-            <th style="width:160px;">Action</th>
+            <th>Timestamp</th>
+            <th>Category</th>
+            <th>Action</th>
             <th>Details</th>
         </tr>
     </thead>
     <tbody>
         {% for e in entries %}
         <tr>
-            <td style="font-size:13px;color:var(--color-text-muted);white-space:nowrap;">
+            <td class="muted nowrap">
                 {{ e.timestamp[:19] | replace('T', ' ') if e.timestamp else '-' }}
             </td>
             <td>
-                {% set bg = 'var(--color-text-muted)' %}
-                {% if e.category == 'auth' %}{% set bg = 'var(--color-primary)' %}
-                {% elif e.category == 'invoice' %}{% set bg = 'var(--color-success)' %}
-                {% elif e.category == 'backup' %}{% set bg = 'var(--color-primary)' %}
-                {% elif e.category == 'settings' %}{% set bg = 'var(--color-accent)' %}
-                {% elif e.category == 'expense' %}{% set bg = 'var(--color-accent)' %}
+                {# map log category to existing badge token pair — dark-mode safe #}
+                {% set badge = 'status-closed' %}
+                {% if e.category in ('auth', 'backup') %}{% set badge = 'status-active' %}
+                {% elif e.category == 'invoice' %}{% set badge = 'status-paid' %}
+                {% elif e.category in ('settings', 'expense') %}{% set badge = 'status-pending' %}
                 {% endif %}
-                <span style="padding:3px 8px;border-radius:3px;font-size:12px;background:{{ bg }};color:white;">
-                    {{ e.category }}
-                </span>
+                <span class="status-badge {{ badge }}">{{ e.category }}</span>
             </td>
-            <td style="font-weight:500;">{{ e.action }}</td>
-            <td style="font-size:13px;color:var(--color-text-muted);word-break:break-all;white-space:normal;">{{ e.details or '' }}</td>
+            <td style="font-weight: var(--fw-medium);">{{ e.action }}</td>
+            <td class="muted" style="word-break: break-all; white-space: normal;">{{ e.details or '' }}</td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
 
-<div style="margin-top:20px;display:flex;gap:10px;justify-content:center;">
+<div class="action-row" style="margin-top: var(--space-5); justify-content: center;">
     {% if page > 1 %}
     <a href="{{ url_for('system_logs', page=page-1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
        class="btn btn-secondary">&laquo; Previous</a>
     {% endif %}
-    <span style="padding:8px 16px;color:var(--color-text-muted);">Page {{ page }}</span>
+    <span class="muted" style="padding: var(--space-2) var(--space-4);">Page {{ page }}</span>
     {% if entries|length == per_page %}
     <a href="{{ url_for('system_logs', page=page+1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
        class="btn btn-secondary">Next &raquo;</a>
@@ -84,9 +90,9 @@
 </div>
 
 {% else %}
-<div style="text-align:center;padding:40px;color:var(--color-text-faint);">
-    <p style="font-size:16px;">No log entries found.</p>
-    <p style="font-size:14px;">Activity will appear here as you use the application.</p>
+<div class="empty-state">
+    <p style="font-size: var(--fs-md);">No log entries found.</p>
+    <p class="fine-print">Activity will appear here as you use the application.</p>
 </div>
 {% endif %}
 
