@@ -139,6 +139,10 @@ class TaxEsIrpfModule(BaseModule):
         from app import Expense
         return Expense
 
+    def _tax_management(self):
+        mm = getattr(self.core, 'module_manager', None)
+        return mm.modules.get('tax_management') if mm else None
+
     def _ss_model(self):
         """tax_management's SSPayment model, if that module is enabled."""
         mm = getattr(self.core, 'module_manager', None)
@@ -356,8 +360,15 @@ class TaxEsIrpfModule(BaseModule):
         expenses = self._sum_expenses(year, profile, end_dt)
         expenses += self._sum_reta(year, profile, end_dt)
 
+        # Box 05: what was paid in earlier quarters — the filed box 07 when
+        # the AEAT PDF is in Tax Forms, else this module's own estimate.
+        filed_forms = self._tax_management()
         prior = 0.0
         for q in range(1, quarter):
+            filed = filed_forms.filed_boxes('130', year, q) if filed_forms else {}
+            if '07' in filed:
+                prior += max(0.0, filed['07'])
+                continue
             prior_input = self._build_modelo130_input(year, q, profile)
             prior += self._engine(year).compute_modelo130(
                 prior_input).summary['modelo130_due']
