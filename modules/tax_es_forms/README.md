@@ -53,6 +53,11 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   the deductible base. Equipment (bienes de inversión: an equipment category
   at or above the threshold set in Settings → IRPF; default "Equipment",
   300 EUR net) goes to boxes 30/31, everything else to 28/29.
+- *Reverse charge* (inversión del sujeto pasivo): an expense marked "Reverse
+  charge" (supplier in another EU country / outside the EU) with no Spanish
+  VAT is declared at its VAT rate (the general rate if 0) in boxes 10/11
+  (EU) or 12/13 (non-EU) and deducted in 36/37 or 38/39 (EU) or 28/29 or
+  30/31 (non-EU) when deductible — net effect zero.
 - *Box 59 / 120*: taxable base of invoices to EU business customers
   (`eu_b2b`) and to customers outside the EU (`non_eu`).
 - *Box 110 / 78 / 87*: the credit carried from the previous quarter's
@@ -77,7 +82,8 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
 
 Out of scope in v1 (also listed in the UI fine print): régimen simplificado
 (módulos), recargo de equivalencia, prorrata, criterio de caja (accrual basis
-only), and the intra-EU acquisition / reverse-charge detail boxes.
+only), imports (boxes 32–35) and intra-EU acquisitions of goods with
+Spanish-VAT exceptions.
 
 A fast-follow for annual summaries (Modelo 390 and 100) can reuse the same
 engine by aggregating four quarters; it is intentionally not built yet.

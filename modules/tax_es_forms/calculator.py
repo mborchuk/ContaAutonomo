@@ -134,10 +134,36 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
             elif tax_type == "non_eu":
                 base_not_subject += _invoice_base_eur(inv)
 
-    deducible = {"current": [0.0, 0.0], "equipment": [0.0, 0.0]}
+    deducible = {"current": [0.0, 0.0], "equipment": [0.0, 0.0],
+                 "eu_current": [0.0, 0.0], "eu_equipment": [0.0, 0.0]}
+    # Reverse charge (inversión del sujeto pasivo): VAT the buyer declares.
+    autoliquidado = {"eu": [0.0, 0.0], "non_eu": [0.0, 0.0]}  # 10/11, 12/13
     missing_vat_count = 0
+
+    def to_eur(value, exp):
+        if convert_expense is None or value is None:
+            return value or 0.0
+        return convert_expense(value, getattr(exp, "currency", "EUR"),
+                               getattr(exp, "expense_date", None))
+
     for exp in expenses:
         vat_amount = getattr(exp, "vat_amount", None)
+        region = getattr(exp, "reverse_charge", None)
+        if region in ("eu", "non_eu") and not vat_amount:
+            net = getattr(exp, "net_amount", None)
+            base = to_eur(net if net is not None else getattr(exp, "amount", 0.0), exp)
+            rate = (getattr(exp, "vat_rate", None) or 0.0) / 100.0 or vat_rate
+            cuota = base * rate
+            autoliquidado[region][0] += base
+            autoliquidado[region][1] += cuota
+            if getattr(exp, "deductible", True):
+                pct = (getattr(exp, "deductible_pct", 100.0) or 100.0) / 100.0
+                equipment = is_equipment is not None and is_equipment(exp, base)
+                kind = (("eu_" if region == "eu" else "")
+                        + ("equipment" if equipment else "current"))
+                deducible[kind][0] += base * pct
+                deducible[kind][1] += cuota * pct
+            continue
         if vat_amount is None:
             # Receipt had no VAT captured -> cannot deduct.
             missing_vat_count += 1
@@ -161,8 +187,9 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
         deducible[kind][0] += net_eur * (pct / 100.0)
         deducible[kind][1] += vat_eur * (pct / 100.0)
 
-    total_devengado = cuota_devengado
-    total_deducir = deducible["current"][1] + deducible["equipment"][1]
+    total_devengado = (cuota_devengado + autoliquidado["eu"][1]
+                       + autoliquidado["non_eu"][1])
+    total_deducir = sum(v[1] for v in deducible.values())
     resultado = total_devengado - total_deducir  # 46 = 64 = 66 (100% State)
     carried = max(0.0, carried_forward or 0.0)
     applied = min(carried, max(0.0, resultado))   # 78
@@ -171,11 +198,19 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
     boxes = {
         "01": _round2(base_devengado),
         "03": _round2(cuota_devengado),
+        "10": _round2(autoliquidado["eu"][0]),
+        "11": _round2(autoliquidado["eu"][1]),
+        "12": _round2(autoliquidado["non_eu"][0]),
+        "13": _round2(autoliquidado["non_eu"][1]),
         "27": _round2(total_devengado),
         "28": _round2(deducible["current"][0]),
         "29": _round2(deducible["current"][1]),
         "30": _round2(deducible["equipment"][0]),
         "31": _round2(deducible["equipment"][1]),
+        "36": _round2(deducible["eu_current"][0]),
+        "37": _round2(deducible["eu_current"][1]),
+        "38": _round2(deducible["eu_equipment"][0]),
+        "39": _round2(deducible["eu_equipment"][1]),
         "45": _round2(total_deducir),
         "46": _round2(resultado),
         "59": _round2(base_eu_b2b),

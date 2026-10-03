@@ -63,6 +63,7 @@ class ExpensesModule(BaseModule):
             vat_amount = db.Column(db.Float)
             deductible = db.Column(db.Boolean, default=True)
             deductible_pct = db.Column(db.Float, default=100.0)
+            reverse_charge = db.Column(db.String(10))  # '' / 'eu' / 'non_eu'
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
         class Contractor(db.Model):
@@ -267,6 +268,7 @@ class ExpensesModule(BaseModule):
             'vat_amount': e.vat_amount,
             'deductible': e.deductible,
             'deductible_pct': e.deductible_pct,
+            'reverse_charge': e.reverse_charge or None,
         }
 
     def _api_expenses(self, request):
@@ -313,6 +315,8 @@ class ExpensesModule(BaseModule):
                 vat_amount=_num('vat_amount'),
                 deductible=bool(body.get('deductible', True)),
                 deductible_pct=_num('deductible_pct') if body.get('deductible_pct') is not None else 100.0,
+                reverse_charge=(body.get('reverse_charge')
+                                if body.get('reverse_charge') in ('eu', 'non_eu') else None),
             )
             self.core.log_activity('expense_created', 'expense',
                                    {'id': exp.id, 'amount': amount,
@@ -407,12 +411,14 @@ class ExpensesModule(BaseModule):
         if deductible_pct is None:
             deductible_pct = 100.0
 
+        reverse_charge = form.get('reverse_charge')
         return {
             'net_amount': net,
             'vat_rate': vat_rate,
             'vat_amount': vat_amount,
             'deductible': deductible,
             'deductible_pct': deductible_pct,
+            'reverse_charge': reverse_charge if reverse_charge in ('eu', 'non_eu') else None,
         }
 
     def _create_expense(self):
