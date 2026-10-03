@@ -62,7 +62,7 @@
                 <form method="POST" action="{{ url_for('documents.categories_delete', id=cat.id) }}"
                       style="display: inline;"
                       onsubmit="return confirm('Remove category «{{ cat.name }}» from the list? Documents with this category will not be affected.');">
-                    <button type="submit" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;">Delete</button>
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                 </form>
             </td>
         </tr>

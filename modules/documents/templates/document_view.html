@@ -108,13 +108,13 @@
                     {% endif %}
                 </div>
                 <div style="display: flex; gap: 6px;">
-                    <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;">👁 Preview</a>
-                    <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success" style="padding: 3px 8px; font-size: 11px;">📥 Download</a>
+                    <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary btn-sm">👁 Preview</a>
+                    <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success btn-sm">📥 Download</a>
                     {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
                         {% set signers = module_manager.find_capabilities('pdf_sign') %}
                         {% for cap in signers %}
                         <form method="POST" action="{{ url_for('documents.file_sign', file_id=df.id, cap_index=loop.index0) }}" style="margin:0;" onsubmit="return confirm('Sign with {{ cap.name }}?');">
-                            <button type="submit" class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;">✍️ {{ cap.name }}</button>
+                            <button type="submit" class="btn btn-primary btn-sm">✍️ {{ cap.name }}</button>
                         </form>
                         {% endfor %}
                     {% endif %}
@@ -131,7 +131,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px; margin-bottom: 15px;">
                 <h3 style="margin: 0; font-size: 15px; color: var(--color-text-muted);">📝 Notes ({{ notes|length if notes else 0 }})</h3>
                 <button type="button" onclick="document.getElementById('new-note-form').style.display = document.getElementById('new-note-form').style.display === 'none' ? 'block' : 'none'"
-                        class="btn btn-primary" style="padding: 3px 10px; font-size: 11px;">+ Add</button>
+                        class="btn btn-primary btn-sm">+ Add</button>
             </div>
 
             <form id="new-note-form" method="POST" action="{{ url_for('documents.note_add', doc_id=doc.id) }}"
@@ -141,9 +141,9 @@
                 <textarea name="note_text" rows="3" placeholder="Write your note..." required
                           style="width: 100%; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 13px; font-family: inherit; resize: vertical; margin-bottom: 6px;"></textarea>
                 <div style="display: flex; gap: 6px;">
-                    <button type="submit" class="btn btn-success" style="padding: 4px 12px; font-size: 11px;">Save</button>
+                    <button type="submit" class="btn btn-success btn-sm">Save</button>
                     <button type="button" onclick="this.closest('form').style.display='none'"
-                            class="btn btn-secondary" style="padding: 4px 12px; font-size: 11px;">Cancel</button>
+                            class="btn btn-secondary btn-sm">Cancel</button>
                 </div>
             </form>
 
@@ -168,9 +168,9 @@
                     <input type="text" name="note_title" value="{{ note.title }}" required style="width:100%;padding:5px 8px;border:1px solid var(--color-border);border-radius:4px;font-size:12px;font-weight:500;margin-bottom:4px;">
                     <textarea name="note_text" rows="2" required style="width:100%;padding:5px 8px;border:1px solid var(--color-border);border-radius:4px;font-size:12px;font-family:inherit;resize:vertical;margin-bottom:4px;">{{ note.text }}</textarea>
                     <div style="display:flex;gap:4px;">
-                        <button type="submit" class="btn btn-success" style="padding:3px 10px;font-size:10px;">Save</button>
+                        <button type="submit" class="btn btn-success btn-sm">Save</button>
                         <button type="button" onclick="var e=this.closest('[data-note]'); e.querySelector('.ne').style.display='none'; e.querySelector('.nv').style.display='block';"
-                                class="btn btn-secondary" style="padding:3px 10px;font-size:10px;">Cancel</button>
+                                class="btn btn-secondary btn-sm">Cancel</button>
                     </div>
                 </form>
             </div>

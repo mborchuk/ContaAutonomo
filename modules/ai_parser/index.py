@@ -70,8 +70,12 @@ Return ONLY valid JSON, no markdown fences."""
   "currency": "3-letter code (EUR, USD, etc.)",
   "category": "one of: Office Supplies, Software, Travel, Equipment, Services, Utilities, Insurance, Professional Services, Telecommunications, Other",
   "description": "brief description of what was purchased",
-  "vat_amount": number or null
+  "net_amount": "number or null (taxable base, amount excluding VAT/IVA)",
+  "vat_rate": "number or null (VAT/IVA percentage, e.g. 21)",
+  "vat_amount": "number or null (VAT/IVA amount)"
 }
+"amount" is the gross total (VAT included). If the receipt shows no VAT
+breakdown, set net_amount/vat_rate/vat_amount to null — never guess VAT data.
 Return ONLY valid JSON, no markdown fences."""
 
     def is_configured(self):
@@ -233,15 +237,20 @@ class GoogleDocAIProvider(BaseAIProvider):
                 'notes': None
             }
         else:
+            total = self._parse_amount(parsed.get('total_amount', '0'))
+            vat = self._parse_amount(parsed.get('total_tax_amount', '0'))
             return {
                 'invoice_number': parsed.get('invoice_id', ''),
                 'expense_date': self._parse_date(parsed.get('invoice_date')),
                 'contractor_name': parsed.get('supplier_name', ''),
-                'amount': self._parse_amount(parsed.get('total_amount', '0')),
+                'amount': total,
                 'currency': parsed.get('currency', 'EUR'),
                 'category': 'Other',
                 'description': parsed.get('supplier_name', ''),
-                'vat_amount': self._parse_amount(parsed.get('total_tax_amount', '0'))
+                # F11-D2 — VAT split parity with the prompt-based providers.
+                'vat_amount': vat or None,
+                'net_amount': round(total - vat, 2) if total and vat else None,
+                'vat_rate': None,  # Document AI gives amounts, not the rate
             }
 
     def _parse_date(self, val):

@@ -1,0 +1,5 @@
+# Development / test dependencies (not needed at runtime). Compiled to
+# requirements-dev.txt, constrained by the runtime lock.
+-c requirements.txt
+pytest>=8.0.0
+hypothesis>=6.0.0

@@ -1,59 +1,68 @@
-# tax_es_forms — Modelo 303 / 130 Draft Calculator (F5)
+# Modelo 303/130 Drafts (`tax_es_forms`)
 
-Caveman summary: this module count numbers already in the app and put them in the
-boxes of **Modelo 303 (IVA)** and **Modelo 130 (IRPF pago fraccionado)** so user
-can transcribe them into AEAT portal. It **file nothing** and give **no tax
-advice** — every page say "estimate, not tax advice".
+Box-level quarterly drafts of **Modelo 303** (IVA) and **Modelo 130** (IRPF
+pago fraccionado), computed from the invoices and expenses already in the app,
+so the figures can be transcribed into the AEAT portal. The module files
+nothing and provides no tax advice — every page carries a non-dismissible
+"estimate, not tax advice" banner.
 
-## What it does
+## Contents
 
-- Per-quarter draft pages: `/tax-forms-draft/303/<year>/<q>` and `/130/<year>/<q>`.
-- Index at `/tax-forms-draft/` listing years × quarters.
-- Copy-to-clipboard per box + print/save-as-PDF (print stylesheet).
+1. [Features](#features)
+2. [Box mapping](#box-mapping)
+3. [How the figures are computed](#how-the-figures-are-computed)
+4. [Scope exclusions](#scope-exclusions)
+
+## Features
+
+- Draft pages per quarter: `/tax-forms-draft/303/<year>/<q>` and
+  `/tax-forms-draft/130/<year>/<q>`, with an index at `/tax-forms-draft/`
+- Copy-to-clipboard per box; print / save-as-PDF via a print stylesheet
 - Dashboard Tax Obligations panel: current-quarter running 303/130 position
-  (display-only — does not change the panel grand total).
-- REST API: `GET /api/v1/m/tax_es_forms/draft/303/<year>/<q>` and `/130/...`.
+  (display-only — it never changes the panel's grand total)
+- REST API: `GET /api/v1/m/tax_es_forms/draft/303/<year>/<q>` and `/130/...`
 
-## Box mapping (F5-D1) — STANDING RULE
+## Box mapping
 
-Box numbers live in [`boxes.py`](boxes.py), stamped `BOX_TABLE_VERSION`. They are
-the standard **régimen general / estimación directa** boxes. **Verify against the
-current official AEAT models before each fiscal year** — box numbers change across
-form revisions.
+Box numbers live in [`boxes.py`](boxes.py), stamped with `BOX_TABLE_VERSION`.
+They are the standard **régimen general / estimación directa** boxes. Box
+numbers change across AEAT form revisions — **verify against the current
+official models before each fiscal year**:
 
-- Modelo 303 (IVA): AEAT Sede Electrónica → Modelo 303.
-- Modelo 130 (IRPF pago fraccionado): AEAT Sede Electrónica → Modelo 130.
+- Modelo 303 (IVA): AEAT Sede Electrónica → Modelo 303
+- Modelo 130 (IRPF pago fraccionado): AEAT Sede Electrónica → Modelo 130
 
-### 303 aggregation
-- **IVA devengado (repercutido):** invoices in the quarter, `status != cancelled`
-  (devengo/accrual). For **issued** invoices the frozen **F2-D4 fiscal snapshot**
-  (`snap_vat_rate` / `snap_taxable_base` / `snap_vat_amount`) is used — so later
-  customer/settings edits never change a filed quarter. Legacy/draft invoices
-  fall back to deriving from customer `tax_type == 'standard'` × `default_vat_rate`
-  (`eu_b2b` / `non_eu` carry no output VAT). Base = invoice `amount_eur`.
-- **IVA soportado (deducible):** now uses **F4** per-expense
-  `vat_amount` × `deductible_pct` (skips `deductible == False`). Legacy rows with
-  no `vat_amount` are excluded and counted as "missing VAT data" (surfaced in UI).
+## How the figures are computed
 
-### 130 aggregation
-- **Cumulative year-to-date** to the end of the selected quarter (as the model
-  requires). Ingresos = YTD invoice bases; Gastos = YTD expense **net** (F4
-  `net_amount`) where present, gross fallback for legacy rows. Rendimiento =
-  ingresos − gastos. Pago = 20% of positive rendimiento. Box 05 (prior payments)
-  estimated from the prior quarters' cumulative rendimiento. Result never < 0.
+The math lives in [`calculator.py`](calculator.py) as pure functions
+(no Flask, no database), which keeps it directly unit-testable.
 
-## Scope exclusions (v1, shown in UI fine print)
-módulos (régimen simplificado), recargo de equivalencia, prorrata, criterio de
-caja (we use devengo only), intra-EU acquisition / inversión del sujeto pasivo
-detail boxes.
+**Modelo 303**
 
-## Dependencies (now satisfied)
-- **F2-D4** (fiscal snapshot) — SHIPPED. Issued invoices carry frozen VAT; the
-  engine prefers the snapshot and falls back to live derivation for legacy/draft.
-- **F4** (expense VAT) — SHIPPED. IVA soportado and 130 net gastos use the real
-  per-expense VAT/net; legacy VAT-less rows are excluded and counted.
+- *IVA repercutido (output VAT)*: invoices in the quarter with
+  `status != cancelled` (accrual basis). Issued invoices use the fiscal
+  snapshot frozen at issue (`snap_vat_rate` / `snap_taxable_base` /
+  `snap_vat_amount`), so later edits to customers or settings never change a
+  past quarter. Legacy and draft invoices fall back to deriving from the
+  customer's `tax_type` and the configured VAT rate; `eu_b2b` and `non_eu`
+  customers carry no output VAT.
+- *IVA soportado (input VAT)*: per-expense `vat_amount` × `deductible_pct`,
+  skipping non-deductible expenses. Legacy expenses without VAT data are
+  excluded and counted — the page shows how many, so the user knows the
+  deduction figure is understated.
 
-## Fast-follow stub (F5-D5, not built)
-Annual **Modelo 390** (resumen anual IVA) and **Modelo 100** (renta) summaries can
-reuse `calculator.py` by summing the four quarters / the full year. Not in v1 —
-tracked as a follow-up. No code shipped for these yet.
+**Modelo 130**
+
+- Cumulative year-to-date, as the official model requires: income minus
+  expenses (net amounts where known, gross for legacy rows), 20% of the
+  positive result, minus the estimated payments from earlier quarters of the
+  same year. The result never goes below zero.
+
+## Scope exclusions
+
+Out of scope in v1 (also listed in the UI fine print): régimen simplificado
+(módulos), recargo de equivalencia, prorrata, criterio de caja (accrual basis
+only), and the intra-EU acquisition / reverse-charge detail boxes.
+
+A fast-follow for annual summaries (Modelo 390 and 100) can reuse the same
+engine by aggregating four quarters; it is intentionally not built yet.

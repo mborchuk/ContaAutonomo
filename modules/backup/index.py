@@ -7,7 +7,7 @@ Supports optional AES encryption, custom backup path, and external storage integ
 
 from module_manager import BaseModule
 from flask import (Blueprint, request, redirect, url_for,
-                   flash, send_file, session, render_template)
+                   flash, send_file, render_template)
 from datetime import datetime, date
 from pathlib import Path
 from io import BytesIO
@@ -156,7 +156,8 @@ class BackupModule(BaseModule):
         @login_required
         def restore_backup(filename):
             ok, msg = module._restore_full_backup(
-                filename, module._decryption_candidates())
+                filename, module._decryption_candidates(
+                    request.form.get('password', '').strip() or None))
             if ok:
                 module.core.log_activity('backup_restored', 'backup', filename)
             flash(msg, 'success' if ok else 'danger')
@@ -306,14 +307,23 @@ class BackupModule(BaseModule):
             return cfg.custom_password or None
         return self._backup_key()
 
-    def _decryption_candidates(self):
-        """Passwords to try on an encrypted backup, most likely first."""
+    def _decryption_candidates(self, typed_password=None):
+        """Passwords to try on an encrypted backup, most likely first.
+
+        *typed_password* is what the owner entered on restore: a custom
+        backup password, or the login password of a backup made with the
+        legacy 'app_password' method (its key is derived the same way).
+        """
         cfg = self._get_config()
         candidates = [self._encryption_password(cfg), self._backup_key()]
-        try:  # backups made with the legacy 'app_password' method
-            candidates.append(session.get('_enc_token'))
-        except RuntimeError:
-            pass  # no request context
+        if typed_password:
+            candidates.append(typed_password)
+            try:
+                from auth import auth_manager
+                key = auth_manager.get_encryption_key(typed_password)
+                candidates.append(key.decode('utf-8') if isinstance(key, bytes) else key)
+            except Exception as e:  # no auth config (external login only)
+                logger.debug('legacy backup key derivation: %s', e)
         return [c for i, c in enumerate(candidates) if c and c not in candidates[:i]]
 
     def _backup_dir(self):
@@ -532,6 +542,12 @@ class BackupModule(BaseModule):
                 "var f=document.createElement('form');"
                 "f.method='POST';"
                 "f.action='/backup/restore/" + fn + "';"
+                + ("var p=prompt('Password for this backup (leave empty to use "
+                   "the backup key; for backups made before the backup key, "
+                   "your login password)');if(p===null)return;"
+                   "var w=document.createElement('input');w.type='hidden';"
+                   "w.name='password';w.value=p;f.appendChild(w);"
+                   if fn.endswith('.enc') else '') +
                 "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
                 "var m=document.querySelector('meta[name=csrf-token]');"
                 "if(m)c.value=m.content;f.appendChild(c);"
