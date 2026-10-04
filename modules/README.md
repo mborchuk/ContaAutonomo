@@ -158,6 +158,9 @@ Every module must inherit from `BaseModule` and implement required properties.
 | `nav_items` | `list[dict]` | `[]` | Navigation menu entries |
 | `settings_tab` | `str` | `'general'` | Which settings tab to place module settings in (`'general'` or `'security'`) |
 | `settings_panels` | `list[dict]` | `[]` | Settings tab panels |
+| `dependencies` | `list[str]` | `[]` | Module ids this module cannot work without; enabled with it, and it cannot be disabled while this one is enabled |
+| `provides` | `list[str]` | `[]` | Module ids this module can replace (see [Replacing a module](#replacing-a-module)) |
+| `interface` | `list[str]` | `[]` | Method and model names other modules use on this module; a replacement must have all of them |
 
 ### Optional Methods
 
@@ -181,6 +184,7 @@ Every module must inherit from `BaseModule` and implement required properties.
 | `on_invoice_annulled(invoice, request)` | `Invoice`, `Request` | `None` | Called when an issued invoice is annulled, before commit — raising aborts |
 | `get_invoice_templates()` | — | `list[dict]` | Invoice PDF templates provided by this module |
 | `get_tax_obligations(context)` | `dict` | `dict` or `None` | Tax obligation data for dashboard |
+| `get_capabilities()` | — | `list[dict]` | What other modules may call: each `{'type': str, 'action': callable, ...}`; invalid entries are skipped and logged |
 | `get_settings_html(settings)` | `Settings` | `str` or `None` | HTML to inject into settings tab |
 | `save_settings(settings, form)` | `Settings`, form | `None` | Handle saving module settings |
 
@@ -208,7 +212,7 @@ interface for interacting with the application core.
 | `core.storage` | `FileStorageBackend` | Active file storage backend |
 | `core.activity_logger` | `ActivityLogger` | Active activity logger |
 | `core.scheduler` | `TaskScheduler` | Task scheduler for periodic jobs |
-| `core.module_manager` | `ModuleManager` | Module manager instance (access other modules' data via contracts) |
+| `core.module_manager` | `ModuleManager` | Module manager: `provider_of(module_id)` for another module, `find_capabilities(type)` for a capability |
 | `core.invoice_service` | `InvoiceService` | Safe API for reading/writing invoices (PAID = read-only) |
 
 ### Methods
@@ -893,6 +897,7 @@ If `total_field` is provided, a TOTAL row is appended with the sum of that field
        └── Imports index.py, finds BaseModule subclass
 
 2. ModuleManager.load_enabled_modules()
+   └── ensure_dependencies(): enables missing dependencies of enabled modules
    └── For each enabled module:
        ├── Instantiate: module = ModuleClass(core_services)
        ├── register_models(db) → creates DB tables
@@ -914,7 +919,8 @@ If `total_field` is provided, a TOTAL row is appended with the sum of that field
 
 ### Enable/Disable Flow
 
-- Enabling: takes effect immediately (module loaded at runtime)
+- Enabling: takes effect immediately (module loaded at runtime); its dependencies are enabled first, unless a module that `provides` them is already enabled
+- Disabling a module that an enabled module depends on is refused, unless another enabled module provides it
 - Disabling: nav items removed immediately, full cleanup on restart
 - DB tables are never dropped on disable (data preserved)
 
@@ -1039,6 +1045,19 @@ def _upload_file(self):
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
 17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
 18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
+19. **Look up other modules with `self.core.module_manager.provider_of('<module id>')`**, never `module_manager.modules.get(...)` — the direct lookup ignores a replacement module, and a test fails on it. Use only names the other module lists in its `interface`; add a name there when you start using it.
+
+### Replacing a module
+
+Any module can be replaced by another one that declares the replaced module's id:
+
+```python
+@property
+def provides(self):
+    return ['expenses']
+```
+
+The replacement must have every name in the replaced module's `interface`, otherwise `provider_of` skips it and logs a warning. The interfaces in use, and the `expense` table columns a replacement expenses module must fill, are listed in `MODULES_DOCUMENTATION.md` → "Replacing a module".
 
 ---
 
