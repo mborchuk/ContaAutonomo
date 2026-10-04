@@ -1482,7 +1482,7 @@ def create_invoice():
 
                 # Auto-sign PDF if pdf_signature module requested it
                 try:
-                    pdf_sig_mod = module_manager.modules.get('pdf_signature')
+                    pdf_sig_mod = module_manager.provider_of('pdf_signature')
                     if pdf_sig_mod:
                         sig_rec = pdf_sig_mod.PDFSignatureInvoice.query.filter_by(
                             invoice_id=invoice.id
@@ -2379,15 +2379,25 @@ def toggle_module(module_id):
         flash('Module system not initialized', 'danger')
         return redirect(url_for('settings') + '#modules')
 
+    if module_id not in module_manager.discovered:
+        flash('Unknown module.', 'danger')
+        return redirect(url_for('settings') + '#modules')
+
     action = request.form.get('action', 'enable')
     if action == 'enable':
-        module_manager.enable_module(module_id)
-        log_activity('module_enabled', 'system', module_id)
-        flash(f'Module enabled. Please restart the application for changes to take effect.', 'success')
+        enabled = module_manager.enable_module(module_id)
+        for mid in enabled:
+            log_activity('module_enabled', 'system', mid)
+        also = [m for m in enabled if m != module_id]
+        flash('Module enabled' + (f' together with the modules it needs: {", ".join(also)}' if also else '')
+              + '. Please restart the application for changes to take effect.', 'success')
     else:
-        module_manager.disable_module(module_id)
-        log_activity('module_disabled', 'system', module_id)
-        flash(f'Module disabled. Please restart the application for changes to take effect.', 'success')
+        needed_by = module_manager.disable_module(module_id)
+        if needed_by:
+            flash(f'Not disabled: needed by {", ".join(needed_by)}. Disable those first.', 'warning')
+        else:
+            log_activity('module_disabled', 'system', module_id)
+            flash('Module disabled. Please restart the application for changes to take effect.', 'success')
 
     return redirect(url_for('settings') + '#modules')
 

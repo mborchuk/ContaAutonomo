@@ -171,7 +171,7 @@ class ReportsModule(BaseModule):
             }
         """
         # Auth: reuse the api module's constant-time token check.
-        api_mod = self.core.module_manager.modules.get('api') if self.core.module_manager else None
+        api_mod = self.core.module_manager.provider_of('api') if self.core.module_manager else None
         if not api_mod or not api_mod.verify_token(request):
             return jsonify(error='unauthorized',
                            message='Missing or invalid X-API-Token'), 401

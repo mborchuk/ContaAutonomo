@@ -66,6 +66,11 @@ class ApiModule(BaseModule):
         return 'api'
 
     @property
+    def interface(self):
+        # Used by Reports for API authentication.
+        return ['verify_token']
+
+    @property
     def name(self):
         return 'AI Communication API'
 

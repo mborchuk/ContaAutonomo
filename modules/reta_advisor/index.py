@@ -43,6 +43,11 @@ class RetaAdvisorModule(BaseModule):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        # Actual Social Security payments come from Tax Forms (tax_management).
+        return ['tax_management']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'RETA Advisor', 'endpoint': 'reta_advisor.reta_index',
@@ -121,7 +126,7 @@ class RetaAdvisorModule(BaseModule):
 
     def _paid_ytd(self, year):
         """Actual SS payments this year via tax_management, if enabled."""
-        tm = self.core.module_manager.modules.get('tax_management')
+        tm = self.core.module_manager.provider_of('tax_management')
         if not tm or not hasattr(tm, 'SSPayment'):
             return None
         try:
