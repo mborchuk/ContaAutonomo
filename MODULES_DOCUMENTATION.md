@@ -795,9 +795,83 @@ if pdf_sig:
     signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
 ```
 
+### Dependencies
+
+A module that cannot work correctly without another declares it:
+
+```python
+@property
+def dependencies(self):
+    return ['expenses', 'tax_management']
+```
+
+- **Enabling** a module (Settings → Modules) enables its dependencies first,
+  recursively; the message lists what else was switched on.
+- **Disabling** a module that an enabled module depends on is refused; the
+  message names the modules that need it.
+- **At start-up** missing dependencies of enabled modules are enabled
+  (`ModuleManager.ensure_dependencies()`), so existing installations become
+  consistent when a dependency is declared later.
+- The Modules tab shows "Requires" and "Required by" for each module.
+
+Declared today: `tax_es_forms` → `expenses`, `tax_management`, `tax_es_irpf`;
+`tax_es_irpf` → `expenses`, `tax_management`; `reta_advisor` →
+`tax_management`. Optional integrations (external storage for backups, PDF
+signing for documents, email for fiscal reminders, AI receipt parsing) are not
+dependencies: they use the capabilities below or check whether the other module
+is loaded, and work without it.
+
+### Replacing a module
+
+Any module, bundled or added later, can be replaced by another one. The
+dependency names a module id; it is met when that module **or any module that
+`provides` its id** is enabled.
+
+```python
+@property
+def provides(self):
+    return ['expenses']        # this module can stand in for 'expenses'
+```
+
+- Enabling a module that depends on `expenses` switches on the bundled
+  Expenses module only when no replacement is enabled.
+- Disabling a provider is refused only when it is the last enabled one.
+- Modules find each other with `module_manager.provider_of('<module id>')`,
+  never `module_manager.modules.get(...)`: the lookup returns the bundled
+  module first, else a replacement. A test fails if a direct lookup comes back.
+- A module lists what others use on it in `interface` (method and model
+  names). A replacement must have all of them; `provider_of` skips and logs one
+  that does not, and a test checks every loaded module has its own interface.
+
+Interfaces declared today:
+
+| Module | `interface` | Used by |
+|---|---|---|
+| `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
+| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)` | Spanish Tax Forms |
+| `fiscal_calendar` | `_selected_forms()` | Tax Forms |
+| `api` | `verify_token(request)` | Reports |
+| `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
+
+**Expenses** has no methods in its interface: the tax modules read the core
+`expense` table (`from app import Expense`). A replacement expenses module must
+write its records there with these columns filled: `expense_date`, `amount`,
+`currency`, `net_amount`, `vat_amount`, `vat_rate`, `deductible`,
+`deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
+`description`. A test fails if one of these columns disappears.
+
+Code imports between modules (`from modules.api.index import ApiError`,
+`fiscal_calendar.calendar_data`, `pdf_verify.extract_signatures`) are not
+covered: replacing those modules means keeping those import paths.
+
 ### Capabilities System
 
-For loose coupling, modules declare **capabilities** — what they can do — and other modules discover them by type:
+For loose coupling, modules declare **capabilities** — what they can do — and other modules discover them by type.
+Contract: each capability is a dict with a non-empty string `type` and a callable `action`
+(`module_manager.valid_capability`); `find_capabilities` skips and logs entries that break it.
+Types in use: `notify` (`action(subject=, body=)`, invoice_email), `pdf_sign` (`action(pdf_bytes)` → bytes,
+pdf_signature), `pdf_verify`, `file_badge` (`action(document_file)` → HTML) and `file_badge_script`
+(`action()` → HTML) from pdf_verify; `document_view_panel` is read by documents but no module provides it yet.
 
 ```python
 # In your module — declare what you can do:

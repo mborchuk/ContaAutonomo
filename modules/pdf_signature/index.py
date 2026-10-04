@@ -32,6 +32,11 @@ class PDFSignatureModule(BaseModule):
         return 'pdf_signature'
 
     @property
+    def interface(self):
+        # Used by the core invoice PDF route to auto-sign.
+        return ['PDFSignatureInvoice']
+
+    @property
     def name(self):
         return 'PDF Signature'
 

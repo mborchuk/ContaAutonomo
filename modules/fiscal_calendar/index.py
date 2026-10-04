@@ -36,6 +36,11 @@ class FiscalCalendarModule(BaseModule):
         return 'fiscal_calendar'
 
     @property
+    def interface(self):
+        # Used by Tax Forms for its payment projection.
+        return ['_selected_forms']
+
+    @property
     def name(self):
         return 'Fiscal Calendar'
 

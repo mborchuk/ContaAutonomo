@@ -52,6 +52,12 @@ class TaxEsFormsModule(BaseModule):
         return '0.1.0'
 
     @property
+    def dependencies(self):
+        # Expenses feed 303; filed returns and Social Security come from Tax Forms;
+        # Modelo 130 is calculated by the IRPF Estimator (owner decision 2026-10-03).
+        return ['expenses', 'tax_management', 'tax_es_irpf']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'Tax Drafts', 'endpoint': 'tax_es_forms.drafts_index',
@@ -158,7 +164,7 @@ class TaxEsFormsModule(BaseModule):
         Modelo 303 of the previous quarter: its box 87 plus its negative
         result when compensated (no refund requested in box 73)."""
         mm = getattr(self.core, 'module_manager', None)
-        tm = mm.modules.get('tax_management') if mm else None
+        tm = mm.provider_of('tax_management') if mm else None
         prev_year, prev_quarter = (year, quarter - 1) if quarter > 1 else (year - 1, 4)
         boxes = tm.filed_boxes('303', prev_year, prev_quarter) if tm else {}
         if not boxes:
@@ -218,7 +224,7 @@ class TaxEsFormsModule(BaseModule):
 
     def _irpf_module(self):
         mm = getattr(self.core, 'module_manager', None)
-        return mm.modules.get('tax_es_irpf') if mm else None
+        return mm.provider_of('tax_es_irpf') if mm else None
 
     def _draft_130(self, year, quarter):
         # One owner for Modelo 130 (owner decision 2026-10-03): when the IRPF
