@@ -12,17 +12,17 @@ urllib3>=2.8.0
 python-dateutil>=2.8.2
 reportlab>=5.0.1
 cryptography>=41.0.0
-boto3>=1.43.105
-google-cloud-storage>=2.14.0
+boto3>=1.43.114
+google-cloud-storage>=3.17.1
 google-api-python-client>=2.100.0
-google-auth>=2.59.0
-openai>=3.22.1
-anthropic>=0.20.0
+google-auth>=2.62.0
+openai>=3.32.0
+anthropic>=1.15.0
 google-cloud-documentai>=2.20.0
 pyhanko
 Pillow
-pypdf>=4.0.0
+pypdf>=6.21.0
 asn1crypto>=1.5.0
 gunicorn>=26.2.0
 # Error tracking, enabled only when SENTRY_DSN is set.
-sentry-sdk[flask]>=2.0.0
+sentry-sdk[flask]>=2.72.0
