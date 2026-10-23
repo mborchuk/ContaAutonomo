@@ -695,7 +695,7 @@ frozenlist==1.8.0 \
     # via
     #   aiohttp
     #   aiosignal
-google-api-core==2.40.0 \
+google-api-core[grpc]==2.40.0 \
     --hash=sha256:4b9e0a80024c269ae173136d5439f4ed284651d6e5e2773ba5c694f481f9c0f4 \
     --hash=sha256:ebee7d1b138b5362beecec260e6e8988ac97346562c7382ccb6f0ad8435c599f
     # via
@@ -1539,9 +1539,9 @@ openai==3.24.0 \
     --hash=sha256:1e7463f7d78773ab2ce4fe85710481aa5bd5ffefd54c8de4b067506cd2d42895 \
     --hash=sha256:b59703a3e3b5df78b269e90049d383a1dda58c90104cc4be59db21078db4b7a4
     # via -r requirements.in
-opentelemetry-api==1.45.0 \
-    --hash=sha256:711ede81773c8025c2c03dac0450bc89f3d30aea6eabcc815c570d4e35a963f7 \
-    --hash=sha256:80e068aba7cd56c8b58512d6a36f8d25cb1dfaa0c0a4cc1c938ccf9f362d9cb3
+opentelemetry-api==1.45.1 \
+    --hash=sha256:aa38ed19bcc084ba42782a73255b3582283eced7ad6dddbd6695189e69adfb75 \
+    --hash=sha256:b31553efa588ae44bc306f863c785c5333a9ecc091248c6ee68b4b6c87fdedfb
     # via google-api-core
 ordered-set==4.1.0 \
     --hash=sha256:046e1132c71fcf3330438a539928932caf51ddbc582496833e23de611de14562 \
@@ -1986,7 +1986,7 @@ s3transfer==0.19.2 \
     --hash=sha256:ba0309fd86be3c27dbf78cdd813c13c5e1df16e5874b99d2535ebbdfb9892993 \
     --hash=sha256:d8168eccca828cbb2cd573675333f3bddd254313a9c42494b84c76b539e8ba25
     # via boto3
-sentry-sdk==2.71.0 \
+sentry-sdk[flask]==2.71.0 \
     --hash=sha256:7beb27a22f06396f3a05510c3da6ea10e1c79e02e859993c27ce4ff074e296d6 \
     --hash=sha256:9ed36b4c206048aa67b5ddba0a6e28d59fc55cf10d60f5f7aea2c3917184bf4a
     # via -r requirements.in
