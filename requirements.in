@@ -21,7 +21,7 @@ anthropic>=0.20.0
 google-cloud-documentai>=2.20.0
 pyhanko
 Pillow
-pypdf>=4.0.0
+pypdf>=6.21.2
 asn1crypto>=1.5.0
 gunicorn>=26.2.0
 # Error tracking, enabled only when SENTRY_DSN is set.
