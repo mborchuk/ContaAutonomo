@@ -35,3 +35,22 @@ def test_real_response_passes_through(api, app):
         resp = api._handle(lambda: pdf)
     assert resp is pdf
     assert resp.mimetype == 'application/pdf'
+
+
+@pytest.mark.parametrize('query', ['from=<b>x</b>&to=EUR', 'from=USD&to=EURO', 'from=US1&to=EUR'])
+def test_rates_rejects_anything_but_currency_codes(api, app, query):
+    """/rates echoes the codes back, so only three letters are accepted."""
+    with app.test_request_context(f'/api/v1/rates?{query}'):
+        resp, status = api._handle(api._rates)
+    assert status == 400
+    assert resp.get_json()['error'] == 'bad_request'
+
+
+def test_rates_echoes_normalised_codes(api, app, monkeypatch):
+    monkeypatch.setattr(api.core.currency_service, 'get_rate',
+                        lambda f, t, d: (0.9, '2026-03-17'))
+    with app.test_request_context('/api/v1/rates?from=usd&to=eur&date=2026-03-17'):
+        resp, status = api._handle(api._rates)
+    assert status == 200
+    assert resp.get_json() == {'from': 'USD', 'to': 'EUR', 'rate': 0.9,
+                               'actual_date': '2026-03-17'}

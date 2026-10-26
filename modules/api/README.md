@@ -112,7 +112,7 @@ sequenceDiagram
 | `GET` | `/api/v1/customers` | List customers |
 | `GET` | `/api/v1/expenses` | List expenses (only if `expenses` enabled) |
 | `GET` | `/api/v1/dashboard/summary` | Money summary + tax totals |
-| `GET` | `/api/v1/rates` | Exchange rate (`from`, `to`, `date`) |
+| `GET` | `/api/v1/rates` | Exchange rate (`from`, `to`: three-letter currency codes, else 400; `date`) |
 | `*` | `/api/v1/m/{module_id}/{path}` | Module-contributed endpoints |
 
 Verbs follow REST: read = `GET`, make = `POST`, change = `PATCH`, remove =
