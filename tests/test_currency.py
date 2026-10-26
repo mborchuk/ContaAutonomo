@@ -110,7 +110,6 @@ def test_currency_symbol_fallback():
 def test_fallback_logging_strips_line_breaks_from_date(monkeypatch, caplog):
     """A form-supplied date must not forge extra log lines (log injection)."""
     import logging
-    import currency_converter as cc
     monkeypatch.setattr(cc, 'get_exchange_rate_ecb', lambda d: (None, None))
     monkeypatch.setattr(cc, 'get_exchange_rate_exchangerate_api', lambda d: 0.9)
     with caplog.at_level(logging.INFO, logger=cc.logger.name):
