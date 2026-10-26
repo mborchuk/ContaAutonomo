@@ -18,6 +18,7 @@ The optional MCP wrapper lives outside this module/process.
 """
 
 import hmac
+import re
 import secrets
 from datetime import date, datetime
 from functools import wraps
@@ -52,6 +53,10 @@ class ApiError(Exception):
         self.status = status
         self.code = code
         self.message = message
+
+
+# ISO 4217 alphabetic code, as the rate providers expect.
+_CURRENCY_CODE = re.compile(r'[A-Z]{3}')
 
 
 def _json_error(status, code, message):
@@ -756,12 +761,15 @@ class ApiModule(BaseModule):
         }, 200
 
     def _rates(self):
-        frm = (request.args.get('from') or '').upper()
-        to = (request.args.get('to') or '').upper()
+        frm = (request.args.get('from') or '').strip().upper()
+        to = (request.args.get('to') or '').strip().upper()
         date_str = request.args.get('date') or date.today().strftime('%Y-%m-%d')
         if not frm or not to:
             raise ApiError(400, 'bad_request',
                            'Query params "from" and "to" are required')
+        if not (_CURRENCY_CODE.fullmatch(frm) and _CURRENCY_CODE.fullmatch(to)):
+            raise ApiError(400, 'bad_request',
+                           '"from" and "to" must be three-letter currency codes')
         # Validate the date format.
         self._parse_date(date_str, 'date')
         rate, actual_date = self.core.currency_service.get_rate(frm, to, date_str)
