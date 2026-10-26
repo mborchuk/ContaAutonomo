@@ -10,9 +10,9 @@ requests>=2.31.0
 # Transitive (requests, botocore); floor for CVE-2026-97687/97688/97689.
 urllib3>=2.8.0
 python-dateutil>=2.8.2
-reportlab>=5.0.1
+reportlab>=5.1.0
 cryptography>=41.0.0
-boto3>=1.43.105
+boto3>=1.43.118
 google-cloud-storage>=2.14.0
 google-api-python-client>=2.100.0
 google-auth>=2.59.0
