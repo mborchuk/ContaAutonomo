@@ -7,7 +7,6 @@ VAT and deducts it in the same return. Synthetic figures.
 from datetime import date
 from types import SimpleNamespace as NS
 
-import pytest
 
 from modules.tax_es_forms.calculator import compute_modelo_303
 

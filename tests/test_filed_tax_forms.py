@@ -5,7 +5,6 @@ number, then the amount to its right on the same line). No real form is used.
 """
 import io
 import json
-from datetime import date
 
 import pytest
 from reportlab.pdfgen import canvas

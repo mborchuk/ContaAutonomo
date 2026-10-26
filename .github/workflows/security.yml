@@ -15,7 +15,10 @@ permissions:
 # Gates (owner decision 2026-10-03): a job fails on CRITICAL or HIGH findings
 # that have a fix available. Accepted exceptions live in .trivyignore and
 # .pip-audit-ignore, each with a reason and a review date. Every job also
-# publishes its full report (all severities) before the gate runs.
+# publishes its full report (all severities) before the gate runs: Trivy as an
+# Actions artifact. Code scanning gets only findings that have a fix — base-image
+# packages Debian has not fixed yet would otherwise fill it with alerts no
+# change here can close; they appear there once Debian ships a fix.
 
 env:
   # Pin Trivy version explicitly — do NOT use trivy-action (compromised March 2026)
@@ -138,8 +141,18 @@ jobs:
           rm trivy.deb
           trivy --version
 
-      - name: Trivy SARIF output
-        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-fs.sarif .
+      - name: Trivy full report
+        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format json --output trivy-fs.json .
+
+      - name: Upload full report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-fs-report
+          path: trivy-fs.json
+
+      - name: Trivy SARIF output (fixable only)
+        run: trivy fs --severity CRITICAL,HIGH,MEDIUM --ignore-unfixed --ignorefile .trivyignore --exit-code 0 --format sarif --output trivy-fs.sarif .
 
       - name: Upload to GitHub Security
         if: always()
@@ -169,8 +182,18 @@ jobs:
       - name: Build image
         run: docker build -t contaautonomo:scan .
 
-      - name: Trivy SARIF output
-        run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format sarif --output trivy-image.sarif contaautonomo:scan
+      - name: Trivy full report
+        run: trivy image --severity CRITICAL,HIGH,MEDIUM --exit-code 0 --format json --output trivy-image.json contaautonomo:scan
+
+      - name: Upload full report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-image-report
+          path: trivy-image.json
+
+      - name: Trivy SARIF output (fixable only)
+        run: trivy image --severity CRITICAL,HIGH,MEDIUM --ignore-unfixed --ignorefile .trivyignore --exit-code 0 --format sarif --output trivy-image.sarif contaautonomo:scan
 
       - name: Upload to GitHub Security
         if: always()

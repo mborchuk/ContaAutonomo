@@ -28,7 +28,7 @@ def test_unpaid_invoices_and_unmarked_vat_free_purchases_are_flagged(app, loaded
 
     checks = loaded_modules.modules['tax_es_forms']._draft_303(2026, 3)['meta']['checks']
     assert checks == [
-        "1 invoice(s) of this quarter are not marked paid — they are still counted "
-        "(invoice date): C-2",
-        '1 expense(s) without Spanish VAT are not marked "Reverse charge" — if the '
-        'supplier is outside Spain, mark them: Synthetic SaaS']
+        ("1 invoice(s) of this quarter are not marked paid — they are still counted "
+         "(invoice date): C-2"),
+        ('1 expense(s) without Spanish VAT are not marked "Reverse charge" — if the '
+         'supplier is outside Spain, mark them: Synthetic SaaS')]
