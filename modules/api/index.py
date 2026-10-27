@@ -18,6 +18,7 @@ The optional MCP wrapper lives outside this module/process.
 """
 
 import hmac
+import html
 import re
 import secrets
 from datetime import date, datetime
@@ -770,6 +771,9 @@ class ApiModule(BaseModule):
         if not (_CURRENCY_CODE.fullmatch(frm) and _CURRENCY_CODE.fullmatch(to)):
             raise ApiError(400, 'bad_request',
                            '"from" and "to" must be three-letter currency codes')
+        # No-op on three letters; tells CodeQL the echoed values are safe
+        # (it does not treat the regex check as a sanitizer).
+        frm, to = html.escape(frm), html.escape(to)
         # Validate the date format.
         self._parse_date(date_str, 'date')
         rate, actual_date = self.core.currency_service.get_rate(frm, to, date_str)
