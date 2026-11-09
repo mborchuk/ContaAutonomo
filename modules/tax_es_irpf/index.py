@@ -692,7 +692,7 @@ class TaxEsIrpfModule(BaseModule):
         start = profile.start_date.isoformat() if profile.start_date else ''
         return f'''
         <h3>🧮 IRPF Estimator (España)</h3>
-        <p style="color:#666;">Estimate only — not tax advice. Confirm with AEAT.</p>
+        <p style="color:var(--color-text-muted);">Estimate only — not tax advice. Confirm with AEAT.</p>
         <div class="form-group">
             <label for="irpf_region">Comunidad autónoma</label>
             <select id="irpf_region" name="irpf_region">{options}</select>

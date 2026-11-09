@@ -109,8 +109,8 @@ class InvoiceAttachmentsModule(BaseModule):
     <div class="form-group">
         <label for="invoice_pdf">📎 Attach Invoice PDF (optional)</label>
         <input type="file" id="invoice_pdf" name="invoice_pdf" accept=".pdf"
-               style="padding: 8px; border: 1px dashed #ccc; border-radius: 5px; background: #fafafa;">
-        <small style="display: block; margin-top: 5px; color: #666;">
+               style="padding: 8px; border: 1px dashed var(--color-border-strong); border-radius: 5px; background: var(--color-surface-2);">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             Upload a ready-made invoice PDF instead of generating one later.
         </small>
     </div>
@@ -125,8 +125,8 @@ class InvoiceAttachmentsModule(BaseModule):
     <div class="form-group">
         <label for="invoice_pdf">{label}</label>
         <input type="file" id="invoice_pdf" name="invoice_pdf" accept=".pdf"
-               style="padding: 8px; border: 1px dashed #ccc; border-radius: 5px; background: #fafafa;">
-        <small style="display: block; margin-top: 5px; color: #666;">
+               style="padding: 8px; border: 1px dashed var(--color-border-strong); border-radius: 5px; background: var(--color-surface-2);">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             {hint}
         </small>
     </div>

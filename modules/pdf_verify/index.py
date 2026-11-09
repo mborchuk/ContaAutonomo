@@ -425,10 +425,10 @@ class PDFVerifyModule(BaseModule):
                 var detailUrl = '/pdf-verify/details?key=' + encodeURIComponent(key)
                     + '&name=' + encodeURIComponent(fname)
                     + '&back=' + encodeURIComponent(window.location.pathname);
-                badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#e8f5e9;color:#2e7d32;text-decoration:none;border:1px solid #a5d6a7;" title="' + n + ' signature(s)">'
+                badge.innerHTML = '<a href="' + detailUrl + '" style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--color-success-bg);color:var(--color-success-fg);text-decoration:none;border:1px solid var(--color-success);" title="' + n + ' signature(s)">'
                     + '\\u2705 Signed' + (n > 1 ? ' (' + n + ')' : '') + ' \\u2014 ' + short + '</a>';
             } else if (data) {
-                badge.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:#fff3e0;color:#e65100;border:1px solid #ffcc80;">Not signed</span>';
+                badge.innerHTML = '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;background:var(--color-warning-bg);color:var(--color-warning-fg);border:1px solid var(--color-warning);">Not signed</span>';
             }
         })
         .catch(function() {})
