@@ -102,8 +102,8 @@ class TaxPolandModule(BaseModule):
         flat_checked = 'checked' if cfg.tax_mode == 'flat' else ''
         progressive_checked = 'checked' if cfg.tax_mode == 'progressive' else ''
         return f'''
-        <h3 style="margin-bottom: 15px; color: #333;">🇵🇱 Tax Poland (IT)</h3>
-        <p style="color: #666; margin-bottom: 15px;">
+        <h3 style="margin-bottom: 15px; color: var(--color-text);">🇵🇱 Tax Poland (IT)</h3>
+        <p style="color: var(--color-text-muted); margin-bottom: 15px;">
             Polish tax settings for IT freelancers (JDG / B2B).
         </p>
 
@@ -128,7 +128,7 @@ class TaxPolandModule(BaseModule):
             <input type="number" id="tax_pl_zus" name="tax_pl_zus"
                    value="{cfg.zus_monthly:.2f}" step="0.01" min="0"
                    style="width: 160px;">
-            <small style="display: block; margin-top: 5px; color: #666;">
+            <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
                 Full ZUS social insurance contribution (składki społeczne). ~1,600 PLN/month in 2025/2026.
             </small>
         </div>

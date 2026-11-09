@@ -375,8 +375,8 @@ class BackupModule(BaseModule):
                          cp, cp_show, ext_ok, use_ext, backups, RS):
         h = []
         a = h.append
-        a('<h3 style="margin-bottom:15px;color:#333;">Backup &amp; Restore</h3>')
-        a('<p style="color:#666;margin-bottom:20px;">'
+        a('<h3 style="margin-bottom:15px;color:var(--color-text);">Backup &amp; Restore</h3>')
+        a('<p style="color:var(--color-text-muted);margin-bottom:20px;">'
           'Full backups include database (JSON) and all uploaded files '
           'in a ZIP archive.</p>')
 
@@ -386,7 +386,7 @@ class BackupModule(BaseModule):
         a(f'<input type="checkbox" name="auto_backup_enabled" {auto_ck}'
           f' style="{RS}"> Enable automatic daily backup</label>')
         a('<small style="display:block;margin-top:4px;margin-left:24px;'
-          'color:#666;">Runs about a minute after start-up and daily at '
+          'color:var(--color-text-muted);">Runs about a minute after start-up and daily at '
           '03:00, at most once per day.</small></div>')
 
         # custom backup path
@@ -395,7 +395,7 @@ class BackupModule(BaseModule):
         a(f'<input type="text" id="bk_backup_path" name="bk_backup_path"'
           f' value="{bp}" placeholder="Leave empty for default (backups/)"'
           f' style="max-width:400px;">')
-        a('<small style="display:block;margin-top:4px;color:#666;">'
+        a('<small style="display:block;margin-top:4px;color:var(--color-text-muted);">'
           'Absolute path or relative to app root.</small></div>')
 
         # external storage option
@@ -405,11 +405,11 @@ class BackupModule(BaseModule):
             a(f'<input type="checkbox" name="bk_use_external_storage" {use_ext}'
               f' style="{RS}"> Also send backups to External Storage</label>')
             a('<small style="display:block;margin-top:4px;margin-left:24px;'
-              'color:#666;">Copies archive to the storage configured in '
+              'color:var(--color-text-muted);">Copies archive to the storage configured in '
               'External Storage module.</small></div>')
         else:
-            a('<div style="margin-bottom:15px;padding:10px;background:#f8f9fa;'
-              'border-radius:4px;color:#666;font-size:13px;">'
+            a('<div style="margin-bottom:15px;padding:10px;background:var(--color-surface-2);'
+              'border-radius:4px;color:var(--color-text-muted);font-size:13px;">'
               '\u2139\ufe0f Enable the <strong>External Storage</strong> '
               'module to send backups to S3 or other remote storage.</div>')
 
@@ -417,7 +417,7 @@ class BackupModule(BaseModule):
         LS = 'display:block;margin-bottom:8px;font-weight:normal;cursor:pointer;'
         a('<div style="margin-bottom:20px;">')
         a('<label style="display:block;margin-bottom:8px;font-weight:bold;'
-          'color:#333;">Encryption</label><div style="margin-left:4px;">')
+          'color:var(--color-text);">Encryption</label><div style="margin-left:4px;">')
         a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
           f' value="none" {enc_none}'
           f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
@@ -426,7 +426,7 @@ class BackupModule(BaseModule):
           f' value="key" {enc_key}'
           f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
           f' style="{RS}"> Use the backup key (recommended)</label>')
-        a('<small style="display:block;margin:-4px 0 8px 24px;color:#666;">'
+        a('<small style="display:block;margin:-4px 0 8px 24px;color:var(--color-text-muted);">'
           f'Read from {escape(self._key_source())}. Keep a copy in a password '
           'manager: encrypted backups cannot be restored without it.</small>')
         a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
@@ -443,7 +443,7 @@ class BackupModule(BaseModule):
           f' style="max-width:300px;" autocomplete="off">')
         a('</div></div></div>')
 
-        a('<hr style="margin:20px 0;border:none;border-top:1px solid #e0e0e0;">')
+        a('<hr style="margin:20px 0;border:none;border-top:1px solid var(--color-border);">')
 
         # create backup buttons
         a('<h4 style="margin-bottom:10px;">Create New Backup</h4>')
@@ -482,7 +482,7 @@ class BackupModule(BaseModule):
         if backups:
             a(self._render_backup_table(backups))
         else:
-            a('<div style="text-align:center;padding:30px;color:#999;">'
+            a('<div style="text-align:center;padding:30px;color:var(--color-text-faint);">'
               '<p>No backups found.</p></div>')
 
         return '\n'.join(h)
@@ -515,7 +515,7 @@ class BackupModule(BaseModule):
         h = []
         a = h.append
         a('<table style="width:100%;border-collapse:collapse;margin-top:10px;">')
-        a('<thead><tr style="background:#f8f9fa;">')
+        a('<thead><tr style="background:var(--color-surface-2);">')
         a('<th style="padding:10px;text-align:left;">File</th>')
         a('<th style="padding:10px;text-align:left;">Type</th>')
         a('<th style="padding:10px;text-align:left;">Date</th>')
@@ -524,12 +524,11 @@ class BackupModule(BaseModule):
         a('</tr></thead><tbody>')
         for b in backups:
             fn = b['filename']
-            bg = '#007bff' if b['type'] == 'Manual' else '#28a745'
-            a(f'<tr style="border-bottom:1px solid #e0e0e0;">')
+            badge = 'status-active' if b['type'] == 'Manual' else 'status-paid'
+            a(f'<tr style="border-bottom:1px solid var(--color-border);">')
             a(f'<td style="padding:10px;font-size:13px;">{fn}</td>')
             a(f'<td style="padding:10px;">'
-              f'<span style="padding:3px 8px;border-radius:3px;'
-              f'font-size:12px;background:{bg};color:white;">'
+              f'<span class="status-badge {badge}">'
               f'{b["type"]}</span></td>')
             a(f'<td style="padding:10px;">{b["date"]}</td>')
             a(f'<td style="padding:10px;">{b["size"]}</td>')
