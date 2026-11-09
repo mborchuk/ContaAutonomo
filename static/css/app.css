@@ -264,6 +264,7 @@ tbody tr:hover { background: var(--color-surface-2); }
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .table-section { background: var(--color-surface-3); color: var(--color-text-muted); font-weight: var(--fw-semibold); }
 .table-year { background: var(--color-primary-tint); color: var(--color-primary); font-weight: var(--fw-bold); }
+tbody tr.table-year:hover { background: var(--color-primary-tint); }
 .nowrap { white-space: nowrap; }
 .text-right { text-align: right !important; }
 .text-center { text-align: center !important; }
@@ -326,6 +327,31 @@ input[type="checkbox"], input[type="radio"] {
 .status-cancelled { background: var(--color-danger-bg);  color: var(--color-danger-fg); }
 .status-warning,
 .status-missing   { background: var(--color-warning-bg); color: var(--color-warning-fg); }
+
+/* ============================================================================
+   User-picked category colors (documents). Color comes from data as
+   --cat-color on the element. Light theme paints it raw (user picks pastels).
+   Dark theme blends it into the dark surface so light text stays readable.
+   ============================================================================ */
+.cat-badge {
+    display: inline-block; padding: 2px var(--space-2); border-radius: var(--radius-sm);
+    font-size: var(--fs-xs); color: var(--color-text);
+    background: var(--cat-color, var(--color-surface-3));
+}
+tbody tr.cat-fill, tbody tr.cat-fill:hover { background: var(--cat-color); }
+
+/* dark: primary on primary-tint only 3.8:1 — lighter indigo gets AA */
+html.dark .status-open, html.dark .status-draft, html.dark .status-issued,
+html.dark .status-active, html.dark .table-year { color: var(--color-primary-hover); }
+
+html.dark .cat-badge {
+    background: var(--color-surface-3);
+    background: color-mix(in srgb, var(--cat-color, var(--color-surface-3)) 40%, var(--color-surface));
+}
+html.dark tbody tr.cat-fill, html.dark tbody tr.cat-fill:hover {
+    background: var(--color-surface-2);
+    background: color-mix(in srgb, var(--cat-color) 18%, var(--color-surface));
+}
 
 .panel-list { display: flex; flex-direction: column; gap: var(--space-2); }
 .panel-list-row {

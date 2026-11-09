@@ -482,19 +482,19 @@ class AIParserModule(BaseModule):
 
     def get_create_form_html(self):
         return '''
-    <div class="form-group" style="background: #f0f7ff; padding: 15px; border-radius: 8px; border: 1px solid #b3d4fc; margin-bottom: 20px;">
-        <label style="font-weight: bold; color: #1565c0;">🤖 AI Document Parser</label>
+    <div class="form-group" style="background: var(--color-primary-tint); padding: 15px; border-radius: 8px; border: 1px solid var(--color-primary); margin-bottom: 20px;">
+        <label style="font-weight: bold; color: var(--color-primary);">🤖 AI Document Parser</label>
         <div style="display: flex; gap: 10px; align-items: end; margin-top: 8px;">
             <div style="flex: 1;">
                 <input type="file" id="ai_parse_file" accept=".pdf,.jpg,.jpeg,.png"
-                       style="padding: 8px; border: 1px dashed #90caf9; border-radius: 5px; background: var(--color-surface); width: 100%;">
+                       style="padding: 8px; border: 1px dashed var(--color-primary); border-radius: 5px; background: var(--color-surface); width: 100%;">
             </div>
             <button type="button" onclick="aiParseDocument('invoice')" class="btn btn-primary"
                     id="ai_parse_btn" style="white-space: nowrap;">
                 🔍 Parse with AI
             </button>
         </div>
-        <small style="display: block; margin-top: 5px; color: #666;">
+        <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
             Upload an invoice PDF or photo — AI will extract fields and fill the form automatically.
         </small>
         <div id="ai_parse_status" style="margin-top: 8px; display: none;"></div>
@@ -507,7 +507,7 @@ class AIParserModule(BaseModule):
 
         if (!fileInput.files.length) {
             statusDiv.style.display = 'block';
-            statusDiv.innerHTML = '<span style="color: #d32f2f;">Please select a file first.</span>';
+            statusDiv.innerHTML = '<span style="color: var(--color-danger-fg);">Please select a file first.</span>';
             return;
         }
 
@@ -518,7 +518,7 @@ class AIParserModule(BaseModule):
         btn.disabled = true;
         btn.textContent = '⏳ Parsing...';
         statusDiv.style.display = 'block';
-        statusDiv.innerHTML = '<span style="color: #1565c0;">Sending to AI...</span>';
+        statusDiv.innerHTML = '<span style="color: var(--color-primary);">Sending to AI...</span>';
 
         fetch('/ai-parser/parse', { method: 'POST', body: formData })
             .then(r => r.json())
@@ -526,16 +526,16 @@ class AIParserModule(BaseModule):
                 btn.disabled = false;
                 btn.textContent = '🔍 Parse with AI';
                 if (data.error) {
-                    statusDiv.innerHTML = '<span style="color: #d32f2f;">Error: ' + data.error + '</span>';
+                    statusDiv.innerHTML = '<span style="color: var(--color-danger-fg);">Error: ' + data.error + '</span>';
                     return;
                 }
-                statusDiv.innerHTML = '<span style="color: #2e7d32;">✓ Parsed successfully! Fields filled.</span>';
+                statusDiv.innerHTML = '<span style="color: var(--color-success-fg);">✓ Parsed successfully! Fields filled.</span>';
                 aiFillInvoiceForm(data);
             })
             .catch(err => {
                 btn.disabled = false;
                 btn.textContent = '🔍 Parse with AI';
-                statusDiv.innerHTML = '<span style="color: #d32f2f;">Request failed: ' + err + '</span>';
+                statusDiv.innerHTML = '<span style="color: var(--color-danger-fg);">Request failed: ' + err + '</span>';
             });
     }
 

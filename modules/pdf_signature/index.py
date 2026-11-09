@@ -532,8 +532,8 @@ class PDFSignatureModule(BaseModule):
         d_opacity = '1' if digital_available else '0.5'
 
         return f'''
-    <div style="background: #f5f5f5; padding: 20px; border-radius: 5px; margin-bottom: 20px;">
-        <h3 style="margin: 0 0 15px 0; color: #333; font-size: 18px;">PDF Signature Options</h3>
+    <div style="background: var(--color-surface-2); padding: 20px; border-radius: 5px; margin-bottom: 20px;">
+        <h3 style="margin: 0 0 15px 0; color: var(--color-text); font-size: 18px;">PDF Signature Options</h3>
 
         <div style="margin-bottom: 14px; opacity: {v_opacity};">
             <label style="display: flex; align-items: flex-start; cursor: {'pointer' if visual_available else 'not-allowed'};">
@@ -541,7 +541,7 @@ class PDFSignatureModule(BaseModule):
                        style="margin-right: 10px; margin-top: 3px; width: 16px; height: 16px;">
                 <span>
                     <strong style="display: block; font-size: 15px;">✍️ Add visual signature</strong>
-                    <span style="color: #666; font-size: 13px;">{visual_hint}</span>
+                    <span style="color: var(--color-text-muted); font-size: 13px;">{visual_hint}</span>
                 </span>
             </label>
         </div>
@@ -552,7 +552,7 @@ class PDFSignatureModule(BaseModule):
                        style="margin-right: 10px; margin-top: 3px; width: 16px; height: 16px;">
                 <span>
                     <strong style="display: block; font-size: 15px;">🔏 Digitally sign PDF</strong>
-                    <span style="color: #666; font-size: 13px;">{digital_hint}</span>
+                    <span style="color: var(--color-text-muted); font-size: 13px;">{digital_hint}</span>
                 </span>
             </label>
         </div>

@@ -968,7 +968,7 @@ class ApiModule(BaseModule):
                 # button; in these curl examples we show a placeholder rather than
                 # the raw secret to avoid echoing it into extra HTML contexts.
                 '<p style="margin-top:.75rem;">Quick start (use the token above):</p>'
-                '<pre style="white-space:pre-wrap;background:#f5f5f5;padding:.5rem;'
+                '<pre style="white-space:pre-wrap;background:var(--color-surface-2);padding:.5rem;'
                 'border-radius:4px;">'
                 'curl -H "X-API-Token: $TOKEN" \\\n'
                 f'  $ORIGIN{base}/invoices\n\n'
@@ -995,7 +995,7 @@ class ApiModule(BaseModule):
             '<div class="form-group">'
             '<label><input type="checkbox" name="api_rotate_token" value="1"> '
             'Rotate token on save</label>'
-            '<small style="display:block;color:#a00;">Rotating invalidates the '
+            '<small style="display:block;color:var(--color-danger-fg);">Rotating invalidates the '
             'current token immediately. Serve the API over HTTPS only '
             '(set <code>FORCE_HTTPS=1</code>).</small>'
             '</div>'

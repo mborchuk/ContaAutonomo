@@ -112,10 +112,10 @@ class InvoiceCommentsModule(BaseModule):
 
 COMMENTS_TEMPLATE = '''
 <div style="margin-top: 30px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px;">
-    <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #5b6bc0; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+    <h3 style="margin: 0 0 15px 0; font-size: 16px; color: var(--color-primary); border-bottom: 1px solid var(--color-border); padding-bottom: 8px;">
         💬 Internal Comments ({{ comments|length }})
     </h3>
-    <p style="color: #999; font-size: 12px; margin-bottom: 15px;">
+    <p style="color: var(--color-text-faint); font-size: 12px; margin-bottom: 15px;">
         Comments are internal only — they won't appear on the invoice PDF.
     </p>
 
@@ -123,7 +123,7 @@ COMMENTS_TEMPLATE = '''
           style="margin-bottom: 20px;">
         <div style="display: flex; gap: 8px;">
             <textarea name="comment_text" rows="2" placeholder="Add a comment..."
-                      style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px;
+                      style="flex: 1; padding: 10px; border: 1px solid var(--color-border-strong); border-radius: 5px;
                              font-size: 13px; font-family: inherit; resize: vertical;"
                       required></textarea>
             <button type="submit" class="btn btn-primary"
@@ -136,9 +136,9 @@ COMMENTS_TEMPLATE = '''
     {% if comments %}
     <div style="max-height: 400px; overflow-y: auto;">
         {% for c in comments %}
-        <div style="padding: 10px 0; {% if not loop.last %}border-bottom: 1px solid #f5f5f5;{% endif %}">
+        <div style="padding: 10px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-border);{% endif %}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-size: 12px; color: #999;">
+                <span style="font-size: 12px; color: var(--color-text-faint);">
                     {{ c.created_at.strftime('%d/%m/%Y %H:%M') }}
                 </span>
                 <form method="POST"
@@ -146,19 +146,19 @@ COMMENTS_TEMPLATE = '''
                       style="margin: 0;"
                       onsubmit="return confirm('Delete this comment?');">
                     <button type="submit"
-                            style="background: none; border: none; color: #ccc; cursor: pointer;
+                            style="background: none; border: none; color: var(--color-text-faint); cursor: pointer;
                                    font-size: 12px; padding: 2px 6px;"
                             title="Delete comment">✕</button>
                 </form>
             </div>
-            <div style="font-size: 13px; color: #333; white-space: pre-wrap; word-break: break-word;">
+            <div style="font-size: 13px; color: var(--color-text); white-space: pre-wrap; word-break: break-word;">
                 {{ c.text }}
             </div>
         </div>
         {% endfor %}
     </div>
     {% else %}
-    <p style="color: #bbb; font-size: 13px; text-align: center; padding: 10px 0;">
+    <p style="color: var(--color-text-faint); font-size: 13px; text-align: center; padding: 10px 0;">
         No comments yet.
     </p>
     {% endif %}
@@ -166,11 +166,11 @@ COMMENTS_TEMPLATE = '''
 '''
 
 COMMENT_FORM_HTML = '''
-<div style="background: #f0f7ff; padding: 12px 15px; border-radius: 6px; border: 1px solid #b3d4fc; margin-top: 10px;">
-    <div style="font-weight: bold; color: #1565c0; margin-bottom: 8px;">💬 Add Comment</div>
+<div style="background: var(--color-primary-tint); padding: 12px 15px; border-radius: 6px; border: 1px solid var(--color-primary); margin-top: 10px;">
+    <div style="font-weight: bold; color: var(--color-primary); margin-bottom: 8px;">💬 Add Comment</div>
     <textarea name="initial_comment" rows="2" placeholder="Optional internal comment (not visible on PDF)..."
-              style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;
+              style="width: 100%; padding: 8px; border: 1px solid var(--color-border-strong); border-radius: 4px;
                      font-size: 13px; font-family: inherit; resize: vertical;"></textarea>
-    <div style="color: #888; font-size: 11px; margin-top: 4px;">This comment will be saved with the invoice for internal reference.</div>
+    <div style="color: var(--color-text-faint); font-size: 11px; margin-top: 4px;">This comment will be saved with the invoice for internal reference.</div>
 </div>
 '''
