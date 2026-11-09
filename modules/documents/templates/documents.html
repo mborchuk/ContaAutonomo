@@ -103,13 +103,13 @@
         {% for doc in documents %}
             {% if doc.document_date and doc.document_date.year != current_year.value %}
                 {% set current_year.value = doc.document_date.year %}
-                <tr style="background: var(--color-primary-tint);">
-                    <td colspan="8" style="padding: 10px 12px; font-weight: bold; font-size: 14px; color: var(--color-primary);">
+                <tr class="table-year">
+                    <td colspan="8" style="padding: 10px 12px; font-size: 14px;">
                         {{ current_year.value }}
                     </td>
                 </tr>
             {% endif %}
-            <tr{% if fill_row_color and doc.category and category_colors.get(doc.category) %} style="background: {{ category_colors.get(doc.category) }};"{% endif %}>
+            <tr{% if fill_row_color and doc.category and category_colors.get(doc.category) %} class="cat-fill" style="--cat-color: {{ category_colors.get(doc.category) }};"{% endif %}>
                 <td><input type="checkbox" class="doc-check" value="{{ doc.id }}"></td>
                 <td>{{ doc.document_date.strftime('%d/%m/%Y') if doc.document_date else '-' }}</td>
                 <td style="font-weight: 500;">
@@ -123,8 +123,7 @@
                 </td>
                 <td>
                     {% if doc.category %}
-                    {% set cat_color = category_colors.get(doc.category, 'var(--color-surface-3)') %}
-                    <span style="padding: 2px 8px; border-radius: 3px; font-size: 11px; background: {{ cat_color }};">
+                    <span class="cat-badge"{% if category_colors.get(doc.category) %} style="--cat-color: {{ category_colors.get(doc.category) }};"{% endif %}>
                         {{ doc.category }}
                     </span>
                     {% else %}-{% endif %}

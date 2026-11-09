@@ -756,7 +756,7 @@ class ExternalStorageModule(BaseModule):
         # Shared styles
         rs = 'width: auto !important; padding: 0 !important; margin-right: 8px; vertical-align: middle;'
         ls = 'display: block; margin-bottom: 8px; font-weight: normal; cursor: pointer;'
-        panel = 'margin-left: 20px; padding: 15px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e0e0e0; margin-bottom: 15px;'
+        panel = 'margin-left: 20px; padding: 15px; background: var(--color-surface-2); border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 15px;'
 
         # JS helper to show/hide config panels
         js = """
@@ -773,9 +773,9 @@ function esShowPanel(type) {
 </script>"""
 
         return f'''{js}
-<h3 style="margin-bottom: 15px; color: #333;">File Storage</h3>
+<h3 style="margin-bottom: 15px; color: var(--color-text);">File Storage</h3>
 <div style="margin-bottom: 20px;">
-    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Storage Backend</label>
+    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Storage Backend</label>
     <div style="margin-left: 4px;">
         <label style="{ls}">
             <input type="radio" name="es_storage_type" value="local" {chk(st,'local')}
@@ -802,7 +802,7 @@ function esShowPanel(type) {
 
 <!-- AWS S3 Config -->
 <div id="s3-config" style="display: {'block' if st=='s3' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:#555;">AWS S3 Settings</h4>
+    <h4 style="margin-top:0; color:var(--color-text-muted);">AWS S3 Settings</h4>
     <div class="form-group">
         <label for="es_s3_bucket">S3 Bucket Name *</label>
         <input type="text" id="es_s3_bucket" name="es_s3_bucket" value="{s3_bucket}" placeholder="my-app-files" style="max-width: 300px;">
@@ -810,14 +810,14 @@ function esShowPanel(type) {
     <div class="form-group">
         <label for="es_s3_prefix">Key Prefix (optional)</label>
         <input type="text" id="es_s3_prefix" name="es_s3_prefix" value="{s3_prefix}" placeholder="autonomos/" style="max-width: 300px;">
-        <small style="display: block; margin-top: 4px; color: #666;">Files stored under this prefix in the bucket.</small>
+        <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">Files stored under this prefix in the bucket.</small>
     </div>
     <div class="form-group">
         <label for="es_s3_region">AWS Region</label>
         <input type="text" id="es_s3_region" name="es_s3_region" value="{s3_region}" placeholder="eu-west-1" style="max-width: 200px;">
     </div>
     <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Authentication Method</label>
+        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
         <div style="margin-left: 4px;">
             <label style="{ls}">
                 <input type="radio" name="es_s3_auth_method" value="sdk" {chk(s3_auth,'sdk')}
@@ -865,7 +865,7 @@ function esShowPanel(type) {
 
 <!-- Google Cloud Storage Config -->
 <div id="gcs-config" style="display: {'block' if st=='gcs' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:#555;">Google Cloud Storage Settings</h4>
+    <h4 style="margin-top:0; color:var(--color-text-muted);">Google Cloud Storage Settings</h4>
     <div class="form-group">
         <label for="es_gcs_bucket">GCS Bucket Name *</label>
         <input type="text" id="es_gcs_bucket" name="es_gcs_bucket" value="{gcs_bucket}" placeholder="my-gcs-bucket" style="max-width: 300px;">
@@ -875,7 +875,7 @@ function esShowPanel(type) {
         <input type="text" id="es_gcs_prefix" name="es_gcs_prefix" value="{gcs_prefix}" placeholder="autonomos/" style="max-width: 300px;">
     </div>
     <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Authentication Method</label>
+        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
         <div style="margin-left: 4px;">
             <label style="{ls}">
                 <input type="radio" name="es_gcs_auth_method" value="adc" {chk(gcs_auth,'adc')}
@@ -895,7 +895,7 @@ function esShowPanel(type) {
         <div class="form-group">
             <label for="es_gcs_credentials_json">Path to JSON Key File</label>
             <input type="text" id="es_gcs_credentials_json" name="es_gcs_credentials_json" value="{gcs_creds}" placeholder="/path/to/service-account.json" style="max-width: 400px;">
-            <small style="display: block; margin-top: 4px; color: #666;">Absolute path on the server to the Service Account JSON key file.</small>
+            <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">Absolute path on the server to the Service Account JSON key file.</small>
         </div>
     </div>
     <div style="margin-top: 15px;">
@@ -908,14 +908,14 @@ function esShowPanel(type) {
 
 <!-- Google Drive Config -->
 <div id="gdrive-config" style="display: {'block' if st=='gdrive' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:#555;">Google Drive Settings</h4>
+    <h4 style="margin-top:0; color:var(--color-text-muted);">Google Drive Settings</h4>
     <div class="form-group">
         <label for="es_gdrive_folder_id">Drive Folder ID *</label>
         <input type="text" id="es_gdrive_folder_id" name="es_gdrive_folder_id" value="{gd_folder}" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" style="max-width: 400px;">
-        <small style="display: block; margin-top: 4px; color: #666;">The ID from the folder URL: drive.google.com/drive/folders/<b>THIS_PART</b></small>
+        <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">The ID from the folder URL: drive.google.com/drive/folders/<b>THIS_PART</b></small>
     </div>
     <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: #333;">Authentication Method</label>
+        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
         <div style="margin-left: 4px;">
             <label style="{ls}">
                 <input type="radio" name="es_gdrive_auth_method" value="adc" {chk(gd_auth,'adc')}
@@ -935,7 +935,7 @@ function esShowPanel(type) {
         <div class="form-group">
             <label for="es_gdrive_credentials_json">Path to JSON Key File</label>
             <input type="text" id="es_gdrive_credentials_json" name="es_gdrive_credentials_json" value="{gd_creds}" placeholder="/path/to/service-account.json" style="max-width: 400px;">
-            <small style="display: block; margin-top: 4px; color: #666;">The Service Account must have access to the target folder (share the folder with the SA email).</small>
+            <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">The Service Account must have access to the target folder (share the folder with the SA email).</small>
         </div>
     </div>
     <div style="margin-top: 15px;">

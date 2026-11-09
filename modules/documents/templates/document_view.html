@@ -34,7 +34,7 @@
                     <td style="padding: 6px 0; color: var(--color-text-faint);">Category</td>
                     <td style="padding: 6px 0;">
                         {% if doc.category %}
-                        <span style="padding: 2px 8px; border-radius: 3px; font-size: 12px; background: {{ category_colors.get(doc.category, 'var(--color-surface-3)') }};">{{ doc.category }}</span>
+                        <span class="cat-badge"{% if category_colors.get(doc.category) %} style="--cat-color: {{ category_colors.get(doc.category) }};"{% endif %}>{{ doc.category }}</span>
                         {% else %}—{% endif %}
                     </td>
                 </tr>
