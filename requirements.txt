@@ -210,9 +210,9 @@ blinker==1.9.0 \
     # via
     #   flask
     #   sentry-sdk
-boto3==1.43.125 \
-    --hash=sha256:101fe3ee99664e671efb9af65c8e98ec0bceddf6de922ea89685da4adc8c6907 \
-    --hash=sha256:5a635a0fbbd51f319e465b809cf043668705defbb9dddaf26ae66747f70b2a49
+boto3==1.43.126 \
+    --hash=sha256:5fda4a3dd2782c134a01d1678911962c2860dd8de8cd10bef168ba1507b371a9 \
+    --hash=sha256:dd701a973b02a73930e546a6a15d13edbfbedc3180bb3d55b0a88678c284ccd6
     # via -r requirements.in
 botocore==1.43.126 \
     --hash=sha256:2f2239a47025a2fa173cd145ab8803ac02b76114864bf5b66475ff1cb88e6b0a \
