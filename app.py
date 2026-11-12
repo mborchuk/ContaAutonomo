@@ -1261,6 +1261,41 @@ def rectify_invoice(id):
         return redirect(url_for('view_invoice', id=id))
 
 
+class NoExchangeRate(ValueError):
+    """No exchange rate to EUR is available for the invoice currency and date."""
+
+
+def invoice_amounts(total, currency, date_str):
+    """Convert an entered invoice total into the stored amount columns.
+
+    Returns (amount_usd, amount_eur, exchange_rate). Legacy column naming:
+    - EUR invoice: amount_eur = total, amount_usd = USD conversion.
+    - Any other currency: amount_usd = total in the invoice currency (the
+      column name is historical), amount_eur = EUR conversion — the tax base.
+    exchange_rate is the USD->EUR rate for EUR/USD invoices and the
+    <currency>->EUR rate for other currencies, so amount_eur =
+    amount_usd * exchange_rate holds for every non-EUR invoice.
+
+    Raises NoExchangeRate when the currency cannot be converted to EUR.
+    """
+    if currency in ('EUR', 'USD'):
+        import currency_converter  # module lookup: tests can stub the rate
+        exchange_rate, _ = currency_converter.get_exchange_rate(date_str)
+        if currency == 'EUR':
+            return total * exchange_rate, total, exchange_rate
+        return total, convert_usd_to_eur(total, exchange_rate), exchange_rate
+    if not module_manager:
+        raise NoExchangeRate(f'No currency service to convert {currency}')
+    try:
+        amount_eur, rate, _ = module_manager.core.currency_service.convert(
+            total, currency, 'EUR', date_str)
+    except Exception as e:
+        raise NoExchangeRate(f'No {currency}->EUR rate for {date_str}') from e
+    if not rate or rate <= 0:
+        raise NoExchangeRate(f'No {currency}->EUR rate for {date_str}')
+    return total, amount_eur, rate
+
+
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_invoice():
@@ -1338,22 +1373,16 @@ def create_invoice():
         invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
 
-        # Get exchange rate and calculate amounts based on currency
-        exchange_rate, rate_date = get_exchange_rate(invoice_date_str)
-
-        # Convert amounts based on selected currency
-        if currency == 'EUR':
-            # If currency is EUR, total_usd is actually in EUR
-            amount_eur = total_usd  # The entered amount is already in EUR
-            amount_usd = total_usd * exchange_rate  # Convert to USD for storage
-        elif currency == 'USD':
-            # If currency is USD, keep as is
-            amount_usd = total_usd
-            amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
-        else:
-            # For other currencies, treat as USD for now (can be extended)
-            amount_usd = total_usd
-            amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
+        # total_usd holds the entered total in the invoice currency.
+        try:
+            amount_usd, amount_eur, exchange_rate = invoice_amounts(
+                total_usd, currency, invoice_date_str)
+        except NoExchangeRate as e:
+            logger.warning('Invoice not created: %s', e)
+            flash(f'No exchange rate to EUR is available for {currency} on this date. '
+                  'Choose another currency or check the exchange rate provider in Settings.',
+                  'danger')
+            return redirect(url_for('create_invoice'))
 
         # Handle customer selection or creation
         customer = None
@@ -1613,23 +1642,17 @@ def edit_invoice(id):
         invoice.invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
         invoice.due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
 
-        # Recalculate EUR amount based on currency
-        exchange_rate, _ = get_exchange_rate(invoice_date_str)
-        invoice.exchange_rate = exchange_rate
-
-        # Convert amounts based on selected currency
-        if currency == 'EUR':
-            # If currency is EUR, total_usd is actually in EUR
-            invoice.amount_eur = total_usd  # The entered amount is already in EUR
-            invoice.amount_usd = total_usd * exchange_rate  # Convert to USD for storage
-        elif currency == 'USD':
-            # If currency is USD, keep as is
-            invoice.amount_usd = total_usd
-            invoice.amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
-        else:
-            # For other currencies, treat as USD for now
-            invoice.amount_usd = total_usd
-            invoice.amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
+        # Recalculate the stored amounts; total_usd is in the invoice currency.
+        try:
+            invoice.amount_usd, invoice.amount_eur, invoice.exchange_rate = invoice_amounts(
+                total_usd, currency, invoice_date_str)
+        except NoExchangeRate as e:
+            db.session.rollback()
+            logger.warning('Invoice %s not updated: %s', invoice.id, e)
+            flash(f'No exchange rate to EUR is available for {currency} on this date. '
+                  'Choose another currency or check the exchange rate provider in Settings.',
+                  'danger')
+            return redirect(url_for('edit_invoice', id=invoice.id))
 
         invoice.currency = currency
 
