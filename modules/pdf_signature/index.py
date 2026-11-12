@@ -6,13 +6,13 @@ Integrates via BaseModule hooks without modifying core models.
 """
 
 import io
-from datetime import datetime
 import importlib.util
 
 from module_manager import BaseModule
 from secret_box import EncryptedString, encrypt_existing
 from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
+from timeutil import utcnow
 
 # Graceful degradation: try importing optional dependencies
 try:
@@ -367,7 +367,7 @@ class PDFSignatureModule(BaseModule):
             sig.is_signed = True
             sig.has_visual = visual
             sig.has_digital = digital
-            sig.signed_at = datetime.utcnow()
+            sig.signed_at = utcnow()
             self._db.session.commit()
 
             self.logger.info(
@@ -441,7 +441,7 @@ class PDFSignatureModule(BaseModule):
                 sig = self._get_invoice_sig(invoice.id)
             sig.is_signed = True
             sig.has_digital = True
-            sig.signed_at = sig.signed_at or datetime.utcnow()
+            sig.signed_at = sig.signed_at or utcnow()
             self._db.session.commit()
             signer = sigs[0].get('signer_email') or sigs[0].get('signer') or ''
             html = render_template(

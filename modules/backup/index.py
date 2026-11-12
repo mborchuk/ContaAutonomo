@@ -19,6 +19,7 @@ import shutil
 import zipfile
 import logging
 from secret_box import EncryptedString, encrypt_existing
+from timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ class BackupModule(BaseModule):
             encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
             custom_password = db.Column(EncryptedString(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow)
 
         # We only need Settings reference for auto_backup_enabled check
         class Settings(db.Model):
@@ -375,7 +376,7 @@ class BackupModule(BaseModule):
             cfg.custom_password = secret_from_form(form, 'bk_custom_password',
                                                    cfg.custom_password or '')
             cfg.use_external_storage = form.get('bk_use_external_storage') == 'on'
-            cfg.updated_at = datetime.utcnow()
+            cfg.updated_at = utcnow()
             self._db.session.commit()
 
     # ── core backup logic ───────────────────────────────────────────
@@ -568,11 +569,13 @@ class BackupModule(BaseModule):
                 safe_t = _check_name(tname)
                 cols = [c['name'] for c in inspector.get_columns(tname)]
                 for rd in tables[tname]:
-                    # Normalize date and datetime fields if present
+                    # Normalize date and datetime fields to the text form
+                    # SQLite stores (what the deprecated sqlite3 default
+                    # adapters produced: isoformat() / isoformat(' ')).
                     for k, v in list(rd.items()):
                         if v and k in date_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v).date()
+                                rd[k] = datetime.fromisoformat(v).date().isoformat()
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
@@ -582,7 +585,7 @@ class BackupModule(BaseModule):
                                 )
                         elif v and k in dt_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v)
+                                rd[k] = datetime.fromisoformat(v).isoformat(' ')
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))

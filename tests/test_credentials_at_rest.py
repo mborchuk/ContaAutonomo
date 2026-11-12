@@ -103,11 +103,9 @@ def test_smtp_password_encrypted_in_json_and_migrated(loaded_modules):
     ('ai_parser', 'ai_parser_config', 'openai_api_key'),
     ('pdf_signature', 'pdf_signature_config', 'certificate_password'),
 ])
-def test_module_credential_columns_encrypted(loaded_modules, module_id, table, attr):
+def test_module_credential_columns_encrypted(standalone_module, module_id, table, attr):
     from app import db
-    inst = loaded_modules.discovered[module_id](loaded_modules.core)
-    inst.register_models(db)
-    db.create_all()
+    inst = standalone_module(module_id)
     cfg = inst._get_config()
     setattr(cfg, attr, SECRET)
     db.session.commit()

@@ -21,6 +21,8 @@ def _sanitize_log(value):
 import importlib
 import importlib.util
 from abc import ABC, abstractmethod
+from db_helpers import db_get
+from timeutil import utcnow
 
 from constants import invoice_locked
 
@@ -643,12 +645,11 @@ class FileActivityLogger(ActivityLogger):
 
     def log(self, action, category='system', details=None, user=None):
         try:
-            from datetime import datetime
             det = details if isinstance(details, str) else (
                 self._json.dumps(details, ensure_ascii=False)
                 if details else None)
             entry = {
-                'ts': datetime.utcnow().isoformat(),
+                'ts': utcnow().isoformat(),
                 'action': action,
                 'cat': category,
                 'details': det,
@@ -783,7 +784,6 @@ class DbActivityLogger(ActivityLogger):
 
     def log(self, action, category='system', details=None, user=None):
         try:
-            from datetime import datetime
             from sqlalchemy import text
             det = details if isinstance(details, str) else (
                 self._json.dumps(details, ensure_ascii=False) if details else None)
@@ -791,7 +791,7 @@ class DbActivityLogger(ActivityLogger):
                 conn.execute(text(
                     'INSERT INTO activity_log (timestamp, action, category, details, user) '
                     'VALUES (:ts, :action, :cat, :det, :usr)'),
-                    {'ts': datetime.utcnow().isoformat(), 'action': action,
+                    {'ts': utcnow().isoformat(), 'action': action,
                      'cat': category, 'det': det, 'usr': user})
                 conn.commit()
         except Exception as e:
@@ -1567,7 +1567,7 @@ class InvoiceService:
     def get(self, invoice_id):
         """Get an invoice by ID. Returns None if not found."""
         Invoice, _ = self._get_models()
-        return Invoice.query.get(invoice_id)
+        return db_get(Invoice, invoice_id)
 
     def get_all(self, **filters):
         """Query invoices with optional filters (status, client_name, etc.)"""
@@ -1603,7 +1603,7 @@ class InvoiceService:
             ValueError: if invoice is paid or not found
         """
         Invoice, _ = self._get_models()
-        invoice = Invoice.query.get(invoice_id)
+        invoice = db_get(Invoice, invoice_id)
         if not invoice:
             raise ValueError(f'Invoice #{invoice_id} not found')
         if self.is_locked(invoice):
@@ -1639,7 +1639,7 @@ class InvoiceService:
 
         if isinstance(invoice_or_id, int):
             Invoice, _ = self._get_models()
-            invoice = Invoice.query.get(invoice_or_id)
+            invoice = db_get(Invoice, invoice_or_id)
         else:
             invoice = invoice_or_id
 

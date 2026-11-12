@@ -26,6 +26,7 @@ if __name__ == '__main__':
 from currency_converter import convert_usd_to_eur, get_currency_symbol
 import logging
 import logging.config
+from timeutil import utcnow
 
 
 class _RequestIdFilter(logging.Filter):
@@ -331,7 +332,7 @@ class Customer(db.Model):
     phone = db.Column(db.String(50))
     is_default = db.Column(db.Boolean, default=False)
     tax_type = db.Column(db.String(20), default='eu_b2b')  # non_eu, eu_b2b, standard
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     invoices = db.relationship('Invoice', backref='customer', lazy=True)
 
     def __repr__(self):
@@ -361,7 +362,7 @@ class Invoice(db.Model):
     # estimator). Defaults to 0 so legacy invoices stay unaffected.
     irpf_retention_pct = db.Column(db.Float, default=0)
     irpf_retention_amount = db.Column(db.Float, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
     bank_id = db.Column(db.Integer, db.ForeignKey('bank.id'), nullable=True)
     # F2 — lifecycle: series + per-series sequence assigned at ISSUE time.
@@ -405,7 +406,7 @@ class InvoiceItem(db.Model):
     subtotal_usd = db.Column(db.Float, nullable=False)
     # F2-D4 — per-line VAT rate (nullable; defaults to the header rate at issue).
     vat_rate = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<InvoiceItem {self.description}>'
@@ -418,7 +419,7 @@ class Bank(db.Model):
     swift = db.Column(db.String(50))
     bank_name = db.Column(db.String(200))
     is_default = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     invoices = db.relationship('Invoice', backref='bank', lazy=True)
 
     def __repr__(self):
@@ -468,7 +469,7 @@ class Settings(db.Model):
     currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
     currency_provider_api_key = db.Column(EncryptedString(500), default='')  # encrypted at rest (C-2)
     payment_methods = db.Column(db.Text, default='Bank Transfer,PayPal,Credit Card,Cash,Crypto')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     def __repr__(self):
         return f'<Settings {self.business_name}>'
@@ -485,7 +486,7 @@ class Contractor(db.Model):
     email = db.Column(db.String(200))
     phone = db.Column(db.String(50))
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     expenses = db.relationship('Expense', backref='contractor', lazy=True)
 
     def __repr__(self):
@@ -514,7 +515,7 @@ class Expense(db.Model):
     # supplier in another EU country ('eu') or outside the EU ('non_eu') with
     # no Spanish VAT invoiced; the buyer self-assesses it on Modelo 303.
     reverse_charge = db.Column(db.String(10))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<Expense {self.id} - {self.amount} {self.currency}>'
@@ -527,7 +528,7 @@ class TaxForm(db.Model):
     quarter = db.Column(db.Integer)  # 1-4 for quarterly forms, NULL for annual
     file_path = db.Column(db.String(500), nullable=False)
     original_filename = db.Column(db.String(200))
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_at = db.Column(db.DateTime, default=utcnow)
     notes = db.Column(db.Text)
 
     def __repr__(self):
@@ -544,7 +545,7 @@ class Document(db.Model):
     description = db.Column(db.Text)
     file_path = db.Column(db.String(500), nullable=False)
     original_filename = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<Document {self.name}>'
@@ -555,7 +556,7 @@ class SSPayment(db.Model):
     payment_date = db.Column(db.Date, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<SSPayment {self.payment_date} {self.amount}>'
@@ -595,7 +596,7 @@ def create_customer():
 @app.route('/customers/<int:id>')
 @login_required
 def view_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
 
     # Get base currency from settings
     app_settings = Settings.query.first()
@@ -610,7 +611,7 @@ def view_customer(id):
 @app.route('/customers/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
 
     if request.method == 'POST':
         customer.name = request.form['name']
@@ -633,7 +634,7 @@ def edit_customer(id):
 @app.route('/customers/<int:id>/delete', methods=['POST'])
 @login_required
 def delete_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
     db.session.delete(customer)
     db.session.commit()
     flash('Customer deleted successfully!', 'success')
@@ -1086,7 +1087,7 @@ def _issue_invoice(invoice, series=None, request_obj=None):
         invoice.sequence_number = seq
         invoice.invoice_number = f'{series}/{seq:04d}'
         invoice.status = 'issued'
-        invoice.issued_at = datetime.utcnow()
+        invoice.issued_at = utcnow()
         try:
             db.session.flush()  # surfaces unique-number collisions early
             break
@@ -1108,7 +1109,7 @@ def _issue_invoice(invoice, series=None, request_obj=None):
 @app.route('/issue/<int:id>', methods=['POST'])
 @login_required
 def issue_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if _invoice_locked(invoice):
         flash('Invoice is already issued.', 'warning')
         return redirect(url_for('view_invoice', id=id))
@@ -1145,7 +1146,7 @@ def _mark_invoice_paid(invoice):
 @app.route('/mark-paid/<int:id>', methods=['POST'])
 @login_required
 def mark_invoice_paid(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     try:
         _mark_invoice_paid(invoice)
         flash(f'Invoice {invoice.invoice_number} marked as paid.', 'success')
@@ -1161,7 +1162,7 @@ def mark_invoice_paid(id):
 @app.route('/annul/<int:id>', methods=['POST'])
 @login_required
 def annul_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if invoice.status not in LOCKED_INVOICE_STATUSES:
         flash('Only issued invoices can be annulled.', 'warning')
         return redirect(url_for('view_invoice', id=id))
@@ -1183,23 +1184,23 @@ def annul_invoice(id):
 @app.route('/rectify/<int:id>', methods=['POST'])
 @login_required
 def rectify_invoice(id):
-    original = Invoice.query.get_or_404(id)
+    original = db.get_or_404(Invoice, id)
     if original.status not in LOCKED_INVOICE_STATUSES:
         flash('Only issued invoices can be rectified.', 'warning')
         return redirect(url_for('view_invoice', id=id))
     rtype = request.form.get('rectification_type', 'sustitucion')
     if rtype not in ('sustitucion', 'diferencias'):
         rtype = 'sustitucion'
-    year = datetime.utcnow().year
+    year = utcnow().year
     try:
         # New DRAFT pre-filled from the original; original is never mutated.
         draft = Invoice(
-            invoice_number=f'RECT-{original.id}-{datetime.utcnow().strftime("%Y%m%d%H%M%S")}',
+            invoice_number=f'RECT-{original.id}-{utcnow().strftime("%Y%m%d%H%M%S")}',
             client_name=original.client_name,
             amount_usd=original.amount_usd,
             amount_eur=original.amount_eur,
             exchange_rate=original.exchange_rate,
-            invoice_date=datetime.utcnow().date(),
+            invoice_date=utcnow().date(),
             due_date=original.due_date,
             description=original.description,
             quantity=original.quantity,
@@ -1544,7 +1545,7 @@ def create_invoice():
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # F2 — issued/paid invoices are immutable; changes go via a rectificative.
     if _invoice_locked(invoice):
@@ -1713,7 +1714,7 @@ def edit_invoice(id):
 @app.route('/view/<int:id>')
 @login_required
 def view_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # Check if invoice is paid and has hash — verify integrity via storage
     hash_mismatch = False
@@ -1739,7 +1740,7 @@ def view_invoice(id):
 def delete_invoice(id):
     # POST-only + CSRF token. A GET delete could be triggered by an
     # <img src="/delete/42"> and is not covered by CSRF protection.
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # F2 — issued/paid invoices cannot be deleted; annul them instead.
     if _invoice_locked(invoice):
@@ -1772,7 +1773,7 @@ def generate_pdf(id):
     import importlib.util
     from pathlib import Path
 
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     customer = invoice.customer
     app_settings = Settings.query.first()
 
@@ -1910,7 +1911,7 @@ def generate_pdf(id):
 @login_required
 def preview_invoice_pdf(id):
     """Preview invoice PDF inline in the browser"""
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if not module_manager:
         flash('Module manager not available.', 'danger')
         return redirect(url_for('index'))
@@ -2137,7 +2138,7 @@ def add_bank():
 @login_required
 def edit_bank(id):
     """Edit a bank"""
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
 
     if request.method == 'POST':
         bank.name = request.form.get('name', '')
@@ -2167,7 +2168,7 @@ def edit_bank(id):
 @login_required
 def delete_bank(id):
     """Delete a bank"""
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
 
     # Check if any invoices use this bank
     invoice_count = Invoice.query.filter_by(bank_id=id).count()
@@ -2189,7 +2190,7 @@ def set_default_bank(id):
     Bank.query.update({Bank.is_default: False})
 
     # Set this one as default
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
     bank.is_default = True
     db.session.commit()
 
@@ -2205,7 +2206,7 @@ def set_default_customer(id):
     Customer.query.update({Customer.is_default: False})
 
     # Set this one as default
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
     customer.is_default = True
     db.session.commit()
 
@@ -2284,7 +2285,7 @@ def create_contractor():
 @login_required
 def edit_contractor(id):
     """Edit a contractor"""
-    contractor = Contractor.query.get_or_404(id)
+    contractor = db.get_or_404(Contractor, id)
 
     if request.method == 'POST':
         try:
@@ -2313,7 +2314,7 @@ def edit_contractor(id):
 @login_required
 def delete_contractor(id):
     """Delete a contractor"""
-    contractor = Contractor.query.get_or_404(id)
+    contractor = db.get_or_404(Contractor, id)
 
     # Check if contractor has expenses
     if contractor.expenses:

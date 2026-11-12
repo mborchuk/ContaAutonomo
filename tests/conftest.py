@@ -82,3 +82,24 @@ def _loaded_modules_session():
 
     _db.session.remove()
     ctx.pop()
+
+
+@pytest.fixture
+def standalone_module(loaded_modules):
+    """Instance of a module the test session does not enable, without its
+    hooks, so other tests are not affected. One instance per module for the
+    whole session: declaring a module's models a second time makes
+    SQLAlchemy warn and replaces the classes other tests hold."""
+    from app import db
+    cache = loaded_modules.__dict__.setdefault('_standalone_cache', {})
+
+    def make(module_id):
+        if module_id in loaded_modules.modules:
+            return loaded_modules.modules[module_id]
+        if module_id not in cache:
+            inst = loaded_modules.discovered[module_id](loaded_modules.core)
+            inst.register_models(db)
+            cache[module_id] = inst
+        db.create_all()   # tables may have been dropped by another test
+        return cache[module_id]
+    return make

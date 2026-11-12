@@ -15,22 +15,8 @@ def request_ctx(app):
 
 
 @pytest.fixture
-def standalone(loaded_modules):
-    """Instantiate a module that the test session does not enable, without
-    registering its hooks, so other tests are not affected."""
-    from app import db
-    made = {}
-
-    def make(module_id):
-        if module_id in loaded_modules.modules:
-            return loaded_modules.modules[module_id]
-        if module_id not in made:
-            inst = loaded_modules.discovered[module_id](loaded_modules.core)
-            inst.register_models(db)
-            db.create_all()
-            made[module_id] = inst
-        return made[module_id]
-    return make
+def standalone(standalone_module):
+    return standalone_module
 
 
 def _assert_safe(html, raw_values=(XSS,)):

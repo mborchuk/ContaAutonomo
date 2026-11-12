@@ -15,7 +15,6 @@ README.md). Compliance assist, not legal advice.
 """
 
 import json
-from datetime import datetime
 
 from flask import Blueprint, render_template, Response, url_for
 
@@ -31,6 +30,7 @@ from .chain import (
     verify_chain,
     verify_signature,
 )
+from timeutil import utcnow
 
 
 class VerifactuModule(BaseModule):
@@ -80,7 +80,7 @@ class VerifactuModule(BaseModule):
             # the key derived from SECRET_KEY, before VERIFACTU_KEY existed.
             key_id = db.Column(db.String(16))
             spec_version = db.Column(db.String(20), default=CHAIN_SPEC_VERSION)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
             submitted_at = db.Column(db.DateTime)  # VERI*FACTU mode only
 
         self.VerifactuRecord = VerifactuRecord
@@ -189,7 +189,7 @@ class VerifactuModule(BaseModule):
             'total_eur': invoice.amount_eur,
             'rectifies': getattr(invoice, 'rectifies_invoice_id', None),
             'rectification_type': getattr(invoice, 'rectification_type', None),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utcnow().isoformat(),
         }
 
     def _append_record(self, invoice, record_type):

@@ -23,6 +23,8 @@ from datetime import datetime, date
 import json
 import os
 import logging
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -214,8 +216,8 @@ class InvoiceDesignerModule(BaseModule):
             config_json = db.Column(db.Text, nullable=False)
             logo_storage_key = db.Column(db.String(500))
             is_default = db.Column(db.Boolean, default=False)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow)
 
         self.InvoiceTemplate = InvoiceTemplate
         return {'InvoiceTemplate': InvoiceTemplate}
@@ -300,7 +302,7 @@ class InvoiceDesignerModule(BaseModule):
                                layout_presets=LAYOUT_PRESETS)
 
     def _edit_template(self, id):
-        tpl = self.InvoiceTemplate.query.get_or_404(id)
+        tpl = db_get_or_404(self.InvoiceTemplate, id)
         if request.method == 'POST':
             return self._save_template(tpl)
         config = json.loads(tpl.config_json)
@@ -449,7 +451,7 @@ class InvoiceDesignerModule(BaseModule):
             if tpl:
                 tpl.name = name
                 tpl.config_json = config_json
-                tpl.updated_at = datetime.utcnow()
+                tpl.updated_at = utcnow()
             else:
                 tpl = self.InvoiceTemplate(name=name, config_json=config_json)
                 self._db.session.add(tpl)
@@ -465,7 +467,7 @@ class InvoiceDesignerModule(BaseModule):
             return redirect(url_for('invoice_designer.designer_create'))
 
     def _delete_template(self, id):
-        tpl = self.InvoiceTemplate.query.get_or_404(id)
+        tpl = db_get_or_404(self.InvoiceTemplate, id)
         name = tpl.name
         self._db.session.delete(tpl)
         self._db.session.commit()
@@ -473,7 +475,7 @@ class InvoiceDesignerModule(BaseModule):
         return redirect(url_for('invoice_designer.designer_index'))
 
     def _duplicate_template(self, id):
-        src = self.InvoiceTemplate.query.get_or_404(id)
+        src = db_get_or_404(self.InvoiceTemplate, id)
         dup = self.InvoiceTemplate(
             name=f'{src.name} (copy)',
             config_json=src.config_json,
@@ -485,7 +487,7 @@ class InvoiceDesignerModule(BaseModule):
         return redirect(url_for('invoice_designer.designer_edit', id=dup.id))
 
     def _preview_template(self, id):
-        tpl = self.InvoiceTemplate.query.get_or_404(id)
+        tpl = db_get_or_404(self.InvoiceTemplate, id)
         config = json.loads(tpl.config_json)
         merged = _merge_config(config)
 
@@ -559,7 +561,7 @@ class InvoiceDesignerModule(BaseModule):
 
     def _export_template(self, id):
         """Export template config as JSON download."""
-        tpl = self.InvoiceTemplate.query.get_or_404(id)
+        tpl = db_get_or_404(self.InvoiceTemplate, id)
         config = json.loads(tpl.config_json)
         pretty = json.dumps(config, indent=2, ensure_ascii=False)
         safe_name = tpl.name.replace(' ', '_').lower()
