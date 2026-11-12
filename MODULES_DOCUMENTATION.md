@@ -27,6 +27,24 @@ Technical reference for the Autónomos application architecture.
 | `Contractor` | `contractor` | Contractor/vendor info |
 | `Expense` | `expense` | Expense records with VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`, `deductible`, `deductible_pct`) |
 
+#### Invoice amount columns
+
+The amount columns keep historical names. Their meaning depends on the invoice
+currency:
+
+| Column | EUR invoice | Any other currency (USD, GBP, CZK, …) |
+|--------|-------------|----------------------------------------|
+| `amount_eur` | Entered total | Total converted to EUR — the tax base |
+| `amount_usd` | Total converted to USD | Entered total, in the invoice currency |
+| `exchange_rate` | USD→EUR rate | USD→EUR for USD invoices; `<currency>`→EUR otherwise |
+| `unit_price_usd`, `subtotal_usd` (items) | Invoice currency | Invoice currency |
+
+`app.invoice_amounts()` is the single conversion used by the create and edit
+routes and by Recurring Invoices. Currencies other than EUR and USD are
+converted through `CurrencyService.convert()` with the configured rate
+provider; when no rate is available the invoice is not saved. Renaming the
+columns (for example to `amount_original`) is a planned follow-up.
+
 ### Invoice Lifecycle
 
 Invoices move through an explicit lifecycle. Issued and paid invoices are
@@ -44,15 +62,25 @@ stateDiagram-v2
 
 Key rules:
 
+- **New invoices are always drafts.** The create and edit forms and the REST
+  API never set the status directly; it changes only through the lifecycle
+  actions (Issue, Mark paid, Annul, Rectify). A posted status other than the
+  current one is rejected.
 - **Draft** invoices behave like the legacy `pending` status: freely editable
-  and deletable. Legacy `pending` invoices keep those semantics unchanged.
+  and deletable. Legacy `pending` invoices keep those semantics unchanged and
+  can be marked paid without issuing (issuing renumbers them).
 - **Issue** is one-way. It assigns the next sequential number for the series
   (derived from `MAX(sequence_number)`, collision-safe) and freezes the fiscal
   snapshot, so later edits to the customer or tax settings never change the
   meaning of an issued invoice.
-- **Issued/paid** invoices cannot be edited or deleted — enforced in the core
-  routes, in `InvoiceService`, and in the REST API. The only forward
-  transitions are *Mark paid* and *Annul*.
+- **Issued, paid and annulled** invoices cannot be edited or deleted —
+  enforced in the core routes, in `InvoiceService`, and in the REST API
+  (one rule: `constants.invoice_locked`). The only forward transitions are *Mark
+  paid* and *Annul*. Legacy invoices cancelled before the lifecycle existed
+  (no `issued_at`) stay editable.
+- **Legacy settled invoices** — paid or cancelled without ever being issued
+  through the app — are left as they are; the invoice page labels them
+  (no sequential number, fiscal snapshot or Verifactu record).
 - **Rectify** creates a new draft pre-filled from the original, linked via
   `rectifies_invoice_id` + `rectification_type` (`sustitucion` | `diferencias`),
   in a dedicated `R<year>` series. The original invoice is never mutated.
@@ -60,6 +88,11 @@ Key rules:
   `on_invoice_annulled`) run **inside the transition transaction**: a raising
   module aborts the transition. This is how the Verifactu module guarantees a
   billing record exists for every issued invoice.
+- **Income rule** (devengo, owner decision 2026-10-03): an invoice counts as
+  income in the year of its `invoice_date` whatever its payment status; only
+  `cancelled` invoices are excluded. One helper, `constants.counts_as_income()`,
+  is used by the dashboard, the Modelo 130/303 drafts, the IRPF Estimator and
+  the RETA Advisor, so their figures agree.
 
 ### Core Routes
 
@@ -67,8 +100,8 @@ Key rules:
 |-------|-------------|
 | `/` | Dashboard (clickable invoice rows navigate to view) |
 | `/invoices` | Invoice list with filters, sorting, pagination (clickable rows) |
-| `/create` | Create invoice — defaults to `draft` (calls `module_manager.on_invoice_created` after commit) |
-| `/edit/<id>` | Edit invoice — blocked for issued/paid (calls `module_manager.on_invoice_updated` after commit) |
+| `/create` | Create invoice — always `draft` (calls `module_manager.on_invoice_created` after commit) |
+| `/edit/<id>` | Edit invoice — blocked once issued; never changes the status (calls `module_manager.on_invoice_updated` after commit) |
 | `/view/<id>` | View invoice (renders `module_manager.get_invoice_actions` + `get_invoice_view_panels`) |
 | `/issue/<id>` | POST — issue a draft: sequential number + fiscal snapshot; fires `on_invoice_issued` (blocking) |
 | `/mark-paid/<id>` | POST — mark an issued/pending invoice as paid |
@@ -90,6 +123,13 @@ Key rules:
 - **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, HSTS (when FORCE_HTTPS=1)
 - **Session Security**: HttpOnly cookies, SameSite=Lax, Secure (when HTTPS), 1-hour lifetime
 - **Auth Blueprint**: exempt from CSRF (handles its own validation)
+- **Credentials at rest**: `secret_box.py` encrypts stored service credentials
+  (Fernet, prefix `enc:v1:`) with `CREDENTIALS_KEY` or `instance/credentials.key`.
+  Columns use the `EncryptedString` type; JSON-stored values (SMTP password) and
+  the raw-SQL API token call `encrypt()` / `decrypt()` directly. Backups (raw SQL
+  dump) therefore contain ciphertext only. Plaintext values from earlier
+  versions are encrypted once at start-up (`encrypt_existing()`), in the core
+  and in each module's `on_enable`.
 
 ### Activity Logging
 
@@ -363,6 +403,7 @@ PDF financial reports collecting data dynamically from all enabled modules.
   - PDF signing checkboxes (when pdf_signature module enabled)
   - Collects data via `module_manager.get_report_sections()`
   - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
+  - Income and expenses tables include **IVA %** and **IVA (EUR)** columns with totals. Issued invoices use the fiscal snapshot; legacy and draft invoices use the derived value. Reverse-charge rows (intra-EU B2B customers, expenses with `reverse_charge`) show `ISP`, and the note "Inversión del sujeto pasivo – Artículo 194 Directiva 2006/112/EC" is printed under the table
   - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns`, `total_field`, and for file attachments `has_files`, `files_fn`, `list_fn`
 
 ### External Storage (`external_storage`)

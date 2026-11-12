@@ -16,6 +16,7 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
+from constants import counts_as_income
 from module_manager import BaseModule
 
 from .brackets import BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year
@@ -100,7 +101,7 @@ class RetaAdvisorModule(BaseModule):
         for inv in Invoice.query.all():
             if (inv.invoice_date and inv.invoice_date.year == year
                     and inv.invoice_date <= today
-                    and inv.status != 'cancelled'):
+                    and counts_as_income(inv)):
                 income += inv.amount_eur or 0.0
 
         expenses = 0.0
