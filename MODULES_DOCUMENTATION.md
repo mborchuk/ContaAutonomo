@@ -557,9 +557,11 @@ app data. Full reference: [`modules/api/README.md`](api/README.md).
 
 Spanish AEAT filing deadlines as local, versioned data — no external API.
 
-- Data: `calendar_data.py` ships deadline windows for Modelos 303/130/349/111
-  (quarterly; Q4 files in January of the following year) and 390/100 (annual).
-  Annual update is a one-file edit; verify against the official AEAT calendar.
+- Data: `calendar_data.py` generates deadline windows for any year for Modelos
+  303/130/349/111 (quarterly; Q4 files in January of the following year) and
+  390/100 (annual); weekend deadlines move to Monday; `WINDOW_OVERRIDES` for
+  other AEAT changes. Years outside `VERIFIED_YEARS` are marked *(verify)*.
+  Yearly checklist: `CONTRIBUTING.md` → *Annual Tax Data Update*.
 - Routes: `/fiscal-calendar/` (year view)
 - Dashboard panel: upcoming/open filing windows for the user's selected forms
 - Settings: "which forms do I file" checkboxes (defaults inferred from

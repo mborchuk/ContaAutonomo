@@ -201,7 +201,7 @@ class FiscalCalendarModule(BaseModule):
         selected = self._selected_forms()
         state = self._reminder_state()
         fired = []
-        for entry in all_deadlines():
+        for entry in all_deadlines(today=today):
             if entry['form'] not in selected:
                 continue
             days_to_end = (entry['window_end'] - today).days

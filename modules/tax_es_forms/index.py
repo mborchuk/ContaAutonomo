@@ -19,8 +19,7 @@ from module_manager import BaseModule
 
 from .boxes import (
     BOX_TABLE_VERSION,
-    MODELO_303_BOXES,
-    MODELO_130_BOXES,
+    boxes_for_year,
 )
 from .calculator import (
     compute_modelo_303,
@@ -186,17 +185,17 @@ class TaxEsFormsModule(BaseModule):
             carried_forward=carried)
         result['meta']['carried_from'] = carried_from
         result['meta']['checks'] = self._data_checks(invoices, expenses)
-        result['labels'] = MODELO_303_BOXES
+        result['labels'] = self._box_labels(year, '303')
+        result.update(self._table_info(year))
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
         return result
 
     def _draft_349(self, year, quarter):
         result = compute_modelo_349(self._invoices_in(year, quarter=quarter))
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
+        result.update(self._table_info(year))
         result['box_59'] = self._draft_303(year, quarter)['boxes']['59']
         return result
 
@@ -234,8 +233,8 @@ class TaxEsFormsModule(BaseModule):
             boxes, rate = irpf.modelo130_boxes(year, quarter)
             return {
                 'form': '130', 'boxes': boxes, 'irpf_rate': rate,
-                'labels': MODELO_130_BOXES, 'year': year, 'quarter': quarter,
-                'table_version': BOX_TABLE_VERSION,
+                'labels': self._box_labels(year, '130'), 'year': year, 'quarter': quarter,
+                **self._table_info(year),
                 'meta': {'basis': 'cumulative_ytd', 'source': 'tax_es_irpf'},
             }
         _, irpf_rate = self._rates()
@@ -247,12 +246,27 @@ class TaxEsFormsModule(BaseModule):
             invoices_ytd, expenses_ytd, irpf_rate,
             prior_income=prior_income, prior_expenses=prior_expenses,
             convert_expense=self._convert_to_eur)
-        result['labels'] = MODELO_130_BOXES
+        result['labels'] = self._box_labels(year, '130')
         result['meta']['source'] = 'tax_es_forms'
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
+        result.update(self._table_info(year))
         return result
+
+    @staticmethod
+    def _box_labels(year, form):
+        _table_year, tables, _fallback = boxes_for_year(year)
+        return tables[form]
+
+    @staticmethod
+    def _table_info(year):
+        """Box table metadata for a draft: version, the table year used, and
+        whether it is a fallback from an earlier year (shown as a warning)."""
+        from year_tables import fallback_note
+        table_year, _tables, fallback = boxes_for_year(year)
+        return {'table_version': BOX_TABLE_VERSION, 'table_year': table_year,
+                'table_fallback': fallback,
+                'table_note': fallback_note(table_year) if fallback else ''}
 
     def _available_years(self):
         return self.core.data_years()

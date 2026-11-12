@@ -3,7 +3,7 @@
     {% for d in data.deadlines %}
     <div class="panel-list-row{% if d.state == 'open' %} is-open{% elif d.days_to_start is not none and d.days_to_start <= 7 %} is-imminent{% endif %}">
         <span>
-            <strong>Modelo {{ d.form }}</strong> · {{ d.period_label }}
+            <strong>Modelo {{ d.form }}</strong> · {{ d.period_label }}{% if not d.verified %} <span class="fine-print" title="Generated from rules; not yet checked against the AEAT calendar">(verify)</span>{% endif %}
         </span>
         <span class="fine-print">
             {% if d.state == 'open' %}
