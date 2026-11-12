@@ -2,10 +2,11 @@
 """
 Invoice Email Module (F8) — send invoice PDFs by SMTP + overdue reminders.
 
-CAVEMAN NOTE: app had zero mail code. This module bring stdlib smtplib, an
-SMTP settings tab, a "send by email" panel on the invoice view with a send log,
-a daily overdue-reminder job (opt-in, idempotent), and a `notify` capability so
-fiscal_calendar reminders can ride email with zero coupling.
+The app had no mail code before this module. It adds sending through the
+standard library's smtplib, an SMTP settings tab, a "send by email" panel on
+the invoice view with a send log, a daily overdue-reminder job (opt-in and
+idempotent), and a `notify` capability so Fiscal Calendar reminders can be
+sent by email without the two modules depending on each other.
 
 Password stored in module config (plaintext SQLite) — same posture as the
 existing AI-provider API keys; documented, self-hosted single-user app.

@@ -2,10 +2,11 @@
 """
 Fiscal Calendar Module (F3) — Spanish AEAT deadlines + reminders.
 
-CAVEMAN NOTE: local data (calendar_data.py), no external API. Show a dashboard
-panel of upcoming filing windows for the forms user actually file, and a daily
-scheduler job that shout reminders at T-14/7/1. Reminders ride the `notify`
-capability seam (F8 email plug in later) and always write the activity log.
+Uses local data (calendar_data.py), no external API. Shows a dashboard panel
+of upcoming filing windows for the forms the user actually files, and runs a
+daily scheduler job that sends reminders 14, 7 and 1 days before a deadline.
+Reminders go through the `notify` capability (email plugs in through F8) and
+are always written to the activity log.
 """
 
 import json

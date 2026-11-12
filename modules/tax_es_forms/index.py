@@ -2,10 +2,10 @@
 """
 Tax ES Forms Module (F5) — Modelo 303 / 130 draft calculator.
 
-CAVEMAN NOTE: this module DO NOT file anything and give NO tax advice. It just
-add up numbers already in the app and lay them out in the boxes of Modelo 303
-(IVA) and Modelo 130 (IRPF pago fraccionado), so user can copy them into AEAT
-portal. Every page shout "estimate, not tax advice".
+This module does not file anything and gives no tax advice. It adds up the
+figures already in the app and lays them out in the boxes of Modelo 303 (IVA)
+and Modelo 130 (IRPF pago fraccionado), so the user can copy them into the
+AEAT portal. Every page states "estimate, not tax advice".
 
 Pure math live in calculator.py; box numbers live in boxes.py (versioned).
 This file only fetch data and render.

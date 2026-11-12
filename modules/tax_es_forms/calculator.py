@@ -2,8 +2,9 @@
 """
 Modelo 303 / 130 aggregation engine — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: keep this file dumb and pure so tests feed plain objects and check
-numbers. No queries here. Module (index.py) fetch data, pass it in.
+This file is kept pure — no database queries — so tests can pass plain
+objects in and check the numbers. The module (index.py) fetches the data and
+passes it in.
 
 Devengo (accrual) basis: invoices count by invoice_date; cancelled excluded.
 IVA repercutido only on `standard` customers (eu_b2b / non_eu = reverse charge

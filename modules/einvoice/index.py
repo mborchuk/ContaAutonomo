@@ -2,10 +2,10 @@
 """
 E-Invoice Module (F9, Phase 1) — Facturae export for issued invoices.
 
-CAVEMAN NOTE: Phase 1 only — generate Facturae 3.2.2 XML (UNSIGNED, see
-facturae.py for the XAdES gap) with a data-readiness check. Exchange with
-platforms / status messages (Phase 2) is gated on the ministerial order for
-RD 238/2026 — design notes in README.md, no code.
+Phase 1 only: generate Facturae 3.2.2 XML (unsigned — see facturae.py for the
+XAdES gap) with a data-readiness check. Exchange with platforms and status
+messages (Phase 2) waits for the ministerial order for RD 238/2026; the design
+notes are in README.md, there is no code for it yet.
 
 Readiness ride the structured party data that already exist on Customer and
 Settings (address/city/postal_code/country) — the missing-data checklist tell
