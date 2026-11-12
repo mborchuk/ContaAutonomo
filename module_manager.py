@@ -1482,11 +1482,16 @@ class CurrencyService:
 
         Returns:
             (converted_amount, rate, actual_date)
+
+        Raises:
+            ValueError: no rate is available for the pair on that date.
         """
         if from_currency == to_currency:
             return amount, 1.0, date_str
 
         rate, actual_date = self.get_rate(from_currency, to_currency, date_str)
+        if rate is None:
+            raise ValueError(f'No exchange rate for {from_currency}->{to_currency} on {date_str}')
         return amount * rate, rate, actual_date
 
     # --- Default provider (ECB) ---
@@ -1515,9 +1520,12 @@ class CurrencyService:
             codes.add(to_currency)
         rates = get_multiple_exchange_rates(date_str, list(codes), base_currency='EUR')
 
-        # rates[X] = how many X per 1 EUR
-        from_per_eur = rates.get(from_currency, 1.0) if from_currency != 'EUR' else 1.0
-        to_per_eur = rates.get(to_currency, 1.0) if to_currency != 'EUR' else 1.0
+        # rates[X] = how many X per 1 EUR. A missing code means "no rate", not
+        # 1.0: a silent 1:1 rate would store a wrong EUR tax base.
+        from_per_eur = rates.get(from_currency) if from_currency != 'EUR' else 1.0
+        to_per_eur = rates.get(to_currency) if to_currency != 'EUR' else 1.0
+        if not from_per_eur or not to_per_eur:
+            return None, None
 
         # 1 from_currency = (to_per_eur / from_per_eur) to_currency
         cross_rate = to_per_eur / from_per_eur if from_per_eur else 0.0
