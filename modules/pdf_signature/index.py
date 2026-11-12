@@ -6,11 +6,13 @@ Integrates via BaseModule hooks without modifying core models.
 """
 
 import io
-from datetime import datetime
 import importlib.util
 
 from module_manager import BaseModule
+from secret_box import EncryptedString, encrypt_existing
+from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
+from timeutil import utcnow
 
 # Graceful degradation: try importing optional dependencies
 try:
@@ -63,7 +65,7 @@ class PDFSignatureModule(BaseModule):
             digital_enabled = db.Column(db.Boolean, default=False)
             signature_image_key = db.Column(db.String(500), default='')
             certificate_key = db.Column(db.String(500), default='')
-            certificate_password = db.Column(db.String(500), default='')
+            certificate_password = db.Column(EncryptedString(500), default='')
             sig_position = db.Column(db.String(20), default='bottom-left')
             sig_margin_x = db.Column(db.Integer, default=40)
             sig_margin_y = db.Column(db.Integer, default=40)
@@ -176,7 +178,7 @@ class PDFSignatureModule(BaseModule):
         self.logger.info('PDF Signature: image dimensions: %dx%d, mode=%s', img_w, img_h, img.mode)
 
         # Save image to a local temp file for reportlab (needs a real file path on disk)
-        import os, tempfile
+        import tempfile
         tmp_fd, tmp_path = tempfile.mkstemp(suffix='_overlay.png', prefix='pdf_sig_')
         try:
             if img.mode != 'RGBA':
@@ -280,7 +282,8 @@ class PDFSignatureModule(BaseModule):
         password = (cfg.certificate_password or '').encode('utf-8')
 
         # Save PFX to a local temp file — pyHanko 0.34+ expects a file path
-        import os, tempfile
+        import os
+        import tempfile
         tmp_fd, tmp_path = tempfile.mkstemp(suffix='_certificate.p12', prefix='pdf_sig_')
         try:
             with os.fdopen(tmp_fd, 'wb') as f:
@@ -364,7 +367,7 @@ class PDFSignatureModule(BaseModule):
             sig.is_signed = True
             sig.has_visual = visual
             sig.has_digital = digital
-            sig.signed_at = datetime.utcnow()
+            sig.signed_at = utcnow()
             self._db.session.commit()
 
             self.logger.info(
@@ -438,7 +441,7 @@ class PDFSignatureModule(BaseModule):
                 sig = self._get_invoice_sig(invoice.id)
             sig.is_signed = True
             sig.has_digital = True
-            sig.signed_at = sig.signed_at or datetime.utcnow()
+            sig.signed_at = sig.signed_at or utcnow()
             self._db.session.commit()
             signer = sigs[0].get('signer_email') or sigs[0].get('signer') or ''
             html = render_template(
@@ -665,9 +668,13 @@ class PDFSignatureModule(BaseModule):
             })
         return caps
 
+    def on_enable(self):
+        # C-2: encrypt a certificate password stored in plaintext by earlier versions.
+        encrypt_existing(self._db, 'pdf_signature_config', ['certificate_password'])
+
     def get_settings_html(self, settings):
         cfg = self._get_config()
-        return render_template(
+        return self.render_settings_template(
             'pdf_signature_settings.html',
             cfg=cfg,
             pillow_available=PILLOW_AVAILABLE,
@@ -693,9 +700,9 @@ class PDFSignatureModule(BaseModule):
         if cert_key:
             cfg.certificate_key = cert_key
             self.logger.info('PDF Signature: updated cert_key=%r', cert_key)
-        cert_password = form.get('pdf_sig_cert_password')
-        if cert_password is not None:
-            cfg.certificate_password = cert_password
+        if 'pdf_sig_cert_password' in form or 'pdf_sig_cert_password__clear' in form:
+            cfg.certificate_password = secret_from_form(
+                form, 'pdf_sig_cert_password', cfg.certificate_password)
         # Signature position settings
         sig_position = form.get('pdf_sig_position', 'bottom-left').strip()
         if sig_position in ('bottom-left', 'bottom-right', 'bottom-center',

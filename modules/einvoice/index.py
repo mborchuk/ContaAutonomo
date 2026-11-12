@@ -17,6 +17,7 @@ from flask import Blueprint, Response, flash, redirect, url_for
 from module_manager import BaseModule
 
 from .facturae import check_readiness, generate_facturae
+from db_helpers import db_get
 
 
 class EInvoiceModule(BaseModule):
@@ -48,7 +49,7 @@ class EInvoiceModule(BaseModule):
     def _readiness(self, invoice):
         from app import Customer
         seller = self.core.get_settings()
-        customer = Customer.query.get(invoice.customer_id) \
+        customer = db_get(Customer, invoice.customer_id) \
             if invoice.customer_id else None
         return check_readiness(invoice, seller, customer), seller, customer
 

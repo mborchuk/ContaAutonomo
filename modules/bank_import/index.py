@@ -12,7 +12,6 @@ reverted until one of its movements is matched.
 """
 
 import json
-from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
@@ -20,6 +19,8 @@ from module_manager import BaseModule
 
 from .parsers import parse_n43, parse_csv
 from .matching import suggest_for_movement
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 class BankImportModule(BaseModule):
@@ -61,7 +62,7 @@ class BankImportModule(BaseModule):
             imported = db.Column(db.Integer, default=0)
             skipped = db.Column(db.Integer, default=0)
             errors = db.Column(db.Text)             # JSON list of bad-line reports
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class BankMovement(db.Model):
             __tablename__ = 'bank_movement'
@@ -77,7 +78,7 @@ class BankImportModule(BaseModule):
             status = db.Column(db.String(20), default='new')  # new|matched|ignored
             matched_type = db.Column(db.String(20))            # invoice|expense
             matched_id = db.Column(db.Integer)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class BankImportConfig(db.Model):
             """CSV column-mapping profiles, one row per profile name."""
@@ -223,13 +224,13 @@ class BankImportModule(BaseModule):
         @bp.route('/confirm/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_confirm(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             invoice_id = request.form.get('invoice_id', type=int)
             if not invoice_id:
                 flash('Pick an invoice to match.', 'danger')
                 return redirect(url_for('bank_import.bank_index'))
             from app import Invoice, _mark_invoice_paid
-            invoice = Invoice.query.get_or_404(invoice_id)
+            invoice = db_get_or_404(Invoice, invoice_id)
             try:
                 # Normal core transition -> lifecycle log; F2/F1 semantics hold.
                 _mark_invoice_paid(invoice)
@@ -251,10 +252,10 @@ class BankImportModule(BaseModule):
         @bp.route('/link-expense/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_link_expense(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             expense_id = request.form.get('expense_id', type=int)
             from app import Expense
-            expense = Expense.query.get_or_404(expense_id)
+            expense = db_get_or_404(Expense, expense_id)
             movement.status = 'matched'
             movement.matched_type = 'expense'
             movement.matched_id = expense.id
@@ -265,7 +266,7 @@ class BankImportModule(BaseModule):
         @bp.route('/ignore/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_ignore(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             movement.status = 'ignored'
             module._db.session.commit()
             return redirect(url_for('bank_import.bank_index'))
@@ -273,7 +274,7 @@ class BankImportModule(BaseModule):
         @bp.route('/batch/<int:batch_id>/delete', methods=['POST'])
         @login_required
         def bank_batch_delete(batch_id):
-            batch = module.ImportBatch.query.get_or_404(batch_id)
+            batch = db_get_or_404(module.ImportBatch, batch_id)
             matched = module.BankMovement.query.filter(
                 module.BankMovement.batch_id == batch.id,
                 module.BankMovement.status == 'matched').count()

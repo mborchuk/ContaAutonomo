@@ -1,4 +1,4 @@
-.PHONY: setup start stop run test install lock
+.PHONY: setup start stop run test install lock lint format coverage
 
 # Generate a .env with a strong SECRET_KEY (won't overwrite an existing one).
 setup:
@@ -7,6 +7,7 @@ setup:
 	else \
 		echo "SECRET_KEY=$$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > .env; \
 		echo "BACKUP_KEY=$$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env; \
+		echo "CREDENTIALS_KEY=$$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env; \
 		echo "FLASK_DEBUG=0" >> .env; \
 		echo ".env created. Review it, then run: make start"; \
 	fi
@@ -38,3 +39,15 @@ lock:
 # Run the test suite.
 test:
 	FLASK_DEBUG=1 DATABASE_URL="sqlite:///:memory:" pytest -q
+
+# Lint (ruff, rules in pyproject.toml). CI runs the same check.
+lint:
+	ruff check .
+
+# Format the files you changed (repository-wide formatting is not enforced yet).
+format:
+	ruff format $(shell git diff --name-only --diff-filter=AM origin/main -- '*.py')
+
+# Test suite with a coverage report.
+coverage:
+	FLASK_DEBUG=1 DATABASE_URL="sqlite:///:memory:" pytest -q --cov --cov-report=term:skip-covered
