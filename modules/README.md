@@ -648,27 +648,55 @@ The template (`base.html`) iterates `get_full_nav()` and renders links and dropd
 
 ## Settings Integration
 
-Modules inject settings HTML into a specific tab via `get_settings_html()` and `settings_tab`:
+Modules inject settings HTML into a specific tab via `get_settings_html()` and `settings_tab`.
+Build the panel from a Jinja template in the module's `templates/` folder with
+`self.render_settings_template()` — never with f-strings. The template is
+auto-escaped, so stored values cannot inject markup, and it works for modules
+without a blueprint.
 
 ```python
+from module_manager import BaseModule
+from settings_forms import secret_from_form
+
 @property
 def settings_tab(self):
     return 'general'  # 'general' (default) or 'security'
 
 def get_settings_html(self, settings):
-    return '''
-    <h3>My Module Settings</h3>
-    <div class="form-group">
-        <label>My Option</label>
-        <input type="text" name="my_option" value="...">
-    </div>
-    '''
+    cfg = self._get_config()
+    return self.render_settings_template('my_module_settings_panel.html', cfg=cfg)
 
 def save_settings(self, settings, form):
-    if 'my_option' in form:
-        # save to your model or settings
-        pass
+    if 'my_option' not in form:
+        return  # guard: another tab was saved
+    cfg = self._get_config()
+    cfg.my_option = form.get('my_option', '')
+    # Secrets: an empty field keeps the stored value; `<name>__clear` removes it.
+    cfg.api_key = secret_from_form(form, 'my_api_key', cfg.api_key)
 ```
+
+`templates/my_module_settings_panel.html`:
+
+```jinja
+{% from "_secret_field.html" import secret_input %}
+<h3>My Module Settings</h3>
+<div class="form-group">
+    <label for="my_option">My Option</label>
+    <input type="text" id="my_option" name="my_option" value="{{ cfg.my_option or '' }}">
+</div>
+<div class="form-group">
+    <label for="my_api_key">API key</label>
+    {{ secret_input('my_api_key', cfg.api_key) }}
+</div>
+```
+
+Rules:
+
+- **Never send a stored secret to the browser** (password, API key, token).
+  `secret_input` renders an empty password field with "Stored — leave blank to
+  keep" and a "Clear the stored value" checkbox.
+- Prefix template file names with the module id to avoid clashes.
+- Pass data, not pre-built HTML strings, to the template.
 
 ---
 
@@ -838,7 +866,11 @@ Used by report type `expenses` and `combined`. `query_fn` must return:
     'contractor_name': 'Acme Corp',     # str
     'category': 'Software',            # str
     'description': 'Monthly license',   # str
-    'amount_eur': 99.00                 # float, amount in EUR
+    'amount_eur': 99.00,                # float, amount in EUR
+    # Optional (report IVA columns; '–' when missing):
+    'vat_rate_pct': 21.0,               # float | None, IVA rate in %
+    'vat_eur': 17.18,                   # float | None, IVA amount in EUR
+    'reverse_charge': False,            # bool, row shown as 'ISP' + Art. 194 note
 }]
 ```
 

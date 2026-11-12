@@ -100,9 +100,7 @@ def test_issue_writes_alta_record_and_chain_verifies(verifactu):
     assert payload['invoice_number'] == inv.invoice_number
     assert payload['vat_amount'] == 21.0      # snapshot: 21% of 100
 
-    all_recs = verifactu.VerifactuRecord.query.order_by(
-        verifactu.VerifactuRecord.id).all()
-    ok, bad, reason = verify_chain(all_recs, verifactu._secret())
+    ok, bad, reason = verifactu._verify_all()[1]
     assert ok, f'chain broken at {bad}: {reason}'
 
 
@@ -124,5 +122,115 @@ def test_qr_payload_contains_invoice_fields(verifactu):
 
     inv = _issue_one(db, 'VF-C')
     url = verifactu.qr_payload(inv)
-    assert f'numserie={inv.invoice_number}' in url
-    assert 'importe=100.00' in url
+    from urllib.parse import quote
+    assert f'numserie={quote(inv.invoice_number, safe="")}' in url
+    assert 'importe=121.00' in url          # total = base 100 + IVA 21
+    assert '/ValidarQRNoVerifactu?' in url   # not submitting to AEAT yet
+
+
+# --- C-4: dedicated signing key ------------------------------------------------
+
+def test_verify_chain_accepts_per_record_key_resolver():
+    payload = {'x': 1}
+    h = record_hash(GENESIS_HASH, payload)
+    rec = {'payload': json.dumps(payload, sort_keys=True, separators=(',', ':')),
+           'prev_hash': GENESIS_HASH, 'record_hash': h,
+           'signature': sign_hash(h, 'k1'), 'key_id': 'a'}
+    assert verify_chain([rec], lambda r: {'a': 'k1'}.get(r['key_id']))[0]
+    ok, bad, reason = verify_chain([rec], lambda r: None)
+    assert not ok and bad == 0 and 'unknown key' in reason
+
+
+def test_new_records_are_signed_with_verifactu_key_not_secret_key(verifactu):
+    from app import db
+    from modules.verifactu.chain import key_id
+
+    inv = _issue_one(db, 'VF-K1')
+    rec = verifactu.VerifactuRecord.query.filter_by(invoice_id=inv.id).one()
+    assert rec.key_id == key_id('test-verifactu-key')
+    assert rec.signature == sign_hash(rec.record_hash, 'test-verifactu-key')
+    assert rec.signature != sign_hash(rec.record_hash, verifactu._legacy_secret())
+
+
+def test_rotating_secret_key_keeps_chain_valid(verifactu, monkeypatch):
+    from app import db
+
+    _issue_one(db, 'VF-K2')
+    monkeypatch.setitem(verifactu.core.app.config, 'SECRET_KEY', 'rotated-session-key')
+    ok, bad, reason = verifactu._verify_all()[1]
+    assert ok, f'chain broken at {bad}: {reason}'
+
+
+def _append_legacy_record(verifactu, signature_key):
+    """Append a record the way the module wrote them before VERIFACTU_KEY."""
+    from app import db
+    from modules.verifactu.chain import canonical_payload
+
+    last = verifactu.VerifactuRecord.query.order_by(
+        verifactu.VerifactuRecord.id.desc()).first()
+    prev = last.record_hash if last else GENESIS_HASH
+    payload = {'invoice_number': f'LEGACY-{prev[:6]}', 'total': 50}
+    h = record_hash(prev, payload)
+    rec = verifactu.VerifactuRecord(
+        record_type='alta', invoice_id=0, invoice_number=payload['invoice_number'],
+        payload=canonical_payload(payload), prev_hash=prev, record_hash=h,
+        signature=sign_hash(h, signature_key), key_id=None)
+    db.session.add(rec)
+    db.session.commit()
+    return rec
+
+
+def test_legacy_records_verify_with_secret_key_then_migrate(verifactu):
+    from modules.verifactu.chain import key_id
+
+    rec = _append_legacy_record(verifactu, verifactu._legacy_secret())
+    ok, _bad, _reason = verifactu._verify_all()[1]
+    assert ok, 'legacy record must verify with SECRET_KEY before migration'
+
+    verifactu._migrate_signing_key()
+    assert rec.key_id == key_id('test-verifactu-key')
+    assert rec.signature == sign_hash(rec.record_hash, 'test-verifactu-key')
+    ok, bad, reason = verifactu._verify_all()[1]
+    assert ok, f'chain broken at {bad}: {reason}'
+
+    verifactu._migrate_signing_key()  # idempotent
+    assert rec.key_id == key_id('test-verifactu-key')
+
+
+def test_migration_leaves_records_with_bad_signature_alone(verifactu):
+    from app import db
+
+    rec = _append_legacy_record(verifactu, 'some-other-key')
+    verifactu._migrate_signing_key()
+    assert rec.key_id is None
+    ok, _bad, reason = verifactu._verify_all()[1]
+    assert not ok and 'signature' in reason
+    db.session.delete(rec)
+    db.session.commit()
+
+
+def test_status_page_renders_with_dedicated_key(verifactu, client):
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    resp = client.get('/verifactu/')
+    assert resp.status_code == 200
+
+
+def test_deployment_key_prefers_env_then_creates_private_file(loaded_modules,
+                                                              tmp_path, monkeypatch):
+    import os
+    import stat
+
+    core = loaded_modules.modules['verifactu'].core
+    key_file = tmp_path / 'instance' / 'verifactu.key'
+    monkeypatch.setitem(core.app.config, 'VERIFACTU_KEY_FILE', str(key_file))
+
+    monkeypatch.setenv('VERIFACTU_KEY', 'from-env')
+    assert core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test') == 'from-env'
+    assert not key_file.exists()
+
+    monkeypatch.delenv('VERIFACTU_KEY')
+    first = core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test')
+    assert len(first) >= 32
+    assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
+    assert core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test') == first

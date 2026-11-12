@@ -110,7 +110,7 @@ def test_upload_for_another_period_stores_no_boxes(tax_forms, client):
     assert stored.boxes == {}
 
 
-def test_box_05_uses_the_filed_result_of_earlier_quarters(year_2026, loaded_modules):
+def test_box_05_uses_the_filed_result_of_earlier_quarters(year_2026, loaded_modules):  # noqa: F811
     from app import db
 
     tm = loaded_modules.modules['tax_management']

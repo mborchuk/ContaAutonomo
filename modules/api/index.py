@@ -29,6 +29,7 @@ from werkzeug.wrappers import Response as WerkzeugResponse
 from sqlalchemy import inspect as sa_inspect, text
 
 from module_manager import BaseModule
+import secret_box
 
 # API surface version (path is /api/v1). Bump when the contract changes.
 API_VERSION = 'v1'
@@ -40,8 +41,10 @@ HEAVY_LIMIT = '10/minute'
 
 # Fields a PATCH is allowed to touch. Everything else is rejected so a client
 # can never set amounts/hashes directly (those are server-computed).
+# The status is not patchable: it changes only through the lifecycle actions
+# (POST /invoices/<id>/issue and /invoices/<id>/mark-paid).
 PATCHABLE_FIELDS = {
-    'client_name', 'status', 'due_date', 'invoice_date',
+    'client_name', 'due_date', 'invoice_date',
     'notes', 'payment_method', 'currency', 'description',
 }
 
@@ -117,6 +120,12 @@ class ApiModule(BaseModule):
             self.logger.error('api_token migration failed: %s', e, exc_info=True)
             return
 
+        # C-2: encrypt a token stored in plaintext by earlier versions.
+        try:
+            secret_box.encrypt_existing(db, 'settings', ['api_token'])
+        except Exception as e:
+            self.logger.error('api_token encryption failed: %s', e)
+
         # Generate an initial token if a settings row exists but has none.
         try:
             self._ensure_token()
@@ -137,7 +146,7 @@ class ApiModule(BaseModule):
             return ''
         if not row:
             return ''
-        return row[0] or ''
+        return secret_box.decrypt(row[0] or '') or ''
 
     def _set_token(self, token):
         """Persist a new API token on the settings singleton."""
@@ -145,7 +154,7 @@ class ApiModule(BaseModule):
         db.session.execute(
             text('UPDATE settings SET api_token = :t WHERE id = ('
                  'SELECT id FROM settings ORDER BY id LIMIT 1)'),
-            {'t': token})
+            {'t': secret_box.encrypt(token)})  # encrypted at rest (C-2)
         db.session.commit()
 
     def _ensure_token(self):
@@ -376,6 +385,18 @@ class ApiModule(BaseModule):
         def api_invoice_delete(invoice_id):
             return module._handle(module._delete_invoice, invoice_id)
 
+        @bp.route('/invoices/<int:invoice_id>/issue', methods=['POST'])
+        @require_token
+        @limit(WRITE_LIMIT)
+        def api_invoice_issue(invoice_id):
+            return module._handle(module._issue_invoice, invoice_id)
+
+        @bp.route('/invoices/<int:invoice_id>/mark-paid', methods=['POST'])
+        @require_token
+        @limit(WRITE_LIMIT)
+        def api_invoice_mark_paid(invoice_id):
+            return module._handle(module._mark_paid, invoice_id)
+
         @bp.route('/invoices/<int:invoice_id>/pdf', methods=['GET'])
         @require_token
         @limit(HEAVY_LIMIT)
@@ -590,7 +611,12 @@ class ApiModule(BaseModule):
             raise ApiError(409, 'conflict',
                            f'invoice_number {invoice_number} already exists')
 
-        status = body.get('status', 'pending')
+        from constants import INITIAL_INVOICE_STATUS
+        status = body.get('status', INITIAL_INVOICE_STATUS)
+        if status != INITIAL_INVOICE_STATUS:
+            raise ApiError(400, 'bad_request',
+                           'New invoices are created as drafts; use '
+                           '/invoices/<id>/issue and /invoices/<id>/mark-paid')
         first = items_data[0]
         invoice = Invoice(
             invoice_number=invoice_number,
@@ -673,7 +699,7 @@ class ApiModule(BaseModule):
             inv = svc.update(invoice_id, **fields)
         except ValueError:
             raise ApiError(409, 'conflict',
-                           f'Invoice #{invoice_id} is PAID and cannot be modified')
+                           f'Invoice #{invoice_id} is issued and cannot be modified')
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _delete_invoice(self, invoice_id):
@@ -684,13 +710,45 @@ class ApiModule(BaseModule):
             raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
         if svc.is_locked(inv):
             raise ApiError(409, 'conflict',
-                           f'Invoice #{inv.invoice_number} is PAID and cannot be deleted')
+                           f'Invoice #{inv.invoice_number} is issued and cannot be deleted')
         number = inv.invoice_number
         db.session.delete(inv)  # items cascade via relationship
         db.session.commit()
         self.core.log_activity('invoice_deleted', 'invoice',
                                {'invoice_number': number, 'via': 'api'})
         return {'data': {'deleted': True, 'invoice_number': number}}, 200
+
+    def _issue_invoice(self, invoice_id):
+        from app import _issue_invoice, db
+        svc = self.core.invoice_service
+        inv = svc.get(invoice_id)
+        if not inv:
+            raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
+        if inv.status not in ('draft', 'pending'):
+            raise ApiError(409, 'conflict',
+                           f'Only draft invoices can be issued (status: {inv.status})')
+        try:
+            _issue_invoice(inv, request_obj=request)
+        except ValueError:
+            db.session.rollback()
+            raise ApiError(409, 'conflict', f'Invoice #{invoice_id} could not be issued')
+        self.core.log_activity('invoice_issued', 'invoice',
+                               {'invoice_number': inv.invoice_number, 'via': 'api'})
+        return {'data': self._serialize_invoice(inv, svc)}, 200
+
+    def _mark_paid(self, invoice_id):
+        from app import _mark_invoice_paid, db
+        svc = self.core.invoice_service
+        inv = svc.get(invoice_id)
+        if not inv:
+            raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
+        try:
+            _mark_invoice_paid(inv)
+        except ValueError:
+            db.session.rollback()
+            raise ApiError(409, 'conflict',
+                           f'Only issued invoices can be marked paid (status: {inv.status})')
+        return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _invoice_pdf(self, invoice_id):
         svc = self.core.invoice_service
@@ -864,15 +922,25 @@ class ApiModule(BaseModule):
         paths['/invoices/{id}'] = {
             'get': {'summary': 'Get one invoice + items',
                     'responses': {'200': {'description': 'OK'}}},
-            'patch': {'summary': 'Update invoice fields (blocked if PAID)',
+            'patch': {'summary': 'Update invoice fields (blocked once issued; status not patchable)',
                       'requestBody': {'required': True,
                                       'content': {'application/json':
                                                   {'schema': {'type': 'object'}}}},
                       'responses': {'200': {'description': 'OK'},
-                                    '409': {'description': 'PAID lock'}}},
-            'delete': {'summary': 'Delete invoice (blocked if PAID)',
+                                    '409': {'description': 'Issued lock'}}},
+            'delete': {'summary': 'Delete invoice (blocked once issued)',
                        'responses': {'200': {'description': 'OK'},
-                                     '409': {'description': 'PAID lock'}}},
+                                     '409': {'description': 'Issued lock'}}},
+        }
+        paths['/invoices/{id}/issue'] = {
+            'post': {'summary': 'Issue a draft: sequential number + fiscal snapshot',
+                     'responses': {'200': {'description': 'OK'},
+                                   '409': {'description': 'Not a draft'}}},
+        }
+        paths['/invoices/{id}/mark-paid'] = {
+            'post': {'summary': 'Mark an issued (or legacy pending) invoice paid',
+                     'responses': {'200': {'description': 'OK'},
+                                   '409': {'description': 'Not issued'}}},
         }
         paths['/invoices/{id}/pdf'] = op('get', 'Download invoice PDF bytes')
         paths['/customers'] = op('get', 'List customers')
@@ -934,77 +1002,33 @@ class ApiModule(BaseModule):
     # ------------------------------------------------------------------ #
 
     def get_settings_html(self, settings):
-        from markupsafe import escape
+        """Settings panel. The token is shown in full only once — right after
+        it is generated or rotated — and masked afterwards (C-1)."""
+        from flask import session
 
+        reveal = session.pop('api_token_reveal', False)
         token = ''
         try:
-            token = self._ensure_token()
+            token = self._get_token()
+            if not token:
+                token = self._ensure_token()
+                reveal = bool(token)
         except Exception as e:
             self.logger.debug('Token unavailable for settings render: %s', e)
 
         base = f'/api/{API_VERSION}'
-        manifest = f'{base}/openapi.json'
-        # HTML-escape the token before it touches any HTML context. The token is
-        # url-safe so this is a no-op in practice, but it removes the taint flow
-        # CodeQL reports (reflected XSS) and is correct defense-in-depth.
-        safe_token = escape(token)
-
-        if token:
-            token_block = (
-                '<p>Send this token in the <code>X-API-Token</code> header on '
-                'every request.</p>'
-                '<div style="display:flex;gap:.5rem;align-items:center;">'
-                f'<input type="text" id="api-token-field" readonly value="{safe_token}" '
-                'style="flex:1;font-family:monospace;" onclick="this.select()">'
-                '<button type="button" class="btn btn-secondary" '
-                "onclick=\"(function(b){var i=document.getElementById('api-token-field');"
-                'i.select();'
-                'if(navigator.clipboard){navigator.clipboard.writeText(i.value);}'
-                "else{document.execCommand('copy');}"
-                "var t=b.textContent;b.textContent='Copied!';"
-                'setTimeout(function(){b.textContent=t;},1200);})(this)">Copy</button>'
-                '</div>'
-                # Quick-start. Token is read from the input field above by the copy
-                # button; in these curl examples we show a placeholder rather than
-                # the raw secret to avoid echoing it into extra HTML contexts.
-                '<p style="margin-top:.75rem;">Quick start (use the token above):</p>'
-                '<pre style="white-space:pre-wrap;background:var(--color-surface-2);padding:.5rem;'
-                'border-radius:4px;">'
-                'curl -H "X-API-Token: $TOKEN" \\\n'
-                f'  $ORIGIN{base}/invoices\n\n'
-                'curl -X POST -H "X-API-Token: $TOKEN" \\\n'
-                '  -H "Content-Type: application/json" \\\n'
-                '  -d \'{"client_name":"ACME","items":'
-                '[{"description":"Work","quantity":1,"unit_price_usd":100}]}\' \\\n'
-                f'  $ORIGIN{base}/invoices'
-                '</pre>'
-                '<small>Replace <code>$ORIGIN</code> with your server URL and '
-                '<code>$TOKEN</code> with the token above.</small>'
-            )
-        else:
-            token_block = '<p><em>No token yet — save once to generate one.</em></p>'
-
-        return (
-            '<h3>AI Communication API</h3>'
-            f'<p>Base URL: <code>{base}</code> · '
-            f'Manifest: <a href="{manifest}" target="_blank"><code>{manifest}</code></a></p>'
-            '<div class="form-group">'
-            '<label>API Token</label>'
-            f'{token_block}'
-            '</div>'
-            '<div class="form-group">'
-            '<label><input type="checkbox" name="api_rotate_token" value="1"> '
-            'Rotate token on save</label>'
-            '<small style="display:block;color:var(--color-danger-fg);">Rotating invalidates the '
-            'current token immediately. Serve the API over HTTPS only '
-            '(set <code>FORCE_HTTPS=1</code>).</small>'
-            '</div>'
-        )
+        return self.render_settings_template(
+            'api_settings_panel.html',
+            base=base, manifest=f'{base}/openapi.json',
+            reveal_token=token if reveal else '',
+            token_hint=token[-4:] if token else '')
 
     def save_settings(self, settings, form):
         # Only act on this tab's submit, and only when asked to rotate.
         if 'api_rotate_token' not in form:
             return
         if form.get('api_rotate_token') == '1':
+            from flask import session
             self._rotate_token()
+            session['api_token_reveal'] = True  # show the new token once
             self.core.flash('API token rotated.', 'success')

@@ -67,12 +67,16 @@
             </div>
             <div class="ca-info-col">
                 <div class="ca-info-label">Tax Deadlines</div>
-                {% if tax_deadlines %}
+                {% if tax_deadlines is none %}
+                <div style="color: var(--color-text-faint); font-size: 11px;">
+                    Enable the <a href="{{ url_for('settings') }}#modules">Fiscal Calendar</a> module to see filing deadlines.
+                </div>
+                {% elif tax_deadlines %}
                 <div style="font-size: 11px;">
                     {% for deadline in tax_deadlines %}
                     <div style="margin-bottom: 8px;">
-                        <div style="font-weight: 500; color: var(--color-text);">Mod. {{ deadline.forms[0][0] }} — {{ deadline.forms[0][1] }}</div>
-                        <div style="color: var(--color-text-faint);">{{ deadline.date }}</div>
+                        <div style="font-weight: 500; color: var(--color-text);">Mod. {{ deadline.form }} — {{ deadline.period_label }}</div>
+                        <div style="color: var(--color-text-faint);">by {{ deadline.window_end.strftime('%d/%m/%Y') }}</div>
                     </div>
                     {% endfor %}
                 </div>
