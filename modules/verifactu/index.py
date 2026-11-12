@@ -21,6 +21,8 @@ from flask import Blueprint, render_template, Response, url_for
 
 from module_manager import BaseModule
 
+from .aeat import VERIFACTU_PHRASE, qr_url
+from .pdf_qr import stamp_qr
 from .chain import (
     CHAIN_SPEC_VERSION,
     GENESIS_HASH,
@@ -232,24 +234,59 @@ class VerifactuModule(BaseModule):
 
     # --- QR (F1-D4, draft payload) ------------------------------------------- #
 
-    def qr_payload(self, invoice):
-        """AEAT-style QR content (draft: URL with NIF, serie, fecha, importe).
+    def _qr_mode(self):
+        """'no_verifactu' until records are actually submitted to AEAT; the
+        VERI*FACTU QR and phrase are only allowed for a submitting system."""
+        import os
+        mode = (self.core.app.config.get('VERIFACTU_MODE')
+                or os.environ.get('VERIFACTU_MODE', 'no_verifactu'))
+        return mode if mode in ('verifactu', 'no_verifactu') else 'no_verifactu'
 
-        Final URL + parameter spec comes from the AEAT annexes (F1-D1).
-        """
-        settings = self.core.get_settings()
-        nif = (settings.vat_number or settings.nie_number or '') if settings else ''
-        fecha = invoice.invoice_date.strftime('%d-%m-%Y') if invoice.invoice_date else ''
-        importe = f'{invoice.amount_eur or 0:.2f}'
-        return ('https://www2.agenciatributaria.gob.es/wlpl/TIKE-CONT/ValidarQR'
-                f'?nif={nif}&numserie={invoice.invoice_number}'
-                f'&fecha={fecha}&importe={importe}')
+    def _qr_environment(self):
+        import os
+        env = (self.core.app.config.get('VERIFACTU_QR_ENV')
+               or os.environ.get('VERIFACTU_QR_ENV', 'production'))
+        return env if env in ('production', 'test') else 'production'
+
+    @staticmethod
+    def _issuer_nif(settings):
+        nif = ((settings.vat_number or settings.nie_number or '') if settings else '')
+        nif = nif.replace(' ', '').upper()
+        if len(nif) == 11 and nif.startswith('ES'):
+            nif = nif[2:]          # the QR takes the NIF, not the EU VAT number
+        return nif
+
+    @staticmethod
+    def _importe_total(invoice):
+        """Invoice total (base + IVA) in EUR. In this app the stored amount is
+        the taxable base; the IVA comes from the snapshot frozen at issue."""
+        base = getattr(invoice, 'snap_taxable_base', None)
+        if base is None:
+            base = invoice.amount_eur or 0.0
+        return round(base + (getattr(invoice, 'snap_vat_amount', None) or 0.0), 2)
+
+    def qr_payload(self, invoice):
+        """Cotejo URL for the invoice QR, per the AEAT QR specification."""
+        return qr_url(self._issuer_nif(self.core.get_settings()), invoice.invoice_number,
+                      invoice.invoice_date, self._importe_total(invoice),
+                      mode=self._qr_mode(), environment=self._qr_environment())
+
+    def _has_record(self, invoice):
+        return self.VerifactuRecord.query.filter_by(
+            invoice_id=invoice.id, record_type='alta').first() is not None
+
+    def filter_invoice_pdf(self, invoice, pdf_bytes):
+        """Core hook: put the QR on page 1 of every PDF of an issued invoice."""
+        if not invoice or not getattr(invoice, 'id', None) or not self._has_record(invoice):
+            return pdf_bytes
+        phrase = VERIFACTU_PHRASE if self._qr_mode() == 'verifactu' else None
+        return stamp_qr(pdf_bytes, self.qr_payload(invoice), phrase)
 
     def _qr_svg(self, invoice):
         from reportlab.graphics.barcode.qr import QrCodeWidget
         from reportlab.graphics.shapes import Drawing
         from reportlab.graphics import renderSVG
-        widget = QrCodeWidget(self.qr_payload(invoice))
+        widget = QrCodeWidget(self.qr_payload(invoice), barLevel='M')
         b = widget.getBounds()
         size = 160
         drawing = Drawing(size, size, transform=[size / (b[2] - b[0]), 0, 0,
@@ -326,9 +363,10 @@ class VerifactuModule(BaseModule):
         """
         endpoint = self.core.app.config.get('VERIFACTU_ENDPOINT')
         if not endpoint:
-            self.logger.info('VERI*FACTU submission skipped: no endpoint configured')
+            self.logger.info('VERI*FACTU submission not available (no endpoint); '
+                             'the app works as a non-VERI*FACTU system')
             return 0
-        # Submission implementation lands with AEAT test access (F1-D6).
-        self.logger.warning('VERIFACTU_ENDPOINT set but submission not yet '
-                            'implemented (gated on AEAT test environment)')
+        # Not implemented: needs AEAT test-environment access (SPEC_COMPARISON.md).
+        self.logger.warning('VERIFACTU_ENDPOINT is set but submission is not '
+                            'available yet; see modules/verifactu/SPEC_COMPARISON.md')
         return 0
