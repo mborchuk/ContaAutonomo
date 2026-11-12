@@ -396,6 +396,7 @@ PDF financial reports collecting data dynamically from all enabled modules.
   - PDF signing checkboxes (when pdf_signature module enabled)
   - Collects data via `module_manager.get_report_sections()`
   - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
+  - Income and expenses tables include **IVA %** and **IVA (EUR)** columns with totals. Issued invoices use the fiscal snapshot; legacy and draft invoices use the derived value. Reverse-charge rows (intra-EU B2B customers, expenses with `reverse_charge`) show `ISP`, and the note "Inversión del sujeto pasivo – Artículo 194 Directiva 2006/112/EC" is printed under the table
   - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns`, `total_field`, and for file attachments `has_files`, `files_fn`, `list_fn`
 
 ### External Storage (`external_storage`)
