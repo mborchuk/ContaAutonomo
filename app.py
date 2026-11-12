@@ -677,7 +677,7 @@ def _get_upcoming_tax_deadlines():
 def dashboard():
     """Main dashboard page with invoice summary table"""
     # Get all invoices with valid invoice_date
-    invoices = Invoice.query.filter(Invoice.invoice_date != None).order_by(Invoice.invoice_date.desc()).all()
+    invoices = Invoice.query.filter(Invoice.invoice_date.isnot(None)).order_by(Invoice.invoice_date.desc()).all()
 
     # Additional safety check - filter out any None objects or invoices with None dates
     invoices = [inv for inv in invoices if inv is not None and hasattr(inv, 'invoice_date') and inv.invoice_date is not None]
@@ -957,7 +957,7 @@ def dashboard():
         logger.exception("Failed to fetch public holidays from Nager.Date API")
 
     # Tax deadlines for Spanish Autónomo
-    from datetime import date, timedelta
+    from datetime import date
     tax_deadlines = _get_upcoming_tax_deadlines()
 
     # Collect module dashboard panels
@@ -1002,7 +1002,7 @@ def index():
     sort_order = request.args.get('sort_order', 'desc')
 
     # Build select statement
-    stmt = select(Invoice).where(Invoice.id != None)
+    stmt = select(Invoice).where(Invoice.id.isnot(None))
 
     if status_filter:
         stmt = stmt.where(Invoice.status == status_filter)
@@ -2494,7 +2494,7 @@ def _apply_currency_provider(s, mgr):
     """Apply currency provider from Settings to CurrencyService."""
     if not s or not mgr:
         return
-    from currency_converter import BUILTIN_PROVIDERS, make_frankfurter_provider, \
+    from currency_converter import make_frankfurter_provider, \
         make_open_exchange_rates_provider, make_fixer_provider
     provider_name = getattr(s, 'currency_provider', 'ecb') or 'ecb'
     api_key = getattr(s, 'currency_provider_api_key', '') or ''

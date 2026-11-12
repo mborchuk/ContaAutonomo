@@ -279,7 +279,7 @@ class InvoiceDesignerModule(BaseModule):
                     'path': '__designer__',
                     '_designer_id': tpl.id,
                 })
-        except Exception:  # noqa: DB query may fail if table missing
+        except Exception:  # DB query may fail if the table is missing
             pass
         return templates
 
@@ -457,9 +457,9 @@ class InvoiceDesignerModule(BaseModule):
             self._db.session.commit()
             flash(f'Template "{name}" saved.', 'success')
             return redirect(url_for('invoice_designer.designer_index'))
-        except Exception as e:
+        except Exception:
             self._db.session.rollback()
-            flash(f'Error saving template.', 'danger')
+            flash('Error saving template.', 'danger')
             if tpl:
                 return redirect(url_for('invoice_designer.designer_edit', id=tpl.id))
             return redirect(url_for('invoice_designer.designer_create'))
@@ -500,7 +500,7 @@ class InvoiceDesignerModule(BaseModule):
             ).fetchone()
             if row:
                 bank = _Obj(iban=row[0] or '', swift=row[1] or '', bank_name=row[2] or '')
-        except Exception:  # noqa: DB query may fail if table missing
+        except Exception:  # DB query may fail if the table is missing
             pass
         if not bank:
             bank = _Obj(iban='ES00 0000 0000 0000 0000 0000', swift='ABCDESXX', bank_name='Demo Bank')
@@ -516,7 +516,7 @@ class InvoiceDesignerModule(BaseModule):
                                 address=row[2] or '', city=row[3] or '',
                                 postal_code=row[4] or '', country=row[5] or '',
                                 tax_type=row[6] or 'eu_b2b')
-        except Exception:  # noqa: DB query may fail if table missing
+        except Exception:  # DB query may fail if the table is missing
             pass
 
         invoice = _demo_invoice()

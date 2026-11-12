@@ -176,7 +176,7 @@ class PDFSignatureModule(BaseModule):
         self.logger.info('PDF Signature: image dimensions: %dx%d, mode=%s', img_w, img_h, img.mode)
 
         # Save image to a local temp file for reportlab (needs a real file path on disk)
-        import os, tempfile
+        import tempfile
         tmp_fd, tmp_path = tempfile.mkstemp(suffix='_overlay.png', prefix='pdf_sig_')
         try:
             if img.mode != 'RGBA':
@@ -280,7 +280,8 @@ class PDFSignatureModule(BaseModule):
         password = (cfg.certificate_password or '').encode('utf-8')
 
         # Save PFX to a local temp file — pyHanko 0.34+ expects a file path
-        import os, tempfile
+        import os
+        import tempfile
         tmp_fd, tmp_path = tempfile.mkstemp(suffix='_certificate.p12', prefix='pdf_sig_')
         try:
             with os.fdopen(tmp_fd, 'wb') as f:
