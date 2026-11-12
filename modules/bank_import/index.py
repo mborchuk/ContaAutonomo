@@ -18,7 +18,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from module_manager import BaseModule
 
 from .parsers import parse_n43, parse_csv
-from .matching import suggest_for_movement
+from .matching import suggest_expenses_for_movement, suggest_for_movement
 from db_helpers import db_get_or_404
 from timeutil import utcnow
 
@@ -158,6 +158,49 @@ class BankImportModule(BaseModule):
                 out[m.id] = ranked[:3]
         return out
 
+    def _expense_candidates(self, currency):
+        """Expenses not yet linked to a movement, with their amount in
+        `currency` (converted when needed; skipped when no rate is available)."""
+        from types import SimpleNamespace
+        from app import Contractor, Expense
+        linked = {mid for (mid,) in self._db.session.query(self.BankMovement.matched_id)
+                  .filter(self.BankMovement.matched_type == 'expense')}
+        names = {c.id: c.name for c in Contractor.query.all()}
+        out = []
+        for exp in Expense.query.all():
+            if exp.id in linked:
+                continue
+            amount = exp.amount
+            if (exp.currency or 'EUR') != currency:
+                try:
+                    amount, _rate, _date = self.core.currency_service.convert(
+                        exp.amount, exp.currency or 'EUR', currency,
+                        exp.expense_date.strftime('%Y-%m-%d') if exp.expense_date else None)
+                except Exception as e:  # no rate: the expense cannot be compared
+                    self.logger.debug('Skipping expense %s for matching: %s', exp.id, e)
+                    continue
+            out.append(SimpleNamespace(
+                id=exp.id, amount=amount, currency=currency, expense_date=exp.expense_date,
+                contractor_name=names.get(exp.contractor_id, ''),
+                invoice_number=exp.invoice_number or '',
+                description=exp.description or ''))
+        return out
+
+    def _expense_suggestions(self, movements):
+        """{movement_id: [(score, expense, reason), ...top 3]} for debits."""
+        out = {}
+        candidates = {}
+        for m in movements:
+            if (m.amount or 0) >= 0:
+                continue
+            currency = m.currency or 'EUR'
+            if currency not in candidates:
+                candidates[currency] = self._expense_candidates(currency)
+            ranked = suggest_expenses_for_movement(m, candidates[currency])
+            if ranked:
+                out[m.id] = ranked[:3]
+        return out
+
     # --- Routes -------------------------------------------------------------- #
 
     def register_routes(self, app):
@@ -178,6 +221,7 @@ class BankImportModule(BaseModule):
             return render_template('bank_import.html',
                                    unmatched=unmatched,
                                    suggestions=module._suggestions(unmatched),
+                                   expense_suggestions=module._expense_suggestions(unmatched),
                                    batches=batches,
                                    batch_errors=batch_errors,
                                    csv_profiles=module._csv_profiles())

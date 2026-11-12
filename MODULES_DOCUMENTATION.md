@@ -674,8 +674,9 @@ Import bank statements and reconcile movements against invoices and expenses.
   date format, decimal-comma amounts). Bad lines are reported per batch; good
   lines still import.
 - Matching (`matching.py`, pure): ranked suggestions — amount + invoice number
-  in the description scores highest, then amount + close date. Nothing is
-  auto-matched; the user confirms.
+  in the description scores highest, then amount + close date. Debit movements
+  get expense suggestions (amount, date window, contractor name, expense
+  invoice number). Nothing is auto-matched; the user confirms.
 - Confirming a match marks the invoice paid through the **normal core
   transition** (`_mark_invoice_paid`), so lifecycle semantics and logging hold.
 - Routes: `/bank-import/` (upload, unmatched list with suggestions, batch
