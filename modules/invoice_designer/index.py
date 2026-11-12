@@ -39,6 +39,11 @@ BLOCK_IDS = [
     'invoice_meta', 'due_date', 'bank_details', 'notes', 'payment_terms',
 ]
 
+# Zones whose columns can be split by vertical lines, and zones followed by a
+# horizontal separator line.
+VERTICAL_LINE_ZONES = ['top', 'header', 'bottom', 'footer']
+LINE_BELOW_ZONES = ['top', 'header', 'subtotal', 'bottom']
+
 # Valid slot positions
 SLOT_CHOICES = [
     'top-left', 'top-center', 'top-right',
@@ -63,6 +68,9 @@ DEFAULT_CONFIG = {
     'show_accent_line': True,
     'show_separator_lines': False,
     'show_vertical_lines': False,
+    # Per-zone lines, applied when the global switches above are on:
+    # {zone: {'vertical': bool, 'below': bool}}; a missing entry means True.
+    'zone_lines': {},
     'block_gaps': {},                # per-block gap override: {block_id: pt}
     'block_label_widths': {},        # per-block label column width override: {block_id: pt}
     'block_styles': {},              # per-block: {block_id: {color: '#hex', bg: '#hex', show_label: true}}
@@ -308,6 +316,8 @@ class InvoiceDesignerModule(BaseModule):
                                config=config, config_json=json.dumps(config, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
                                module_blocks=blocks,
+                               vertical_line_zones=VERTICAL_LINE_ZONES,
+                               line_below_zones=LINE_BELOW_ZONES,
                                layout_presets=LAYOUT_PRESETS)
 
     def _edit_template(self, id):
@@ -320,6 +330,8 @@ class InvoiceDesignerModule(BaseModule):
                                config=merged, config_json=json.dumps(merged, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
                                module_blocks=blocks,
+                               vertical_line_zones=VERTICAL_LINE_ZONES,
+                               line_below_zones=LINE_BELOW_ZONES,
                                layout_presets=LAYOUT_PRESETS)
 
     def _module_blocks(self):
@@ -406,6 +418,16 @@ class InvoiceDesignerModule(BaseModule):
                     for key in ('block_positions', 'block_options'):
                         for bid, value in (old_config.get(key) or {}).items():
                             config[key].setdefault(bid, value)
+
+                # Lines per zone
+                config['zone_lines'] = {}
+                for zone in sorted(set(VERTICAL_LINE_ZONES) | set(LINE_BELOW_ZONES)):
+                    lines = {}
+                    if zone in VERTICAL_LINE_ZONES:
+                        lines['vertical'] = f'line_v_{zone}' in request.form
+                    if zone in LINE_BELOW_ZONES:
+                        lines['below'] = f'line_b_{zone}' in request.form
+                    config['zone_lines'][zone] = lines
 
                 # Parse zone column widths
                 config['zone_columns'] = {}
@@ -673,6 +695,30 @@ def sanitize_module_blocks(config, blocks):
     return config
 
 
+def aligned_block(flowables, align='left'):
+    """The flowables stacked as one unit as wide as its column, each aligned
+    'left', 'center' or 'right' in it. A table cell positions flowables by
+    the cell's alignment and ignores their own, so without this a centred
+    label and a drawing below it would not share the same axis."""
+    from reportlab.platypus import Flowable
+
+    class _Aligned(Flowable):
+        def wrap(self, avail_w, avail_h):
+            self._sizes = [f.wrap(avail_w, avail_h) for f in flowables]
+            self.width = avail_w
+            self.height = sum(h for _w, h in self._sizes)
+            return self.width, self.height
+
+        def draw(self):
+            y = self.height
+            for f, (w, h) in zip(flowables, self._sizes):
+                y -= h
+                x = {'center': (self.width - w) / 2, 'right': self.width - w}.get(align, 0)
+                f.drawOn(self.canv, x, y)
+
+    return _Aligned()
+
+
 def _deep_copy_config(cfg):
     return json.loads(json.dumps(cfg))
 
@@ -703,6 +749,8 @@ def _merge_config(user_cfg):
             merged['block_styles'].update(v)
         elif k == 'block_options':
             merged['block_options'] = dict(v or {})
+        elif k == 'zone_lines':
+            merged['zone_lines'] = dict(v or {})
         else:
             merged[k] = v
     return merged
@@ -800,6 +848,13 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
     title_fs = c.get('title_font_size', 28)
     show_sep = c.get('show_separator_lines', False)
     show_vert = c.get('show_vertical_lines', False)
+    zone_lines = c.get('zone_lines') or {}
+
+    def _zone_line(zone, kind):
+        """A line of `kind` ('vertical' or 'below') for `zone`: the global
+        switch must be on and the zone must not turn it off."""
+        enabled = show_vert if kind == 'vertical' else show_sep
+        return bool(enabled) and (zone_lines.get(zone) or {}).get(kind, True) is not False
 
     module_blocks = {b['id']: b for b in normalize_blocks(blocks)}
     placed = sanitize_module_blocks(
@@ -921,7 +976,8 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
                    'options': block_options.get(block_id, {}),
                    'font': font, 'font_bold': font_b, 'preview': preview}
             try:
-                return list(block['render'](invoice, ctx) or [])
+                flows = list(block['render'](invoice, ctx) or [])
+                return [aligned_block(flows, ctx['align'])] if flows else []
             except Exception:
                 logger.exception('Invoice block %r of module %r failed to render',
                                  block_id, block.get('module_id'))
@@ -1117,7 +1173,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
                 zone_style.append(('BOTTOMPADDING', (ci, 0), (ci, -1), 8))
 
         # Vertical lines between columns — skip if either adjacent column has bg
-        if show_vert and len(col_widths) > 1:
+        if _zone_line(zone_name, 'vertical') and len(col_widths) > 1:
             for ci in range(len(col_widths) - 1):
                 left_has_bg = col_bg_colors[ci] if ci < len(col_bg_colors) else None
                 right_has_bg = col_bg_colors[ci + 1] if ci + 1 < len(col_bg_colors) else None
@@ -1138,9 +1194,9 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
         elements.append(Spacer(1, 10))
         return True
 
-    def _separator():
-        """Add a thin separator line if enabled."""
-        if show_sep:
+    def _separator(zone):
+        """Add a thin separator line below `zone` if enabled."""
+        if _zone_line(zone, 'below'):
             sep = Table([['']], colWidths=[CONTENT_W])
             sep.setStyle(TableStyle([
                 ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
@@ -1169,13 +1225,13 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
     _has_top = _render_zone('top')
 
     if _has_top:
-        _separator()
+        _separator('top')
 
     # --- HEADER zone ---
     _has_header = _render_zone('header')
 
     if _has_header:
-        _separator()
+        _separator('header')
 
     elements.append(Spacer(1, 10))
 
@@ -1332,13 +1388,13 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
 
     elements.append(Spacer(1, 25))
 
-    _separator()
+    _separator('subtotal')
 
     # --- BOTTOM zone ---
     _has_bottom = _render_zone('bottom')
 
     if _has_bottom:
-        _separator()
+        _separator('bottom')
 
     # --- FOOTER zone ---
     _render_zone('footer')

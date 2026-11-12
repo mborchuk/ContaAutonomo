@@ -521,12 +521,14 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
     options to `block_options`. A block never placed in a template, or placed where it is not
     allowed (old or imported JSON), goes to its suggested slot (`sanitize_module_blocks`, on
     save and when rendering). Saving keeps the entries of blocks whose module is disabled.
-    The module renders the block; the designer preview passes `preview=True` so it can show
+    The module renders the block, kept as one unit aligned in its column (left, centre or right,
+    from the slot), so e.g. the QR label and the QR share the same axis; the designer preview passes `preview=True` so it can show
     sample content (the Verifactu QR shows only on issued invoices)
   - Fine-tune X/Y offsets per block in points
   - 6 layout presets (Standard, Classic Right, Modern Center, Minimal Left, Compact Header, Bottom Bank)
   - Configurable: accent/text/header/page background colors, font, title size, layout style
   - Toggle sections: logo, bank details, notes, payment terms, due date, VAT breakdown, accent line, separator lines
+  - Lines per zone (`zone_lines`): vertical lines between a zone's columns (top, header, bottom, footer) and the line below a zone (top, header, subtotal, bottom) can each be turned off; the global *Vertical Lines* / *Horizontal Lines* switches still turn all lines of their kind on or off. A column with a background colour never gets a vertical line next to it
   - Customizable labels for all invoice text (Invoice #, Bill To, Subtotal, etc.)
   - JSON import/export for sharing templates
   - Edit as JSON toggle with live sync to visual editor

@@ -245,6 +245,8 @@ def test_form_lists_module_blocks_with_allowed_slots(designer, loaded_modules, a
         ctx = {'template': None, 'config': config, 'config_json': json.dumps(config),
                'block_ids': g['BLOCK_IDS'], 'slot_choices': g['SLOT_CHOICES'],
                'module_blocks': blocks, 'layout_presets': g['LAYOUT_PRESETS'],
+               'vertical_line_zones': g['VERTICAL_LINE_ZONES'],
+               'line_below_zones': g['LINE_BELOW_ZONES'],
                'url_for': lambda endpoint, **kw: f'/{endpoint}'}
         app.update_template_context(ctx)
         html = env.get_template('designer_form.html').render(ctx)
@@ -255,6 +257,8 @@ def test_form_lists_module_blocks_with_allowed_slots(designer, loaded_modules, a
     assert 'hidden' not in select and 'footer' not in select
     assert 'name="opt_verifactu_qr_size_mm"' in html
     # The zone map knows each module block's allowed cells and that it is required.
+    assert 'name="line_v_top"' in html and 'name="line_b_top"' in html
+    assert 'name="line_v_subtotal"' not in html and 'name="line_b_footer"' not in html
     assert 'id="zoneMap"' in html and 'data-slot="top-left"' in html and 'data-slot="hidden"' in html
     assert ('blockMeta["verifactu_qr"] = {slots: ["top-center", "top-left"], required: true}'
             in html)
@@ -304,3 +308,57 @@ def test_issued_invoice_with_designer_template_gets_one_qr(designer, loaded_modu
     assert len(xs) == 1 and xs[0] < 80          # placed by the template, not stamped again
     settings.invoice_template = 'default_template'
     db.session.commit()
+
+
+# ---- alignment of module blocks and lines per zone ----
+
+def test_module_block_parts_share_one_axis(designer):
+    """A table cell ignores a flowable's own alignment; the wrapper centres
+    (or left/right-aligns) every part of the block in its column."""
+    from reportlab.platypus import Spacer
+    _inst, g = designer
+    drawn = []
+
+    class Part(Spacer):
+        def drawOn(self, canvas, x, y, _sW=0):
+            drawn.append((x, self.width))
+
+    for align, expected in (('center', [50, 70]), ('left', [0, 0]), ('right', [100, 140])):
+        drawn.clear()
+        block = g['aligned_block']([Part(100, 10), Part(60, 20)], align)
+        assert block.wrap(200, 500) == (200, 30)
+        block.canv = None
+        block.draw()
+        assert [x for x, _w in drawn] == expected
+
+
+def _line_ops(pdf):
+    content = PdfReader(io.BytesIO(pdf)).pages[0].get_contents().get_data()
+    return content.count(b' l S') + content.count(b' l\nS')
+
+
+def test_lines_per_zone(designer):
+    _inst, g = designer
+    base = {'show_vertical_lines': True, 'show_separator_lines': True,
+            'block_positions': {'logo': 'hidden', 'title': 'top-left', 'invoice_meta': 'top-right'}}
+    all_lines = _line_ops(_render(g, base, []))
+    no_top_vertical = _line_ops(_render(g, dict(base, zone_lines={'top': {'vertical': False}}), []))
+    no_top_below = _line_ops(_render(g, dict(base, zone_lines={'top': {'below': False}}), []))
+    assert no_top_vertical == all_lines - 1 and no_top_below == all_lines - 1
+    # The global switches still turn every line of their kind off.
+    off = _line_ops(_render(g, dict(base, show_vertical_lines=False), []))
+    assert off < all_lines and _line_ops(_render(
+        g, dict(base, show_vertical_lines=False, zone_lines={'top': {'vertical': True}}), [])) == off
+
+
+def test_form_saves_lines_per_zone(designer, loaded_modules, app):
+    inst, _g = designer
+    form = _form(name='Lines', show_vertical_lines='on', line_v_header='on', line_v_bottom='on',
+                 line_v_footer='on', line_b_top='on', line_b_header='on', line_b_subtotal='on')
+    with app.test_request_context('/invoice-designer/create', method='POST', data=form):
+        inst._save_template(None)
+    cfg = json.loads(inst.InvoiceTemplate.query.filter_by(name='Lines').one().config_json)
+    assert cfg['zone_lines']['top'] == {'vertical': False, 'below': True}
+    assert cfg['zone_lines']['bottom'] == {'vertical': True, 'below': False}
+    assert cfg['zone_lines']['footer'] == {'vertical': True}
+    assert cfg['zone_lines']['subtotal'] == {'below': True}

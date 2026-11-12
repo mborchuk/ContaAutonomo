@@ -261,10 +261,14 @@
 
             <!-- Zone Column Widths -->
             <div style="margin-top: 18px; margin-bottom: 12px;">
-                <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 6px;">Zone Column Widths (pt)</label>
+                <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 6px;">Zone Column Widths (pt) and Lines</label>
                 <small style="color: var(--color-text-faint); display: block; margin-bottom: 8px;">
-                    Left : Center : Right per zone. Total ≈ 512. Leave empty for equal split.
+                    Left : Center : Right per zone. Total ≈ 512. Leave empty for equal split.<br>
+                    Lines: <b>│</b> between the zone's columns (when <i>Vertical Lines</i> is on),
+                    <b>—</b> below the zone (when <i>Horizontal Lines</i> is on). A column with a
+                    background colour never gets a vertical line next to it.
                 </small>
+                {% set zl = config.zone_lines or {} %}
                 {% set zc = config.zone_columns if config.zone_columns else {} %}
                 {% for zone in ['top', 'header', 'subtotal', 'bottom', 'footer'] %}
                 {% set vals = zc[zone] if zone in zc else [] %}
@@ -281,6 +285,17 @@
                     <input type="number" name="zone_col_{{ zone }}_2" min="0" max="512" step="1"
                            placeholder="Right" value="{{ vals[2]|int if vals|length > 2 and vals[2] is not none else '' }}"
                            style="width: 70px; padding: 4px 6px; font-size: 12px;">
+                    {% set lines = zl.get(zone) or {} %}
+                    {% if zone in vertical_line_zones %}
+                    <label style="font-size: 12px; display: flex; align-items: center; gap: 3px; margin-left: 6px;" title="Vertical lines between the {{ zone }} columns">
+                        <input type="checkbox" name="line_v_{{ zone }}" {{ 'checked' if lines.get('vertical', True) != False }}> │
+                    </label>
+                    {% endif %}
+                    {% if zone in line_below_zones %}
+                    <label style="font-size: 12px; display: flex; align-items: center; gap: 3px;" title="Horizontal line below the {{ zone }} zone">
+                        <input type="checkbox" name="line_b_{{ zone }}" {{ 'checked' if lines.get('below', True) != False }}> —
+                    </label>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -465,6 +480,7 @@
             block_offsets: {},
             block_options: {},
             zone_columns: {},
+            zone_lines: {},
             block_gaps: {},
             block_label_widths: {},
             block_styles: {}
@@ -520,6 +536,13 @@
             // Only save if at least 2 non-null values
             var nonNull = parts.filter(function(v){ return v !== null; });
             if (nonNull.length >= 2) cfg.zone_columns[zone] = parts;
+            var lv = f.querySelector('input[name="line_v_' + zone + '"]');
+            var lb = f.querySelector('input[name="line_b_' + zone + '"]');
+            if (lv || lb) {
+                cfg.zone_lines[zone] = {};
+                if (lv) cfg.zone_lines[zone].vertical = lv.checked;
+                if (lb) cfg.zone_lines[zone].below = lb.checked;
+            }
         });
         return cfg;
     }
@@ -569,6 +592,13 @@
                 }
             });
         }
+        ['top','header','subtotal','bottom','footer'].forEach(function(zone){
+            var zl = (cfg.zone_lines || {})[zone] || {};
+            var lv = f.querySelector('input[name="line_v_' + zone + '"]');
+            var lb = f.querySelector('input[name="line_b_' + zone + '"]');
+            if (lv) lv.checked = zl.vertical !== false;
+            if (lb) lb.checked = zl.below !== false;
+        });
         if (cfg.zone_columns) {
             ['top','header','subtotal','bottom','footer'].forEach(function(zone){
                 var vals = cfg.zone_columns[zone] || [];
