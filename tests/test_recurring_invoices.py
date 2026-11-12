@@ -68,7 +68,6 @@ def test_generation_creates_draft_with_items(recurring_module, monkeypatch):
     from app import db, Invoice
 
     # Deterministic exchange rate — no network in tests.
-    import modules.recurring_invoices.index as rec_mod
     monkeypatch.setattr('currency_converter.get_exchange_rate',
                         lambda d: (1.1, d))
 
