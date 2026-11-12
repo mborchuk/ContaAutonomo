@@ -1114,6 +1114,30 @@ class CoreServices:
         os.makedirs(path, exist_ok=True)
         return path
 
+    def deployment_key(self, env_var, file_config_key, purpose):
+        """A per-deployment secret: the `env_var` environment variable, else a
+        key file (path in app.config[file_config_key]) created on first use,
+        readable by the owner only.
+
+        Used for keys that must outlive `SECRET_KEY` rotation (backup
+        encryption, Verifactu signatures). `purpose` names the key in the
+        warning logged when the file is created.
+        """
+        key = os.environ.get(env_var, '').strip()
+        if key:
+            return key
+        path = self.app.config[file_config_key]
+        if not os.path.exists(path):
+            import secrets
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write(secrets.token_urlsafe(32) + '\n')
+            logger.warning('Created %s key file %s — keep a copy in a password '
+                           'manager: it cannot be recreated if lost', purpose, path)
+        with open(path) as f:
+            return f.read().strip()
+
     def flash(self, message, category='info'):
         """Flash a message to the user"""
         from flask import flash
