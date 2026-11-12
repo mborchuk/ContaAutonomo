@@ -12,10 +12,11 @@ Settings (address/city/postal_code/country) — the missing-data checklist tell
 the user exactly what to fill before an invoice is e-invoice ready.
 """
 
-from flask import Blueprint, Response, flash, redirect, url_for
+from flask import Blueprint, Response, flash, redirect, request, url_for
 
 from module_manager import BaseModule
 
+from . import xades
 from .facturae import check_readiness, generate_facturae
 
 
@@ -32,7 +33,8 @@ class EInvoiceModule(BaseModule):
 
     @property
     def description(self):
-        return ('Export issued invoices as Facturae 3.2.2 XML (unsigned) with '
+        return ('Export issued invoices as Facturae 3.2.2 XML (XAdES-signed with '
+                'the PDF Signature certificate when one is configured) with '
                 'an e-invoice readiness check. Phase 1 of RD 238/2026 support.')
 
     @property
@@ -51,6 +53,36 @@ class EInvoiceModule(BaseModule):
         customer = Customer.query.get(invoice.customer_id) \
             if invoice.customer_id else None
         return check_readiness(invoice, seller, customer), seller, customer
+
+    # --- Signing (D-4) --------------------------------------------------------- #
+
+    def _certificate(self):
+        """(pfx_bytes, password) of the PDF Signature module's certificate, or
+        None when signing is not available (module off, no certificate, no
+        XAdES library)."""
+        if not xades.available():
+            return None
+        mm = getattr(self.core, 'module_manager', None)
+        pdf_sig = mm.provider_of('pdf_signature') if mm else None
+        if pdf_sig is None or not hasattr(pdf_sig, '_get_config'):
+            return None
+        cfg = pdf_sig._get_config()
+        if not cfg.certificate_key:
+            return None
+        stored = self.core.storage.get(cfg.certificate_key)
+        if not stored:
+            return None
+        pfx_bytes, _name = stored
+        return pfx_bytes, cfg.certificate_password or ''
+
+    def _export(self, invoice, seller, customer, unsigned=False):
+        """(xml_bytes, signed) — signed with XAdES-EPES when a certificate is
+        configured, unless `unsigned` is requested."""
+        xml = generate_facturae(invoice, seller, customer)
+        cert = None if unsigned else self._certificate()
+        if cert is None:
+            return xml, False
+        return xades.sign_facturae(xml, *cert), True
 
     # --- Invoice view integration -------------------------------------------- #
 
@@ -91,12 +123,21 @@ class EInvoiceModule(BaseModule):
             if problems:
                 flash('Not e-invoice ready: ' + '; '.join(problems), 'danger')
                 return redirect(url_for('view_invoice', id=invoice_id))
-            xml = generate_facturae(invoice, seller, customer)
+            unsigned = request.args.get('unsigned') == '1'
+            try:
+                xml, signed = module._export(invoice, seller, customer, unsigned=unsigned)
+            except ValueError as e:   # unreadable certificate or wrong password
+                module.logger.error('Facturae signing failed for invoice %s: %s',
+                                    invoice.id, e)
+                flash('Facturae could not be signed — check the certificate and its '
+                      'password in Settings → PDF Signature.', 'danger')
+                return redirect(url_for('view_invoice', id=invoice_id))
             safe = (invoice.invoice_number or str(invoice.id)).replace('/', '-')
+            ext = 'xsig' if signed else 'xml'
             return Response(
                 xml, mimetype='application/xml',
                 headers={'Content-Disposition':
-                         f'attachment; filename=facturae_{safe}.xml'})
+                         f'attachment; filename=facturae_{safe}.{ext}'})
 
         app.register_blueprint(bp)
 
@@ -106,7 +147,8 @@ class EInvoiceModule(BaseModule):
         return [
             {'path': 'facturae/<int:invoice_id>', 'methods': ['GET'],
              'handler': self._api_facturae,
-             'summary': 'Facturae XML for an issued invoice (unsigned)'},
+             'summary': 'Facturae XML for an issued invoice (XAdES-signed when a '
+                        'certificate is configured; ?unsigned=1 for the unsigned file)'},
         ]
 
     def _api_facturae(self, request, invoice_id=None):
@@ -118,8 +160,14 @@ class EInvoiceModule(BaseModule):
         if problems:
             raise ApiError(409, 'not_ready',
                            'Not e-invoice ready: ' + '; '.join(problems))
-        xml = generate_facturae(invoice, seller, customer)
+        try:
+            xml, signed = self._export(invoice, seller, customer,
+                                       unsigned=request.args.get('unsigned') == '1')
+        except ValueError as e:
+            self.logger.error('Facturae signing failed for invoice %s: %s', invoice.id, e)
+            raise ApiError(409, 'signing_failed',
+                           'Facturae could not be signed: check the PDF Signature certificate')
         return {'invoice_id': invoice.id,
                 'invoice_number': invoice.invoice_number,
                 'facturae_xml': xml.decode('utf-8'),
-                'signed': False}, 200
+                'signed': signed}, 200
