@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tax ES IRPF Module — Modelo 130 + Modelo 100 estimator.
 
-Caveman summary: this module guess two numbers for Spanish autónomo.
-  - Modelo 130 = how much IRPF to prepay this quarter (cumulative YTD).
-  - Modelo 100 = what final year IRPF look like after prepays + retenciones.
+Summary: this module estimates two figures for a Spanish autónomo.
+  - Modelo 130: how much IRPF to prepay this quarter (cumulative year to date).
+  - Modelo 100: what the final annual IRPF looks like after the prepayments
+    and withholdings (retenciones).
 
 Both modelos live in ONE module because they share the same money path
 (net profit, expense handling, 5% difícil justificación cap). The actual math

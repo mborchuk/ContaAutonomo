@@ -2,12 +2,13 @@
 """
 Verifactu Module (F1) — tamper-evident billing records per RD 1007/2023.
 
-CAVEMAN NOTE: every invoice ISSUE / ANNUL write one append-only record into a
-hash chain (see chain.py). Record write ride the same transaction as the F2
-lifecycle transition — record fail => transition roll back (compliance veto).
-QR payload render on the invoice view. Local conservation first; VERI*FACTU
-real-time submission is scaffolded but gated on AEAT test-environment access
-(F1-D6) — job no-ops with a log until an endpoint is configured.
+Every invoice issue or annulment writes one append-only record into a hash
+chain (see chain.py). The record is written in the same transaction as the
+F2 lifecycle transition: if the record fails, the transition is rolled back
+(a compliance veto). The QR payload is rendered on the invoice view. Records
+are kept locally first; real-time VERI*FACTU submission is scaffolded but
+waits for access to the AEAT test environment (F1-D6) — until an endpoint is
+configured, the job only logs and does nothing.
 
 STANDING RULE: record format, QR content and chaining are versioned drafts —
 verify against current AEAT technical specs before real use (see chain.py and
