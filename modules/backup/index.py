@@ -284,20 +284,7 @@ class BackupModule(BaseModule):
     def _backup_key(self):
         """The deployment's backup key: BACKUP_KEY, else the key file
         (created on first use, readable by the owner only)."""
-        key = os.environ.get('BACKUP_KEY', '').strip()
-        if key:
-            return key
-        path = Path(self.core.app.config['BACKUP_KEY_FILE'])
-        if not path.exists():
-            import secrets
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w') as f:
-                f.write(secrets.token_urlsafe(32) + '\n')
-            logger.warning('Created backup key file %s — copy it to a password '
-                           'manager; encrypted backups cannot be restored '
-                           'without it', path)
-        return path.read_text().strip()
+        return self.core.deployment_key('BACKUP_KEY', 'BACKUP_KEY_FILE', 'backup')
 
     def _encryption_password(self, cfg):
         """Password used to encrypt a new backup (None = unencrypted)."""
