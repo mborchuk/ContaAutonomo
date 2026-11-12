@@ -208,6 +208,23 @@ class BaseModule(ABC):
         """
         return []
 
+    def render_settings_template(self, filename, **context):
+        """Render `templates/<filename>` from this module's folder, auto-escaped.
+
+        Use it in get_settings_html instead of building HTML with f-strings:
+        stored values are escaped, and the shared `_secret_field.html` macro
+        can be imported. Works for modules without a blueprint.
+        """
+        from flask import render_template_string
+        module_dir = getattr(type(self), 'module_dir', None)  # set by discovery
+        if not module_dir:
+            import inspect
+            module_dir = os.path.dirname(inspect.getfile(type(self)))
+        folder = os.path.join(module_dir, 'templates')
+        with open(os.path.join(folder, filename), encoding='utf-8') as f:
+            source = f.read()
+        return render_template_string(source, **context)
+
     def get_settings_html(self, settings):
         """
         Return HTML to inject into a settings tab.
@@ -1828,6 +1845,7 @@ class ModuleManager:
                         if (isinstance(attr, type) and
                             issubclass(attr, BaseModule) and
                             attr is not BaseModule):
+                            attr.module_dir = module_path
                             self.discovered[item] = attr
                             break
                 except Exception as e:

@@ -98,41 +98,8 @@ class TaxPolandModule(BaseModule):
     # ── Settings UI ─────────────────────────────────────────────────
 
     def get_settings_html(self, settings):
-        cfg = self._get_config()
-        flat_checked = 'checked' if cfg.tax_mode == 'flat' else ''
-        progressive_checked = 'checked' if cfg.tax_mode == 'progressive' else ''
-        return f'''
-        <h3 style="margin-bottom: 15px; color: var(--color-text);">🇵🇱 Tax Poland (IT)</h3>
-        <p style="color: var(--color-text-muted); margin-bottom: 15px;">
-            Polish tax settings for IT freelancers (JDG / B2B).
-        </p>
-
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Tax Mode</label>
-            <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
-                <input type="radio" name="tax_pl_mode" value="flat"
-                       {flat_checked}
-                       style="margin-right: 8px; width: 16px; height: 16px;">
-                <span>Flat tax (podatek liniowy) — 19%</span>
-            </label>
-            <label style="display: flex; align-items: center; cursor: pointer;">
-                <input type="radio" name="tax_pl_mode" value="progressive"
-                       {progressive_checked}
-                       style="margin-right: 8px; width: 16px; height: 16px;">
-                <span>Progressive (skala podatkowa) — 12% / 32%</span>
-            </label>
-        </div>
-
-        <div class="form-group" style="margin-bottom: 15px;">
-            <label for="tax_pl_zus" style="font-weight: 600;">Monthly ZUS (PLN)</label>
-            <input type="number" id="tax_pl_zus" name="tax_pl_zus"
-                   value="{cfg.zus_monthly:.2f}" step="0.01" min="0"
-                   style="width: 160px;">
-            <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
-                Full ZUS social insurance contribution (składki społeczne). ~1,600 PLN/month in 2025/2026.
-            </small>
-        </div>
-        '''
+        return self.render_settings_template('tax_poland_settings_panel.html',
+                                             cfg=self._get_config())
 
     def save_settings(self, settings, form):
         if 'tax_pl_mode' not in form:

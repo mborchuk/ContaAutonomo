@@ -756,18 +756,8 @@ class TaxManagementModule(BaseModule):
     def get_settings_html(self, settings):
         """Provide SS monthly quota field for General Settings tab"""
         value = settings.social_security_monthly if settings and settings.social_security_monthly else 0
-        annual = value * 12
-        return f'''
-        <h3 style="margin-bottom: 15px; color: var(--color-text);">Social Security (Autónomo)</h3>
-        <div class="form-group">
-            <label for="social_security_monthly">Monthly SS Quota (€)</label>
-            <input type="number" id="social_security_monthly" name="social_security_monthly"
-                   value="{value}" step="0.01" min="0" style="width: 200px;">
-            <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
-                Your monthly Seguridad Social payment (cuota de autónomo). This is used to calculate annual Social Security in the Tax Obligations panel.
-                Current annual total: €{annual:.2f}
-            </small>
-        </div>'''
+        return self.render_settings_template(
+            'tax_management_settings_panel.html', value=value, annual=value * 12)
 
     def save_settings(self, settings, form):
         """Save SS monthly quota from General Settings form"""
