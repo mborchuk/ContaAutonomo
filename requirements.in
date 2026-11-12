@@ -20,6 +20,8 @@ openai>=3.46.0
 anthropic>=2.6.0
 google-cloud-documentai>=3.17.0
 pyhanko
+# XAdES-EPES signature of Facturae e-invoices (einvoice module).
+signxml>=4.0.0
 Pillow
 pypdf>=7.0.0
 asn1crypto>=1.5.0
