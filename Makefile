@@ -7,6 +7,7 @@ setup:
 	else \
 		echo "SECRET_KEY=$$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > .env; \
 		echo "BACKUP_KEY=$$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env; \
+		echo "CREDENTIALS_KEY=$$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >> .env; \
 		echo "FLASK_DEBUG=0" >> .env; \
 		echo ".env created. Review it, then run: make start"; \
 	fi

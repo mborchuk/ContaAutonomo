@@ -10,6 +10,7 @@ from flask import Blueprint, request, jsonify, render_template
 import json
 import base64
 from datetime import datetime
+from secret_box import EncryptedString, encrypt_existing
 
 
 # ---------------------------------------------------------------------------
@@ -314,9 +315,9 @@ class AIParserModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
             provider = db.Column(db.String(50), default='openai')
-            openai_api_key = db.Column(db.String(500), default='')
+            openai_api_key = db.Column(EncryptedString(500), default='')
             openai_model = db.Column(db.String(100), default='gpt-4o')
-            anthropic_api_key = db.Column(db.String(500), default='')
+            anthropic_api_key = db.Column(EncryptedString(500), default='')
             anthropic_model = db.Column(db.String(100), default='claude-sonnet-4-20250514')
             google_project_id = db.Column(db.String(200), default='')
             google_processor_id = db.Column(db.String(200), default='')
@@ -452,6 +453,10 @@ class AIParserModule(BaseModule):
     @property
     def settings_tab(self):
         return {'id': 'ai_parser', 'label': 'AI Parser'}
+
+    def on_enable(self):
+        # C-2: encrypt API keys stored in plaintext by earlier versions.
+        encrypt_existing(self._db, 'ai_parser_config', ['openai_api_key', 'anthropic_api_key'])
 
     def get_settings_html(self, settings):
         cfg = self._get_config()

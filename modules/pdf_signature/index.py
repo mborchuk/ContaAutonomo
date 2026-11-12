@@ -10,6 +10,7 @@ from datetime import datetime
 import importlib.util
 
 from module_manager import BaseModule
+from secret_box import EncryptedString, encrypt_existing
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
 
 # Graceful degradation: try importing optional dependencies
@@ -63,7 +64,7 @@ class PDFSignatureModule(BaseModule):
             digital_enabled = db.Column(db.Boolean, default=False)
             signature_image_key = db.Column(db.String(500), default='')
             certificate_key = db.Column(db.String(500), default='')
-            certificate_password = db.Column(db.String(500), default='')
+            certificate_password = db.Column(EncryptedString(500), default='')
             sig_position = db.Column(db.String(20), default='bottom-left')
             sig_margin_x = db.Column(db.Integer, default=40)
             sig_margin_y = db.Column(db.Integer, default=40)
@@ -664,6 +665,10 @@ class PDFSignatureModule(BaseModule):
                 'action': lambda pdf_bytes, **kw: self._apply_digital_signature(pdf_bytes),
             })
         return caps
+
+    def on_enable(self):
+        # C-2: encrypt a certificate password stored in plaintext by earlier versions.
+        encrypt_existing(self._db, 'pdf_signature_config', ['certificate_password'])
 
     def get_settings_html(self, settings):
         cfg = self._get_config()

@@ -7,6 +7,8 @@ import os
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('FLASK_DEBUG', '1')
+# Fixed credentials key so tests never create instance/credentials.key.
+os.environ.setdefault('CREDENTIALS_KEY', 'test-credentials-key')
 
 import pytest
 

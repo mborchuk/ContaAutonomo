@@ -11,6 +11,8 @@ services:
       - FORCE_HTTPS=${FORCE_HTTPS:-false}
       # Backup encryption key; empty = key file instance/backup.key (created on first backup)
       - BACKUP_KEY=${BACKUP_KEY:-}
+      # Credentials encryption key; empty = key file instance/credentials.key (created on first start)
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:-}
       # Set to the number of reverse proxies in front of the app (0 = direct access)
       - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-0}
     volumes:

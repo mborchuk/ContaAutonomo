@@ -90,6 +90,13 @@ Key rules:
 - **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, HSTS (when FORCE_HTTPS=1)
 - **Session Security**: HttpOnly cookies, SameSite=Lax, Secure (when HTTPS), 1-hour lifetime
 - **Auth Blueprint**: exempt from CSRF (handles its own validation)
+- **Credentials at rest**: `secret_box.py` encrypts stored service credentials
+  (Fernet, prefix `enc:v1:`) with `CREDENTIALS_KEY` or `instance/credentials.key`.
+  Columns use the `EncryptedString` type; JSON-stored values (SMTP password) and
+  the raw-SQL API token call `encrypt()` / `decrypt()` directly. Backups (raw SQL
+  dump) therefore contain ciphertext only. Plaintext values from earlier
+  versions are encrypted once at start-up (`encrypt_existing()`), in the core
+  and in each module's `on_enable`.
 
 ### Activity Logging
 
