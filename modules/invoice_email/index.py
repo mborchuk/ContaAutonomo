@@ -13,12 +13,14 @@ existing AI-provider API keys; documented, self-hosted single-user app.
 
 import json
 import smtplib
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from email.message import EmailMessage
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)
@@ -68,7 +70,7 @@ class InvoiceEmailModule(BaseModule):
             subject = db.Column(db.String(500))
             status = db.Column(db.String(20))  # sent | failed
             error = db.Column(db.Text)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         self.Config = InvoiceEmailConfig
         self.EmailLog = EmailLog
@@ -216,7 +218,7 @@ class InvoiceEmailModule(BaseModule):
         @login_required
         def email_send(invoice_id):
             from app import Invoice
-            invoice = Invoice.query.get_or_404(invoice_id)
+            invoice = db_get_or_404(Invoice, invoice_id)
             recipient = (request.form.get('recipient') or '').strip()
             if not recipient or '@' not in recipient:
                 flash('A valid recipient email is required.', 'danger')

@@ -5,7 +5,8 @@ Internal comments/notes on invoices — not visible on PDF.
 
 from module_manager import BaseModule
 from flask import Blueprint, request, redirect, url_for, render_template_string
-from datetime import datetime
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 class InvoiceCommentsModule(BaseModule):
@@ -39,7 +40,7 @@ class InvoiceCommentsModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False)
             text = db.Column(db.Text, nullable=False)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         self.InvoiceComment = InvoiceComment
         return {'InvoiceComment': InvoiceComment}
@@ -64,7 +65,7 @@ class InvoiceCommentsModule(BaseModule):
         @bp.route('/delete/<int:comment_id>', methods=['POST'])
         @login_required
         def delete_comment(comment_id):
-            comment = module.InvoiceComment.query.get_or_404(comment_id)
+            comment = db_get_or_404(module.InvoiceComment, comment_id)
             invoice_id = comment.invoice_id
             module._db.session.delete(comment)
             module._db.session.commit()
