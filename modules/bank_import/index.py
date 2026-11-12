@@ -2,23 +2,25 @@
 """
 Bank Import Module (F12) — statement import (Norma 43 / CSV) + reconciliation.
 
-CAVEMAN NOTE: import movements, dedup by hash, suggest matches against unpaid
-invoices (matching.py rank, user always confirm), one click -> invoice paid via
-the NORMAL core transition (_mark_invoice_paid) so F2/F1 semantics hold —
-Verifactu see nothing (paid is not a record event), lifecycle log fire.
-Import-good-skip-bad with a report; batches reversible until a movement is
-matched.
+Imports bank movements, removes duplicates by hash, and suggests matches
+against unpaid invoices (ranked by matching.py; the user always confirms).
+Confirming marks the invoice paid through the normal core transition
+(_mark_invoice_paid), so the F2/F1 rules hold: Verifactu records nothing
+(paid is not a record event) and the lifecycle log entry is written. Valid
+rows are imported and invalid ones skipped with a report; a batch can be
+reverted until one of its movements is matched.
 """
 
 import json
-from datetime import datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
 
 from .parsers import parse_n43, parse_csv
-from .matching import suggest_for_movement
+from .matching import suggest_expenses_for_movement, suggest_for_movement
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 class BankImportModule(BaseModule):
@@ -60,7 +62,7 @@ class BankImportModule(BaseModule):
             imported = db.Column(db.Integer, default=0)
             skipped = db.Column(db.Integer, default=0)
             errors = db.Column(db.Text)             # JSON list of bad-line reports
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class BankMovement(db.Model):
             __tablename__ = 'bank_movement'
@@ -76,7 +78,7 @@ class BankImportModule(BaseModule):
             status = db.Column(db.String(20), default='new')  # new|matched|ignored
             matched_type = db.Column(db.String(20))            # invoice|expense
             matched_id = db.Column(db.Integer)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class BankImportConfig(db.Model):
             """CSV column-mapping profiles, one row per profile name."""
@@ -156,6 +158,49 @@ class BankImportModule(BaseModule):
                 out[m.id] = ranked[:3]
         return out
 
+    def _expense_candidates(self, currency):
+        """Expenses not yet linked to a movement, with their amount in
+        `currency` (converted when needed; skipped when no rate is available)."""
+        from types import SimpleNamespace
+        from app import Contractor, Expense
+        linked = {mid for (mid,) in self._db.session.query(self.BankMovement.matched_id)
+                  .filter(self.BankMovement.matched_type == 'expense')}
+        names = {c.id: c.name for c in Contractor.query.all()}
+        out = []
+        for exp in Expense.query.all():
+            if exp.id in linked:
+                continue
+            amount = exp.amount
+            if (exp.currency or 'EUR') != currency:
+                try:
+                    amount, _rate, _date = self.core.currency_service.convert(
+                        exp.amount, exp.currency or 'EUR', currency,
+                        exp.expense_date.strftime('%Y-%m-%d') if exp.expense_date else None)
+                except Exception as e:  # no rate: the expense cannot be compared
+                    self.logger.debug('Skipping expense %s for matching: %s', exp.id, e)
+                    continue
+            out.append(SimpleNamespace(
+                id=exp.id, amount=amount, currency=currency, expense_date=exp.expense_date,
+                contractor_name=names.get(exp.contractor_id, ''),
+                invoice_number=exp.invoice_number or '',
+                description=exp.description or ''))
+        return out
+
+    def _expense_suggestions(self, movements):
+        """{movement_id: [(score, expense, reason), ...top 3]} for debits."""
+        out = {}
+        candidates = {}
+        for m in movements:
+            if (m.amount or 0) >= 0:
+                continue
+            currency = m.currency or 'EUR'
+            if currency not in candidates:
+                candidates[currency] = self._expense_candidates(currency)
+            ranked = suggest_expenses_for_movement(m, candidates[currency])
+            if ranked:
+                out[m.id] = ranked[:3]
+        return out
+
     # --- Routes -------------------------------------------------------------- #
 
     def register_routes(self, app):
@@ -176,6 +221,7 @@ class BankImportModule(BaseModule):
             return render_template('bank_import.html',
                                    unmatched=unmatched,
                                    suggestions=module._suggestions(unmatched),
+                                   expense_suggestions=module._expense_suggestions(unmatched),
                                    batches=batches,
                                    batch_errors=batch_errors,
                                    csv_profiles=module._csv_profiles())
@@ -222,13 +268,13 @@ class BankImportModule(BaseModule):
         @bp.route('/confirm/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_confirm(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             invoice_id = request.form.get('invoice_id', type=int)
             if not invoice_id:
                 flash('Pick an invoice to match.', 'danger')
                 return redirect(url_for('bank_import.bank_index'))
             from app import Invoice, _mark_invoice_paid
-            invoice = Invoice.query.get_or_404(invoice_id)
+            invoice = db_get_or_404(Invoice, invoice_id)
             try:
                 # Normal core transition -> lifecycle log; F2/F1 semantics hold.
                 _mark_invoice_paid(invoice)
@@ -250,10 +296,10 @@ class BankImportModule(BaseModule):
         @bp.route('/link-expense/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_link_expense(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             expense_id = request.form.get('expense_id', type=int)
             from app import Expense
-            expense = Expense.query.get_or_404(expense_id)
+            expense = db_get_or_404(Expense, expense_id)
             movement.status = 'matched'
             movement.matched_type = 'expense'
             movement.matched_id = expense.id
@@ -264,7 +310,7 @@ class BankImportModule(BaseModule):
         @bp.route('/ignore/<int:movement_id>', methods=['POST'])
         @login_required
         def bank_ignore(movement_id):
-            movement = module.BankMovement.query.get_or_404(movement_id)
+            movement = db_get_or_404(module.BankMovement, movement_id)
             movement.status = 'ignored'
             module._db.session.commit()
             return redirect(url_for('bank_import.bank_index'))
@@ -272,7 +318,7 @@ class BankImportModule(BaseModule):
         @bp.route('/batch/<int:batch_id>/delete', methods=['POST'])
         @login_required
         def bank_batch_delete(batch_id):
-            batch = module.ImportBatch.query.get_or_404(batch_id)
+            batch = db_get_or_404(module.ImportBatch, batch_id)
             matched = module.BankMovement.query.filter(
                 module.BankMovement.batch_id == batch.id,
                 module.BankMovement.status == 'matched').count()

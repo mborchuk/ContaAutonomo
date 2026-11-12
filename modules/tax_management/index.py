@@ -11,6 +11,8 @@ import json
 from module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from datetime import datetime
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 def _csv_safe(value):
@@ -122,7 +124,7 @@ class TaxManagementModule(BaseModule):
             quarter = db.Column(db.Integer)
             file_path = db.Column(db.String(500), nullable=False)
             original_filename = db.Column(db.String(200))
-            uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+            uploaded_at = db.Column(db.DateTime, default=utcnow)
             notes = db.Column(db.Text)
             # F10 — filing workflow: pending -> filed -> paid, with amount and
             # evidence. Rows created by upload default to 'filed' (they carry a
@@ -153,7 +155,7 @@ class TaxManagementModule(BaseModule):
             payment_date = db.Column(db.Date, nullable=False)
             amount = db.Column(db.Float, nullable=False)
             description = db.Column(db.String(300))
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
             def __repr__(self):
                 return f'<SSPayment {self.payment_date} {self.amount}>'
@@ -372,14 +374,14 @@ class TaxManagementModule(BaseModule):
                 existing.file_path = file_path
                 existing.original_filename = file.filename
                 existing.notes = notes
-                existing.uploaded_at = datetime.utcnow()
+                existing.uploaded_at = utcnow()
             else:
                 new_form = self.TaxForm(
                     form_type=form_type, year=year,
                     quarter=int(quarter) if quarter else None,
                     file_path=file_path, original_filename=file.filename,
                     notes=notes, status='filed',
-                    filed_date=datetime.utcnow().date(),
+                    filed_date=utcnow().date(),
                 )
                 self._db.session.add(new_form)
 
@@ -397,7 +399,7 @@ class TaxManagementModule(BaseModule):
             if status in ('pending', 'filed', 'paid'):
                 target.status = status
                 if status == 'paid' and not target.payment_date:
-                    target.payment_date = datetime.utcnow().date()
+                    target.payment_date = utcnow().date()
 
             self._db.session.commit()
             flash(f'Tax form {form_type} {"updated" if existing else "uploaded"} successfully!', 'success')
@@ -460,7 +462,7 @@ class TaxManagementModule(BaseModule):
 
     def _download_tax_form(self, id):
         """Download a tax form"""
-        tax_form = self.TaxForm.query.get_or_404(id)
+        tax_form = db_get_or_404(self.TaxForm, id)
         if not self.core.file_exists(tax_form.file_path):
             flash('File not found', 'danger')
             return redirect(url_for('tax_management.tax_forms_index'))
@@ -468,7 +470,7 @@ class TaxManagementModule(BaseModule):
 
     def _preview_tax_form(self, id):
         """Preview a tax form inline in the browser"""
-        tax_form = self.TaxForm.query.get_or_404(id)
+        tax_form = db_get_or_404(self.TaxForm, id)
         resp = self.core.preview_file(tax_form.file_path, tax_form.original_filename)
         if not resp:
             flash('File not found', 'danger')
@@ -478,7 +480,7 @@ class TaxManagementModule(BaseModule):
     def _delete_tax_form(self, id):
         """Delete a tax form"""
         try:
-            tax_form = self.TaxForm.query.get_or_404(id)
+            tax_form = db_get_or_404(self.TaxForm, id)
             self.core.delete_file(tax_form.file_path)
             self._db.session.delete(tax_form)
             self._db.session.commit()
@@ -511,7 +513,7 @@ class TaxManagementModule(BaseModule):
     def _edit_ss_payment(self, id):
         """Edit a Social Security payment"""
         try:
-            payment = self.SSPayment.query.get_or_404(id)
+            payment = db_get_or_404(self.SSPayment, id)
             payment.payment_date = datetime.strptime(request.form['payment_date'], '%Y-%m-%d').date()
             payment.amount = float(request.form['amount'])
             payment.description = request.form.get('description', '')
@@ -548,7 +550,7 @@ class TaxManagementModule(BaseModule):
     def _delete_ss_payment(self, id):
         """Delete a Social Security payment"""
         try:
-            payment = self.SSPayment.query.get_or_404(id)
+            payment = db_get_or_404(self.SSPayment, id)
             self._db.session.delete(payment)
             self._db.session.commit()
             flash('SS payment deleted!', 'success')
@@ -682,9 +684,9 @@ class TaxManagementModule(BaseModule):
             if amount not in (None, ''):
                 tax_form.amount = float(amount)
             if status in ('filed', 'paid') and not tax_form.filed_date:
-                tax_form.filed_date = datetime.utcnow().date()
+                tax_form.filed_date = utcnow().date()
             if status == 'paid' and not tax_form.payment_date:
-                tax_form.payment_date = datetime.utcnow().date()
+                tax_form.payment_date = utcnow().date()
             self._db.session.commit()
             self.core.log_activity(
                 'tax_filing_recorded', 'system',
@@ -754,18 +756,8 @@ class TaxManagementModule(BaseModule):
     def get_settings_html(self, settings):
         """Provide SS monthly quota field for General Settings tab"""
         value = settings.social_security_monthly if settings and settings.social_security_monthly else 0
-        annual = value * 12
-        return f'''
-        <h3 style="margin-bottom: 15px; color: var(--color-text);">Social Security (Autónomo)</h3>
-        <div class="form-group">
-            <label for="social_security_monthly">Monthly SS Quota (€)</label>
-            <input type="number" id="social_security_monthly" name="social_security_monthly"
-                   value="{value}" step="0.01" min="0" style="width: 200px;">
-            <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
-                Your monthly Seguridad Social payment (cuota de autónomo). This is used to calculate annual Social Security in the Tax Obligations panel.
-                Current annual total: €{annual:.2f}
-            </small>
-        </div>'''
+        return self.render_settings_template(
+            'tax_management_settings_panel.html', value=value, annual=value * 12)
 
     def save_settings(self, settings, form):
         """Save SS monthly quota from General Settings form"""

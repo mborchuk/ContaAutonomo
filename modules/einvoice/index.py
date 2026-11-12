@@ -2,10 +2,10 @@
 """
 E-Invoice Module (F9, Phase 1) — Facturae export for issued invoices.
 
-CAVEMAN NOTE: Phase 1 only — generate Facturae 3.2.2 XML (UNSIGNED, see
-facturae.py for the XAdES gap) with a data-readiness check. Exchange with
-platforms / status messages (Phase 2) is gated on the ministerial order for
-RD 238/2026 — design notes in README.md, no code.
+Phase 1 only: generate Facturae 3.2.2 XML (unsigned — see facturae.py for the
+XAdES gap) with a data-readiness check. Exchange with platforms and status
+messages (Phase 2) waits for the ministerial order for RD 238/2026; the design
+notes are in README.md, there is no code for it yet.
 
 Readiness ride the structured party data that already exist on Customer and
 Settings (address/city/postal_code/country) — the missing-data checklist tell
@@ -17,6 +17,7 @@ from flask import Blueprint, Response, flash, redirect, url_for
 from module_manager import BaseModule
 
 from .facturae import check_readiness, generate_facturae
+from db_helpers import db_get
 
 
 class EInvoiceModule(BaseModule):
@@ -48,7 +49,7 @@ class EInvoiceModule(BaseModule):
     def _readiness(self, invoice):
         from app import Customer
         seller = self.core.get_settings()
-        customer = Customer.query.get(invoice.customer_id) \
+        customer = db_get(Customer, invoice.customer_id) \
             if invoice.customer_id else None
         return check_readiness(invoice, seller, customer), seller, customer
 

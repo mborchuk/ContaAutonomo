@@ -1,0 +1,35 @@
+{% from "_secret_field.html" import secret_input %}
+<h3>SMTP Email Settings</h3>
+<p class="muted">
+    The SMTP password is stored in the local database and is never shown here
+    again after saving.
+</p>
+<div class="form-grid-3">
+    <div class="form-group"><label>SMTP host</label>
+        <input type="text" name="smtp_host" value="{{ cfg.host }}"></div>
+    <div class="form-group"><label>Port</label>
+        <input type="number" name="smtp_port" value="{{ cfg.port }}"></div>
+    <div class="form-group"><label>Security</label>
+        <select name="smtp_security">
+            <option value="starttls"{% if security == 'starttls' %} selected{% endif %}>STARTTLS</option>
+            <option value="ssl"{% if security == 'ssl' %} selected{% endif %}>SSL</option>
+            <option value="none"{% if security == 'none' %} selected{% endif %}>None</option>
+        </select></div>
+</div>
+<div class="form-grid-3">
+    <div class="form-group"><label>Username</label>
+        <input type="text" name="smtp_username" value="{{ cfg.username }}"></div>
+    <div class="form-group"><label>Password</label>
+        {{ secret_input('smtp_password', password_set, style='') }}</div>
+    <div class="form-group"><label>From address</label>
+        <input type="email" name="smtp_from" value="{{ cfg.from_addr }}"></div>
+</div>
+<label class="check-row" style="margin:8px 0;">
+    <input type="checkbox" name="smtp_reminders_enabled"{% if cfg.reminders_enabled %} checked{% endif %}>
+    <span>Send overdue payment reminders (due +{{ offsets[0] }} and +{{ offsets[1] }} days)</span>
+</label>
+<input type="hidden" name="invoice_email_submitted" value="1">
+<p class="fine-print">
+    Save settings first, then test: form posts to
+    <code>{{ test_url }}</code> via the button on the invoice view or an API call.
+</p>

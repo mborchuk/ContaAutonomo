@@ -2,10 +2,10 @@
 """
 Bank statement parsers — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: two format only (per PM scope): Norma 43 / AEB43 (Spanish bank
-standard, fixed-width, latin-1) and generic CSV with a user column mapping
-(every bank CSV different). Parser return plain dicts; dedup hash computed
-here so importer stay dumb.
+Two formats only (product scope): Norma 43 / AEB43 (the Spanish bank
+standard: fixed width, latin-1) and generic CSV with a user-defined column
+mapping (every bank's CSV is different). Parsers return plain dicts and
+compute the de-duplication hash here, so the importer stays simple.
 
 N43 layout implemented (standard AEB43):
   11 = account header (currency at pos 47-49 as ISO 4217 numeric)

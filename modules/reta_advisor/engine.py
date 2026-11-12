@@ -2,9 +2,10 @@
 """
 RETA projection engine — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: same discipline as tax_es_forms/calculator.py — module fetch
-data, engine only count. Simple linear annualization (v1). Everything is
-ESTIMATE — regularization is settled by Seguridad Social after year end.
+Same approach as tax_es_forms/calculator.py: the module fetches the data and
+the engine only calculates. Simple linear annualization (v1). Everything is
+an estimate — the regularization is settled by the Seguridad Social after
+the year ends.
 
 Not modeled in v1 (flagged, not calculated): tarifa plana, pluriactividad,
 mid-year base changes already made this year.
