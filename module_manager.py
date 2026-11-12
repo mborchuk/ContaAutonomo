@@ -22,6 +22,8 @@ import importlib
 import importlib.util
 from abc import ABC, abstractmethod
 
+from constants import invoice_locked
+
 
 def valid_capability(cap):
     """The capability contract: a dict with a string 'type' and a callable
@@ -1519,10 +1521,9 @@ class InvoiceService:
         F2 — generalized from "PAID only" to "issued or later": `issued`,
         `paid` and annulled invoices are immutable; changes go through
         rectificatives. Legacy `pending` and new `draft` invoices stay freely
-        editable. The rule itself lives in app._invoice_locked.
+        editable. The rule itself lives in constants.invoice_locked.
         """
-        from app import _invoice_locked
-        return _invoice_locked(invoice)
+        return invoice_locked(invoice)
 
     def update(self, invoice_id, **fields):
         """Update invoice fields. Raises ValueError if invoice is PAID.

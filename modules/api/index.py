@@ -604,7 +604,7 @@ class ApiModule(BaseModule):
             raise ApiError(409, 'conflict',
                            f'invoice_number {invoice_number} already exists')
 
-        from app import INITIAL_INVOICE_STATUS
+        from constants import INITIAL_INVOICE_STATUS
         status = body.get('status', INITIAL_INVOICE_STATUS)
         if status != INITIAL_INVOICE_STATUS:
             raise ApiError(400, 'bad_request',

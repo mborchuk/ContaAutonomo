@@ -96,7 +96,14 @@ app.config['INIT_LOCK_PATH'] = os.path.join(
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
 
-from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+from constants import (
+    INITIAL_INVOICE_STATUS,
+    LOCKED_INVOICE_STATUSES,
+    MAX_CONTENT_LENGTH_BYTES,
+    SESSION_LIFETIME_SECONDS,
+    invoice_locked,
+    is_legacy_settled,
+)
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -1047,32 +1054,10 @@ def index():
 
 
 # --- F2: Invoice lifecycle -------------------------------------------------- #
-
-LOCKED_INVOICE_STATUSES = ('issued', 'paid')
-
-# The only status an invoice can be created with. Every later status is reached
-# through a lifecycle action (issue, mark paid, annul), never set directly.
-INITIAL_INVOICE_STATUS = 'draft'
-
-
-def _invoice_locked(invoice):
-    """F2 — issued/paid invoices are read-only (change via rectificative).
-
-    An annulled invoice (cancelled after being issued) is kept for audit and is
-    read-only too. Legacy invoices cancelled before the lifecycle existed have
-    no `issued_at` and stay editable, as before.
-    """
-    if invoice is None:
-        return False
-    if invoice.status in LOCKED_INVOICE_STATUSES:
-        return True
-    return invoice.status == 'cancelled' and invoice.issued_at is not None
-
-
-def _is_legacy_settled(invoice):
-    """Paid or cancelled without ever being issued through the app: it has no
-    sequential number, fiscal snapshot or Verifactu record."""
-    return invoice.status in ('paid', 'cancelled') and invoice.issued_at is None
+# The lock rule and the initial status live in constants.py (LOCKED_INVOICE_STATUSES,
+# INITIAL_INVOICE_STATUS, invoice_locked, is_legacy_settled).
+_invoice_locked = invoice_locked
+_is_legacy_settled = is_legacy_settled
 
 
 def _next_sequence_for_series(series):

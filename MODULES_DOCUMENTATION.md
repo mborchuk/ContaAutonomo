@@ -57,7 +57,7 @@ Key rules:
   meaning of an issued invoice.
 - **Issued, paid and annulled** invoices cannot be edited or deleted —
   enforced in the core routes, in `InvoiceService`, and in the REST API
-  (one rule: `app._invoice_locked`). The only forward transitions are *Mark
+  (one rule: `constants.invoice_locked`). The only forward transitions are *Mark
   paid* and *Annul*. Legacy invoices cancelled before the lifecycle existed
   (no `issued_at`) stay editable.
 - **Legacy settled invoices** — paid or cancelled without ever being issued
