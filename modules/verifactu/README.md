@@ -10,7 +10,8 @@ be written, the transition is rolled back.
 
 1. [How the chain works](#how-the-chain-works)
 2. [What is implemented](#what-is-implemented)
-3. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
+3. [Official specifications](#official-specifications)
+4. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
 
 ## How the chain works
 
@@ -43,6 +44,21 @@ alarm when the chain is broken.
 | Export | `/verifactu/export` — NDJSON of the full record log; records live in the normal database and are therefore covered by the backup module |
 | QR code | AEAT-style payload (`nif`, `numserie`, `fecha`, `importe`) rendered as SVG with ReportLab (no extra dependency); shown on the invoice view panel |
 
+## Official specifications
+
+[SPEC_COMPARISON.md](SPEC_COMPARISON.md) compares the module with the AEAT
+technical documents (hash v0.1.2, QR v0.5.0) and lists the remaining work.
+
+- `aeat.py` implements the official record hash (*huella*) — verified against
+  AEAT's worked examples — and the cotejo URL.
+- Every generated PDF of an issued invoice carries the QR on page 1
+  (`pdf_qr.py`, through the core `filter_invoice_pdf` hook): 30 mm, error
+  correction M, "QR tributario:" above it.
+- `VERIFACTU_MODE` (default `no_verifactu`) selects `ValidarQRNoVerifactu`
+  and omits the "VERI*FACTU" phrase. Switch to `verifactu` only when records
+  are submitted to AEAT. `VERIFACTU_QR_ENV=test` uses the AEAT test host.
+- **Submission to AEAT is not available** (needs AEAT test access).
+
 ## Pending items (verify before real use)
 
 - **Specification alignment**: the record field list, hash input ordering, QR
@@ -56,7 +72,7 @@ alarm when the chain is broken.
 - **Signature**: HMAC is a placeholder. The final specification may require
   certificate-based signing; the PFX upload flow in `pdf_signature` is the
   natural reuse candidate.
-- **QR on PDFs**: the QR currently renders on the invoice view; embedding it
-  into the invoice PDF templates is a follow-up.
+- **Record format**: the chain still uses the draft hash format; switching to
+  the official huella is the next step (see SPEC_COMPARISON.md).
 
 This module is a compliance assist, not legal advice.
