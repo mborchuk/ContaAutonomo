@@ -19,12 +19,16 @@ from module_manager import BaseModule
 
 from .boxes import (
     BOX_TABLE_VERSION,
+    MODELO_390_ORDER,
+    MODELO_390_OUT_OF_SCOPE,
     boxes_for_year,
+    modelo_390_boxes_for_year,
 )
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
     compute_modelo_349,
+    compute_modelo_390,
     quarter_of,
 )
 
@@ -253,6 +257,36 @@ class TaxEsFormsModule(BaseModule):
         result.update(self._table_info(year))
         return result
 
+    def _draft_390(self, year):
+        """Annual VAT summary: the four quarterly 303 drafts added up."""
+        from year_tables import fallback_note
+        quarters = [self._draft_303(year, q) for q in (1, 2, 3, 4)]
+        result = compute_modelo_390([q['boxes'] for q in quarters])
+        table_year, labels, fallback = modelo_390_boxes_for_year(year)
+        checks = []
+        other_rates = sorted({
+            inv.snap_vat_rate for inv in self._invoices_in(year)
+            if getattr(inv, 'status', None) != 'cancelled'
+            and getattr(inv, 'snap_vat_rate', None) not in (None, 0, 0.0, 21, 21.0)})
+        if other_rates:
+            checks.append(
+                'Invoices at VAT rates other than 21 % ('
+                + ', '.join(f'{r:g} %' for r in other_rates)
+                + ') are included in casillas 05/06 — move them to the casillas '
+                'for their rate (01–04) before filing.')
+        for q in quarters:
+            for check in q['meta'].get('checks', []):
+                checks.append(f"Q{q['quarter']}: {check}")
+        result.update({
+            'year': year, 'labels': labels, 'order': MODELO_390_ORDER,
+            'out_of_scope': MODELO_390_OUT_OF_SCOPE,
+            'quarters': [{'quarter': q['quarter'], 'boxes': q['boxes']} for q in quarters],
+            'table_year': table_year, 'table_fallback': fallback,
+            'table_note': fallback_note(table_year) if fallback else '',
+            'meta': {'checks': checks, 'basis': 'sum of quarterly 303 drafts'},
+        })
+        return result
+
     @staticmethod
     def _box_labels(year, form):
         _table_year, tables, _fallback = boxes_for_year(year)
@@ -315,6 +349,11 @@ class TaxEsFormsModule(BaseModule):
                 abort(404)
             draft = module._draft_130(year, quarter)
             return render_template('tax_forms_draft_130.html', draft=draft)
+
+        @bp.route('/390/<int:year>')
+        @login_required
+        def draft_390(year):
+            return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
 
         @bp.route('/349/<int:year>/<int:quarter>')
         @login_required

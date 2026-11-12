@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="page-header">
-    <h1>Modelo 303 / 130 / 349 Drafts</h1>
+    <h1>Modelo 303 / 130 / 349 / 390 Drafts</h1>
     <span class="fine-print">Box table version: {{ table_version }}</span>
 </div>
 
@@ -25,6 +25,7 @@
             <th>Q2</th>
             <th>Q3</th>
             <th>Q4</th>
+            <th>Annual</th>
         </tr>
     </thead>
     <tbody>
@@ -41,6 +42,10 @@
                    class="btn btn-secondary btn-sm">349</a>
             </td>
             {% endfor %}
+            <td>
+                <a href="{{ url_for('tax_es_forms.draft_390', year=year) }}"
+                   class="btn btn-secondary btn-sm">390</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
