@@ -32,7 +32,19 @@ logger = logging.getLogger(__name__)
 BLOCK_IDS = [
     'logo', 'title', 'sender_info', 'recipient_info',
     'invoice_meta', 'due_date', 'bank_details', 'notes', 'payment_terms',
+    'verifactu_qr',
 ]
+
+# The AEAT QR specification (v0.5.0, section 3) puts the tax QR at the top of
+# page 1, preferably centred, otherwise towards the top-left. 'hidden' leaves
+# it out of the layout; the Verifactu module then adds it as a centred band.
+QR_SLOT_CHOICES = ['top-center', 'top-left', 'hidden']
+QR_SLOT_LABELS = {
+    'top-center': 'Top, centred (recommended)',
+    'top-left': 'Top, left',
+    'hidden': 'Automatic band above the invoice',
+}
+QR_SIZE_CHOICES = [30, 35, 40]   # mm, spec range 30-40 mm
 
 # Valid slot positions
 SLOT_CHOICES = [
@@ -58,6 +70,7 @@ DEFAULT_CONFIG = {
     'show_accent_line': True,
     'show_separator_lines': False,
     'show_vertical_lines': False,
+    'verifactu_qr_size_mm': 30,      # Verifactu QR block size (30-40 mm)
     'block_gaps': {},                # per-block gap override: {block_id: pt}
     'block_label_widths': {},        # per-block label column width override: {block_id: pt}
     'block_styles': {},              # per-block: {block_id: {color: '#hex', bg: '#hex', show_label: true}}
@@ -90,6 +103,7 @@ DEFAULT_CONFIG = {
         'bank_details':   'bottom-left',
         'notes':          'bottom-right',
         'payment_terms':  'bottom-center',
+        'verifactu_qr':   'top-center',
     },
     # Fine-tune offsets in points (pt): {block_id: {x: 0, y: 0}}
     'block_offsets': {},
@@ -299,6 +313,8 @@ class InvoiceDesignerModule(BaseModule):
         return render_template('designer_form.html', template=None,
                                config=config, config_json=json.dumps(config, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
+                               qr_slot_choices=QR_SLOT_CHOICES, qr_slot_labels=QR_SLOT_LABELS,
+                               qr_size_choices=QR_SIZE_CHOICES,
                                layout_presets=LAYOUT_PRESETS)
 
     def _edit_template(self, id):
@@ -310,6 +326,8 @@ class InvoiceDesignerModule(BaseModule):
         return render_template('designer_form.html', template=tpl,
                                config=merged, config_json=json.dumps(merged, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
+                               qr_slot_choices=QR_SLOT_CHOICES, qr_slot_labels=QR_SLOT_LABELS,
+                               qr_size_choices=QR_SIZE_CHOICES,
                                layout_presets=LAYOUT_PRESETS)
 
     def _save_template(self, tpl):
@@ -337,7 +355,7 @@ class InvoiceDesignerModule(BaseModule):
                     old_config = json.loads(tpl.config_json)
                     if old_config.get('logo_path') and 'logo_path' not in config:
                         config['logo_path'] = old_config['logo_path']
-                config_json = json.dumps(config)
+                config_json = json.dumps(sanitize_qr_config(config))
             else:
                 config = {
                     'accent_color': request.form.get('accent_color', '#5B6FD8'),
@@ -352,6 +370,7 @@ class InvoiceDesignerModule(BaseModule):
                     'show_accent_line': 'show_accent_line' in request.form,
                     'show_separator_lines': 'show_separator_lines' in request.form,
                     'show_vertical_lines': 'show_vertical_lines' in request.form,
+                    'verifactu_qr_size_mm': request.form.get('verifactu_qr_size_mm', 30),
                     'labels': {},
                     'block_positions': {},
                     'block_offsets': {},
@@ -446,7 +465,7 @@ class InvoiceDesignerModule(BaseModule):
                     if old_config.get('logo_path'):
                         config['logo_path'] = old_config['logo_path']
 
-                config_json = json.dumps(config)
+                config_json = json.dumps(sanitize_qr_config(config))
 
             if tpl:
                 tpl.name = name
@@ -490,6 +509,9 @@ class InvoiceDesignerModule(BaseModule):
         tpl = db_get_or_404(self.InvoiceTemplate, id)
         config = json.loads(tpl.config_json)
         merged = _merge_config(config)
+        if 'verifactu_qr' not in config.get('block_positions', {}):
+            # Saved before the QR block existed: real PDFs use the automatic band.
+            merged['block_positions']['verifactu_qr'] = 'hidden'
 
         settings = self.core.get_settings()
 
@@ -530,6 +552,7 @@ class InvoiceDesignerModule(BaseModule):
             settings=settings,
             config=merged,
             storage=self.core.storage,
+            qr=_sample_qr(),
         )
         return Response(pdf_bytes, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
@@ -572,6 +595,27 @@ class InvoiceDesignerModule(BaseModule):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _sample_qr():
+    """A QR for the designer preview (AEAT test host, made-up invoice), so the
+    chosen position and size are visible before any invoice is issued."""
+    from modules.verifactu.aeat import qr_url
+    return {'url': qr_url('00000000T', '2026-DEMO', date.today(), 1210.00,
+                          environment='test'), 'phrase': None}
+
+
+def sanitize_qr_config(config):
+    """Keep the Verifactu QR block in an AEAT-compliant place and size."""
+    positions = config.setdefault('block_positions', {})
+    if positions.get('verifactu_qr') not in QR_SLOT_CHOICES:
+        positions['verifactu_qr'] = DEFAULT_CONFIG['block_positions']['verifactu_qr']
+    try:
+        size = int(config.get('verifactu_qr_size_mm', 30))
+    except (TypeError, ValueError):
+        size = 30
+    config['verifactu_qr_size_mm'] = max(30, min(40, size))
+    return config
+
 
 def _deep_copy_config(cfg):
     return json.loads(json.dumps(cfg))
@@ -658,12 +702,15 @@ def _demo_customer():
 # Universal PDF generator from config — grid-based layout
 # ---------------------------------------------------------------------------
 
-def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
+def generate_pdf_from_config(invoice, customer, settings, config, storage=None, qr=None):
     """
     Generate invoice PDF bytes from a config dict.
 
     Layout zones (top → footer), each with left | center | right slots.
     Blocks are placed according to config['block_positions'].
+
+    `qr` is the Verifactu QR of an issued invoice ({'url', 'phrase'}, from
+    the Verifactu module) or None; the 'verifactu_qr' block shows it.
     """
     import io as _io
     from reportlab.lib.pagesizes import letter
@@ -693,7 +740,9 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     show_sep = c.get('show_separator_lines', False)
     show_vert = c.get('show_vertical_lines', False)
 
-    positions = c.get('block_positions', DEFAULT_CONFIG['block_positions'])
+    positions = dict(c.get('block_positions', DEFAULT_CONFIG['block_positions']))
+    if positions.get('verifactu_qr', 'hidden') not in QR_SLOT_CHOICES:
+        positions['verifactu_qr'] = DEFAULT_CONFIG['block_positions']['verifactu_qr']
     offsets = c.get('block_offsets', {})
     _block_label_widths = c.get('block_label_widths', {})
 
@@ -798,6 +847,22 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
             except Exception:  # logo file may be missing or corrupted
                 pass
             return []
+
+        if block_id == 'verifactu_qr':
+            if not qr:
+                return []   # drafts have no Verifactu record, hence no QR
+            from modules.verifactu.aeat import QR_LABEL
+            from modules.verifactu.pdf_qr import clamp_size_mm, qr_drawing
+            align = 1 if slot == 'top-center' else 0
+            s_qr = ParagraphStyle('dqr', fontSize=9, fontName=font_b, textColor=colors.black,
+                                  alignment=align, leading=11)
+            drawing = qr_drawing(qr['url'], clamp_size_mm(c.get('verifactu_qr_size_mm', 30)))
+            drawing.hAlign = 'CENTER' if align == 1 else 'LEFT'
+            quiet = 2.5 * 72 / 25.4   # spec: at least 2 mm blank around the QR
+            flows = [Paragraph(QR_LABEL, s_qr), Spacer(1, quiet), drawing, Spacer(1, quiet)]
+            if qr.get('phrase'):
+                flows.append(Paragraph(qr['phrase'], s_qr))
+            return flows
 
         if block_id == 'title':
             lw = _block_label_widths.get('title', 0)

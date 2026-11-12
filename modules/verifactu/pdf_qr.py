@@ -22,19 +22,48 @@ def _band_height(phrase):
     return BAND_TOP_MARGIN + lines * (TEXT_SIZE + 4) + QR_SIZE_MM * mm + 2 * QUIET_ZONE
 
 
-def _overlay(width, height, url, phrase):
-    from reportlab.graphics import renderPDF
+MIN_SIZE_MM, MAX_SIZE_MM = 30, 40   # spec: between 30x30 and 40x40 mm
+
+
+def clamp_size_mm(value):
+    """A QR size in mm inside the range the AEAT specification allows."""
+    try:
+        size = int(value)
+    except (TypeError, ValueError):
+        return QR_SIZE_MM
+    return max(MIN_SIZE_MM, min(MAX_SIZE_MM, size))
+
+
+def qr_drawing(url, size_mm=QR_SIZE_MM):
+    """ReportLab Drawing of the QR (error correction M), `size_mm` square."""
     from reportlab.graphics.barcode.qr import QrCodeWidget
     from reportlab.graphics.shapes import Drawing
+    size = clamp_size_mm(size_mm) * mm
+    widget = QrCodeWidget(url, barLevel=QR_ERROR_CORRECTION, barBorder=0)
+    x0, y0, x1, y1 = widget.getBounds()
+    drawing = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
+    drawing.add(widget)
+    return drawing
+
+
+def has_qr(pdf_bytes):
+    """True when page 1 already shows the tax QR label (e.g. a designer
+    template placed the QR itself), so it must not be stamped again."""
+    from pypdf import PdfReader
+    try:
+        return QR_LABEL in (PdfReader(io.BytesIO(pdf_bytes)).pages[0].extract_text() or '')
+    except Exception:  # unreadable PDF: let stamping decide
+        return False
+
+
+def _overlay(width, height, url, phrase):
+    from reportlab.graphics import renderPDF
     from reportlab.pdfgen import canvas
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(width, height))
     size = QR_SIZE_MM * mm
-    widget = QrCodeWidget(url, barLevel=QR_ERROR_CORRECTION, barBorder=0)
-    x0, y0, x1, y1 = widget.getBounds()
-    drawing = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
-    drawing.add(widget)
+    drawing = qr_drawing(url, QR_SIZE_MM)
 
     centre = width / 2
     label_y = height - BAND_TOP_MARGIN - TEXT_SIZE

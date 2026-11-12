@@ -123,6 +123,7 @@
                 'bank_details': '🏦 Bank Details',
                 'notes': '📝 Notes',
                 'payment_terms': '💳 Payment Terms',
+                'verifactu_qr': '🧾 Verifactu QR',
             } %}
 
             {% for bid in block_ids %}
@@ -130,9 +131,15 @@
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: nowrap;">
                 <label style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">{{ block_labels.get(bid, bid) }}</label>
                 <select name="pos_{{ bid }}" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
+                    {% if bid == 'verifactu_qr' %}
+                    {% for slot in qr_slot_choices %}
+                    <option value="{{ slot }}" {% if config.block_positions.get(bid) == slot %}selected{% endif %}>{{ qr_slot_labels[slot] }}</option>
+                    {% endfor %}
+                    {% else %}
                     {% for slot in slot_choices %}
                     <option value="{{ slot }}" {% if config.block_positions.get(bid) == slot %}selected{% endif %}>{{ slot }}</option>
                     {% endfor %}
+                    {% endif %}
                 </select>
                 <input type="number" name="block_lw_{{ bid }}" min="0" max="300" step="1" placeholder="X"
                        value="{{ (config.block_label_widths or {})[bid] if config.block_label_widths and bid in config.block_label_widths else '' }}"
@@ -156,6 +163,20 @@
                 </label>
             </div>
             {% endfor %}
+            <!-- Verifactu QR size + rules -->
+            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;">
+                <label for="verifactu_qr_size_mm" style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">🧾 QR size</label>
+                <select name="verifactu_qr_size_mm" id="verifactu_qr_size_mm" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
+                    {% for size in qr_size_choices %}
+                    <option value="{{ size }}" {% if (config.verifactu_qr_size_mm or 30)|int == size %}selected{% endif %}>{{ size }} × {{ size }} mm</option>
+                    {% endfor %}
+                </select>
+                <small style="font-size: 11px; color: var(--color-text-muted); flex: 1 1 260px;">
+                    AEAT rules: the tax QR goes at the top of page 1, centred or towards the left,
+                    30–40 mm, with “QR tributario:” above it. Shown only on issued invoices; the
+                    preview uses a sample QR.
+                </small>
+            </div>
             <!-- Totals style -->
             {% set tbs = (config.block_styles or {})['totals'] if config.block_styles and 'totals' in config.block_styles else {} %}
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: nowrap; border-top: 1px solid var(--color-surface-3); padding-top: 6px;">
@@ -350,6 +371,7 @@
             show_accent_line: f.show_accent_line.checked,
             show_separator_lines: f.show_separator_lines.checked,
             show_vertical_lines: f.show_vertical_lines ? f.show_vertical_lines.checked : false,
+            verifactu_qr_size_mm: f.verifactu_qr_size_mm ? (parseInt(f.verifactu_qr_size_mm.value) || 30) : 30,
             labels: {},
             block_positions: {},
             block_offsets: {},
@@ -417,6 +439,7 @@
         }
         if (cfg.font) f.font.value = cfg.font;
         if (cfg.title_font_size) f.title_font_size.value = cfg.title_font_size;
+        if (cfg.verifactu_qr_size_mm && f.verifactu_qr_size_mm) f.verifactu_qr_size_mm.value = cfg.verifactu_qr_size_mm;
         if (cfg.layout) f.layout.value = cfg.layout;
         ['show_logo','show_vat_breakdown','show_accent_line','show_separator_lines','show_vertical_lines'].forEach(function(k){
             if (f[k]) f[k].checked = !!cfg[k];

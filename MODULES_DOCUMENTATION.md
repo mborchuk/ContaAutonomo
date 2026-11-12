@@ -512,8 +512,13 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
 - Nav: Invoice Designer (grouped under Invoices dropdown)
 - Features:
   - Grid-based layout: 5 zones (top, header, body, bottom, footer) × 3 columns (left, center, right)
-  - 8 placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, bank_details, notes, payment_terms
-  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`)
+  - Placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, due_date, bank_details, notes, payment_terms, verifactu_qr
+  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`) — except the
+    **Verifactu QR** block, limited to what the AEAT QR specification allows: *top-centre*
+    (recommended), *top-left*, or *automatic band* (not in the layout; the Verifactu module adds
+    a centred band). Size 30, 35 or 40 mm (`verifactu_qr_size_mm`). It shows only on issued
+    invoices; the designer preview uses a sample QR. Invalid positions or sizes in saved or
+    imported JSON are corrected on save (`sanitize_qr_config`) and when rendering
   - Fine-tune X/Y offsets per block in points
   - 6 layout presets (Standard, Classic Right, Modern Center, Minimal Left, Compact Header, Bottom Bank)
   - Configurable: accent/text/header/page background colors, font, title size, layout style

@@ -22,7 +22,7 @@ from flask import Blueprint, render_template, Response, url_for
 from module_manager import BaseModule
 
 from .aeat import VERIFACTU_PHRASE, qr_url
-from .pdf_qr import stamp_qr
+from .pdf_qr import has_qr, stamp_qr
 from .chain import (
     CHAIN_SPEC_VERSION,
     GENESIS_HASH,
@@ -275,12 +275,22 @@ class VerifactuModule(BaseModule):
         return self.VerifactuRecord.query.filter_by(
             invoice_id=invoice.id, record_type='alta').first() is not None
 
-    def filter_invoice_pdf(self, invoice, pdf_bytes):
-        """Core hook: put the QR on page 1 of every PDF of an issued invoice."""
+    def qr_for_invoice(self, invoice):
+        """QR content for an invoice that has a Verifactu record:
+        {'url': ..., 'phrase': 'VERI*FACTU' or None}. None for drafts.
+        Used by this module's PDF stamping and by the invoice designer."""
         if not invoice or not getattr(invoice, 'id', None) or not self._has_record(invoice):
+            return None
+        return {'url': self.qr_payload(invoice),
+                'phrase': VERIFACTU_PHRASE if self._qr_mode() == 'verifactu' else None}
+
+    def filter_invoice_pdf(self, invoice, pdf_bytes):
+        """Core hook: put the QR on page 1 of every PDF of an issued invoice,
+        unless the template already placed it (invoice designer QR block)."""
+        qr = self.qr_for_invoice(invoice)
+        if qr is None or has_qr(pdf_bytes):
             return pdf_bytes
-        phrase = VERIFACTU_PHRASE if self._qr_mode() == 'verifactu' else None
-        return stamp_qr(pdf_bytes, self.qr_payload(invoice), phrase)
+        return stamp_qr(pdf_bytes, qr['url'], qr['phrase'])
 
     def _qr_svg(self, invoice):
         from reportlab.graphics.barcode.qr import QrCodeWidget
