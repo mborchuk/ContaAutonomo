@@ -377,6 +377,18 @@ class Invoice(db.Model):
     items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan',
                             foreign_keys='InvoiceItem.invoice_id')
 
+    @property
+    def amount_in_currency(self):
+        """Invoice total in the invoice's own currency.
+
+        Legacy naming: for EUR invoices `amount_eur` holds the entered amount
+        and `amount_usd` its USD conversion; for every other currency
+        `amount_usd` holds the entered amount (see task A-3).
+        """
+        if (self.currency or 'USD') == 'EUR':
+            return self.amount_eur
+        return self.amount_usd
+
     def __repr__(self):
         return f'<Invoice {self.invoice_number}>'
 
@@ -1743,7 +1755,8 @@ def view_invoice(id):
     banks = Bank.query.order_by(Bank.name).all()
     return render_template('view.html', invoice=invoice, customers=customers, banks=banks,
                            hash_mismatch=hash_mismatch,
-                           legacy_settled=_is_legacy_settled(invoice))
+                           legacy_settled=_is_legacy_settled(invoice),
+                           currency_symbol=get_currency_symbol(invoice.currency or 'USD'))
 
 
 @app.route('/delete/<int:id>', methods=['POST'])
