@@ -46,6 +46,28 @@ def qr_drawing(url, size_mm=QR_SIZE_MM):
     return drawing
 
 
+def qr_flowables(url, phrase=None, size_mm=QR_SIZE_MM, align='center',
+                 font_bold='Helvetica-Bold'):
+    """ReportLab flowables for a layout that places the QR itself (invoice
+    designer): "QR tributario:", the QR with at least 2 mm blank around it,
+    and the VERI*FACTU phrase when given. `align` is 'center' or 'left'."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, Spacer
+
+    centred = align == 'center'
+    style = ParagraphStyle('verifactu_qr', fontSize=TEXT_SIZE, fontName=font_bold,
+                           textColor=colors.black, leading=TEXT_SIZE + 2,
+                           alignment=1 if centred else 0)
+    drawing = qr_drawing(url, size_mm)
+    drawing.hAlign = 'CENTER' if centred else 'LEFT'
+    quiet = 2.5 * mm
+    flows = [Paragraph(QR_LABEL, style), Spacer(1, quiet), drawing, Spacer(1, quiet)]
+    if phrase:
+        flows.append(Paragraph(phrase, style))
+    return flows
+
+
 def has_qr(pdf_bytes):
     """True when page 1 already shows the tax QR label (e.g. a designer
     template placed the QR itself), so it must not be stamped again."""

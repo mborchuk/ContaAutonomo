@@ -184,6 +184,7 @@ Every module must inherit from `BaseModule` and implement required properties.
 | `on_invoice_annulled(invoice, request)` | `Invoice`, `Request` | `None` | Called when an issued invoice is annulled, before commit — raising aborts |
 | `on_invoice_deleted(invoice)` | `Invoice` | `None` | Called when a draft invoice is deleted, before commit — delete this module's rows that reference the invoice (foreign keys are enforced); raising aborts the delete |
 | `get_invoice_templates()` | — | `list[dict]` | Invoice PDF templates provided by this module |
+| `get_invoice_blocks()` | — | `list[dict]` | Blocks the invoice designer places in its layouts — see [Invoice layout blocks](#invoice-layout-blocks) |
 | `get_tax_obligations(context)` | `dict` | `dict` or `None` | Tax obligation data for dashboard |
 | `get_capabilities()` | — | `list[dict]` | What other modules may call: each `{'type': str, 'action': callable, ...}`; invalid entries are skipped and logged |
 | `get_settings_html(settings)` | `Settings` | `str` or `None` | HTML to inject into settings tab |
@@ -822,6 +823,38 @@ def generate_invoice_pdf(invoice, customer, settings, Bank):
 ```
 
 The core detects the signature via `inspect.signature` and passes `Bank` only if the parameter exists.
+
+### Invoice layout blocks
+
+A module that needs something on every invoice (a tax QR, a legal notice) does
+not need its own template: it declares a **block**, and the invoice designer
+places it in its layouts. The designer lists the blocks of all enabled modules
+under *Blocks from modules*, offers only the slots the module allows, and calls
+the module to draw the block when it builds a PDF.
+
+```python
+def get_invoice_blocks(self):
+    return [{
+        'id': 'verifactu_qr',                 # unique; stored in the template config
+        'label': 'Verifactu QR',
+        'help': 'AEAT rules: top of page 1, centred or towards the left, 30–40 mm.',
+        'required': True,                     # False = suggested (the user may hide it)
+        'slots': ['top-center', 'top-left'],  # allowed designer slots
+        'default_slot': 'top-center',         # suggested slot (★ in the form)
+        'options': [{'id': 'size_mm', 'label': 'Size', 'default': 30,
+                     'choices': [[30, '30 × 30 mm'], [35, '35 × 35 mm'], [40, '40 × 40 mm']]}],
+        'render': self._render_qr_block,      # (invoice, ctx) -> list of ReportLab flowables
+    }]
+```
+
+`ctx` gives `slot`, `align` (`left`, `center` or `right`), `options` (the chosen
+values), `font`, `font_bold` and `preview` (True in the designer preview, where
+`invoice` is sample data). Return `[]` to draw nothing (e.g. a draft). A block
+that is never placed in a template, or placed where it is not allowed, goes to
+its `default_slot`; a required block cannot be hidden. An exception in `render`
+is logged and the block is left out. Templates that are not designer templates
+do not show blocks; a module that must reach every PDF also uses
+`filter_invoice_pdf` (Verifactu does, and skips PDFs that already show its QR).
 
 ---
 

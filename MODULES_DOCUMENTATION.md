@@ -512,13 +512,17 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
 - Nav: Invoice Designer (grouped under Invoices dropdown)
 - Features:
   - Grid-based layout: 5 zones (top, header, body, bottom, footer) × 3 columns (left, center, right)
-  - Placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, due_date, bank_details, notes, payment_terms, verifactu_qr
-  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`) — except the
-    **Verifactu QR** block, limited to what the AEAT QR specification allows: *top-centre*
-    (recommended), *top-left*, or *automatic band* (not in the layout; the Verifactu module adds
-    a centred band). Size 30, 35 or 40 mm (`verifactu_qr_size_mm`). It shows only on issued
-    invoices; the designer preview uses a sample QR. Invalid positions or sizes in saved or
-    imported JSON are corrected on save (`sanitize_qr_config`) and when rendering
+  - Placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, due_date, bank_details, notes, payment_terms
+  - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`)
+  - **Blocks from modules**: enabled modules add blocks through `get_invoice_blocks()` (today the
+    Verifactu tax QR). Each is *required* (cannot be hidden) or *suggested* (can be hidden), and
+    the module lists the slots it may use and its suggested slot (★ in the form), plus options
+    (e.g. QR size). The form offers only those slots; positions go to `block_positions`,
+    options to `block_options`. A block never placed in a template, or placed where it is not
+    allowed (old or imported JSON), goes to its suggested slot (`sanitize_module_blocks`, on
+    save and when rendering). Saving keeps the entries of blocks whose module is disabled.
+    The module renders the block; the designer preview passes `preview=True` so it can show
+    sample content (the Verifactu QR shows only on issued invoices)
   - Fine-tune X/Y offsets per block in points
   - 6 layout presets (Standard, Classic Right, Modern Center, Minimal Left, Compact Header, Bottom Bank)
   - Configurable: accent/text/header/page background colors, font, title size, layout style
@@ -828,6 +832,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
 | `on_invoice_deleted(invoice)` | Called when a draft invoice is deleted, before commit. Delete the module's rows that reference the invoice; raising aborts. |
 | `get_invoice_templates()` | Invoice PDF templates provided by this module |
+| `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render) |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |

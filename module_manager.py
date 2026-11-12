@@ -445,6 +445,32 @@ class BaseModule(ABC):
         """
         return []
 
+    def get_invoice_blocks(self):
+        """
+        Return blocks this module adds to invoice layouts built with the invoice
+        designer (for example the Verifactu tax QR). The designer lists them,
+        lets the user place them within the allowed positions, and renders them
+        when it builds an invoice PDF.
+
+        Returns:
+            list[dict]: each dict has:
+                - 'id': unique block id (str), stored in the template config
+                - 'label': name shown in the designer
+                - 'help': optional rules shown under the block (str)
+                - 'required': True = must be on the invoice (cannot be hidden);
+                  False = suggested (shown by default, can be hidden)
+                - 'slots': allowed positions, e.g. ['top-center', 'top-left']
+                - 'default_slot': the suggested position (one of 'slots')
+                - 'options': optional list of choices, each
+                  {'id', 'label', 'choices': [[value, text], ...], 'default'}
+                - 'render': callable(invoice, ctx) -> list of ReportLab
+                  flowables ([] to show nothing, e.g. for a draft). ctx has
+                  'slot', 'align' ('left'|'center'|'right'), 'options' (the
+                  chosen values), 'font', 'font_bold' and 'preview' (True in
+                  the designer preview, where `invoice` is sample data).
+        """
+        return []
+
     def get_field_labels(self):
         """
         Override UI labels for core fields.
@@ -2456,6 +2482,33 @@ class ModuleManager:
         it. Blocking: an error propagates and the delete is rolled back."""
         for mod in self.modules.values():
             mod.on_invoice_deleted(invoice)
+
+    def get_invoice_blocks(self):
+        """Collect the invoice layout blocks of all active modules (see
+        BaseModule.get_invoice_blocks). Each block gets 'module_id'. A module
+        whose hook fails, a block without an id or a render callable, and a
+        repeated id are left out (logged)."""
+        blocks, seen = [], set()
+        for mod in self.modules.values():
+            try:
+                provided = mod.get_invoice_blocks() or []
+            except Exception as e:
+                logger.error("Module '%s' get_invoice_blocks error: %s",
+                             _sanitize_log(mod.module_id), e)
+                continue
+            for block in provided:
+                bid = block.get('id') if isinstance(block, dict) else None
+                if not isinstance(bid, str) or not bid or not callable(block.get('render')):
+                    logger.error("Module '%s' returned an invalid invoice block",
+                                 _sanitize_log(mod.module_id))
+                    continue
+                if bid in seen:
+                    logger.error("Module '%s' invoice block '%s' is already defined",
+                                 _sanitize_log(mod.module_id), _sanitize_log(bid))
+                    continue
+                seen.add(bid)
+                blocks.append(dict(block, module_id=mod.module_id))
+        return blocks
 
     def get_invoice_templates(self):
         """Collect invoice PDF templates from core + all active modules.

@@ -14,6 +14,11 @@ Layout grid:
 Each block (logo, title, sender_info, recipient_info, invoice_meta,
 bank_details, notes, payment_terms, custom_text) can be assigned to
 a slot like "top-left", "header-right", "bottom-center", etc.
+
+Other modules add their own blocks through BaseModule.get_invoice_blocks()
+(for example the Verifactu tax QR). Each says whether it is required or
+suggested, which slots it may use and its default slot; the designer offers
+only those slots and the generator renders the block in the chosen one.
 """
 
 from module_manager import BaseModule
@@ -32,19 +37,7 @@ logger = logging.getLogger(__name__)
 BLOCK_IDS = [
     'logo', 'title', 'sender_info', 'recipient_info',
     'invoice_meta', 'due_date', 'bank_details', 'notes', 'payment_terms',
-    'verifactu_qr',
 ]
-
-# The AEAT QR specification (v0.5.0, section 3) puts the tax QR at the top of
-# page 1, preferably centred, otherwise towards the top-left. 'hidden' leaves
-# it out of the layout; the Verifactu module then adds it as a centred band.
-QR_SLOT_CHOICES = ['top-center', 'top-left', 'hidden']
-QR_SLOT_LABELS = {
-    'top-center': 'Top, centred (recommended)',
-    'top-left': 'Top, left',
-    'hidden': 'Automatic band above the invoice',
-}
-QR_SIZE_CHOICES = [30, 35, 40]   # mm, spec range 30-40 mm
 
 # Valid slot positions
 SLOT_CHOICES = [
@@ -70,7 +63,6 @@ DEFAULT_CONFIG = {
     'show_accent_line': True,
     'show_separator_lines': False,
     'show_vertical_lines': False,
-    'verifactu_qr_size_mm': 30,      # Verifactu QR block size (30-40 mm)
     'block_gaps': {},                # per-block gap override: {block_id: pt}
     'block_label_widths': {},        # per-block label column width override: {block_id: pt}
     'block_styles': {},              # per-block: {block_id: {color: '#hex', bg: '#hex', show_label: true}}
@@ -103,8 +95,9 @@ DEFAULT_CONFIG = {
         'bank_details':   'bottom-left',
         'notes':          'bottom-right',
         'payment_terms':  'bottom-center',
-        'verifactu_qr':   'top-center',
     },
+    # Options of blocks provided by other modules: {block_id: {option_id: value}}
+    'block_options': {},
     # Fine-tune offsets in points (pt): {block_id: {x: 0, y: 0}}
     'block_offsets': {},
     # Zone column widths in pt: {zone_name: [left, right] or [left, center, right]}
@@ -309,28 +302,33 @@ class InvoiceDesignerModule(BaseModule):
     def _create_template(self):
         if request.method == 'POST':
             return self._save_template(None)
-        config = _deep_copy_config(DEFAULT_CONFIG)
+        blocks = self._module_blocks()
+        config = sanitize_module_blocks(_deep_copy_config(DEFAULT_CONFIG), blocks)
         return render_template('designer_form.html', template=None,
                                config=config, config_json=json.dumps(config, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
-                               qr_slot_choices=QR_SLOT_CHOICES, qr_slot_labels=QR_SLOT_LABELS,
-                               qr_size_choices=QR_SIZE_CHOICES,
+                               module_blocks=blocks,
                                layout_presets=LAYOUT_PRESETS)
 
     def _edit_template(self, id):
         tpl = db_get_or_404(self.InvoiceTemplate, id)
         if request.method == 'POST':
             return self._save_template(tpl)
-        config = json.loads(tpl.config_json)
-        merged = _merge_config(config)
+        blocks = self._module_blocks()
+        merged = sanitize_module_blocks(_merge_config(json.loads(tpl.config_json)), blocks)
         return render_template('designer_form.html', template=tpl,
                                config=merged, config_json=json.dumps(merged, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
-                               qr_slot_choices=QR_SLOT_CHOICES, qr_slot_labels=QR_SLOT_LABELS,
-                               qr_size_choices=QR_SIZE_CHOICES,
+                               module_blocks=blocks,
                                layout_presets=LAYOUT_PRESETS)
 
+    def _module_blocks(self):
+        """Invoice blocks offered by the enabled modules (normalized)."""
+        manager = self.core.module_manager
+        return normalize_blocks(manager.get_invoice_blocks() if manager else [])
+
     def _save_template(self, tpl):
+        blocks = self._module_blocks()
         try:
             name = request.form.get('name', '').strip()
             if not name:
@@ -355,7 +353,7 @@ class InvoiceDesignerModule(BaseModule):
                     old_config = json.loads(tpl.config_json)
                     if old_config.get('logo_path') and 'logo_path' not in config:
                         config['logo_path'] = old_config['logo_path']
-                config_json = json.dumps(sanitize_qr_config(config))
+                config_json = json.dumps(sanitize_module_blocks(config, blocks))
             else:
                 config = {
                     'accent_color': request.form.get('accent_color', '#5B6FD8'),
@@ -370,10 +368,10 @@ class InvoiceDesignerModule(BaseModule):
                     'show_accent_line': 'show_accent_line' in request.form,
                     'show_separator_lines': 'show_separator_lines' in request.form,
                     'show_vertical_lines': 'show_vertical_lines' in request.form,
-                    'verifactu_qr_size_mm': request.form.get('verifactu_qr_size_mm', 30),
                     'labels': {},
                     'block_positions': {},
                     'block_offsets': {},
+                    'block_options': {},
                 }
 
                 for key in DEFAULT_CONFIG['labels']:
@@ -393,6 +391,21 @@ class InvoiceDesignerModule(BaseModule):
                             'x': float(ox) if ox else 0,
                             'y': float(oy) if oy else 0,
                         }
+
+                # Blocks of other modules: position and options
+                for block in blocks:
+                    pos = request.form.get(f'pos_{block["id"]}', '').strip()
+                    if pos:
+                        config['block_positions'][block['id']] = pos
+                    config['block_options'][block['id']] = {
+                        opt['id']: request.form.get(f'opt_{block["id"]}_{opt["id"]}')
+                        for opt in block['options']}
+                if tpl:
+                    # Keep what was saved for blocks of modules that are disabled now.
+                    old_config = json.loads(tpl.config_json)
+                    for key in ('block_positions', 'block_options'):
+                        for bid, value in (old_config.get(key) or {}).items():
+                            config[key].setdefault(bid, value)
 
                 # Parse zone column widths
                 config['zone_columns'] = {}
@@ -465,7 +478,7 @@ class InvoiceDesignerModule(BaseModule):
                     if old_config.get('logo_path'):
                         config['logo_path'] = old_config['logo_path']
 
-                config_json = json.dumps(sanitize_qr_config(config))
+                config_json = json.dumps(sanitize_module_blocks(config, blocks))
 
             if tpl:
                 tpl.name = name
@@ -507,11 +520,7 @@ class InvoiceDesignerModule(BaseModule):
 
     def _preview_template(self, id):
         tpl = db_get_or_404(self.InvoiceTemplate, id)
-        config = json.loads(tpl.config_json)
-        merged = _merge_config(config)
-        if 'verifactu_qr' not in config.get('block_positions', {}):
-            # Saved before the QR block existed: real PDFs use the automatic band.
-            merged['block_positions']['verifactu_qr'] = 'hidden'
+        merged = _merge_config(json.loads(tpl.config_json))
 
         settings = self.core.get_settings()
 
@@ -552,7 +561,8 @@ class InvoiceDesignerModule(BaseModule):
             settings=settings,
             config=merged,
             storage=self.core.storage,
-            qr=_sample_qr(),
+            blocks=self._module_blocks(),
+            preview=True,
         )
         return Response(pdf_bytes, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
@@ -596,24 +606,70 @@ class InvoiceDesignerModule(BaseModule):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _sample_qr():
-    """A QR for the designer preview (AEAT test host, made-up invoice), so the
-    chosen position and size are visible before any invoice is issued."""
-    from modules.verifactu.aeat import qr_url
-    return {'url': qr_url('00000000T', '2026-DEMO', date.today(), 1210.00,
-                          environment='test'), 'phrase': None}
+def normalize_blocks(blocks):
+    """Module blocks (from ModuleManager.get_invoice_blocks) in the shape the
+    designer uses. Slots outside the grid are dropped; a suggested block may
+    also be 'hidden', a required one may not. A block whose id clashes with a
+    built-in block, or that has no usable slot, is left out."""
+    result = []
+    for block in blocks or []:
+        bid = block.get('id')
+        if bid in BLOCK_IDS:
+            logger.warning('Invoice block %r clashes with a built-in block; ignored', bid)
+            continue
+        required = bool(block.get('required'))
+        slots = [s for s in block.get('slots') or [] if s in SLOT_CHOICES and s != 'hidden']
+        if not slots:
+            logger.warning('Invoice block %r has no valid slot; ignored', bid)
+            continue
+        default = block.get('default_slot')
+        if default not in slots:
+            default = slots[0]
+        options = []
+        for opt in block.get('options') or []:
+            choices = [list(c) if isinstance(c, (list, tuple)) else [c, str(c)]
+                       for c in opt.get('choices') or []]
+            if not opt.get('id') or not choices:
+                continue
+            values = [c[0] for c in choices]
+            options.append({'id': opt['id'], 'label': opt.get('label') or opt['id'],
+                            'choices': choices,
+                            'default': opt.get('default') if opt.get('default') in values
+                            else values[0]})
+        result.append({
+            'id': bid,
+            'label': block.get('label') or bid,
+            'help': block.get('help') or '',
+            'required': required,
+            'module_id': block.get('module_id'),
+            'slots': slots if required else slots + ['hidden'],
+            'default_slot': default,
+            'options': options,
+            'render': block['render'],
+        })
+    return result
 
 
-def sanitize_qr_config(config):
-    """Keep the Verifactu QR block in an AEAT-compliant place and size."""
+def _option_value(opt, raw):
+    """`raw` as one of the option's choice values (compared as text), or the default."""
+    for value, _text in opt['choices']:
+        if raw is not None and str(raw) == str(value):
+            return value
+    return opt['default']
+
+
+def sanitize_module_blocks(config, blocks):
+    """Put each module block (normalized) in an allowed slot - its default
+    slot when none or another one is set - and keep only valid option values.
+    Entries of blocks not in `blocks` (module disabled) are left as they are."""
     positions = config.setdefault('block_positions', {})
-    if positions.get('verifactu_qr') not in QR_SLOT_CHOICES:
-        positions['verifactu_qr'] = DEFAULT_CONFIG['block_positions']['verifactu_qr']
-    try:
-        size = int(config.get('verifactu_qr_size_mm', 30))
-    except (TypeError, ValueError):
-        size = 30
-    config['verifactu_qr_size_mm'] = max(30, min(40, size))
+    options = config.setdefault('block_options', {})
+    for block in blocks:
+        if positions.get(block['id']) not in block['slots']:
+            positions[block['id']] = block['default_slot']
+        chosen = options.get(block['id']) or {}
+        options[block['id']] = {opt['id']: _option_value(opt, chosen.get(opt['id']))
+                                for opt in block['options']}
     return config
 
 
@@ -645,6 +701,8 @@ def _merge_config(user_cfg):
         elif k == 'block_styles':
             merged['block_styles'] = dict(DEFAULT_CONFIG.get('block_styles', {}))
             merged['block_styles'].update(v)
+        elif k == 'block_options':
+            merged['block_options'] = dict(v or {})
         else:
             merged[k] = v
     return merged
@@ -702,15 +760,18 @@ def _demo_customer():
 # Universal PDF generator from config — grid-based layout
 # ---------------------------------------------------------------------------
 
-def generate_pdf_from_config(invoice, customer, settings, config, storage=None, qr=None):
+def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
+                             blocks=None, preview=False):
     """
     Generate invoice PDF bytes from a config dict.
 
     Layout zones (top → footer), each with left | center | right slots.
     Blocks are placed according to config['block_positions'].
 
-    `qr` is the Verifactu QR of an issued invoice ({'url', 'phrase'}, from
-    the Verifactu module) or None; the 'verifactu_qr' block shows it.
+    `blocks` are the invoice blocks of the enabled modules
+    (ModuleManager.get_invoice_blocks); each is rendered by its module in the
+    slot the template chose, or in its default slot. `preview` tells them the
+    invoice is sample data (designer preview).
     """
     import io as _io
     from reportlab.lib.pagesizes import letter
@@ -740,9 +801,14 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None, 
     show_sep = c.get('show_separator_lines', False)
     show_vert = c.get('show_vertical_lines', False)
 
-    positions = dict(c.get('block_positions', DEFAULT_CONFIG['block_positions']))
-    if positions.get('verifactu_qr', 'hidden') not in QR_SLOT_CHOICES:
-        positions['verifactu_qr'] = DEFAULT_CONFIG['block_positions']['verifactu_qr']
+    module_blocks = {b['id']: b for b in normalize_blocks(blocks)}
+    placed = sanitize_module_blocks(
+        {'block_positions': dict(c.get('block_positions', DEFAULT_CONFIG['block_positions'])),
+         'block_options': dict(c.get('block_options') or {})},
+        module_blocks.values())
+    positions = placed['block_positions']
+    block_options = placed['block_options']
+    all_block_ids = BLOCK_IDS + list(module_blocks)
     offsets = c.get('block_offsets', {})
     _block_label_widths = c.get('block_label_widths', {})
 
@@ -848,21 +914,18 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None, 
                 pass
             return []
 
-        if block_id == 'verifactu_qr':
-            if not qr:
-                return []   # drafts have no Verifactu record, hence no QR
-            from modules.verifactu.aeat import QR_LABEL
-            from modules.verifactu.pdf_qr import clamp_size_mm, qr_drawing
-            align = 1 if slot == 'top-center' else 0
-            s_qr = ParagraphStyle('dqr', fontSize=9, fontName=font_b, textColor=colors.black,
-                                  alignment=align, leading=11)
-            drawing = qr_drawing(qr['url'], clamp_size_mm(c.get('verifactu_qr_size_mm', 30)))
-            drawing.hAlign = 'CENTER' if align == 1 else 'LEFT'
-            quiet = 2.5 * 72 / 25.4   # spec: at least 2 mm blank around the QR
-            flows = [Paragraph(QR_LABEL, s_qr), Spacer(1, quiet), drawing, Spacer(1, quiet)]
-            if qr.get('phrase'):
-                flows.append(Paragraph(qr['phrase'], s_qr))
-            return flows
+        if block_id in module_blocks:
+            block = module_blocks[block_id]
+            ctx = {'slot': slot,
+                   'align': slot.split('-', 1)[1] if '-' in slot else 'left',
+                   'options': block_options.get(block_id, {}),
+                   'font': font, 'font_bold': font_b, 'preview': preview}
+            try:
+                return list(block['render'](invoice, ctx) or [])
+            except Exception:
+                logger.exception('Invoice block %r of module %r failed to render',
+                                 block_id, block.get('module_id'))
+                return []
 
         if block_id == 'title':
             lw = _block_label_widths.get('title', 0)
@@ -975,7 +1038,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None, 
     def _render_zone(zone_name):
         """Render a zone as a single Table. Returns True if anything was rendered."""
         col_bids = {0: [], 1: [], 2: []}
-        for bid in BLOCK_IDS:
+        for bid in all_block_ids:
             slot = positions.get(bid, 'hidden')
             if slot == 'hidden' or not slot.startswith(zone_name):
                 continue
@@ -1213,7 +1276,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None, 
     # Check if any block is placed in subtotal zone
     sub_left_bids = []
     sub_right_bids = []
-    for bid in BLOCK_IDS:
+    for bid in all_block_ids:
         slot = positions.get(bid, 'hidden')
         if slot == 'subtotal-left':
             sub_left_bids.append(bid)

@@ -1490,7 +1490,7 @@ def create_invoice():
                             merged['labels'].update(cfg['labels'])
                         pdf_content = generate_pdf_from_config(
                             invoice, cust, app_settings_obj, merged,
-                            storage=module_manager.core.storage, qr=_invoice_qr(invoice))
+                            storage=module_manager.core.storage, blocks=_invoice_blocks())
                     else:
                         designer_id = None  # fall through
 
@@ -1806,13 +1806,10 @@ def delete_invoice(id):
 
 
 
-def _invoice_qr(invoice):
-    """Verifactu QR content for an issued invoice (None for drafts or when
-    the Verifactu module is not enabled) — for templates that place it."""
-    verifactu = module_manager.provider_of('verifactu') if module_manager else None
-    if verifactu is None or not hasattr(verifactu, 'qr_for_invoice'):
-        return None
-    return verifactu.qr_for_invoice(invoice)
+def _invoice_blocks():
+    """Invoice layout blocks of the enabled modules (e.g. the Verifactu QR),
+    for designer templates to place."""
+    return module_manager.get_invoice_blocks() if module_manager else []
 
 
 def _filter_invoice_pdf(invoice, pdf_bytes):
@@ -1893,7 +1890,7 @@ def generate_pdf(id):
             pdf_content = generate_pdf_from_config(
                 invoice, customer, app_settings, merged,
                 storage=module_manager.core.storage if module_manager else None,
-                qr=_invoice_qr(invoice))
+                blocks=_invoice_blocks())
             pdf_content = _filter_invoice_pdf(invoice, pdf_content)
             pdf_hash = hashlib.sha256(pdf_content).hexdigest()
             if storage:
@@ -2021,7 +2018,7 @@ def preview_invoice_pdf(id):
                 pdf_content = generate_pdf_from_config(
                     invoice, customer, app_settings, merged,
                     storage=module_manager.core.storage if module_manager else None,
-                    qr=_invoice_qr(invoice))
+                    blocks=_invoice_blocks())
                 pdf_content = _filter_invoice_pdf(invoice, pdf_content)
                 return Response(pdf_content, mimetype='application/pdf',
                                 headers={'Content-Disposition': 'inline'})

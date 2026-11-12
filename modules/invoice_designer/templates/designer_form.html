@@ -123,7 +123,6 @@
                 'bank_details': '🏦 Bank Details',
                 'notes': '📝 Notes',
                 'payment_terms': '💳 Payment Terms',
-                'verifactu_qr': '🧾 Verifactu QR',
             } %}
 
             {% for bid in block_ids %}
@@ -131,15 +130,9 @@
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: nowrap;">
                 <label style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">{{ block_labels.get(bid, bid) }}</label>
                 <select name="pos_{{ bid }}" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
-                    {% if bid == 'verifactu_qr' %}
-                    {% for slot in qr_slot_choices %}
-                    <option value="{{ slot }}" {% if config.block_positions.get(bid) == slot %}selected{% endif %}>{{ qr_slot_labels[slot] }}</option>
-                    {% endfor %}
-                    {% else %}
                     {% for slot in slot_choices %}
                     <option value="{{ slot }}" {% if config.block_positions.get(bid) == slot %}selected{% endif %}>{{ slot }}</option>
                     {% endfor %}
-                    {% endif %}
                 </select>
                 <input type="number" name="block_lw_{{ bid }}" min="0" max="300" step="1" placeholder="X"
                        value="{{ (config.block_label_widths or {})[bid] if config.block_label_widths and bid in config.block_label_widths else '' }}"
@@ -163,20 +156,41 @@
                 </label>
             </div>
             {% endfor %}
-            <!-- Verifactu QR size + rules -->
-            <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap;">
-                <label for="verifactu_qr_size_mm" style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">🧾 QR size</label>
-                <select name="verifactu_qr_size_mm" id="verifactu_qr_size_mm" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
-                    {% for size in qr_size_choices %}
-                    <option value="{{ size }}" {% if (config.verifactu_qr_size_mm or 30)|int == size %}selected{% endif %}>{{ size }} × {{ size }} mm</option>
-                    {% endfor %}
-                </select>
-                <small style="font-size: 11px; color: var(--color-text-muted); flex: 1 1 260px;">
-                    AEAT rules: the tax QR goes at the top of page 1, centred or towards the left,
-                    30–40 mm, with “QR tributario:” above it. Shown only on issued invoices; the
-                    preview uses a sample QR.
-                </small>
+            {% if module_blocks %}
+            <!-- Blocks provided by enabled modules -->
+            <div style="border-top: 1px solid var(--color-surface-3); padding-top: 6px; margin-bottom: 6px;">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">🧩 Blocks from modules</div>
+                <p style="font-size: 12px; color: var(--color-text-faint); margin: 0 0 6px;">
+                    Enabled modules add these blocks. Only the positions a module allows are offered;
+                    ★ marks its suggested position. Required blocks cannot be hidden.
+                </p>
+                {% for block in module_blocks %}
+                {% set chosen = (config.block_options or {}).get(block.id, {}) %}
+                <div class="module-block" data-block-id="{{ block.id }}" style="margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <label for="pos_{{ block.id }}" style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">{{ block.label }}</label>
+                        <select name="pos_{{ block.id }}" id="pos_{{ block.id }}" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
+                            {% for slot in block.slots %}
+                            <option value="{{ slot }}" {% if config.block_positions.get(block.id) == slot %}selected{% endif %}>{{ slot }}{% if slot == block.default_slot %} ★{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        {% for opt in block.options %}
+                        <select name="opt_{{ block.id }}_{{ opt.id }}" class="form-control" title="{{ opt.label }}" aria-label="{{ block.label }}: {{ opt.label }}" style="font-size: 13px; padding: 3px 5px; width: auto; flex-shrink: 0;">
+                            {% for value, text in opt.choices %}
+                            <option value="{{ value }}" {% if chosen.get(opt.id, opt.default)|string == value|string %}selected{% endif %}>{{ text }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endfor %}
+                        <span style="font-size: 11px; padding: 1px 6px; border-radius: 8px; flex-shrink: 0;
+                                     background: var(--color-surface-3); color: var(--color-text-muted);">{{ 'Required' if block.required else 'Suggested' }}</span>
+                    </div>
+                    {% if block.help %}
+                    <small style="display: block; font-size: 11px; color: var(--color-text-muted); margin: 2px 0 0 136px;">{{ block.help }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
             </div>
+            {% endif %}
             <!-- Totals style -->
             {% set tbs = (config.block_styles or {})['totals'] if config.block_styles and 'totals' in config.block_styles else {} %}
             <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: nowrap; border-top: 1px solid var(--color-surface-3); padding-top: 6px;">
@@ -321,7 +335,9 @@
         recipient_info: '👤 Recipient', invoice_meta: '🔢 Meta',
         due_date: '📅 Due', bank_details: '🏦 Bank', notes: '📝 Notes', payment_terms: '💳 Pay'
     };
-    var blockIds = {{ block_ids | tojson }};
+    var moduleBlockIds = {{ module_blocks | map(attribute='id') | list | tojson }};
+    {% for block in module_blocks %}blockLabels[{{ block.id | tojson }}] = {{ block.label | tojson }};
+    {% endfor %}var blockIds = {{ block_ids | tojson }}.concat(moduleBlockIds);
 
     /* Update the zone map preview */
     function updateZoneMap() {
@@ -371,10 +387,10 @@
             show_accent_line: f.show_accent_line.checked,
             show_separator_lines: f.show_separator_lines.checked,
             show_vertical_lines: f.show_vertical_lines ? f.show_vertical_lines.checked : false,
-            verifactu_qr_size_mm: f.verifactu_qr_size_mm ? (parseInt(f.verifactu_qr_size_mm.value) || 30) : 30,
             labels: {},
             block_positions: {},
             block_offsets: {},
+            block_options: {},
             zone_columns: {},
             block_gaps: {},
             block_label_widths: {},
@@ -402,6 +418,15 @@
             if (bsBg && bsBg.value && bsBg.value !== '#ffffff' && bsBg.value !== '#FFFFFF') bs.bg = bsBg.value;
             bs.show_label = bsLabel ? bsLabel.checked : true;
             if (bs.color || bs.bg || !bs.show_label) cfg.block_styles[bid] = bs;
+        });
+        // Options of module blocks
+        moduleBlockIds.forEach(function(bid){
+            var prefix = 'opt_' + bid + '_';
+            var opts = {};
+            f.querySelectorAll('select[name^="' + prefix + '"]').forEach(function(sel){
+                opts[sel.name.slice(prefix.length)] = sel.value;
+            });
+            cfg.block_options[bid] = opts;
         });
         // Totals styles
         var tColor = f.querySelector('input[name="bs_color_totals"]');
@@ -439,7 +464,6 @@
         }
         if (cfg.font) f.font.value = cfg.font;
         if (cfg.title_font_size) f.title_font_size.value = cfg.title_font_size;
-        if (cfg.verifactu_qr_size_mm && f.verifactu_qr_size_mm) f.verifactu_qr_size_mm.value = cfg.verifactu_qr_size_mm;
         if (cfg.layout) f.layout.value = cfg.layout;
         ['show_logo','show_vat_breakdown','show_accent_line','show_separator_lines','show_vertical_lines'].forEach(function(k){
             if (f[k]) f[k].checked = !!cfg[k];
@@ -452,6 +476,15 @@
             blockIds.forEach(function(bid){
                 var sel = f.querySelector('select[name="pos_' + bid + '"]');
                 if (sel && cfg.block_positions[bid]) sel.value = cfg.block_positions[bid];
+            });
+        }
+        if (cfg.block_options) {
+            moduleBlockIds.forEach(function(bid){
+                var opts = cfg.block_options[bid] || {};
+                Object.keys(opts).forEach(function(key){
+                    var sel = f.querySelector('select[name="opt_' + bid + '_' + key + '"]');
+                    if (sel) sel.value = String(opts[key]);
+                });
             });
         }
         if (cfg.block_offsets) {
