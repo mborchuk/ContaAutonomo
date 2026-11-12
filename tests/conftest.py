@@ -7,6 +7,8 @@ import os
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('FLASK_DEBUG', '1')
+# Fixed Verifactu key so tests never create instance/verifactu.key in the checkout.
+os.environ.setdefault('VERIFACTU_KEY', 'test-verifactu-key')
 
 import pytest
 

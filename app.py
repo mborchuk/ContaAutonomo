@@ -95,6 +95,10 @@ app.config['INIT_LOCK_PATH'] = os.path.join(
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
+# Verifactu signing key file, used when VERIFACTU_KEY is not set. Separate
+# from SECRET_KEY so rotating the session key never breaks the record chain.
+app.config['VERIFACTU_KEY_FILE'] = os.environ.get(
+    'VERIFACTU_KEY_FILE', os.path.join(app.instance_path, 'verifactu.key'))
 
 from constants import (
     INITIAL_INVOICE_STATUS,
