@@ -1050,10 +1050,29 @@ def index():
 
 LOCKED_INVOICE_STATUSES = ('issued', 'paid')
 
+# The only status an invoice can be created with. Every later status is reached
+# through a lifecycle action (issue, mark paid, annul), never set directly.
+INITIAL_INVOICE_STATUS = 'draft'
+
 
 def _invoice_locked(invoice):
-    """F2 — issued/paid invoices are read-only (change via rectificative)."""
-    return invoice is not None and invoice.status in LOCKED_INVOICE_STATUSES
+    """F2 — issued/paid invoices are read-only (change via rectificative).
+
+    An annulled invoice (cancelled after being issued) is kept for audit and is
+    read-only too. Legacy invoices cancelled before the lifecycle existed have
+    no `issued_at` and stay editable, as before.
+    """
+    if invoice is None:
+        return False
+    if invoice.status in LOCKED_INVOICE_STATUSES:
+        return True
+    return invoice.status == 'cancelled' and invoice.issued_at is not None
+
+
+def _is_legacy_settled(invoice):
+    """Paid or cancelled without ever being issued through the app: it has no
+    sequential number, fiscal snapshot or Verifactu record."""
+    return invoice.status in ('paid', 'cancelled') and invoice.issued_at is None
 
 
 def _next_sequence_for_series(series):
@@ -1271,9 +1290,13 @@ def create_invoice():
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — new invoices start as DRAFT (freely editable) unless the form
-            # explicitly sets a status. Issuing is a separate, one-way action.
-            status = request.form.get('status') or 'draft'
+            # F2 — new invoices always start as DRAFT. Issue, Mark paid and
+            # Annul are the only ways to change the status afterwards.
+            status = request.form.get('status') or INITIAL_INVOICE_STATUS
+            if status != INITIAL_INVOICE_STATUS:
+                flash('New invoices are created as drafts. Issue the invoice, '
+                      'then use Mark paid or Annul to change its status.', 'danger')
+                return redirect(url_for('create_invoice'))
             notes = request.form.get('notes', '')
             bank_id = request.form.get('bank_id')
 
@@ -1550,11 +1573,13 @@ def edit_invoice(id):
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — issuing must go through the Issue action (assigns series,
-            # sequence and the fiscal snapshot). Ignore a direct 'issued' here.
-            _new_status = request.form['status']
-            if _new_status != 'issued':
-                invoice.status = _new_status
+            # F2 — the status never changes through the edit form: issuing,
+            # payment and annulment are lifecycle actions on the invoice view.
+            posted_status = request.form.get('status')
+            if posted_status is not None and posted_status != invoice.status:
+                flash('The status cannot be changed here. Use Issue, Mark paid '
+                      'or Annul on the invoice page.', 'danger')
+                return redirect(url_for('edit_invoice', id=id))
             invoice.notes = request.form.get('notes', '')
             invoice.payment_method = request.form.get('payment_method', 'Bank Transfer')
             bank_id = request.form.get('bank_id')
@@ -1724,7 +1749,9 @@ def view_invoice(id):
 
     customers = Customer.query.order_by(Customer.name).all()
     banks = Bank.query.order_by(Bank.name).all()
-    return render_template('view.html', invoice=invoice, customers=customers, banks=banks, hash_mismatch=hash_mismatch)
+    return render_template('view.html', invoice=invoice, customers=customers, banks=banks,
+                           hash_mismatch=hash_mismatch,
+                           legacy_settled=_is_legacy_settled(invoice))
 
 
 @app.route('/delete/<int:id>', methods=['POST'])
