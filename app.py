@@ -1279,8 +1279,9 @@ def invoice_amounts(total, currency, date_str):
     Raises NoExchangeRate when the currency cannot be converted to EUR.
     """
     if currency in ('EUR', 'USD'):
-        import currency_converter  # module lookup: tests can stub the rate
-        exchange_rate, _ = currency_converter.get_exchange_rate(date_str)
+        # Looked up at call time (not the module-level name) so tests can stub it.
+        from currency_converter import get_exchange_rate as current_rate
+        exchange_rate, _ = current_rate(date_str)
         if currency == 'EUR':
             return total * exchange_rate, total, exchange_rate
         return total, convert_usd_to_eur(total, exchange_rate), exchange_rate
