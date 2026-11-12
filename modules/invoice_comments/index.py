@@ -45,6 +45,9 @@ class InvoiceCommentsModule(BaseModule):
         self.InvoiceComment = InvoiceComment
         return {'InvoiceComment': InvoiceComment}
 
+    def on_invoice_deleted(self, invoice):
+        self.InvoiceComment.query.filter_by(invoice_id=invoice.id).delete()
+
     def register_routes(self, app):
         bp = Blueprint('invoice_comments', __name__, url_prefix='/invoice-comments')
         login_required = self.core.login_required
