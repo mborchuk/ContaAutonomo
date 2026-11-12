@@ -570,14 +570,17 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
   idempotent across restarts; delivers through the `notify` capability
   (e.g. email when `invoice_email` is enabled) and always writes the activity log
 
-### Modelo 303/130 Drafts (`tax_es_forms`)
+### Modelo 303/130/349/390 Drafts (`tax_es_forms`)
 
 Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
 fraccionado), computed from data already in the app. Estimate only — every page
 carries a non-dismissible "not tax advice" banner.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
-  `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF
+  `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
+  `/tax-forms-draft/390/<year>` — Modelo 390 annual summary, each casilla the
+  sum of the four quarterly 303 drafts (casillas per the AEAT 2025
+  instructions; out-of-scope items listed on the page)
 - Engine (`calculator.py`, pure functions): IVA repercutido prefers the frozen
   fiscal snapshot on issued invoices; IVA soportado uses the expense VAT
   breakdown (`vat_amount` × `deductible_pct`); Modelo 130 is cumulative
@@ -674,8 +677,9 @@ Import bank statements and reconcile movements against invoices and expenses.
   date format, decimal-comma amounts). Bad lines are reported per batch; good
   lines still import.
 - Matching (`matching.py`, pure): ranked suggestions — amount + invoice number
-  in the description scores highest, then amount + close date. Nothing is
-  auto-matched; the user confirms.
+  in the description scores highest, then amount + close date. Debit movements
+  get expense suggestions (amount, date window, contractor name, expense
+  invoice number). Nothing is auto-matched; the user confirms.
 - Confirming a match marks the invoice paid through the **normal core
   transition** (`_mark_invoice_paid`), so lifecycle semantics and logging hold.
 - Routes: `/bank-import/` (upload, unmatched list with suggestions, batch

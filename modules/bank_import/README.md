@@ -46,8 +46,18 @@ Suggestions are ranked, never auto-applied (the user always confirms):
 3. Amount matches only
 
 Only credit movements (money in) are matched against unpaid invoices
-(`issued` or legacy `pending`). Debit movements can be linked to expenses or
-ignored.
+(`issued` or legacy `pending`).
+
+Debit movements (money out) get **expense** suggestions, ranked by:
+
+1. Amount matches (required; the expense amount is converted to the movement
+   currency when they differ)
+2. Expense invoice number in the description (+40)
+3. Contractor name in the description or counterparty (+25)
+4. Expense date within 45 days of the movement (+20, more when closer)
+
+Expenses already linked to a movement are not suggested again. Linking needs
+a confirmation click; a debit movement can also be ignored.
 
 ## Data model
 

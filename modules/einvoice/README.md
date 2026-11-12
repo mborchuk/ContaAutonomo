@@ -9,8 +9,9 @@ frozen at issue and per-line VAT rates.
 
 1. [What Phase 1 provides](#what-phase-1-provides)
 2. [Data readiness](#data-readiness)
-3. [Known gaps](#known-gaps)
-4. [Phase 2 design notes](#phase-2-design-notes)
+3. [XAdES signature](#xades-signature)
+4. [Known gaps](#known-gaps)
+5. [Phase 2 design notes](#phase-2-design-notes)
 
 ## What Phase 1 provides
 
@@ -24,7 +25,8 @@ frozen at issue and per-line VAT rates.
 - Invoice view integration: a **Facturae XML** action on issued/paid invoices
   (`/einvoice/facturae/<id>.xml`) and a readiness panel while data is missing
 - REST API: `GET /api/v1/m/einvoice/facturae/<id>` (returns 409 with the
-  missing-data list when the invoice is not ready)
+  missing-data list when the invoice is not ready; `signed` tells whether the
+  XML carries a signature; `?unsigned=1` returns the unsigned file)
 
 ## Data readiness
 
@@ -38,16 +40,35 @@ The readiness check requires:
 | Customer | VAT/NIF number, address, postal code, town |
 | Invoice | Issued (or paid) status and a fiscal snapshot |
 
+## XAdES signature
+
+When the **PDF Signature** module is enabled and has a PFX/P12 certificate
+(Settings → PDF Signature), the export is signed with an enveloped
+**XAdES-EPES** signature (`xades.py`, library `signxml`):
+
+| Element | Value |
+|---------|-------|
+| Signature policy | `http://www.facturae.es/politica_de_firma_formato_facturae/politica_de_firma_formato_facturae_v3_1.pdf` |
+| Policy hash | SHA-1 `Ohixl6upD6av8N7pEvDABhEL6hM=` |
+| Signer role | `emisor` |
+| Signature | RSA-SHA256, certificate chain in `KeyInfo` |
+
+- The signed file downloads as `facturae_<number>.xsig`. Without a certificate
+  the unsigned `.xml` is served as before; `?unsigned=1` forces it.
+- A wrong certificate password shows an error and serves nothing.
+
+**Validate before real use.** Upload one signed file to the official
+validator — *Validar factura* on [facturae.gob.es](https://www.facturae.gob.es)
+(or the FACe validation service) — and confirm that both the format and the
+signature are accepted. Repeat after changing the certificate.
+
 ## Known gaps
 
-- **XAdES signature**: a legally valid Facturae requires an XAdES enveloped
-  signature. No XAdES library is currently in the dependency set (pyHanko
-  covers PDF/PAdES only), so the output is **unsigned** — a structured draft
-  suitable for platforms that accept unsigned files or sign on upload.
-  Follow-up: add `signxml` and reuse the certificate upload flow from
-  `pdf_signature`.
-- **Validation**: run generated files through the official Facturae XSD and
-  the EU EN 16931 reference validator before real B2B use.
+- **Official validation** of a signed file with a real certificate has not
+  been run from this repository (tests use a throwaway self-signed
+  certificate); do it once as described above.
+- **Validation of content**: run generated files through the official
+  Facturae XSD and the EU EN 16931 reference validator before real B2B use.
 
 ## Phase 2 design notes
 

@@ -227,6 +227,7 @@ certifi==2026.10.23 \
     #   pyhanko-certvalidator
     #   requests
     #   sentry-sdk
+    #   signxml
 cffi==2.1.1 \
     --hash=sha256:046bfc24911b37851ee1b51aab8bffe713d89c68c6a057b09484ce9fd5f69b4e \
     --hash=sha256:06c72bb76605a4b0cd0aad6930b69d4baf7dd5d806cfc409b824191099700e66 \
@@ -574,6 +575,7 @@ cryptography==50.0.2 \
     #   google-auth
     #   pyhanko
     #   pyhanko-certvalidator
+    #   signxml
 deprecated==3.0.0 \
     --hash=sha256:16850204d3a1e6bb0acd06bff48d96e8b0a0d25d1c52f71705405a0f4894192d \
     --hash=sha256:58204cf4a7f6270d547af5c278ee7a6bb56045a4b3d8441a1cd11660f41b7939
@@ -1243,7 +1245,9 @@ lxml==6.1.3 \
     --hash=sha256:fe91993149523aa59941b9e3c90e2eb45f57ad014697aef6c8b13339a59c019e \
     --hash=sha256:febd35ef45f603c2d74b74655efdbf45e14f55fc0aef4ac82b663ca829b283e0 \
     --hash=sha256:ff88a92cafde90888511242d1c54afcc1a8adbb6dc0a88fa7f87e29e92400d4a
-    # via pyhanko
+    # via
+    #   pyhanko
+    #   signxml
 markupsafe==3.0.4 \
     --hash=sha256:007e1ffd9bf65bb6ee96df7b258fc632a4868dd5566037986c64781f35a36e98 \
     --hash=sha256:02fa4acbc6a3fc5c693c34d4dd8c1130b7fe99cc915181b0ddd6f72aeb296002 \
@@ -2029,6 +2033,10 @@ s3transfer==0.19.2 \
 sentry-sdk[flask]==2.74.0 \
     --hash=sha256:40b205af015649df3ec9986e057ce24ce85956bee3fb75efa72c93aa7036bdff \
     --hash=sha256:dd91d75aacaef636006b579ac3ddb2fdbc9dce35f00f4b353b6b1b110c6b256a
+    # via -r requirements.in
+signxml==5.3.0 \
+    --hash=sha256:1a7f19fad67941ad2aae9b0daf5a53b29248308fc4911c40f7242770221a707d \
+    --hash=sha256:4fc31f162569e40411a23cb971449e579a0510bbdb0a9842db4c87e5bc737287
     # via -r requirements.in
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274 \
