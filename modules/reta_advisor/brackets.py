@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-RETA contribution brackets — versioned config data.
+RETA contribution brackets — versioned config data, keyed by year.
 
-CAVEMAN NOTE (standing rule F6-D1): bracket table change every year by BOE.
+The bracket table changes every year by BOE (standing rule F6-D1).
 Values below follow the published cotización-by-real-income table trajectory
 (reduced table ≤ €1,700/month, general table above; monthly quotas ≈ €200–590,
 MEI included). VERIFY against current Seguridad Social / BOE sources before
@@ -14,9 +14,13 @@ Sources to check on annual update:
 
 Each bracket: (monthly net yield lower bound exclusive, upper bound inclusive,
 monthly quota EUR). Upper bound None = no limit.
+
+Annual update (each January): add the new year to BRACKET_TABLES from the BOE
+orden de cotización. Years without a table use the latest earlier one and the
+advisor shows a "verify" note.
 """
 
-BRACKET_TABLE_VERSION = "2026.0"
+BRACKET_TABLE_VERSION = "2026.1"
 
 # Generic deduction applied to net yield before bracket lookup (7% general,
 # 3% for corporate autónomos — setting on the module page).
@@ -42,17 +46,31 @@ BRACKETS = [
 ]
 
 
-def bracket_for(monthly_net_yield):
+# Tables per year. BRACKETS above is the 2026 table.
+BRACKET_TABLES = {
+    2026: BRACKETS,
+}
+
+
+def brackets_for_year(year):
+    """Return (table_year, brackets, is_fallback)."""
+    from year_tables import resolve
+    return resolve(BRACKET_TABLES, year)
+
+
+def bracket_for(monthly_net_yield, brackets=None):
     """Return (index, lower, upper, quota) for a monthly net yield in EUR.
 
-    Negative/zero yields land in the lowest bracket (minimum quota still due).
+    `brackets` defaults to the 2026 table. Negative/zero yields land in the
+    lowest bracket (minimum quota still due).
     """
+    brackets = brackets or BRACKETS
     value = max(0.0, monthly_net_yield)
-    for idx, (lo, hi, quota) in enumerate(BRACKETS):
+    for idx, (lo, hi, quota) in enumerate(brackets):
         if hi is None or value <= hi:
             if value > lo or idx == 0:
                 return idx, lo, hi, quota
     # Fallback: top bracket (should be unreachable).
-    idx = len(BRACKETS) - 1
-    lo, hi, quota = BRACKETS[idx]
+    idx = len(brackets) - 1
+    lo, hi, quota = brackets[idx]
     return idx, lo, hi, quota

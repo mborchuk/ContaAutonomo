@@ -10,7 +10,8 @@ reviewed.
 2. [Development Setup](#development-setup)
 3. [Making Changes](#making-changes)
 4. [Pull Request Process](#pull-request-process)
-5. [Reporting Bugs and Requesting Features](#reporting-bugs-and-requesting-features)
+5. [Annual Tax Data Update](#annual-tax-data-update)
+6. [Reporting Bugs and Requesting Features](#reporting-bugs-and-requesting-features)
 
 ## Ground Rules
 
@@ -86,6 +87,22 @@ python -m pytest
 
 `main` is protected: direct pushes, force pushes, and branch deletion are
 blocked, and history is kept linear.
+
+## Annual Tax Data Update
+
+Some data is valid for one year only. Review it **every January** for the new
+fiscal year, in one pull request. Years without their own data keep working:
+the app uses the latest earlier table and shows *"figures use the <year>
+table — verify"*.
+
+| File | What to check | Official source | When done |
+|------|---------------|-----------------|-----------|
+| `modules/fiscal_calendar/calendar_data.py` | Generated filing windows for the new year (quarterly forms, 390, Renta); add `WINDOW_OVERRIDES` for dates AEAT moves (national holidays) | AEAT *Calendario del contribuyente* | Add the year to `VERIFIED_YEARS`, bump `CALENDAR_VERSION` |
+| `modules/tax_es_forms/boxes.py` | Modelo 303 and 130 box numbers and labels | AEAT Sede, current Modelo 303 / 130 | Add the year to `BOX_TABLES` (same dicts if unchanged), bump `BOX_TABLE_VERSION` |
+| `modules/reta_advisor/brackets.py` | RETA brackets and quotas, generic deduction % | Seguridad Social (cotización por ingresos reales), BOE *orden de cotización* | Add the year to `BRACKET_TABLES`, bump `BRACKET_TABLE_VERSION` |
+| `modules/tax_es_irpf/params/es_irpf_<year>.json` | IRPF scales, minimums, regional deductions | AEAT *Manual práctico de Renta*, regional laws | Add the year's file |
+
+`year_tables.resolve()` implements the fallback for the box and bracket tables.
 
 ## Reporting Bugs and Requesting Features
 

@@ -24,7 +24,8 @@ calendar, so deadlines ship inside the module and are updated once a year.
 
 ## Deadline data
 
-`calendar_data.py` ships deadline windows, stamped with `CALENDAR_VERSION`:
+`calendar_data.py` generates deadline windows for any fiscal year from these
+rules, stamped with `CALENDAR_VERSION`:
 
 | Forms | Period | Filing window |
 |-------|--------|---------------|
@@ -33,9 +34,15 @@ calendar, so deadlines ship inside the module and are updated once a year.
 | 390 | Annual | 1–30 January of the following year |
 | 100 (Renta) | Annual | 1 April – 30 June of the following year |
 
-The annual update is a one-file edit (`COVERED_YEARS` and the window rules).
-**Verify all dates against the official AEAT calendar before each fiscal
-year** — this dataset is a convenience, not an authoritative source.
+- A window that ends on a Saturday or Sunday moves to the following Monday.
+- Dates AEAT moves for other reasons (national holidays) go into
+  `WINDOW_OVERRIDES`, keyed by `(year, form, period)`.
+- Years in `VERIFIED_YEARS` were checked against the AEAT calendar. Other
+  years are generated from the rules and marked *(verify)* in the calendar and
+  the dashboard panel.
+
+The annual check is described in `CONTRIBUTING.md` → *Annual Tax Data Update*.
+This dataset is a convenience, not an authoritative source.
 
 ## Reminders
 

@@ -23,7 +23,7 @@ import hashlib
 if __name__ == '__main__':
     sys.modules.setdefault('app', sys.modules['__main__'])
 
-from currency_converter import get_exchange_rate, convert_usd_to_eur, get_currency_symbol
+from currency_converter import convert_usd_to_eur, get_currency_symbol
 import logging
 import logging.config
 
@@ -93,10 +93,25 @@ app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
 app.config['INIT_LOCK_PATH'] = os.path.join(
     os.path.dirname(app.config['SCHEDULER_LOCK_PATH']), 'init.lock')
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+app.config['CREDENTIALS_KEY_FILE'] = os.environ.get(
+    'CREDENTIALS_KEY_FILE', os.path.join(app.instance_path, 'credentials.key'))
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
+# Verifactu signing key file, used when VERIFACTU_KEY is not set. Separate
+# from SECRET_KEY so rotating the session key never breaks the record chain.
+app.config['VERIFACTU_KEY_FILE'] = os.environ.get(
+    'VERIFACTU_KEY_FILE', os.path.join(app.instance_path, 'verifactu.key'))
 
-from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+from constants import (
+    INITIAL_INVOICE_STATUS,
+    LOCKED_INVOICE_STATUSES,
+    MAX_CONTENT_LENGTH_BYTES,
+    SESSION_LIFETIME_SECONDS,
+    counts_as_income,
+    invoice_locked,
+    is_legacy_settled,
+)
+from secret_box import EncryptedString, encrypt_existing
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -365,6 +380,18 @@ class Invoice(db.Model):
     items = db.relationship('InvoiceItem', backref='invoice', lazy=True, cascade='all, delete-orphan',
                             foreign_keys='InvoiceItem.invoice_id')
 
+    @property
+    def amount_in_currency(self):
+        """Invoice total in the invoice's own currency.
+
+        Legacy naming: for EUR invoices `amount_eur` holds the entered amount
+        and `amount_usd` its USD conversion; for every other currency
+        `amount_usd` holds the entered amount (see task A-3).
+        """
+        if (self.currency or 'USD') == 'EUR':
+            return self.amount_eur
+        return self.amount_usd
+
     def __repr__(self):
         return f'<Invoice {self.invoice_number}>'
 
@@ -439,7 +466,7 @@ class Settings(db.Model):
     default_irpf_rate = db.Column(db.Float, default=20.0)  # Income tax retention rate in %
     # Currency provider settings
     currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
-    currency_provider_api_key = db.Column(db.String(200), default='')  # API key for providers that need it
+    currency_provider_api_key = db.Column(EncryptedString(500), default='')  # encrypted at rest (C-2)
     payment_methods = db.Column(db.Text, default='Bank Transfer,PayPal,Credit Card,Cash,Crypto')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -613,65 +640,6 @@ def delete_customer(id):
     return redirect(url_for('settings') + '#customers')
 
 
-def _get_upcoming_tax_deadlines():
-    """
-    Get upcoming Spanish Autónomo tax deadlines grouped by date.
-    If a deadline falls on weekend, it moves to the next business day.
-    """
-    from datetime import date, timedelta
-
-    today = date.today()
-    year = today.year
-
-    # All deadlines: (date, list of forms)
-    raw_deadlines = [
-        (date(year, 1, 20), [
-            ('130, 303, 349', f'Q4 {year-1}'),
-        ]),
-        (date(year, 1, 30), [
-            ('390', f'Annual VAT {year-1}'),
-        ]),
-        (date(year, 4, 20), [
-            ('130, 303, 349', f'Q1 {year}'),
-        ]),
-        (date(year, 6, 30), [
-            ('100', f'Renta {year-1}'),
-        ]),
-        (date(year, 7, 20), [
-            ('130, 303, 349', f'Q2 {year}'),
-        ]),
-        (date(year, 10, 20), [
-            ('130, 303, 349', f'Q3 {year}'),
-        ]),
-        (date(year + 1, 1, 20), [
-            ('130, 303, 349', f'Q4 {year}'),
-        ]),
-        (date(year + 1, 1, 30), [
-            ('390', f'Annual VAT {year}'),
-        ]),
-    ]
-
-    def adjust_to_business_day(d):
-        while d.weekday() >= 5:
-            d += timedelta(days=1)
-        return d
-
-    upcoming = []
-    for deadline_date, forms in raw_deadlines:
-        adjusted = adjust_to_business_day(deadline_date)
-        if adjusted >= today:
-            days_left = (adjusted - today).days
-            upcoming.append({
-                'date': adjusted.strftime('%d/%m/%Y'),
-                'days_left': days_left,
-                'urgent': days_left <= 14,
-                'forms': forms,
-            })
-
-    upcoming.sort(key=lambda x: x['days_left'])
-    return upcoming[:4]
-
-
 @app.route('/')
 @login_required
 def dashboard():
@@ -830,7 +798,9 @@ def dashboard():
     # Calculate current year tax obligations
     from datetime import datetime
     current_year = datetime.now().year
-    current_year_invoices = [inv for inv in invoices if inv.invoice_date.year == current_year and inv.status == 'paid']
+    # Same rule as the tax drafts: every invoice dated this year except cancelled.
+    current_year_invoices = [inv for inv in invoices
+                             if inv.invoice_date.year == current_year and counts_as_income(inv)]
 
     # Income for current year
     current_year_income = sum(inv.amount_base for inv in current_year_invoices)
@@ -956,9 +926,16 @@ def dashboard():
     except Exception:
         logger.exception("Failed to fetch public holidays from Nager.Date API")
 
-    # Tax deadlines for Spanish Autónomo
-    from datetime import date
-    tax_deadlines = _get_upcoming_tax_deadlines()
+    # Tax deadlines: one source, the Fiscal Calendar module. None = module
+    # disabled (the dashboard then shows a hint to enable it).
+    tax_deadlines = None
+    fiscal_calendar = module_manager.provider_of('fiscal_calendar') if module_manager else None
+    if fiscal_calendar is not None:
+        try:
+            tax_deadlines = fiscal_calendar.upcoming_deadlines(limit=4)
+        except Exception:
+            logger.exception('Fiscal Calendar deadlines unavailable')
+            tax_deadlines = []
 
     # Collect module dashboard panels
     module_panels = []
@@ -1047,13 +1024,10 @@ def index():
 
 
 # --- F2: Invoice lifecycle -------------------------------------------------- #
-
-LOCKED_INVOICE_STATUSES = ('issued', 'paid')
-
-
-def _invoice_locked(invoice):
-    """F2 — issued/paid invoices are read-only (change via rectificative)."""
-    return invoice is not None and invoice.status in LOCKED_INVOICE_STATUSES
+# The lock rule and the initial status live in constants.py (LOCKED_INVOICE_STATUSES,
+# INITIAL_INVOICE_STATUS, invoice_locked, is_legacy_settled).
+_invoice_locked = invoice_locked
+_is_legacy_settled = is_legacy_settled
 
 
 def _next_sequence_for_series(series):
@@ -1261,6 +1235,42 @@ def rectify_invoice(id):
         return redirect(url_for('view_invoice', id=id))
 
 
+class NoExchangeRate(ValueError):
+    """No exchange rate to EUR is available for the invoice currency and date."""
+
+
+def invoice_amounts(total, currency, date_str):
+    """Convert an entered invoice total into the stored amount columns.
+
+    Returns (amount_usd, amount_eur, exchange_rate). Legacy column naming:
+    - EUR invoice: amount_eur = total, amount_usd = USD conversion.
+    - Any other currency: amount_usd = total in the invoice currency (the
+      column name is historical), amount_eur = EUR conversion — the tax base.
+    exchange_rate is the USD->EUR rate for EUR/USD invoices and the
+    <currency>->EUR rate for other currencies, so amount_eur =
+    amount_usd * exchange_rate holds for every non-EUR invoice.
+
+    Raises NoExchangeRate when the currency cannot be converted to EUR.
+    """
+    if currency in ('EUR', 'USD'):
+        # Looked up at call time (not the module-level name) so tests can stub it.
+        from currency_converter import get_exchange_rate as current_rate
+        exchange_rate, _ = current_rate(date_str)
+        if currency == 'EUR':
+            return total * exchange_rate, total, exchange_rate
+        return total, convert_usd_to_eur(total, exchange_rate), exchange_rate
+    if not module_manager:
+        raise NoExchangeRate(f'No currency service to convert {currency}')
+    try:
+        amount_eur, rate, _ = module_manager.core.currency_service.convert(
+            total, currency, 'EUR', date_str)
+    except Exception as e:
+        raise NoExchangeRate(f'No {currency}->EUR rate for {date_str}') from e
+    if not rate or rate <= 0:
+        raise NoExchangeRate(f'No {currency}->EUR rate for {date_str}')
+    return total, amount_eur, rate
+
+
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_invoice():
@@ -1271,9 +1281,13 @@ def create_invoice():
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — new invoices start as DRAFT (freely editable) unless the form
-            # explicitly sets a status. Issuing is a separate, one-way action.
-            status = request.form.get('status') or 'draft'
+            # F2 — new invoices always start as DRAFT. Issue, Mark paid and
+            # Annul are the only ways to change the status afterwards.
+            status = request.form.get('status') or INITIAL_INVOICE_STATUS
+            if status != INITIAL_INVOICE_STATUS:
+                flash('New invoices are created as drafts. Issue the invoice, '
+                      'then use Mark paid or Annul to change its status.', 'danger')
+                return redirect(url_for('create_invoice'))
             notes = request.form.get('notes', '')
             bank_id = request.form.get('bank_id')
 
@@ -1338,22 +1352,16 @@ def create_invoice():
         invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
         due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
 
-        # Get exchange rate and calculate amounts based on currency
-        exchange_rate, rate_date = get_exchange_rate(invoice_date_str)
-
-        # Convert amounts based on selected currency
-        if currency == 'EUR':
-            # If currency is EUR, total_usd is actually in EUR
-            amount_eur = total_usd  # The entered amount is already in EUR
-            amount_usd = total_usd * exchange_rate  # Convert to USD for storage
-        elif currency == 'USD':
-            # If currency is USD, keep as is
-            amount_usd = total_usd
-            amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
-        else:
-            # For other currencies, treat as USD for now (can be extended)
-            amount_usd = total_usd
-            amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
+        # total_usd holds the entered total in the invoice currency.
+        try:
+            amount_usd, amount_eur, exchange_rate = invoice_amounts(
+                total_usd, currency, invoice_date_str)
+        except NoExchangeRate as e:
+            logger.warning('Invoice not created: %s', e)
+            flash(f'No exchange rate to EUR is available for {currency} on this date. '
+                  'Choose another currency or check the exchange rate provider in Settings.',
+                  'danger')
+            return redirect(url_for('create_invoice'))
 
         # Handle customer selection or creation
         customer = None
@@ -1550,11 +1558,13 @@ def edit_invoice(id):
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — issuing must go through the Issue action (assigns series,
-            # sequence and the fiscal snapshot). Ignore a direct 'issued' here.
-            _new_status = request.form['status']
-            if _new_status != 'issued':
-                invoice.status = _new_status
+            # F2 — the status never changes through the edit form: issuing,
+            # payment and annulment are lifecycle actions on the invoice view.
+            posted_status = request.form.get('status')
+            if posted_status is not None and posted_status != invoice.status:
+                flash('The status cannot be changed here. Use Issue, Mark paid '
+                      'or Annul on the invoice page.', 'danger')
+                return redirect(url_for('edit_invoice', id=id))
             invoice.notes = request.form.get('notes', '')
             invoice.payment_method = request.form.get('payment_method', 'Bank Transfer')
             bank_id = request.form.get('bank_id')
@@ -1613,23 +1623,17 @@ def edit_invoice(id):
         invoice.invoice_date = datetime.strptime(invoice_date_str, '%Y-%m-%d').date()
         invoice.due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date() if due_date_str else None
 
-        # Recalculate EUR amount based on currency
-        exchange_rate, _ = get_exchange_rate(invoice_date_str)
-        invoice.exchange_rate = exchange_rate
-
-        # Convert amounts based on selected currency
-        if currency == 'EUR':
-            # If currency is EUR, total_usd is actually in EUR
-            invoice.amount_eur = total_usd  # The entered amount is already in EUR
-            invoice.amount_usd = total_usd * exchange_rate  # Convert to USD for storage
-        elif currency == 'USD':
-            # If currency is USD, keep as is
-            invoice.amount_usd = total_usd
-            invoice.amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
-        else:
-            # For other currencies, treat as USD for now
-            invoice.amount_usd = total_usd
-            invoice.amount_eur = convert_usd_to_eur(total_usd, exchange_rate)
+        # Recalculate the stored amounts; total_usd is in the invoice currency.
+        try:
+            invoice.amount_usd, invoice.amount_eur, invoice.exchange_rate = invoice_amounts(
+                total_usd, currency, invoice_date_str)
+        except NoExchangeRate as e:
+            db.session.rollback()
+            logger.warning('Invoice %s not updated: %s', invoice.id, e)
+            flash(f'No exchange rate to EUR is available for {currency} on this date. '
+                  'Choose another currency or check the exchange rate provider in Settings.',
+                  'danger')
+            return redirect(url_for('edit_invoice', id=invoice.id))
 
         invoice.currency = currency
 
@@ -1724,7 +1728,10 @@ def view_invoice(id):
 
     customers = Customer.query.order_by(Customer.name).all()
     banks = Bank.query.order_by(Bank.name).all()
-    return render_template('view.html', invoice=invoice, customers=customers, banks=banks, hash_mismatch=hash_mismatch)
+    return render_template('view.html', invoice=invoice, customers=customers, banks=banks,
+                           hash_mismatch=hash_mismatch,
+                           legacy_settled=_is_legacy_settled(invoice),
+                           currency_symbol=get_currency_symbol(invoice.currency or 'USD'))
 
 
 @app.route('/delete/<int:id>', methods=['POST'])
@@ -2029,12 +2036,17 @@ def settings():
                 'report_template': 'report_template',
                 'invoice_template': 'invoice_template',
                 'currency_provider': 'currency_provider',
-                'currency_provider_api_key': 'currency_provider_api_key',
                 'payment_methods': 'payment_methods',
             }
             for form_key, attr in field_map.items():
                 if form_key in request.form:
                     setattr(app_settings, attr, request.form.get(form_key, ''))
+            # Secrets are never rendered back (C-1): blank keeps the stored key.
+            if 'currency_provider_api_key' in request.form:
+                from settings_forms import secret_from_form
+                app_settings.currency_provider_api_key = secret_from_form(
+                    request.form, 'currency_provider_api_key',
+                    app_settings.currency_provider_api_key or '')
 
             # Update dashboard settings (checkboxes — only from general tab)
             if active_tab == 'general':
@@ -2414,6 +2426,7 @@ def init_database():
     """
     from schema_migrations import run_migrations
     run_migrations(db.engine, db.metadata)
+    encrypt_existing(db, 'settings', ['currency_provider_api_key'])
 
     if not Settings.query.first():
         db.session.add(Settings(
