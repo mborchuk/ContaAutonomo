@@ -6,10 +6,12 @@ Supports multiple backends: OpenAI (GPT-4o), Google Document AI, Anthropic Claud
 """
 
 from module_manager import BaseModule
+from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
 import json
 import base64
 from datetime import datetime
+from secret_box import EncryptedString, encrypt_existing
 
 
 # ---------------------------------------------------------------------------
@@ -314,9 +316,9 @@ class AIParserModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
             provider = db.Column(db.String(50), default='openai')
-            openai_api_key = db.Column(db.String(500), default='')
+            openai_api_key = db.Column(EncryptedString(500), default='')
             openai_model = db.Column(db.String(100), default='gpt-4o')
-            anthropic_api_key = db.Column(db.String(500), default='')
+            anthropic_api_key = db.Column(EncryptedString(500), default='')
             anthropic_model = db.Column(db.String(100), default='claude-sonnet-4-20250514')
             google_project_id = db.Column(db.String(200), default='')
             google_processor_id = db.Column(db.String(200), default='')
@@ -453,6 +455,10 @@ class AIParserModule(BaseModule):
     def settings_tab(self):
         return {'id': 'ai_parser', 'label': 'AI Parser'}
 
+    def on_enable(self):
+        # C-2: encrypt API keys stored in plaintext by earlier versions.
+        encrypt_existing(self._db, 'ai_parser_config', ['openai_api_key', 'anthropic_api_key'])
+
     def get_settings_html(self, settings):
         cfg = self._get_config()
         providers_info = [
@@ -460,7 +466,7 @@ class AIParserModule(BaseModule):
             {'id': 'anthropic', 'name': 'Anthropic (Claude)', 'configured': bool(cfg.anthropic_api_key)},
             {'id': 'google_docai', 'name': 'Google Document AI', 'configured': bool(cfg.google_project_id and cfg.google_processor_id)},
         ]
-        return render_template('ai_parser_settings.html',
+        return self.render_settings_template('ai_parser_settings.html',
                                cfg=cfg, providers=providers_info)
 
     def save_settings(self, settings, form):
@@ -468,9 +474,9 @@ class AIParserModule(BaseModule):
             return
         cfg = self._get_config()
         cfg.provider = form.get('ai_provider', cfg.provider)
-        cfg.openai_api_key = form.get('ai_openai_api_key', cfg.openai_api_key)
+        cfg.openai_api_key = secret_from_form(form, 'ai_openai_api_key', cfg.openai_api_key)
         cfg.openai_model = form.get('ai_openai_model', cfg.openai_model) or 'gpt-4o'
-        cfg.anthropic_api_key = form.get('ai_anthropic_api_key', cfg.anthropic_api_key)
+        cfg.anthropic_api_key = secret_from_form(form, 'ai_anthropic_api_key', cfg.anthropic_api_key)
         cfg.anthropic_model = form.get('ai_anthropic_model', cfg.anthropic_model) or 'claude-sonnet-4-20250514'
         cfg.google_project_id = form.get('ai_google_project_id', cfg.google_project_id)
         cfg.google_processor_id = form.get('ai_google_processor_id', cfg.google_processor_id)

@@ -1,0 +1,46 @@
+<h3>AI Communication API</h3>
+<p>Base URL: <code>{{ base }}</code> ·
+   Manifest: <a href="{{ manifest }}" target="_blank"><code>{{ manifest }}</code></a></p>
+<div class="form-group">
+    <label>API Token</label>
+    {% if reveal_token %}
+    <p>Copy this token now — it is shown only once. Send it in the
+       <code>X-API-Token</code> header on every request.</p>
+    <div style="display:flex;gap:.5rem;align-items:center;">
+        <input type="text" id="api-token-field" readonly value="{{ reveal_token }}"
+               style="flex:1;font-family:monospace;" onclick="this.select()">
+        <button type="button" class="btn btn-secondary" onclick="apiCopyToken(this)">Copy</button>
+    </div>
+    <script>
+    function apiCopyToken(b) {
+        var i = document.getElementById('api-token-field');
+        i.select();
+        if (navigator.clipboard) { navigator.clipboard.writeText(i.value); }
+        else { document.execCommand('copy'); }
+        var t = b.textContent;
+        b.textContent = 'Copied!';
+        setTimeout(function () { b.textContent = t; }, 1200);
+    }
+    </script>
+    {% elif token_hint %}
+    <p>A token is configured (ends in <code>…{{ token_hint }}</code>). It is not
+       shown again; rotate it below if you need a new copy.</p>
+    {% else %}
+    <p><em>No token yet — save once to generate one.</em></p>
+    {% endif %}
+    <p style="margin-top:.75rem;">Quick start:</p>
+    <pre style="white-space:pre-wrap;background:var(--color-surface-2);padding:.5rem;border-radius:4px;">curl -H "X-API-Token: $TOKEN" \
+  $ORIGIN{{ base }}/invoices
+
+curl -X POST -H "X-API-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"client_name":"ACME","items":[{"description":"Work","quantity":1,"unit_price_usd":100}]}' \
+  $ORIGIN{{ base }}/invoices</pre>
+    <small>Replace <code>$ORIGIN</code> with your server URL and <code>$TOKEN</code> with your token.</small>
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="api_rotate_token" value="1"> Rotate token on save</label>
+    <small style="display:block;color:var(--color-danger-fg);">Rotating invalidates the
+        current token immediately. Serve the API over HTTPS only
+        (set <code>FORCE_HTTPS=1</code>).</small>
+</div>

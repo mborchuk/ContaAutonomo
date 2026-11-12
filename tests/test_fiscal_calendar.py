@@ -17,12 +17,19 @@ def test_dataset_has_quarterly_and_annual_forms():
 
 
 def test_q4_window_rolls_into_next_january():
-    # Modelo 303 Q4 2026 files 1-30 January 2027.
-    q4 = [d for d in all_deadlines()
-          if d['form'] == '303' and d['quarter'] == 4 and d['year'] == 2026]
+    # Modelo 303 Q4 2025 files 1-30 January 2026 (a Friday).
+    q4 = [d for d in all_deadlines(years=[2025])
+          if d['form'] == '303' and d['quarter'] == 4]
     assert len(q4) == 1
-    assert q4[0]['window_start'] == date(2027, 1, 1)
-    assert q4[0]['window_end'] == date(2027, 1, 30)
+    assert q4[0]['window_start'] == date(2026, 1, 1)
+    assert q4[0]['window_end'] == date(2026, 1, 30)
+
+
+def test_deadline_on_weekend_moves_to_monday():
+    # 30 January 2027 is a Saturday -> Q4 2026 closes Monday 1 February 2027.
+    q4 = [d for d in all_deadlines(years=[2026])
+          if d['form'] == '303' and d['quarter'] == 4]
+    assert q4[0]['window_end'] == date(2027, 2, 1)
 
 
 def test_upcoming_marks_window_open():

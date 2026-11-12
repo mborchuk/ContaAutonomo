@@ -1,3 +1,4 @@
+{% from "_secret_field.html" import secret_input %}
 <h3 style="margin-bottom: 15px; color: var(--color-text);">✍️ PDF Signature</h3>
 <p style="color: var(--color-text-muted); margin-bottom: 20px;">Configure visual and digital signing of invoice PDFs.</p>
 
@@ -144,11 +145,9 @@
 <!-- Certificate Password -->
 <div class="form-group" style="margin-bottom: 20px;">
     <label for="pdf_sig_cert_password" style="font-weight: 600; display: block; margin-bottom: 5px;">Certificate Password</label>
-    <input type="password" id="pdf_sig_cert_password" name="pdf_sig_cert_password"
-           value="{{ cfg.certificate_password or '' }}"
-           placeholder="PFX/P12 certificate password"
-           style="max-width: 400px;"
-           {% if not pyhanko_available %}disabled{% endif %}>
+    {{ secret_input('pdf_sig_cert_password', cfg.certificate_password,
+                    placeholder='PFX/P12 certificate password', style='max-width: 400px;',
+                    disabled=not pyhanko_available) }}
     <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">Password for your PFX/P12 certificate file.</small>
 </div>
 
