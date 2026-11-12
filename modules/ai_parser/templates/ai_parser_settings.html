@@ -1,3 +1,4 @@
+{% from "_secret_field.html" import secret_input %}
 <h3 style="margin-bottom: 15px; color: var(--color-text);">🤖 AI Document Parser</h3>
 <p style="color: var(--color-text-muted); margin-bottom: 20px;">Configure AI provider for automatic invoice and expense parsing.</p>
 
@@ -25,8 +26,7 @@
     <h4 style="margin-bottom: 10px;">OpenAI Settings</h4>
     <div class="form-group">
         <label for="ai_openai_api_key">API Key</label>
-        <input type="password" id="ai_openai_api_key" name="ai_openai_api_key"
-               value="{{ cfg.openai_api_key }}" placeholder="sk-...">
+        {{ secret_input('ai_openai_api_key', cfg.openai_api_key, placeholder='sk-...', style='') }}
     </div>
     <div class="form-group">
         <label for="ai_openai_model">Model</label>
@@ -45,8 +45,7 @@
     <h4 style="margin-bottom: 10px;">Anthropic Settings</h4>
     <div class="form-group">
         <label for="ai_anthropic_api_key">API Key</label>
-        <input type="password" id="ai_anthropic_api_key" name="ai_anthropic_api_key"
-               value="{{ cfg.anthropic_api_key }}" placeholder="sk-ant-...">
+        {{ secret_input('ai_anthropic_api_key', cfg.anthropic_api_key, placeholder='sk-ant-...', style='') }}
     </div>
     <div class="form-group">
         <label for="ai_anthropic_model">Model</label>

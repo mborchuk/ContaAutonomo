@@ -2,11 +2,12 @@
 """
 Facturae 3.2.2 XML generation — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE (F9-D3 spike outcome): XML here is UNSIGNED. Legally valid
-Facturae need an XAdES-EPES enveloped signature; no XAdES library ship with
-this app (pyHanko cover PAdES/PDF only). Adding `signxml` + reusing the
-pdf_signature PFX upload flow is the follow-up — until then, treat output as
-a structured draft for platforms that accept unsigned files or sign on upload.
+Outcome of the F9-D3 spike: the XML produced here is unsigned. A legally
+valid Facturae needs an enveloped XAdES-EPES signature, and no XAdES library
+ships with this app (pyHanko covers PAdES, i.e. PDF, only). The follow-up is
+to add `signxml` and reuse the PFX upload flow of pdf_signature. Until then,
+treat the output as a structured draft for platforms that accept unsigned
+files or sign on upload.
 
 STANDING RULE (F9-D6): validate generated files against the official Facturae
 XSD + the EU EN 16931 validator before real B2B use. Spec pinned:

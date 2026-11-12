@@ -2,10 +2,10 @@
 """
 Verifactu record chain — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: tamper-evidence come from two thing: every record carry
-SHA-256 of (prev_hash + canonical payload), and an HMAC-SHA256 signature over
-the record hash. Change any old record -> every later hash break -> chain
-verify go red.
+Tamper evidence comes from two things: every record carries the SHA-256 of
+(previous hash + canonical payload), and an HMAC-SHA256 signature over the
+record hash. Changing any earlier record breaks every later hash, so chain
+verification fails.
 
 STANDING RULE (F1-D1, PENDING): the exact record field list, hash algorithm
 input ordering, and signature requirements of RD 1007/2023 must be verified
@@ -51,13 +51,24 @@ def verify_signature(rec_hash, signature, secret_key):
     return hmac.compare_digest(sign_hash(rec_hash, secret_key), signature or '')
 
 
+def key_id(secret_key):
+    """Short public fingerprint of a signing key, stored on each record so the
+    verifier knows which key signed it. Reveals nothing usable about the key."""
+    return hashlib.sha256(f'verifactu-key-id:{secret_key}'.encode('utf-8')).hexdigest()[:12]
+
+
 def verify_chain(records, secret_key=None):
     """Walk the chain; return (ok, first_bad_index, reason).
 
     `records` is an ordered iterable of objects/dicts exposing payload (JSON
     str), prev_hash, record_hash, signature. Detects: broken linkage, payload
     tampering, signature mismatch (when secret_key given).
+
+    `secret_key` is either one key for every record, or a callable taking the
+    record and returning its key (None when the key is unknown).
     """
+    key_for = secret_key if callable(secret_key) else (lambda _rec: secret_key)
+    check_signatures = secret_key is not None
     prev = GENESIS_HASH
     for idx, rec in enumerate(records):
         get = rec.get if isinstance(rec, dict) else lambda k, _r=rec: getattr(_r, k, None)
@@ -71,8 +82,11 @@ def verify_chain(records, secret_key=None):
         expected = record_hash(prev, payload)
         if get('record_hash') != expected:
             return False, idx, 'record_hash mismatch (payload tampered?)'
-        if secret_key is not None and not verify_signature(
-                expected, get('signature'), secret_key):
-            return False, idx, 'signature mismatch'
+        if check_signatures:
+            key = key_for(rec)
+            if key is None:
+                return False, idx, 'signed with an unknown key'
+            if not verify_signature(expected, get('signature'), key):
+                return False, idx, 'signature mismatch'
         prev = expected
     return True, None, None

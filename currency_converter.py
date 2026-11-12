@@ -195,7 +195,7 @@ def get_exchange_rate_exchangerate_api(date_str):
         Exchange rate as float or None if failed
     """
     try:
-        url = f"https://api.exchangerate-api.com/v4/latest/USD"
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
 
         response = requests.get(url, timeout=10)
         response.raise_for_status()

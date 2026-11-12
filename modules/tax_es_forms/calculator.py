@@ -2,8 +2,9 @@
 """
 Modelo 303 / 130 aggregation engine — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: keep this file dumb and pure so tests feed plain objects and check
-numbers. No queries here. Module (index.py) fetch data, pass it in.
+This file is kept pure — no database queries — so tests can pass plain
+objects in and check the numbers. The module (index.py) fetches the data and
+passes it in.
 
 Devengo (accrual) basis: invoices count by invoice_date; cancelled excluded.
 IVA repercutido only on `standard` customers (eu_b2b / non_eu = reverse charge
@@ -15,6 +16,8 @@ expenses with zero Spanish VAT are left out of the deductible base.
 """
 
 from datetime import date
+
+from constants import counts_as_income
 
 
 def quarter_of(d):
@@ -70,7 +73,7 @@ def _customer_tax_type(invoice):
 
 def _active(invoice):
     """Devengo basis: everything except cancelled counts."""
-    return getattr(invoice, "status", None) != "cancelled"
+    return counts_as_income(invoice)
 
 
 def _invoice_output_vat(invoice, vat_rate):
@@ -96,6 +99,28 @@ def _invoice_output_vat(invoice, vat_rate):
         base = _invoice_base_eur(invoice)
         return base, base * vat_rate
     return 0.0, 0.0
+
+
+def invoice_vat_line(invoice, vat_rate):
+    """IVA figures for one invoice row in a report.
+
+    Returns {'vat_rate_pct', 'vat_eur', 'reverse_charge'}. Issued invoices use
+    the snapshot frozen at issue; legacy and draft invoices derive the value
+    from the customer's tax type and `vat_rate` (a fraction, e.g. 0.21).
+    `reverse_charge` is True for intra-EU B2B customers (the customer accounts
+    for the VAT).
+    """
+    _base, cuota = _invoice_output_vat(invoice, vat_rate)
+    snap_rate = getattr(invoice, 'snap_vat_rate', None)
+    if snap_rate is not None:
+        rate_pct = snap_rate or 0.0
+    else:
+        rate_pct = vat_rate * 100.0 if cuota else 0.0
+    return {
+        'vat_rate_pct': rate_pct,
+        'vat_eur': cuota or 0.0,
+        'reverse_charge': _customer_tax_type(invoice) == 'eu_b2b',
+    }
 
 
 def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
@@ -331,3 +356,38 @@ def compute_modelo_349(invoices):
         "operators": lines,
         "meta": {"warnings": warnings},
     }
+
+
+def compute_modelo_390(quarterly_303):
+    """Modelo 390 (annual VAT summary) from the four quarterly 303 drafts.
+
+    `quarterly_303` is the list of `boxes` dicts of Q1..Q4 (as returned by
+    compute_modelo_303). Every 390 casilla is the sum of the corresponding
+    303 boxes, so the annual summary always agrees with the quarterly drafts.
+    """
+    def total(box):
+        return _round2(sum(q.get(box, 0.0) for q in quarterly_303))
+
+    b = {
+        "05": total("01"), "06": total("03"),
+        "551": total("10"), "552": total("11"),
+        "27": total("12"), "28": total("13"),
+        "48": total("28"), "49": total("29"),
+        "50": total("30"), "51": total("31"),
+        "597": total("36"), "598": total("37"),
+        "58": total("38"), "59": total("39"),
+        "85": total("78"),
+        "99": total("01"), "103": total("59"), "110": total("120"),
+    }
+    b["33"] = _round2(b["05"] + b["551"] + b["27"])
+    b["34"] = _round2(b["06"] + b["552"] + b["28"])
+    b["47"] = b["34"]
+    b["64"] = _round2(b["49"] + b["51"] + b["598"] + b["59"])
+    b["65"] = _round2(b["47"] - b["64"])
+    b["84"] = b["65"]
+    b["86"] = _round2(b["84"] - b["85"])
+    b["95"] = _round2(sum(max(0.0, q.get("71", 0.0)) for q in quarterly_303))
+    last = quarterly_303[-1] if quarterly_303 else {}
+    b["97"] = _round2(max(0.0, -last.get("71", 0.0)))
+    b["108"] = _round2(b["99"] + b["103"] + b["110"])
+    return {"form": "390", "boxes": b}

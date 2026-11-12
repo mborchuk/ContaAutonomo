@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Modelo 390 · {{ draft.year }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Modelo 390 (IVA, resumen anual) — {{ draft.year }}</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+</div>
+
+{% if draft.table_fallback %}
+<div class="note note-warning">⚠ {{ draft.table_note }}</div>
+{% endif %}
+<!-- Non-dismissible estimate banner -->
+<div class="note note-info">
+    <strong>Estimate, not tax advice.</strong> Each casilla is the sum of the four
+    quarterly Modelo 303 drafts for {{ draft.year }}, so it agrees with them by
+    construction. Verify every casilla against the official AEAT Modelo 390 before
+    filing. Casillas checked against the AEAT instructions for {{ draft.table_year }}.
+</div>
+
+{% for check in draft.meta.checks %}
+<div class="note note-warning">⚠ {{ check }}</div>
+{% endfor %}
+
+<div class="table-wrap">
+<table class="data-table boxTable">
+    <thead>
+        <tr>
+            <th>Casilla</th><th>Concept</th><th class="text-right">Amount (EUR)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for box in draft.order %}
+        <tr {% if box in ['65', '86', '108'] %}class="box-result"{% endif %}>
+            <td><strong>{{ box }}</strong></td>
+            <td>{{ draft.labels[box] }}</td>
+            <td class="text-right"><span class="box-value" data-box="{{ box }}">{{ "%.2f"|format(draft.boxes[box]) }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<h3>Quarterly Modelo 303 figures used</h3>
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr><th>303 box</th>{% for q in draft.quarters %}<th class="text-right">Q{{ q.quarter }}</th>{% endfor %}</tr>
+    </thead>
+    <tbody>
+        {% for box in ['01', '03', '10', '11', '12', '13', '28', '29', '30', '31', '36', '37', '38', '39', '45', '46', '59', '120', '78', '71'] %}
+        <tr>
+            <td><strong>{{ box }}</strong></td>
+            {% for q in draft.quarters %}
+            <td class="text-right">{{ "%.2f"|format(q.boxes[box]) }}</td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<h3>Not covered by this draft</h3>
+<ul class="fine-print">
+    {% for item in draft.out_of_scope %}<li>{{ item }}</li>{% endfor %}
+</ul>
+{% endblock %}

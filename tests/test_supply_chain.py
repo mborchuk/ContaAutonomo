@@ -30,11 +30,11 @@ def test_lock_files_pin_every_package_with_hashes():
 
 def test_runtime_lock_covers_direct_dependencies():
     # Dependabot recompiles without --strip-extras, so names may carry extras.
-    locked = {re.split(r'[\[=]', r, 1)[0].lower() for r in _requirements('requirements.txt')}
+    locked = {re.split(r'[\[=]', r, maxsplit=1)[0].lower() for r in _requirements('requirements.txt')}
     for line in _read('requirements.in').splitlines():
         line = line.split('#')[0].strip()
         if line:
-            pkg = re.split(r'[\[<>=!~ ]', line, 1)[0].lower()
+            pkg = re.split(r'[\[<>=!~ ]', line, maxsplit=1)[0].lower()
             assert pkg in locked, f'{pkg} missing from requirements.txt'
     assert 'sentry-sdk' in locked and 'gunicorn' in locked
 
