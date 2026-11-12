@@ -105,6 +105,7 @@ from constants import (
     LOCKED_INVOICE_STATUSES,
     MAX_CONTENT_LENGTH_BYTES,
     SESSION_LIFETIME_SECONDS,
+    counts_as_income,
     invoice_locked,
     is_legacy_settled,
 )
@@ -853,7 +854,9 @@ def dashboard():
     # Calculate current year tax obligations
     from datetime import datetime
     current_year = datetime.now().year
-    current_year_invoices = [inv for inv in invoices if inv.invoice_date.year == current_year and inv.status == 'paid']
+    # Same rule as the tax drafts: every invoice dated this year except cancelled.
+    current_year_invoices = [inv for inv in invoices
+                             if inv.invoice_date.year == current_year and counts_as_income(inv)]
 
     # Income for current year
     current_year_income = sum(inv.amount_base for inv in current_year_invoices)
