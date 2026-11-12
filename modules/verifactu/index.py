@@ -16,13 +16,14 @@ README.md). Compliance assist, not legal advice.
 """
 
 import json
+from datetime import date
 
 from flask import Blueprint, render_template, Response, url_for
 
 from module_manager import BaseModule
 
 from .aeat import VERIFACTU_PHRASE, qr_url
-from .pdf_qr import stamp_qr
+from .pdf_qr import MAX_SIZE_MM, MIN_SIZE_MM, QR_SIZE_MM, has_qr, qr_flowables, stamp_qr
 from .chain import (
     CHAIN_SPEC_VERSION,
     GENESIS_HASH,
@@ -275,12 +276,56 @@ class VerifactuModule(BaseModule):
         return self.VerifactuRecord.query.filter_by(
             invoice_id=invoice.id, record_type='alta').first() is not None
 
-    def filter_invoice_pdf(self, invoice, pdf_bytes):
-        """Core hook: put the QR on page 1 of every PDF of an issued invoice."""
+    def qr_for_invoice(self, invoice):
+        """QR content for an invoice that has a Verifactu record:
+        {'url': ..., 'phrase': 'VERI*FACTU' or None}. None for drafts.
+        Used by this module's PDF stamping and by the invoice designer."""
         if not invoice or not getattr(invoice, 'id', None) or not self._has_record(invoice):
-            return pdf_bytes
+            return None
+        return {'url': self.qr_payload(invoice),
+                'phrase': VERIFACTU_PHRASE if self._qr_mode() == 'verifactu' else None}
+
+    def get_invoice_blocks(self):
+        """The tax QR as an invoice-designer block, placed as the AEAT QR
+        specification (v0.5.0, section 3) allows: top of page 1, centred
+        (preferred) or towards the left, 30-40 mm."""
+        return [{
+            'id': 'verifactu_qr',
+            'label': 'Verifactu QR',
+            'help': ('AEAT rules: top of page 1, centred or towards the left, '
+                     '30–40 mm, with “QR tributario:” above it. Shown on issued '
+                     'invoices only; the preview uses a sample QR.'),
+            'required': True,
+            'slots': ['top-center', 'top-left'],
+            'default_slot': 'top-center',
+            'options': [{
+                'id': 'size_mm', 'label': 'Size',
+                'choices': [[s, f'{s} × {s} mm'] for s in range(MIN_SIZE_MM, MAX_SIZE_MM + 1, 5)],
+                'default': QR_SIZE_MM,
+            }],
+            'render': self._render_qr_block,
+        }]
+
+    def _render_qr_block(self, invoice, ctx):
         phrase = VERIFACTU_PHRASE if self._qr_mode() == 'verifactu' else None
-        return stamp_qr(pdf_bytes, self.qr_payload(invoice), phrase)
+        if ctx.get('preview'):
+            qr = {'url': qr_url('00000000T', 'DEMO-0001', date.today(), 121.00,
+                                environment='test'), 'phrase': phrase}
+        else:
+            qr = self.qr_for_invoice(invoice)
+        if not qr:
+            return []   # drafts have no Verifactu record, hence no QR
+        return qr_flowables(qr['url'], qr['phrase'], ctx.get('options', {}).get('size_mm'),
+                            align='left' if ctx.get('align') == 'left' else 'center',
+                            font_bold=ctx.get('font_bold') or 'Helvetica-Bold')
+
+    def filter_invoice_pdf(self, invoice, pdf_bytes):
+        """Core hook: put the QR on page 1 of every PDF of an issued invoice,
+        unless the layout already placed it (the invoice designer block)."""
+        qr = self.qr_for_invoice(invoice)
+        if qr is None or has_qr(pdf_bytes):
+            return pdf_bytes
+        return stamp_qr(pdf_bytes, qr['url'], qr['phrase'])
 
     def _qr_svg(self, invoice):
         from reportlab.graphics.barcode.qr import QrCodeWidget

@@ -113,6 +113,86 @@
                 Each zone has left | center | right columns. Use "hidden" to hide a block.
             </p>
 
+            <!-- Interactive zone map: what sits where; click a block, then a cell, to move it -->
+            <style>
+                #zoneMap .zm-cell { padding: 5px 6px; min-height: 30px; display: flex; flex-wrap: wrap; gap: 4px;
+                                    align-items: flex-start; border-left: 1px solid var(--color-surface-3); }
+                #zoneMap .zm-cell[data-col="center"] { justify-content: center; }
+                #zoneMap .zm-cell[data-col="right"] { justify-content: flex-end; }
+                #zoneMap .zm-empty { color: var(--color-text-faint); }
+                #zoneMap .zm-chip { font-size: 11px; padding: 2px 7px; border-radius: 10px; cursor: pointer;
+                                    border: 1px solid var(--color-border); background: var(--color-surface);
+                                    color: var(--color-text); }
+                #zoneMap .zm-chip.zm-required { border-color: var(--color-warning); background: var(--color-warning-bg);
+                                                color: var(--color-warning-fg); font-weight: bold; }
+                #zoneMap .zm-chip.zm-selected { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+                #zoneMap .zm-cell.zm-allowed { background: var(--color-success-bg); cursor: pointer;
+                                               box-shadow: inset 0 0 0 1px var(--color-success); }
+                #zoneMap .zm-cell.zm-blocked { opacity: .45; }
+            </style>
+            <div id="zoneMap" style="margin-bottom: 14px; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; font-size: 11px;">
+                <div style="background: var(--color-surface-2); padding: 5px 8px; border-bottom: 1px solid var(--color-border);">
+                    <b>Zone Map</b>
+                    <span id="zoneMapHint" style="color: var(--color-text-muted);">— click a block, then a highlighted cell, to move it. 🔒 = required by a module: it can only move to the cells its module allows.</span>
+                </div>
+                {% for zone in ['top', 'header', 'body', 'subtotal', 'bottom', 'footer'] %}
+                <div style="display: grid; grid-template-columns: 60px 1fr 1fr 1fr; border-bottom: 1px solid var(--color-surface-3);">
+                    <div style="padding: 6px 8px; background: var(--color-surface-3); font-weight: bold; color: var(--color-text-muted);">{{ zone }}</div>
+                    {% if zone == 'body' %}
+                    <div style="padding: 6px 8px; grid-column: span 3; color: var(--color-text-faint); font-style: italic;">Items table (auto)</div>
+                    {% else %}
+                    {% for col in ['left', 'center', 'right'] %}
+                    {% if zone == 'subtotal' and col == 'center' %}
+                    <div style="padding: 6px 8px; color: var(--color-text-faint); font-style: italic; text-align: center; border-left: 1px solid var(--color-surface-3);">💰 totals (auto)</div>
+                    {% else %}
+                    <div class="zm-cell" data-slot="{{ zone }}-{{ col }}" data-col="{{ col }}" tabindex="-1"></div>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+                <div style="display: grid; grid-template-columns: 60px 1fr;">
+                    <div style="padding: 6px 8px; background: var(--color-surface-3); font-weight: bold; color: var(--color-text-muted);">hidden</div>
+                    <div class="zm-cell" data-slot="hidden" data-col="left" tabindex="-1"></div>
+                </div>
+            </div>
+
+            {% if module_blocks %}
+            <!-- Blocks provided by enabled modules -->
+            <div style="border: 1px solid var(--color-surface-3); border-radius: 6px; padding: 8px; margin-bottom: 12px;">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 4px;">🧩 Blocks from modules</div>
+                <p style="font-size: 12px; color: var(--color-text-faint); margin: 0 0 6px;">
+                    Enabled modules add these blocks. Only the positions a module allows are offered;
+                    ★ marks its suggested position. 🔒 Required blocks cannot be hidden.
+                </p>
+                {% for block in module_blocks %}
+                {% set chosen = (config.block_options or {}).get(block.id, {}) %}
+                <div class="module-block" data-block-id="{{ block.id }}" style="margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <label for="pos_{{ block.id }}" style="font-size: 13px; white-space: nowrap; width: 130px; flex-shrink: 0;">{{ block.label }}</label>
+                        <select name="pos_{{ block.id }}" id="pos_{{ block.id }}" class="form-control" style="font-size: 13px; padding: 3px 5px; width: 130px; flex-shrink: 0;">
+                            {% for slot in block.slots %}
+                            <option value="{{ slot }}" {% if config.block_positions.get(block.id) == slot %}selected{% endif %}>{{ slot }}{% if slot == block.default_slot %} ★{% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        {% for opt in block.options %}
+                        <select name="opt_{{ block.id }}_{{ opt.id }}" class="form-control" title="{{ opt.label }}" aria-label="{{ block.label }}: {{ opt.label }}" style="font-size: 13px; padding: 3px 5px; width: auto; flex-shrink: 0;">
+                            {% for value, text in opt.choices %}
+                            <option value="{{ value }}" {% if chosen.get(opt.id, opt.default)|string == value|string %}selected{% endif %}>{{ text }}</option>
+                            {% endfor %}
+                        </select>
+                        {% endfor %}
+                        <span style="font-size: 11px; padding: 1px 6px; border-radius: 8px; flex-shrink: 0;
+                                     background: var(--color-surface-3); color: var(--color-text-muted);">{{ '🔒 Required' if block.required else 'Suggested' }}</span>
+                    </div>
+                    {% if block.help %}
+                    <small style="display: block; font-size: 11px; color: var(--color-text-muted); margin: 2px 0 0 136px;">{{ block.help }}</small>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% set block_labels = {
                 'logo': '🖼 Logo',
                 'title': '📄 Invoice Title',
@@ -181,10 +261,14 @@
 
             <!-- Zone Column Widths -->
             <div style="margin-top: 18px; margin-bottom: 12px;">
-                <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 6px;">Zone Column Widths (pt)</label>
+                <label style="font-size: 13px; font-weight: bold; display: block; margin-bottom: 6px;">Zone Column Widths (pt) and Lines</label>
                 <small style="color: var(--color-text-faint); display: block; margin-bottom: 8px;">
-                    Left : Center : Right per zone. Total ≈ 512. Leave empty for equal split.
+                    Left : Center : Right per zone. Total ≈ 512. Leave empty for equal split.<br>
+                    Lines: <b>│</b> between the zone's columns (when <i>Vertical Lines</i> is on),
+                    <b>—</b> below the zone (when <i>Horizontal Lines</i> is on). A column with a
+                    background colour never gets a vertical line next to it.
                 </small>
+                {% set zl = config.zone_lines or {} %}
                 {% set zc = config.zone_columns if config.zone_columns else {} %}
                 {% for zone in ['top', 'header', 'subtotal', 'bottom', 'footer'] %}
                 {% set vals = zc[zone] if zone in zc else [] %}
@@ -201,32 +285,21 @@
                     <input type="number" name="zone_col_{{ zone }}_2" min="0" max="512" step="1"
                            placeholder="Right" value="{{ vals[2]|int if vals|length > 2 and vals[2] is not none else '' }}"
                            style="width: 70px; padding: 4px 6px; font-size: 12px;">
-                </div>
-                {% endfor %}
-            </div>
-
-            <!-- Visual zone preview -->
-            <div style="margin-top: 18px; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; font-size: 11px;">
-                <div style="background: var(--color-surface-2); padding: 4px 8px; font-weight: bold; border-bottom: 1px solid var(--color-border);">Zone Map</div>
-                {% for zone in ['top', 'header', 'body', 'subtotal', 'bottom', 'footer'] %}
-                <div style="display: grid; grid-template-columns: 60px 1fr 1fr 1fr; border-bottom: 1px solid var(--color-surface-3);">
-                    <div style="padding: 6px 8px; background: var(--color-surface-3); font-weight: bold; color: var(--color-text-muted);">{{ zone }}</div>
-                    {% if zone == 'body' %}
-                    <div style="padding: 6px 8px; grid-column: span 3; color: var(--color-text-faint); font-style: italic;">
-                        Items table (auto)
-                    </div>
-                    {% elif zone == 'subtotal' %}
-                    <div style="padding: 6px 8px; grid-column: span 3; color: var(--color-text-faint); font-style: italic;">
-                        💰 Subtotal / Tax / Total + optional block
-                    </div>
-                    {% else %}
-                    <div style="padding: 6px 8px; color: var(--color-text-faint);" id="map_{{ zone }}_left">left</div>
-                    <div style="padding: 6px 8px; color: var(--color-text-faint); text-align: center;" id="map_{{ zone }}_center">center</div>
-                    <div style="padding: 6px 8px; color: var(--color-text-faint); text-align: right;" id="map_{{ zone }}_right">right</div>
+                    {% set lines = zl.get(zone) or {} %}
+                    {% if zone in vertical_line_zones %}
+                    <label style="font-size: 12px; display: flex; align-items: center; gap: 3px; margin-left: 6px;" title="Vertical lines between the {{ zone }} columns">
+                        <input type="checkbox" name="line_v_{{ zone }}" {{ 'checked' if lines.get('vertical', True) != False }}> │
+                    </label>
+                    {% endif %}
+                    {% if zone in line_below_zones %}
+                    <label style="font-size: 12px; display: flex; align-items: center; gap: 3px;" title="Horizontal line below the {{ zone }} zone">
+                        <input type="checkbox" name="line_b_{{ zone }}" {{ 'checked' if lines.get('below', True) != False }}> —
+                    </label>
                     {% endif %}
                 </div>
                 {% endfor %}
             </div>
+
         </div>
 
         <!-- Right column: Labels -->
@@ -300,35 +373,87 @@
         recipient_info: '👤 Recipient', invoice_meta: '🔢 Meta',
         due_date: '📅 Due', bank_details: '🏦 Bank', notes: '📝 Notes', payment_terms: '💳 Pay'
     };
-    var blockIds = {{ block_ids | tojson }};
+    var moduleBlockIds = {{ module_blocks | map(attribute='id') | list | tojson }};
+    {% for block in module_blocks %}blockLabels[{{ block.id | tojson }}] = {{ block.label | tojson }};
+    {% endfor %}var blockIds = {{ block_ids | tojson }}.concat(moduleBlockIds);
 
-    /* Update the zone map preview */
+    var blockMeta = {};   // module blocks: allowed slots and required flag
+    {% for block in module_blocks %}blockMeta[{{ block.id | tojson }}] = {slots: {{ block.slots | tojson }}, required: {{ block.required | tojson }}};
+    {% endfor %}var mapSlots = {{ slot_choices | tojson }};
+    var selectedBid = null;
+
+    function posSelect(bid) { return document.querySelector('select[name="pos_' + bid + '"]'); }
+    function allowedSlots(bid) { return blockMeta[bid] ? blockMeta[bid].slots : mapSlots; }
+    function isRequired(bid) { return !!(blockMeta[bid] && blockMeta[bid].required); }
+
+    /* Zone map: one chip per block in its cell; the selected block's allowed cells are highlighted */
     function updateZoneMap() {
-        // Clear all cells
-        ['top','header','subtotal','bottom','footer'].forEach(function(z){
-            ['left','center','right'].forEach(function(col){
-                var el = document.getElementById('map_' + z + '_' + col);
-                if (el) { el.textContent = col; el.style.color = 'var(--color-text-faint)'; }
-            });
+        var cells = document.querySelectorAll('#zoneMap .zm-cell');
+        cells.forEach(function(cell){
+            cell.textContent = '';
+            cell.classList.remove('zm-allowed', 'zm-blocked');
+            cell.removeAttribute('role');
+            cell.setAttribute('tabindex', '-1');
         });
-        // Fill from selects
         blockIds.forEach(function(bid){
-            var sel = document.querySelector('select[name="pos_' + bid + '"]');
+            var sel = posSelect(bid);
             if (!sel) return;
-            var val = sel.value;
-            if (val === 'hidden') return;
-            var parts = val.split('-');
-            var el = document.getElementById('map_' + parts[0] + '_' + parts[1]);
-            if (!el) return;
-            var cur = (el.style.color === 'rgb(170, 170, 170)') ? '' : el.textContent + ' ';
-            el.textContent = (cur && cur.trim() !== parts[1]) ? cur + (blockLabels[bid] || bid) : (blockLabels[bid] || bid);
-            el.style.color = 'var(--color-text)';
+            var cell = document.querySelector('#zoneMap .zm-cell[data-slot="' + sel.value + '"]');
+            if (!cell) return;
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'zm-chip' + (isRequired(bid) ? ' zm-required' : '') + (bid === selectedBid ? ' zm-selected' : '');
+            chip.dataset.bid = bid;
+            chip.textContent = (isRequired(bid) ? '🔒 ' : '') + (blockLabels[bid] || bid);
+            chip.title = isRequired(bid) ? 'Required by a module — click, then a highlighted cell, to move it'
+                                         : 'Click, then a highlighted cell, to move it';
+            chip.setAttribute('aria-pressed', bid === selectedBid ? 'true' : 'false');
+            cell.appendChild(chip);
+        });
+        cells.forEach(function(cell){
+            if (!cell.children.length) {
+                var empty = document.createElement('span');
+                empty.className = 'zm-empty';
+                empty.textContent = cell.dataset.slot === 'hidden' ? '—' : cell.dataset.col;
+                cell.appendChild(empty);
+            }
+            if (selectedBid) {
+                var ok = allowedSlots(selectedBid).indexOf(cell.dataset.slot) !== -1;
+                cell.classList.add(ok ? 'zm-allowed' : 'zm-blocked');
+                if (ok) { cell.setAttribute('role', 'button'); cell.setAttribute('tabindex', '0'); }
+            }
         });
     }
 
+    function moveSelectedTo(slot) {
+        if (!selectedBid || allowedSlots(selectedBid).indexOf(slot) === -1) return;
+        var sel = posSelect(selectedBid);
+        sel.value = slot;
+        sel.dispatchEvent(new Event('change', {bubbles: true}));
+        selectedBid = null;
+        updateZoneMap();
+    }
+
+    var zoneMapEl = document.getElementById('zoneMap');
+    zoneMapEl.addEventListener('click', function(ev){
+        var chip = ev.target.closest('.zm-chip');
+        if (chip) {
+            selectedBid = (selectedBid === chip.dataset.bid) ? null : chip.dataset.bid;
+            updateZoneMap();
+            return;
+        }
+        var cell = ev.target.closest('.zm-cell');
+        if (cell) moveSelectedTo(cell.dataset.slot);
+    });
+    zoneMapEl.addEventListener('keydown', function(ev){
+        if (ev.key === 'Escape' && selectedBid) { selectedBid = null; updateZoneMap(); return; }
+        var cell = ev.target.classList && ev.target.classList.contains('zm-cell') ? ev.target : null;
+        if (cell && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); moveSelectedTo(cell.dataset.slot); }
+    });
+
     // Bind change events on position selects
     blockIds.forEach(function(bid){
-        var sel = document.querySelector('select[name="pos_' + bid + '"]');
+        var sel = posSelect(bid);
         if (sel) sel.addEventListener('change', updateZoneMap);
     });
     updateZoneMap();
@@ -353,7 +478,9 @@
             labels: {},
             block_positions: {},
             block_offsets: {},
+            block_options: {},
             zone_columns: {},
+            zone_lines: {},
             block_gaps: {},
             block_label_widths: {},
             block_styles: {}
@@ -381,6 +508,15 @@
             bs.show_label = bsLabel ? bsLabel.checked : true;
             if (bs.color || bs.bg || !bs.show_label) cfg.block_styles[bid] = bs;
         });
+        // Options of module blocks
+        moduleBlockIds.forEach(function(bid){
+            var prefix = 'opt_' + bid + '_';
+            var opts = {};
+            f.querySelectorAll('select[name^="' + prefix + '"]').forEach(function(sel){
+                opts[sel.name.slice(prefix.length)] = sel.value;
+            });
+            cfg.block_options[bid] = opts;
+        });
         // Totals styles
         var tColor = f.querySelector('input[name="bs_color_totals"]');
         var tBg = f.querySelector('input[name="bs_bg_totals"]');
@@ -400,6 +536,13 @@
             // Only save if at least 2 non-null values
             var nonNull = parts.filter(function(v){ return v !== null; });
             if (nonNull.length >= 2) cfg.zone_columns[zone] = parts;
+            var lv = f.querySelector('input[name="line_v_' + zone + '"]');
+            var lb = f.querySelector('input[name="line_b_' + zone + '"]');
+            if (lv || lb) {
+                cfg.zone_lines[zone] = {};
+                if (lv) cfg.zone_lines[zone].vertical = lv.checked;
+                if (lb) cfg.zone_lines[zone].below = lb.checked;
+            }
         });
         return cfg;
     }
@@ -431,6 +574,15 @@
                 if (sel && cfg.block_positions[bid]) sel.value = cfg.block_positions[bid];
             });
         }
+        if (cfg.block_options) {
+            moduleBlockIds.forEach(function(bid){
+                var opts = cfg.block_options[bid] || {};
+                Object.keys(opts).forEach(function(key){
+                    var sel = f.querySelector('select[name="opt_' + bid + '_' + key + '"]');
+                    if (sel) sel.value = String(opts[key]);
+                });
+            });
+        }
         if (cfg.block_offsets) {
             blockIds.forEach(function(bid){
                 var off = cfg.block_offsets[bid];
@@ -440,6 +592,13 @@
                 }
             });
         }
+        ['top','header','subtotal','bottom','footer'].forEach(function(zone){
+            var zl = (cfg.zone_lines || {})[zone] || {};
+            var lv = f.querySelector('input[name="line_v_' + zone + '"]');
+            var lb = f.querySelector('input[name="line_b_' + zone + '"]');
+            if (lv) lv.checked = zl.vertical !== false;
+            if (lb) lb.checked = zl.below !== false;
+        });
         if (cfg.zone_columns) {
             ['top','header','subtotal','bottom','footer'].forEach(function(zone){
                 var vals = cfg.zone_columns[zone] || [];

@@ -14,6 +14,11 @@ Layout grid:
 Each block (logo, title, sender_info, recipient_info, invoice_meta,
 bank_details, notes, payment_terms, custom_text) can be assigned to
 a slot like "top-left", "header-right", "bottom-center", etc.
+
+Other modules add their own blocks through BaseModule.get_invoice_blocks()
+(for example the Verifactu tax QR). Each says whether it is required or
+suggested, which slots it may use and its default slot; the designer offers
+only those slots and the generator renders the block in the chosen one.
 """
 
 from module_manager import BaseModule
@@ -33,6 +38,11 @@ BLOCK_IDS = [
     'logo', 'title', 'sender_info', 'recipient_info',
     'invoice_meta', 'due_date', 'bank_details', 'notes', 'payment_terms',
 ]
+
+# Zones whose columns can be split by vertical lines, and zones followed by a
+# horizontal separator line.
+VERTICAL_LINE_ZONES = ['top', 'header', 'bottom', 'footer']
+LINE_BELOW_ZONES = ['top', 'header', 'subtotal', 'bottom']
 
 # Valid slot positions
 SLOT_CHOICES = [
@@ -58,6 +68,9 @@ DEFAULT_CONFIG = {
     'show_accent_line': True,
     'show_separator_lines': False,
     'show_vertical_lines': False,
+    # Per-zone lines, applied when the global switches above are on:
+    # {zone: {'vertical': bool, 'below': bool}}; a missing entry means True.
+    'zone_lines': {},
     'block_gaps': {},                # per-block gap override: {block_id: pt}
     'block_label_widths': {},        # per-block label column width override: {block_id: pt}
     'block_styles': {},              # per-block: {block_id: {color: '#hex', bg: '#hex', show_label: true}}
@@ -91,6 +104,8 @@ DEFAULT_CONFIG = {
         'notes':          'bottom-right',
         'payment_terms':  'bottom-center',
     },
+    # Options of blocks provided by other modules: {block_id: {option_id: value}}
+    'block_options': {},
     # Fine-tune offsets in points (pt): {block_id: {x: 0, y: 0}}
     'block_offsets': {},
     # Zone column widths in pt: {zone_name: [left, right] or [left, center, right]}
@@ -295,24 +310,37 @@ class InvoiceDesignerModule(BaseModule):
     def _create_template(self):
         if request.method == 'POST':
             return self._save_template(None)
-        config = _deep_copy_config(DEFAULT_CONFIG)
+        blocks = self._module_blocks()
+        config = sanitize_module_blocks(_deep_copy_config(DEFAULT_CONFIG), blocks)
         return render_template('designer_form.html', template=None,
                                config=config, config_json=json.dumps(config, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
+                               module_blocks=blocks,
+                               vertical_line_zones=VERTICAL_LINE_ZONES,
+                               line_below_zones=LINE_BELOW_ZONES,
                                layout_presets=LAYOUT_PRESETS)
 
     def _edit_template(self, id):
         tpl = db_get_or_404(self.InvoiceTemplate, id)
         if request.method == 'POST':
             return self._save_template(tpl)
-        config = json.loads(tpl.config_json)
-        merged = _merge_config(config)
+        blocks = self._module_blocks()
+        merged = sanitize_module_blocks(_merge_config(json.loads(tpl.config_json)), blocks)
         return render_template('designer_form.html', template=tpl,
                                config=merged, config_json=json.dumps(merged, indent=2),
                                block_ids=BLOCK_IDS, slot_choices=SLOT_CHOICES,
+                               module_blocks=blocks,
+                               vertical_line_zones=VERTICAL_LINE_ZONES,
+                               line_below_zones=LINE_BELOW_ZONES,
                                layout_presets=LAYOUT_PRESETS)
 
+    def _module_blocks(self):
+        """Invoice blocks offered by the enabled modules (normalized)."""
+        manager = self.core.module_manager
+        return normalize_blocks(manager.get_invoice_blocks() if manager else [])
+
     def _save_template(self, tpl):
+        blocks = self._module_blocks()
         try:
             name = request.form.get('name', '').strip()
             if not name:
@@ -337,7 +365,7 @@ class InvoiceDesignerModule(BaseModule):
                     old_config = json.loads(tpl.config_json)
                     if old_config.get('logo_path') and 'logo_path' not in config:
                         config['logo_path'] = old_config['logo_path']
-                config_json = json.dumps(config)
+                config_json = json.dumps(sanitize_module_blocks(config, blocks))
             else:
                 config = {
                     'accent_color': request.form.get('accent_color', '#5B6FD8'),
@@ -355,6 +383,7 @@ class InvoiceDesignerModule(BaseModule):
                     'labels': {},
                     'block_positions': {},
                     'block_offsets': {},
+                    'block_options': {},
                 }
 
                 for key in DEFAULT_CONFIG['labels']:
@@ -374,6 +403,31 @@ class InvoiceDesignerModule(BaseModule):
                             'x': float(ox) if ox else 0,
                             'y': float(oy) if oy else 0,
                         }
+
+                # Blocks of other modules: position and options
+                for block in blocks:
+                    pos = request.form.get(f'pos_{block["id"]}', '').strip()
+                    if pos:
+                        config['block_positions'][block['id']] = pos
+                    config['block_options'][block['id']] = {
+                        opt['id']: request.form.get(f'opt_{block["id"]}_{opt["id"]}')
+                        for opt in block['options']}
+                if tpl:
+                    # Keep what was saved for blocks of modules that are disabled now.
+                    old_config = json.loads(tpl.config_json)
+                    for key in ('block_positions', 'block_options'):
+                        for bid, value in (old_config.get(key) or {}).items():
+                            config[key].setdefault(bid, value)
+
+                # Lines per zone
+                config['zone_lines'] = {}
+                for zone in sorted(set(VERTICAL_LINE_ZONES) | set(LINE_BELOW_ZONES)):
+                    lines = {}
+                    if zone in VERTICAL_LINE_ZONES:
+                        lines['vertical'] = f'line_v_{zone}' in request.form
+                    if zone in LINE_BELOW_ZONES:
+                        lines['below'] = f'line_b_{zone}' in request.form
+                    config['zone_lines'][zone] = lines
 
                 # Parse zone column widths
                 config['zone_columns'] = {}
@@ -446,7 +500,7 @@ class InvoiceDesignerModule(BaseModule):
                     if old_config.get('logo_path'):
                         config['logo_path'] = old_config['logo_path']
 
-                config_json = json.dumps(config)
+                config_json = json.dumps(sanitize_module_blocks(config, blocks))
 
             if tpl:
                 tpl.name = name
@@ -488,8 +542,7 @@ class InvoiceDesignerModule(BaseModule):
 
     def _preview_template(self, id):
         tpl = db_get_or_404(self.InvoiceTemplate, id)
-        config = json.loads(tpl.config_json)
-        merged = _merge_config(config)
+        merged = _merge_config(json.loads(tpl.config_json))
 
         settings = self.core.get_settings()
 
@@ -530,6 +583,8 @@ class InvoiceDesignerModule(BaseModule):
             settings=settings,
             config=merged,
             storage=self.core.storage,
+            blocks=self._module_blocks(),
+            preview=True,
         )
         return Response(pdf_bytes, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
@@ -573,6 +628,97 @@ class InvoiceDesignerModule(BaseModule):
 # Helpers
 # ---------------------------------------------------------------------------
 
+def normalize_blocks(blocks):
+    """Module blocks (from ModuleManager.get_invoice_blocks) in the shape the
+    designer uses. Slots outside the grid are dropped; a suggested block may
+    also be 'hidden', a required one may not. A block whose id clashes with a
+    built-in block, or that has no usable slot, is left out."""
+    result = []
+    for block in blocks or []:
+        bid = block.get('id')
+        if bid in BLOCK_IDS:
+            logger.warning('Invoice block %r clashes with a built-in block; ignored', bid)
+            continue
+        required = bool(block.get('required'))
+        slots = [s for s in block.get('slots') or [] if s in SLOT_CHOICES and s != 'hidden']
+        if not slots:
+            logger.warning('Invoice block %r has no valid slot; ignored', bid)
+            continue
+        default = block.get('default_slot')
+        if default not in slots:
+            default = slots[0]
+        options = []
+        for opt in block.get('options') or []:
+            choices = [list(c) if isinstance(c, (list, tuple)) else [c, str(c)]
+                       for c in opt.get('choices') or []]
+            if not opt.get('id') or not choices:
+                continue
+            values = [c[0] for c in choices]
+            options.append({'id': opt['id'], 'label': opt.get('label') or opt['id'],
+                            'choices': choices,
+                            'default': opt.get('default') if opt.get('default') in values
+                            else values[0]})
+        result.append({
+            'id': bid,
+            'label': block.get('label') or bid,
+            'help': block.get('help') or '',
+            'required': required,
+            'module_id': block.get('module_id'),
+            'slots': slots if required else slots + ['hidden'],
+            'default_slot': default,
+            'options': options,
+            'render': block['render'],
+        })
+    return result
+
+
+def _option_value(opt, raw):
+    """`raw` as one of the option's choice values (compared as text), or the default."""
+    for value, _text in opt['choices']:
+        if raw is not None and str(raw) == str(value):
+            return value
+    return opt['default']
+
+
+def sanitize_module_blocks(config, blocks):
+    """Put each module block (normalized) in an allowed slot - its default
+    slot when none or another one is set - and keep only valid option values.
+    Entries of blocks not in `blocks` (module disabled) are left as they are."""
+    positions = config.setdefault('block_positions', {})
+    options = config.setdefault('block_options', {})
+    for block in blocks:
+        if positions.get(block['id']) not in block['slots']:
+            positions[block['id']] = block['default_slot']
+        chosen = options.get(block['id']) or {}
+        options[block['id']] = {opt['id']: _option_value(opt, chosen.get(opt['id']))
+                                for opt in block['options']}
+    return config
+
+
+def aligned_block(flowables, align='left'):
+    """The flowables stacked as one unit as wide as its column, each aligned
+    'left', 'center' or 'right' in it. A table cell positions flowables by
+    the cell's alignment and ignores their own, so without this a centred
+    label and a drawing below it would not share the same axis."""
+    from reportlab.platypus import Flowable
+
+    class _Aligned(Flowable):
+        def wrap(self, avail_w, avail_h):
+            self._sizes = [f.wrap(avail_w, avail_h) for f in flowables]
+            self.width = avail_w
+            self.height = sum(h for _w, h in self._sizes)
+            return self.width, self.height
+
+        def draw(self):
+            y = self.height
+            for f, (w, h) in zip(flowables, self._sizes):
+                y -= h
+                x = {'center': (self.width - w) / 2, 'right': self.width - w}.get(align, 0)
+                f.drawOn(self.canv, x, y)
+
+    return _Aligned()
+
+
 def _deep_copy_config(cfg):
     return json.loads(json.dumps(cfg))
 
@@ -601,6 +747,10 @@ def _merge_config(user_cfg):
         elif k == 'block_styles':
             merged['block_styles'] = dict(DEFAULT_CONFIG.get('block_styles', {}))
             merged['block_styles'].update(v)
+        elif k == 'block_options':
+            merged['block_options'] = dict(v or {})
+        elif k == 'zone_lines':
+            merged['zone_lines'] = dict(v or {})
         else:
             merged[k] = v
     return merged
@@ -658,12 +808,18 @@ def _demo_customer():
 # Universal PDF generator from config — grid-based layout
 # ---------------------------------------------------------------------------
 
-def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
+def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
+                             blocks=None, preview=False):
     """
     Generate invoice PDF bytes from a config dict.
 
     Layout zones (top → footer), each with left | center | right slots.
     Blocks are placed according to config['block_positions'].
+
+    `blocks` are the invoice blocks of the enabled modules
+    (ModuleManager.get_invoice_blocks); each is rendered by its module in the
+    slot the template chose, or in its default slot. `preview` tells them the
+    invoice is sample data (designer preview).
     """
     import io as _io
     from reportlab.lib.pagesizes import letter
@@ -692,8 +848,22 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     title_fs = c.get('title_font_size', 28)
     show_sep = c.get('show_separator_lines', False)
     show_vert = c.get('show_vertical_lines', False)
+    zone_lines = c.get('zone_lines') or {}
 
-    positions = c.get('block_positions', DEFAULT_CONFIG['block_positions'])
+    def _zone_line(zone, kind):
+        """A line of `kind` ('vertical' or 'below') for `zone`: the global
+        switch must be on and the zone must not turn it off."""
+        enabled = show_vert if kind == 'vertical' else show_sep
+        return bool(enabled) and (zone_lines.get(zone) or {}).get(kind, True) is not False
+
+    module_blocks = {b['id']: b for b in normalize_blocks(blocks)}
+    placed = sanitize_module_blocks(
+        {'block_positions': dict(c.get('block_positions', DEFAULT_CONFIG['block_positions'])),
+         'block_options': dict(c.get('block_options') or {})},
+        module_blocks.values())
+    positions = placed['block_positions']
+    block_options = placed['block_options']
+    all_block_ids = BLOCK_IDS + list(module_blocks)
     offsets = c.get('block_offsets', {})
     _block_label_widths = c.get('block_label_widths', {})
 
@@ -798,6 +968,20 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
             except Exception:  # logo file may be missing or corrupted
                 pass
             return []
+
+        if block_id in module_blocks:
+            block = module_blocks[block_id]
+            ctx = {'slot': slot,
+                   'align': slot.split('-', 1)[1] if '-' in slot else 'left',
+                   'options': block_options.get(block_id, {}),
+                   'font': font, 'font_bold': font_b, 'preview': preview}
+            try:
+                flows = list(block['render'](invoice, ctx) or [])
+                return [aligned_block(flows, ctx['align'])] if flows else []
+            except Exception:
+                logger.exception('Invoice block %r of module %r failed to render',
+                                 block_id, block.get('module_id'))
+                return []
 
         if block_id == 'title':
             lw = _block_label_widths.get('title', 0)
@@ -910,7 +1094,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     def _render_zone(zone_name):
         """Render a zone as a single Table. Returns True if anything was rendered."""
         col_bids = {0: [], 1: [], 2: []}
-        for bid in BLOCK_IDS:
+        for bid in all_block_ids:
             slot = positions.get(bid, 'hidden')
             if slot == 'hidden' or not slot.startswith(zone_name):
                 continue
@@ -989,7 +1173,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
                 zone_style.append(('BOTTOMPADDING', (ci, 0), (ci, -1), 8))
 
         # Vertical lines between columns — skip if either adjacent column has bg
-        if show_vert and len(col_widths) > 1:
+        if _zone_line(zone_name, 'vertical') and len(col_widths) > 1:
             for ci in range(len(col_widths) - 1):
                 left_has_bg = col_bg_colors[ci] if ci < len(col_bg_colors) else None
                 right_has_bg = col_bg_colors[ci + 1] if ci + 1 < len(col_bg_colors) else None
@@ -1010,9 +1194,9 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
         elements.append(Spacer(1, 10))
         return True
 
-    def _separator():
-        """Add a thin separator line if enabled."""
-        if show_sep:
+    def _separator(zone):
+        """Add a thin separator line below `zone` if enabled."""
+        if _zone_line(zone, 'below'):
             sep = Table([['']], colWidths=[CONTENT_W])
             sep.setStyle(TableStyle([
                 ('LINEBELOW', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
@@ -1041,13 +1225,13 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     _has_top = _render_zone('top')
 
     if _has_top:
-        _separator()
+        _separator('top')
 
     # --- HEADER zone ---
     _has_header = _render_zone('header')
 
     if _has_header:
-        _separator()
+        _separator('header')
 
     elements.append(Spacer(1, 10))
 
@@ -1148,7 +1332,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
     # Check if any block is placed in subtotal zone
     sub_left_bids = []
     sub_right_bids = []
-    for bid in BLOCK_IDS:
+    for bid in all_block_ids:
         slot = positions.get(bid, 'hidden')
         if slot == 'subtotal-left':
             sub_left_bids.append(bid)
@@ -1204,13 +1388,13 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None):
 
     elements.append(Spacer(1, 25))
 
-    _separator()
+    _separator('subtotal')
 
     # --- BOTTOM zone ---
     _has_bottom = _render_zone('bottom')
 
     if _has_bottom:
-        _separator()
+        _separator('bottom')
 
     # --- FOOTER zone ---
     _render_zone('footer')

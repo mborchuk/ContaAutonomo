@@ -79,7 +79,10 @@ technical documents (hash v0.1.2, QR v0.5.0) and lists the remaining work.
   AEAT's worked examples — and the cotejo URL.
 - Every generated PDF of an issued invoice carries the QR on page 1
   (`pdf_qr.py`, through the core `filter_invoice_pdf` hook): 30 mm, error
-  correction M, "QR tributario:" above it. The draft PDF stored when the
+  correction M, "QR tributario:" above it. The module also declares the QR
+  as an invoice designer block (`get_invoice_blocks`: required, top-centre or
+  top-left, 30, 35 or 40 mm), so a designer template places it where the user
+  chose; the hook then leaves the PDF as it is (`pdf_qr.has_qr`). The draft PDF stored when the
   invoice was created is discarded at Issue, so the issued PDF is rebuilt with
   the QR. A PDF the user attached (Invoice Attachments) is served as uploaded,
   without a QR.
