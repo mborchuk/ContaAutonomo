@@ -35,3 +35,34 @@ FILE_DIRS = {
     'signatures': 'pdf_signature_files',
     'backups': 'backups',
 }
+
+
+# --- Invoice lifecycle (F2) ---
+# Kept here, not in app.py, so module_manager can use the rule without
+# importing app (no import cycle).
+LOCKED_INVOICE_STATUSES = ('issued', 'paid')
+
+# The only status an invoice can be created with. Every later status is reached
+# through a lifecycle action (issue, mark paid, annul), never set directly.
+INITIAL_INVOICE_STATUS = 'draft'
+
+
+def invoice_locked(invoice):
+    """Issued and paid invoices are read-only (changes go through a
+    rectificative).
+
+    An annulled invoice (cancelled after being issued) is kept for audit and is
+    read-only too. Legacy invoices cancelled before the lifecycle existed have
+    no `issued_at` and stay editable, as before.
+    """
+    if invoice is None:
+        return False
+    if invoice.status in LOCKED_INVOICE_STATUSES:
+        return True
+    return invoice.status == 'cancelled' and getattr(invoice, 'issued_at', None) is not None
+
+
+def is_legacy_settled(invoice):
+    """Paid or cancelled without ever being issued through the app: it has no
+    sequential number, fiscal snapshot or Verifactu record."""
+    return invoice.status in ('paid', 'cancelled') and getattr(invoice, 'issued_at', None) is None
