@@ -18,8 +18,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
 
-from .brackets import BRACKETS, BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT
+from .brackets import BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year
 from .engine import project
+from year_tables import fallback_note
 
 
 class RetaAdvisorModule(BaseModule):
@@ -148,7 +149,8 @@ class RetaAdvisorModule(BaseModule):
             income, expenses, months,
             current_monthly_quota=current_quota,
             paid_ytd=self._paid_ytd(today.year),
-            deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)))
+            deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)),
+            year=today.year)
 
     # --- Routes ------------------------------------------------------------- #
 
@@ -174,9 +176,12 @@ class RetaAdvisorModule(BaseModule):
                 return redirect(url_for('reta_advisor.reta_index'))
 
             proj = module._projection()
+            _table_year, brackets, _fallback = brackets_for_year(date.today().year)
             return render_template('reta_advisor.html',
                                    proj=proj,
-                                   brackets=BRACKETS,
+                                   brackets=brackets,
+                                   table_note=(fallback_note(proj['table_year'])
+                                               if proj['table_fallback'] else ''),
                                    version=BRACKET_TABLE_VERSION,
                                    config=module._get_config(),
                                    current_year=datetime.now().year)
@@ -200,6 +205,8 @@ class RetaAdvisorModule(BaseModule):
             f"{symbol}{proj['current_monthly_quota']:.2f}/month — regularization "
             f"~{symbol}{abs(delta):.2f} {direction}. Table v{BRACKET_TABLE_VERSION}."
         ]
+        if proj.get('table_fallback'):
+            notes.append(f"RETA advisor: {fallback_note(proj['table_year'])}")
         return {
             'summary_columns': [],
             'breakdown_rows': [],
