@@ -6,6 +6,7 @@ Supports: Local filesystem (default), AWS S3, Google Cloud Storage, Google Drive
 """
 
 from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
+from settings_forms import secret_from_form
 from flask import Blueprint, redirect, url_for, flash
 from datetime import datetime
 import logging
@@ -729,224 +730,12 @@ class ExternalStorageModule(BaseModule):
 
     def get_settings_html(self, settings):
         config = self._get_config()
-        st = config.storage_type or 'local'
-
-        # S3 values
-        s3_bucket = config.s3_bucket or ''
-        s3_prefix = config.s3_prefix or ''
-        s3_region = config.s3_region or ''
-        s3_ak = config.s3_access_key or ''
-        s3_sk = config.s3_secret_key or ''
-        s3_prof = config.s3_profile or ''
-        s3_auth = config.s3_auth_method or 'sdk'
-
-        # GCS values
-        gcs_bucket = getattr(config, 'gcs_bucket', '') or ''
-        gcs_prefix = getattr(config, 'gcs_prefix', '') or ''
-        gcs_creds = getattr(config, 'gcs_credentials_json', '') or ''
-        gcs_auth = getattr(config, 'gcs_auth_method', 'adc') or 'adc'
-
-        # Google Drive values
-        gd_folder = getattr(config, 'gdrive_folder_id', '') or ''
-        gd_creds = getattr(config, 'gdrive_credentials_json', '') or ''
-        gd_auth = getattr(config, 'gdrive_auth_method', 'adc') or 'adc'
-
-        # Checked states
-        def chk(val, expected):
-            return 'checked' if val == expected else ''
-
-        # Shared styles
-        rs = 'width: auto !important; padding: 0 !important; margin-right: 8px; vertical-align: middle;'
-        ls = 'display: block; margin-bottom: 8px; font-weight: normal; cursor: pointer;'
-        panel = 'margin-left: 20px; padding: 15px; background: var(--color-surface-2); border-radius: 6px; border: 1px solid var(--color-border); margin-bottom: 15px;'
-
-        # JS helper to show/hide config panels
-        js = """
-<script>
-function esShowPanel(type) {
-    ['s3-config','gcs-config','gdrive-config'].forEach(function(id) {
-        document.getElementById(id).style.display = 'none';
-    });
-    if (type !== 'local') {
-        var el = document.getElementById(type + '-config');
-        if (el) el.style.display = 'block';
-    }
-}
-</script>"""
-
-        return f'''{js}
-<h3 style="margin-bottom: 15px; color: var(--color-text);">File Storage</h3>
-<div style="margin-bottom: 20px;">
-    <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Storage Backend</label>
-    <div style="margin-left: 4px;">
-        <label style="{ls}">
-            <input type="radio" name="es_storage_type" value="local" {chk(st,'local')}
-                   onchange="esShowPanel('local')" style="{rs}">
-            Local Filesystem (default)
-        </label>
-        <label style="{ls}">
-            <input type="radio" name="es_storage_type" value="s3" {chk(st,'s3')}
-                   onchange="esShowPanel('s3')" style="{rs}">
-            AWS S3
-        </label>
-        <label style="{ls}">
-            <input type="radio" name="es_storage_type" value="gcs" {chk(st,'gcs')}
-                   onchange="esShowPanel('gcs')" style="{rs}">
-            Google Cloud Storage
-        </label>
-        <label style="{ls}">
-            <input type="radio" name="es_storage_type" value="gdrive" {chk(st,'gdrive')}
-                   onchange="esShowPanel('gdrive')" style="{rs}">
-            Google Drive
-        </label>
-    </div>
-</div>
-
-<!-- AWS S3 Config -->
-<div id="s3-config" style="display: {'block' if st=='s3' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:var(--color-text-muted);">AWS S3 Settings</h4>
-    <div class="form-group">
-        <label for="es_s3_bucket">S3 Bucket Name *</label>
-        <input type="text" id="es_s3_bucket" name="es_s3_bucket" value="{s3_bucket}" placeholder="my-app-files" style="max-width: 300px;">
-    </div>
-    <div class="form-group">
-        <label for="es_s3_prefix">Key Prefix (optional)</label>
-        <input type="text" id="es_s3_prefix" name="es_s3_prefix" value="{s3_prefix}" placeholder="autonomos/" style="max-width: 300px;">
-        <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">Files stored under this prefix in the bucket.</small>
-    </div>
-    <div class="form-group">
-        <label for="es_s3_region">AWS Region</label>
-        <input type="text" id="es_s3_region" name="es_s3_region" value="{s3_region}" placeholder="eu-west-1" style="max-width: 200px;">
-    </div>
-    <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
-        <div style="margin-left: 4px;">
-            <label style="{ls}">
-                <input type="radio" name="es_s3_auth_method" value="sdk" {chk(s3_auth,'sdk')}
-                       onchange="document.getElementById('s3-keys').style.display='none'; document.getElementById('s3-profile').style.display='none'"
-                       style="{rs}">
-                SDK Default (env vars, instance role)
-            </label>
-            <label style="{ls}">
-                <input type="radio" name="es_s3_auth_method" value="keys" {chk(s3_auth,'keys')}
-                       onchange="document.getElementById('s3-keys').style.display='block'; document.getElementById('s3-profile').style.display='none'"
-                       style="{rs}">
-                Access Keys
-            </label>
-            <label style="{ls}">
-                <input type="radio" name="es_s3_auth_method" value="profile" {chk(s3_auth,'profile')}
-                       onchange="document.getElementById('s3-keys').style.display='none'; document.getElementById('s3-profile').style.display='block'"
-                       style="{rs}">
-                AWS Profile
-            </label>
-        </div>
-    </div>
-    <div id="s3-keys" style="display: {'block' if s3_auth=='keys' else 'none'}; margin-left: 20px;">
-        <div class="form-group">
-            <label for="es_s3_access_key">Access Key ID</label>
-            <input type="text" id="es_s3_access_key" name="es_s3_access_key" value="{s3_ak}" style="max-width: 300px;" autocomplete="off">
-        </div>
-        <div class="form-group">
-            <label for="es_s3_secret_key">Secret Access Key</label>
-            <input type="password" id="es_s3_secret_key" name="es_s3_secret_key" value="{s3_sk}" style="max-width: 300px;" autocomplete="off">
-        </div>
-    </div>
-    <div id="s3-profile" style="display: {'block' if s3_auth=='profile' else 'none'}; margin-left: 20px;">
-        <div class="form-group">
-            <label for="es_s3_profile">AWS Profile Name</label>
-            <input type="text" id="es_s3_profile" name="es_s3_profile" value="{s3_prof}" placeholder="default" style="max-width: 200px;">
-        </div>
-    </div>
-    <div style="margin-top: 15px;">
-        <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;"
-                onclick="var f=document.createElement('form');f.method='POST';f.action='/storage/test';document.body.appendChild(f);f.submit();">
-            Test Connection
-        </button>
-    </div>
-</div>
-
-<!-- Google Cloud Storage Config -->
-<div id="gcs-config" style="display: {'block' if st=='gcs' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:var(--color-text-muted);">Google Cloud Storage Settings</h4>
-    <div class="form-group">
-        <label for="es_gcs_bucket">GCS Bucket Name *</label>
-        <input type="text" id="es_gcs_bucket" name="es_gcs_bucket" value="{gcs_bucket}" placeholder="my-gcs-bucket" style="max-width: 300px;">
-    </div>
-    <div class="form-group">
-        <label for="es_gcs_prefix">Object Prefix (optional)</label>
-        <input type="text" id="es_gcs_prefix" name="es_gcs_prefix" value="{gcs_prefix}" placeholder="autonomos/" style="max-width: 300px;">
-    </div>
-    <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
-        <div style="margin-left: 4px;">
-            <label style="{ls}">
-                <input type="radio" name="es_gcs_auth_method" value="adc" {chk(gcs_auth,'adc')}
-                       onchange="document.getElementById('gcs-json').style.display='none'"
-                       style="{rs}">
-                Application Default Credentials (gcloud auth / env GOOGLE_APPLICATION_CREDENTIALS)
-            </label>
-            <label style="{ls}">
-                <input type="radio" name="es_gcs_auth_method" value="json" {chk(gcs_auth,'json')}
-                       onchange="document.getElementById('gcs-json').style.display='block'"
-                       style="{rs}">
-                Service Account JSON Key File
-            </label>
-        </div>
-    </div>
-    <div id="gcs-json" style="display: {'block' if gcs_auth=='json' else 'none'}; margin-left: 20px;">
-        <div class="form-group">
-            <label for="es_gcs_credentials_json">Path to JSON Key File</label>
-            <input type="text" id="es_gcs_credentials_json" name="es_gcs_credentials_json" value="{gcs_creds}" placeholder="/path/to/service-account.json" style="max-width: 400px;">
-            <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">Absolute path on the server to the Service Account JSON key file.</small>
-        </div>
-    </div>
-    <div style="margin-top: 15px;">
-        <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;"
-                onclick="var f=document.createElement('form');f.method='POST';f.action='/storage/test';document.body.appendChild(f);f.submit();">
-            Test Connection
-        </button>
-    </div>
-</div>
-
-<!-- Google Drive Config -->
-<div id="gdrive-config" style="display: {'block' if st=='gdrive' else 'none'}; {panel}">
-    <h4 style="margin-top:0; color:var(--color-text-muted);">Google Drive Settings</h4>
-    <div class="form-group">
-        <label for="es_gdrive_folder_id">Drive Folder ID *</label>
-        <input type="text" id="es_gdrive_folder_id" name="es_gdrive_folder_id" value="{gd_folder}" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs" style="max-width: 400px;">
-        <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">The ID from the folder URL: drive.google.com/drive/folders/<b>THIS_PART</b></small>
-    </div>
-    <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 8px; font-weight: bold; color: var(--color-text);">Authentication Method</label>
-        <div style="margin-left: 4px;">
-            <label style="{ls}">
-                <input type="radio" name="es_gdrive_auth_method" value="adc" {chk(gd_auth,'adc')}
-                       onchange="document.getElementById('gdrive-json').style.display='none'"
-                       style="{rs}">
-                Application Default Credentials
-            </label>
-            <label style="{ls}">
-                <input type="radio" name="es_gdrive_auth_method" value="json" {chk(gd_auth,'json')}
-                       onchange="document.getElementById('gdrive-json').style.display='block'"
-                       style="{rs}">
-                Service Account JSON Key File
-            </label>
-        </div>
-    </div>
-    <div id="gdrive-json" style="display: {'block' if gd_auth=='json' else 'none'}; margin-left: 20px;">
-        <div class="form-group">
-            <label for="es_gdrive_credentials_json">Path to JSON Key File</label>
-            <input type="text" id="es_gdrive_credentials_json" name="es_gdrive_credentials_json" value="{gd_creds}" placeholder="/path/to/service-account.json" style="max-width: 400px;">
-            <small style="display: block; margin-top: 4px; color: var(--color-text-muted);">The Service Account must have access to the target folder (share the folder with the SA email).</small>
-        </div>
-    </div>
-    <div style="margin-top: 15px;">
-        <button type="button" class="btn btn-secondary" style="font-size: 12px; padding: 6px 14px;"
-                onclick="var f=document.createElement('form');f.method='POST';f.action='/storage/test';document.body.appendChild(f);f.submit();">
-            Test Connection
-        </button>
-    </div>
-</div>'''
+        return self.render_settings_template(
+            'external_storage_settings_panel.html',
+            c=config, st=config.storage_type or 'local',
+            s3_auth=config.s3_auth_method or 'sdk',
+            gcs_auth=getattr(config, 'gcs_auth_method', 'adc') or 'adc',
+            gd_auth=getattr(config, 'gdrive_auth_method', 'adc') or 'adc')
 
     def save_settings(self, settings, form):
         if 'es_storage_type' not in form:
@@ -958,8 +747,10 @@ function esShowPanel(type) {
         config.s3_prefix = form.get('es_s3_prefix', '') or ''
         config.s3_region = form.get('es_s3_region', '') or None
         config.s3_auth_method = form.get('es_s3_auth_method', 'sdk')
-        config.s3_access_key = form.get('es_s3_access_key', '') or None
-        config.s3_secret_key = form.get('es_s3_secret_key', '') or None
+        config.s3_access_key = secret_from_form(
+            form, 'es_s3_access_key', config.s3_access_key or '') or None
+        config.s3_secret_key = secret_from_form(
+            form, 'es_s3_secret_key', config.s3_secret_key or '') or None
         config.s3_profile = form.get('es_s3_profile', '') or None
         # GCS
         config.gcs_bucket = form.get('es_gcs_bucket', '') or None

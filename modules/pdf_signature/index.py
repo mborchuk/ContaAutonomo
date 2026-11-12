@@ -11,6 +11,7 @@ import importlib.util
 
 from module_manager import BaseModule
 from secret_box import EncryptedString, encrypt_existing
+from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
 
 # Graceful degradation: try importing optional dependencies
@@ -672,7 +673,7 @@ class PDFSignatureModule(BaseModule):
 
     def get_settings_html(self, settings):
         cfg = self._get_config()
-        return render_template(
+        return self.render_settings_template(
             'pdf_signature_settings.html',
             cfg=cfg,
             pillow_available=PILLOW_AVAILABLE,
@@ -698,9 +699,9 @@ class PDFSignatureModule(BaseModule):
         if cert_key:
             cfg.certificate_key = cert_key
             self.logger.info('PDF Signature: updated cert_key=%r', cert_key)
-        cert_password = form.get('pdf_sig_cert_password')
-        if cert_password is not None:
-            cfg.certificate_password = cert_password
+        if 'pdf_sig_cert_password' in form or 'pdf_sig_cert_password__clear' in form:
+            cfg.certificate_password = secret_from_form(
+                form, 'pdf_sig_cert_password', cfg.certificate_password)
         # Signature position settings
         sig_position = form.get('pdf_sig_position', 'bottom-left').strip()
         if sig_position in ('bottom-left', 'bottom-right', 'bottom-center',

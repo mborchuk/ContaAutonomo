@@ -27,6 +27,24 @@ Technical reference for the Autónomos application architecture.
 | `Contractor` | `contractor` | Contractor/vendor info |
 | `Expense` | `expense` | Expense records with VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`, `deductible`, `deductible_pct`) |
 
+#### Invoice amount columns
+
+The amount columns keep historical names. Their meaning depends on the invoice
+currency:
+
+| Column | EUR invoice | Any other currency (USD, GBP, CZK, …) |
+|--------|-------------|----------------------------------------|
+| `amount_eur` | Entered total | Total converted to EUR — the tax base |
+| `amount_usd` | Total converted to USD | Entered total, in the invoice currency |
+| `exchange_rate` | USD→EUR rate | USD→EUR for USD invoices; `<currency>`→EUR otherwise |
+| `unit_price_usd`, `subtotal_usd` (items) | Invoice currency | Invoice currency |
+
+`app.invoice_amounts()` is the single conversion used by the create and edit
+routes and by Recurring Invoices. Currencies other than EUR and USD are
+converted through `CurrencyService.convert()` with the configured rate
+provider; when no rate is available the invoice is not saved. Renaming the
+columns (for example to `amount_original`) is a planned follow-up.
+
 ### Invoice Lifecycle
 
 Invoices move through an explicit lifecycle. Issued and paid invoices are
@@ -70,6 +88,11 @@ Key rules:
   `on_invoice_annulled`) run **inside the transition transaction**: a raising
   module aborts the transition. This is how the Verifactu module guarantees a
   billing record exists for every issued invoice.
+- **Income rule** (devengo, owner decision 2026-10-03): an invoice counts as
+  income in the year of its `invoice_date` whatever its payment status; only
+  `cancelled` invoices are excluded. One helper, `constants.counts_as_income()`,
+  is used by the dashboard, the Modelo 130/303 drafts, the IRPF Estimator and
+  the RETA Advisor, so their figures agree.
 
 ### Core Routes
 
@@ -380,6 +403,7 @@ PDF financial reports collecting data dynamically from all enabled modules.
   - PDF signing checkboxes (when pdf_signature module enabled)
   - Collects data via `module_manager.get_report_sections()`
   - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
+  - Income and expenses tables include **IVA %** and **IVA (EUR)** columns with totals. Issued invoices use the fiscal snapshot; legacy and draft invoices use the derived value. Reverse-charge rows (intra-EU B2B customers, expenses with `reverse_charge`) show `ISP`, and the note "Inversión del sujeto pasivo – Artículo 194 Directiva 2006/112/EC" is printed under the table
   - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns`, `total_field`, and for file attachments `has_files`, `files_fn`, `list_fn`
 
 ### External Storage (`external_storage`)

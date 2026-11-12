@@ -208,6 +208,23 @@ class BaseModule(ABC):
         """
         return []
 
+    def render_settings_template(self, filename, **context):
+        """Render `templates/<filename>` from this module's folder, auto-escaped.
+
+        Use it in get_settings_html instead of building HTML with f-strings:
+        stored values are escaped, and the shared `_secret_field.html` macro
+        can be imported. Works for modules without a blueprint.
+        """
+        from flask import render_template_string
+        module_dir = getattr(type(self), 'module_dir', None)  # set by discovery
+        if not module_dir:
+            import inspect
+            module_dir = os.path.dirname(inspect.getfile(type(self)))
+        folder = os.path.join(module_dir, 'templates')
+        with open(os.path.join(folder, filename), encoding='utf-8') as f:
+            source = f.read()
+        return render_template_string(source, **context)
+
     def get_settings_html(self, settings):
         """
         Return HTML to inject into a settings tab.
@@ -1482,11 +1499,16 @@ class CurrencyService:
 
         Returns:
             (converted_amount, rate, actual_date)
+
+        Raises:
+            ValueError: no rate is available for the pair on that date.
         """
         if from_currency == to_currency:
             return amount, 1.0, date_str
 
         rate, actual_date = self.get_rate(from_currency, to_currency, date_str)
+        if rate is None:
+            raise ValueError(f'No exchange rate for {from_currency}->{to_currency} on {date_str}')
         return amount * rate, rate, actual_date
 
     # --- Default provider (ECB) ---
@@ -1515,9 +1537,12 @@ class CurrencyService:
             codes.add(to_currency)
         rates = get_multiple_exchange_rates(date_str, list(codes), base_currency='EUR')
 
-        # rates[X] = how many X per 1 EUR
-        from_per_eur = rates.get(from_currency, 1.0) if from_currency != 'EUR' else 1.0
-        to_per_eur = rates.get(to_currency, 1.0) if to_currency != 'EUR' else 1.0
+        # rates[X] = how many X per 1 EUR. A missing code means "no rate", not
+        # 1.0: a silent 1:1 rate would store a wrong EUR tax base.
+        from_per_eur = rates.get(from_currency) if from_currency != 'EUR' else 1.0
+        to_per_eur = rates.get(to_currency) if to_currency != 'EUR' else 1.0
+        if not from_per_eur or not to_per_eur:
+            return None, None
 
         # 1 from_currency = (to_per_eur / from_per_eur) to_currency
         cross_rate = to_per_eur / from_per_eur if from_per_eur else 0.0
@@ -1820,6 +1845,7 @@ class ModuleManager:
                         if (isinstance(attr, type) and
                             issubclass(attr, BaseModule) and
                             attr is not BaseModule):
+                            attr.module_dir = module_path
                             self.discovered[item] = attr
                             break
                 except Exception as e:

@@ -20,6 +20,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
 import secret_box
+from settings_forms import secret_from_form
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)
@@ -270,49 +271,11 @@ class InvoiceEmailModule(BaseModule):
 
     def get_settings_html(self, settings):
         cfg = self._smtp_config()
-        sec = cfg.get('security', 'starttls')
-
-        def _sel(v):
-            return 'selected' if sec == v else ''
-
-        checked = 'checked' if cfg.get('reminders_enabled') else ''
-        test_url = url_for('invoice_email.email_test')
-        return f'''
-        <h3>SMTP Email Settings</h3>
-        <p class="muted">
-            Credentials are stored in the local database (plaintext, same as other
-            provider API keys). Self-hosted, single-user posture.
-        </p>
-        <div class="form-grid-3">
-            <div class="form-group"><label>SMTP host</label>
-                <input type="text" name="smtp_host" value="{cfg['host']}"></div>
-            <div class="form-group"><label>Port</label>
-                <input type="number" name="smtp_port" value="{cfg['port']}"></div>
-            <div class="form-group"><label>Security</label>
-                <select name="smtp_security">
-                    <option value="starttls" {_sel('starttls')}>STARTTLS</option>
-                    <option value="ssl" {_sel('ssl')}>SSL</option>
-                    <option value="none" {_sel('none')}>None</option>
-                </select></div>
-        </div>
-        <div class="form-grid-3">
-            <div class="form-group"><label>Username</label>
-                <input type="text" name="smtp_username" value="{cfg['username']}"></div>
-            <div class="form-group"><label>Password</label>
-                <input type="password" name="smtp_password" value="{cfg['password']}"></div>
-            <div class="form-group"><label>From address</label>
-                <input type="email" name="smtp_from" value="{cfg['from_addr']}"></div>
-        </div>
-        <label class="check-row" style="margin:8px 0;">
-            <input type="checkbox" name="smtp_reminders_enabled" {checked}>
-            <span>Send overdue payment reminders (due +{REMINDER_OFFSETS[0]} and +{REMINDER_OFFSETS[1]} days)</span>
-        </label>
-        <input type="hidden" name="invoice_email_submitted" value="1">
-        <p class="fine-print">
-            Save settings first, then test: form posts to
-            <code>{test_url}</code> via the button on the invoice view or an API call.
-        </p>
-        '''
+        return self.render_settings_template(
+            'invoice_email_settings_panel.html',
+            cfg=cfg, security=cfg.get('security', 'starttls'),
+            password_set=bool(cfg.get('password')), offsets=REMINDER_OFFSETS,
+            test_url=url_for('invoice_email.email_test'))
 
     def save_settings(self, settings, form):
         if 'invoice_email_submitted' not in form:
@@ -323,7 +286,7 @@ class InvoiceEmailModule(BaseModule):
             'port': int(form.get('smtp_port') or 587),
             'security': form.get('smtp_security', 'starttls'),
             'username': form.get('smtp_username', '').strip(),
-            'password': form.get('smtp_password', ''),
+            'password': secret_from_form(form, 'smtp_password', cfg.get('password', '')),
             'from_addr': form.get('smtp_from', '').strip(),
             'reminders_enabled': 'smtp_reminders_enabled' in form,
         })
