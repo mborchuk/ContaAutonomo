@@ -5,6 +5,7 @@ Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
 from module_manager import BaseModule
+from modules.tax_es_forms.calculator import invoice_vat_line
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
@@ -344,6 +345,7 @@ class ReportsModule(BaseModule):
         base_currency = settings.base_currency if settings and settings.base_currency else 'EUR'
 
         if 'income' in selected_sections:
+            vat_rate = (getattr(settings, 'default_vat_rate', None) or 21.0) / 100.0
             invoices = invoice_repo.get_by_date_range(start_date, end_date, include_cancelled)
             for inv in invoices:
                 if currency_mode == 'original':
@@ -359,6 +361,7 @@ class ReportsModule(BaseModule):
                     display_amount = inv.amount_eur if base_currency == 'EUR' else inv.amount_usd
                     display_currency = base_currency
 
+                vat = invoice_vat_line(inv, vat_rate)
                 income_data.append({
                     'invoice_number': inv.invoice_number,
                     'invoice_date': inv.invoice_date.strftime('%d/%m/%Y'),
@@ -366,7 +369,10 @@ class ReportsModule(BaseModule):
                     'amount': display_amount,
                     'currency': display_currency,
                     'amount_eur': inv.amount_eur,
-                    'status': inv.status
+                    'status': inv.status,
+                    'vat_rate_pct': vat['vat_rate_pct'],
+                    'vat_eur': vat['vat_eur'],
+                    'reverse_charge': vat['reverse_charge'],
                 })
 
         # Collect data from enabled modules for selected sections
