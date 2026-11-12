@@ -331,3 +331,38 @@ def compute_modelo_349(invoices):
         "operators": lines,
         "meta": {"warnings": warnings},
     }
+
+
+def compute_modelo_390(quarterly_303):
+    """Modelo 390 (annual VAT summary) from the four quarterly 303 drafts.
+
+    `quarterly_303` is the list of `boxes` dicts of Q1..Q4 (as returned by
+    compute_modelo_303). Every 390 casilla is the sum of the corresponding
+    303 boxes, so the annual summary always agrees with the quarterly drafts.
+    """
+    def total(box):
+        return _round2(sum(q.get(box, 0.0) for q in quarterly_303))
+
+    b = {
+        "05": total("01"), "06": total("03"),
+        "551": total("10"), "552": total("11"),
+        "27": total("12"), "28": total("13"),
+        "48": total("28"), "49": total("29"),
+        "50": total("30"), "51": total("31"),
+        "597": total("36"), "598": total("37"),
+        "58": total("38"), "59": total("39"),
+        "85": total("78"),
+        "99": total("01"), "103": total("59"), "110": total("120"),
+    }
+    b["33"] = _round2(b["05"] + b["551"] + b["27"])
+    b["34"] = _round2(b["06"] + b["552"] + b["28"])
+    b["47"] = b["34"]
+    b["64"] = _round2(b["49"] + b["51"] + b["598"] + b["59"])
+    b["65"] = _round2(b["47"] - b["64"])
+    b["84"] = b["65"]
+    b["86"] = _round2(b["84"] - b["85"])
+    b["95"] = _round2(sum(max(0.0, q.get("71", 0.0)) for q in quarterly_303))
+    last = quarterly_303[-1] if quarterly_303 else {}
+    b["97"] = _round2(max(0.0, -last.get("71", 0.0)))
+    b["108"] = _round2(b["99"] + b["103"] + b["110"])
+    return {"form": "390", "boxes": b}
