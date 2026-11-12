@@ -1097,6 +1097,19 @@ class CoreServices:
         """Application root path"""
         return self.app.root_path
 
+    def data_years(self):
+        """Years to offer in year pickers: every year with an invoice or an
+        expense, plus the current year. Newest first."""
+        from datetime import date
+        from sqlalchemy import extract
+        from app import Expense, Invoice
+        years = {date.today().year}
+        for column in (Invoice.invoice_date, Expense.expense_date):
+            rows = self.db.session.query(extract('year', column)).filter(
+                column.isnot(None)).distinct()
+            years.update(int(y) for (y,) in rows if y is not None)
+        return sorted(years, reverse=True)
+
     def get_settings(self):
         """Get application settings"""
         if self._settings_model:
