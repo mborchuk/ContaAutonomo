@@ -72,7 +72,7 @@
         <div class="form-group">
             <label for="year">Year *</label>
             <select id="year" name="year" required>
-                {% for year in range(2023, 2028) %}
+                {% for year in years %}
                 <option value="{{ year }}" {% if year == current_year %}selected{% endif %}>{{ year }}</option>
                 {% endfor %}
             </select>

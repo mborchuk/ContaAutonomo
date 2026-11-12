@@ -23,6 +23,7 @@ from datetime import date, datetime
 from flask import Blueprint, render_template, request
 from markupsafe import escape
 
+from constants import NON_INCOME_INVOICE_STATUSES
 from module_manager import BaseModule
 
 from .engine import (
@@ -240,7 +241,7 @@ class TaxEsIrpfModule(BaseModule):
         """
         start_dt = self._year_start(year, profile)
         invoices = self.Invoice.query.filter(
-            self.Invoice.status != 'cancelled',
+            self.Invoice.status.notin_(NON_INCOME_INVOICE_STATUSES),
             self.Invoice.invoice_date >= start_dt,
             self.Invoice.invoice_date <= end_dt,
         ).all()

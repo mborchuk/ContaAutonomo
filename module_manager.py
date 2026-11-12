@@ -22,6 +22,8 @@ import importlib
 import importlib.util
 from abc import ABC, abstractmethod
 
+from constants import invoice_locked
+
 
 def valid_capability(cap):
     """The capability contract: a dict with a string 'type' and a callable
@@ -1097,6 +1099,22 @@ class CoreServices:
         """Application root path"""
         return self.app.root_path
 
+    def data_years(self):
+        """Years to offer in year pickers: every year with an invoice or an
+        expense, plus the current year. Newest first."""
+        from datetime import date
+        from sqlalchemy import extract, select
+        tables = self.db.metadata.tables   # no import of app (avoids a cycle)
+        years = {date.today().year}
+        for table, column in (('invoice', 'invoice_date'), ('expense', 'expense_date')):
+            if table not in tables:
+                continue
+            col = tables[table].c[column]
+            rows = self.db.session.execute(
+                select(extract('year', col)).where(col.isnot(None)).distinct())
+            years.update(int(y) for (y,) in rows if y is not None)
+        return sorted(years, reverse=True)
+
     def get_settings(self):
         """Get application settings"""
         if self._settings_model:
@@ -1111,6 +1129,30 @@ class CoreServices:
         path = os.path.join(self.app.root_path, subfolder)
         os.makedirs(path, exist_ok=True)
         return path
+
+    def deployment_key(self, env_var, file_config_key, purpose):
+        """A per-deployment secret: the `env_var` environment variable, else a
+        key file (path in app.config[file_config_key]) created on first use,
+        readable by the owner only.
+
+        Used for keys that must outlive `SECRET_KEY` rotation (backup
+        encryption, Verifactu signatures). `purpose` names the key in the
+        warning logged when the file is created.
+        """
+        key = os.environ.get(env_var, '').strip()
+        if key:
+            return key
+        path = self.app.config[file_config_key]
+        if not os.path.exists(path):
+            import secrets
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write(secrets.token_urlsafe(32) + '\n')
+            logger.warning('Created %s key file %s — keep a copy in a password '
+                           'manager: it cannot be recreated if lost', purpose, path)
+        with open(path) as f:
+            return f.read().strip()
 
     def flash(self, message, category='info'):
         """Flash a message to the user"""
@@ -1440,11 +1482,16 @@ class CurrencyService:
 
         Returns:
             (converted_amount, rate, actual_date)
+
+        Raises:
+            ValueError: no rate is available for the pair on that date.
         """
         if from_currency == to_currency:
             return amount, 1.0, date_str
 
         rate, actual_date = self.get_rate(from_currency, to_currency, date_str)
+        if rate is None:
+            raise ValueError(f'No exchange rate for {from_currency}->{to_currency} on {date_str}')
         return amount * rate, rate, actual_date
 
     # --- Default provider (ECB) ---
@@ -1473,9 +1520,12 @@ class CurrencyService:
             codes.add(to_currency)
         rates = get_multiple_exchange_rates(date_str, list(codes), base_currency='EUR')
 
-        # rates[X] = how many X per 1 EUR
-        from_per_eur = rates.get(from_currency, 1.0) if from_currency != 'EUR' else 1.0
-        to_per_eur = rates.get(to_currency, 1.0) if to_currency != 'EUR' else 1.0
+        # rates[X] = how many X per 1 EUR. A missing code means "no rate", not
+        # 1.0: a silent 1:1 rate would store a wrong EUR tax base.
+        from_per_eur = rates.get(from_currency) if from_currency != 'EUR' else 1.0
+        to_per_eur = rates.get(to_currency) if to_currency != 'EUR' else 1.0
+        if not from_per_eur or not to_per_eur:
+            return None, None
 
         # 1 from_currency = (to_per_eur / from_per_eur) to_currency
         cross_rate = to_per_eur / from_per_eur if from_per_eur else 0.0
@@ -1516,11 +1566,12 @@ class InvoiceService:
     def is_locked(self, invoice):
         """Check if invoice is locked (read-only).
 
-        F2 — generalized from "PAID only" to "issued or later": both `issued`
-        and `paid` invoices are immutable; changes go through rectificatives.
-        Legacy `pending` and new `draft` invoices stay freely editable.
+        F2 — generalized from "PAID only" to "issued or later": `issued`,
+        `paid` and annulled invoices are immutable; changes go through
+        rectificatives. Legacy `pending` and new `draft` invoices stay freely
+        editable. The rule itself lives in constants.invoice_locked.
         """
-        return invoice is not None and invoice.status in ('issued', 'paid')
+        return invoice_locked(invoice)
 
     def update(self, invoice_id, **fields):
         """Update invoice fields. Raises ValueError if invoice is PAID.

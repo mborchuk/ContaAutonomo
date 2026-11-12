@@ -16,6 +16,8 @@ expenses with zero Spanish VAT are left out of the deductible base.
 
 from datetime import date
 
+from constants import counts_as_income
+
 
 def quarter_of(d):
     """Return calendar quarter (1-4) for a date."""
@@ -70,7 +72,7 @@ def _customer_tax_type(invoice):
 
 def _active(invoice):
     """Devengo basis: everything except cancelled counts."""
-    return getattr(invoice, "status", None) != "cancelled"
+    return counts_as_income(invoice)
 
 
 def _invoice_output_vat(invoice, vat_rate):
