@@ -2,9 +2,9 @@
 """
 Movement ↔ invoice matching heuristics — pure functions.
 
-CAVEMAN NOTE: rank only, never auto-match. Confidence order (F12-D3 AC):
-amount + invoice number in description  >  amount + close date  >  amount only.
-User always confirm.
+Ranks candidates only and never matches automatically. Confidence order
+(F12-D3 acceptance criteria): amount + invoice number in the description,
+then amount + close date, then amount only. The user always confirms.
 """
 
 AMOUNT_TOLERANCE = 0.01

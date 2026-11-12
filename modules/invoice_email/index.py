@@ -2,10 +2,11 @@
 """
 Invoice Email Module (F8) — send invoice PDFs by SMTP + overdue reminders.
 
-CAVEMAN NOTE: app had zero mail code. This module bring stdlib smtplib, an
-SMTP settings tab, a "send by email" panel on the invoice view with a send log,
-a daily overdue-reminder job (opt-in, idempotent), and a `notify` capability so
-fiscal_calendar reminders can ride email with zero coupling.
+The app had no mail code before this module. It adds sending through the
+standard library's smtplib, an SMTP settings tab, a "send by email" panel on
+the invoice view with a send log, a daily overdue-reminder job (opt-in and
+idempotent), and a `notify` capability so Fiscal Calendar reminders can be
+sent by email without the two modules depending on each other.
 
 Password stored in module config (plaintext SQLite) — same posture as the
 existing AI-provider API keys; documented, self-hosted single-user app.
@@ -13,12 +14,16 @@ existing AI-provider API keys; documented, self-hosted single-user app.
 
 import json
 import smtplib
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from email.message import EmailMessage
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
+import secret_box
+from settings_forms import secret_from_form
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)
@@ -68,7 +73,7 @@ class InvoiceEmailModule(BaseModule):
             subject = db.Column(db.String(500))
             status = db.Column(db.String(20))  # sent | failed
             error = db.Column(db.Text)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         self.Config = InvoiceEmailConfig
         self.EmailLog = EmailLog
@@ -86,6 +91,21 @@ class InvoiceEmailModule(BaseModule):
             )
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register reminder job: %s', e)
+        self._encrypt_stored_password()
+
+    def _encrypt_stored_password(self):
+        """C-2: re-save an SMTP password stored in plaintext by earlier versions."""
+        try:
+            row = self.Config.query.filter_by(key='smtp').first()
+            if not row or not row.value:
+                return
+            stored = json.loads(row.value).get('password') or ''
+            if stored and not secret_box.is_encrypted(stored):
+                self._save_smtp_config(self._smtp_config())
+                self.logger.info('Encrypted the stored SMTP password')
+        except Exception as e:  # pragma: no cover - defensive
+            self._db.session.rollback()
+            self.logger.error('Encrypting the SMTP password failed: %s', e)
 
     # --- SMTP config ---------------------------------------------------------- #
 
@@ -103,6 +123,7 @@ class InvoiceEmailModule(BaseModule):
                 cfg.update(json.loads(row.value))
         except Exception as e:  # pragma: no cover - defensive
             self.logger.warning('Reading SMTP config failed: %s', e)
+        cfg['password'] = secret_box.decrypt(cfg.get('password') or '')
         return cfg
 
     def _save_smtp_config(self, cfg):
@@ -110,7 +131,9 @@ class InvoiceEmailModule(BaseModule):
         if not row:
             row = self.Config(key='smtp')
             self._db.session.add(row)
-        row.value = json.dumps(cfg)
+        stored = dict(cfg)
+        stored['password'] = secret_box.encrypt(cfg.get('password') or '')  # C-2
+        row.value = json.dumps(stored)
         self._db.session.commit()
 
     def _configured(self):
@@ -216,7 +239,7 @@ class InvoiceEmailModule(BaseModule):
         @login_required
         def email_send(invoice_id):
             from app import Invoice
-            invoice = Invoice.query.get_or_404(invoice_id)
+            invoice = db_get_or_404(Invoice, invoice_id)
             recipient = (request.form.get('recipient') or '').strip()
             if not recipient or '@' not in recipient:
                 flash('A valid recipient email is required.', 'danger')
@@ -251,49 +274,11 @@ class InvoiceEmailModule(BaseModule):
 
     def get_settings_html(self, settings):
         cfg = self._smtp_config()
-        sec = cfg.get('security', 'starttls')
-
-        def _sel(v):
-            return 'selected' if sec == v else ''
-
-        checked = 'checked' if cfg.get('reminders_enabled') else ''
-        test_url = url_for('invoice_email.email_test')
-        return f'''
-        <h3>SMTP Email Settings</h3>
-        <p class="muted">
-            Credentials are stored in the local database (plaintext, same as other
-            provider API keys). Self-hosted, single-user posture.
-        </p>
-        <div class="form-grid-3">
-            <div class="form-group"><label>SMTP host</label>
-                <input type="text" name="smtp_host" value="{cfg['host']}"></div>
-            <div class="form-group"><label>Port</label>
-                <input type="number" name="smtp_port" value="{cfg['port']}"></div>
-            <div class="form-group"><label>Security</label>
-                <select name="smtp_security">
-                    <option value="starttls" {_sel('starttls')}>STARTTLS</option>
-                    <option value="ssl" {_sel('ssl')}>SSL</option>
-                    <option value="none" {_sel('none')}>None</option>
-                </select></div>
-        </div>
-        <div class="form-grid-3">
-            <div class="form-group"><label>Username</label>
-                <input type="text" name="smtp_username" value="{cfg['username']}"></div>
-            <div class="form-group"><label>Password</label>
-                <input type="password" name="smtp_password" value="{cfg['password']}"></div>
-            <div class="form-group"><label>From address</label>
-                <input type="email" name="smtp_from" value="{cfg['from_addr']}"></div>
-        </div>
-        <label class="check-row" style="margin:8px 0;">
-            <input type="checkbox" name="smtp_reminders_enabled" {checked}>
-            <span>Send overdue payment reminders (due +{REMINDER_OFFSETS[0]} and +{REMINDER_OFFSETS[1]} days)</span>
-        </label>
-        <input type="hidden" name="invoice_email_submitted" value="1">
-        <p class="fine-print">
-            Save settings first, then test: form posts to
-            <code>{test_url}</code> via the button on the invoice view or an API call.
-        </p>
-        '''
+        return self.render_settings_template(
+            'invoice_email_settings_panel.html',
+            cfg=cfg, security=cfg.get('security', 'starttls'),
+            password_set=bool(cfg.get('password')), offsets=REMINDER_OFFSETS,
+            test_url=url_for('invoice_email.email_test'))
 
     def save_settings(self, settings, form):
         if 'invoice_email_submitted' not in form:
@@ -304,7 +289,7 @@ class InvoiceEmailModule(BaseModule):
             'port': int(form.get('smtp_port') or 587),
             'security': form.get('smtp_security', 'starttls'),
             'username': form.get('smtp_username', '').strip(),
-            'password': form.get('smtp_password', ''),
+            'password': secret_from_form(form, 'smtp_password', cfg.get('password', '')),
             'from_addr': form.get('smtp_from', '').strip(),
             'reminders_enabled': 'smtp_reminders_enabled' in form,
         })

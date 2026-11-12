@@ -10,6 +10,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from repositories import ExpenseRepository, SettingsRepository
 import os
+from db_helpers import db_get, db_get_or_404
+from timeutil import utcnow
 
 
 class ExpensesModule(BaseModule):
@@ -64,7 +66,7 @@ class ExpensesModule(BaseModule):
             deductible = db.Column(db.Boolean, default=True)
             deductible_pct = db.Column(db.Float, default=100.0)
             reverse_charge = db.Column(db.String(10))  # '' / 'eu' / 'non_eu'
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class Contractor(db.Model):
             __tablename__ = 'contractor'
@@ -149,18 +151,7 @@ class ExpensesModule(BaseModule):
     def get_settings_html(self, settings):
         import json
         current = json.dumps(self.get_category_defaults(), indent=2, ensure_ascii=False)
-        return f'''
-        <h3>Expense Category VAT Defaults</h3>
-        <p style="font-size: 13px; color: var(--color-text-muted);">
-            JSON map of category → default VAT rate (%) and deductible (%). Applied
-            when picking a category on the expense form (never overwrites a field
-            you already touched).
-        </p>
-        <div class="form-group">
-            <textarea name="expense_category_defaults" rows="12"
-                      style="width: 100%; font-family: monospace; font-size: 12px;">{current}</textarea>
-        </div>
-        '''
+        return self.render_settings_template('expenses_settings_panel.html', current=current)
 
     def save_settings(self, settings, form):
         import json
@@ -340,7 +331,7 @@ class ExpensesModule(BaseModule):
 
     def _api_get_expense(self, request, exp_id=None):
         from modules.api.index import ApiError
-        exp = self.Expense.query.get(exp_id)
+        exp = db_get(self.Expense, exp_id)
         if not exp:
             raise ApiError(404, 'not_found', f'Expense #{exp_id} not found')
         return self._api_serialize_expense(exp), 200
@@ -523,7 +514,7 @@ class ExpensesModule(BaseModule):
 
     def _download_expense(self, id):
         """Download expense file using storage key from DB"""
-        expense = self.Expense.query.get_or_404(id)
+        expense = db_get_or_404(self.Expense, id)
         if not expense.file_path:
             flash('No file attached to this expense.', 'danger')
             return redirect(url_for('expenses.expenses_index'))
@@ -535,7 +526,7 @@ class ExpensesModule(BaseModule):
 
     def _preview_expense(self, id):
         """Preview expense file inline in the browser"""
-        expense = self.Expense.query.get_or_404(id)
+        expense = db_get_or_404(self.Expense, id)
         if not expense.file_path:
             flash('No file attached to this expense.', 'danger')
             return redirect(url_for('expenses.expenses_index'))
@@ -655,6 +646,8 @@ class ExpensesModule(BaseModule):
                 'amount_eur': amount_eur,
                 # F4 — VAT split (None on legacy rows).
                 'vat_eur': vat_eur,
+                'vat_rate_pct': expense.vat_rate,
+                'reverse_charge': bool(expense.reverse_charge),
                 'deductible_pct': expense.deductible_pct,
             })
         return result

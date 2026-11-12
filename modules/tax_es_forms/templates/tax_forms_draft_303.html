@@ -11,6 +11,9 @@
     </div>
 </div>
 
+{% if draft.table_fallback %}
+<div class="note note-warning">⚠ {{ draft.table_note }}</div>
+{% endif %}
 <!-- Non-dismissible estimate banner -->
 <div class="note note-info">
     <strong>Estimate, not tax advice.</strong> Devengo (accrual) basis; régimen

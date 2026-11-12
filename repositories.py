@@ -4,6 +4,8 @@
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import os
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 class BaseRepository:
@@ -17,7 +19,7 @@ class BaseRepository:
         return self.model.query.all()
 
     def get_by_id(self, id):
-        return self.model.query.get_or_404(id)
+        return db_get_or_404(self.model, id)
 
     def create(self, **kwargs):
         instance = self.model(**kwargs)
@@ -273,7 +275,7 @@ class TaxFormRepository(BaseRepository):
 
         tax_form.file_path = file_path
         tax_form.original_filename = file.filename
-        tax_form.uploaded_at = datetime.utcnow()
+        tax_form.uploaded_at = utcnow()
         tax_form.notes = notes
 
         if old_file and old_file != file_path and os.path.exists(old_file):

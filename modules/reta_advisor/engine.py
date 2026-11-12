@@ -2,20 +2,21 @@
 """
 RETA projection engine — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: same discipline as tax_es_forms/calculator.py — module fetch
-data, engine only count. Simple linear annualization (v1). Everything is
-ESTIMATE — regularization is settled by Seguridad Social after year end.
+Same approach as tax_es_forms/calculator.py: the module fetches the data and
+the engine only calculates. Simple linear annualization (v1). Everything is
+an estimate — the regularization is settled by the Seguridad Social after
+the year ends.
 
 Not modeled in v1 (flagged, not calculated): tarifa plana, pluriactividad,
 mid-year base changes already made this year.
 """
 
-from .brackets import bracket_for, GENERIC_DEDUCTION_PCT
+from .brackets import GENERIC_DEDUCTION_PCT, bracket_for, brackets_for_year
 
 
 def project(ytd_income, ytd_expenses, months_elapsed,
             current_monthly_quota=0.0, paid_ytd=None,
-            deduction_pct=GENERIC_DEDUCTION_PCT):
+            deduction_pct=GENERIC_DEDUCTION_PCT, year=None):
     """Project the RETA position from year-to-date figures.
 
     Args:
@@ -25,6 +26,7 @@ def project(ytd_income, ytd_expenses, months_elapsed,
         current_monthly_quota: what the user pays now per month.
         paid_ytd: total actually paid so far (None -> current quota × months).
         deduction_pct: generic deduction (7% general / 3% corporate).
+        year: contribution year; picks the bracket table (None = 2026 table).
 
     Returns dict: monthly_net_yield, bracket (index/lo/hi/quota),
     projected_annual_quota, paid_projection, regularization_delta
@@ -34,7 +36,11 @@ def project(ytd_income, ytd_expenses, months_elapsed,
     net_yield_ytd = (ytd_income - ytd_expenses) * (1.0 - deduction_pct / 100.0)
     monthly_net = net_yield_ytd / months
 
-    idx, lo, hi, quota = bracket_for(monthly_net)
+    if year is None:
+        table_year, brackets, fallback = 2026, None, False
+    else:
+        table_year, brackets, fallback = brackets_for_year(year)
+    idx, lo, hi, quota = bracket_for(monthly_net, brackets)
 
     projected_annual_quota = quota * 12
     if paid_ytd is None:
@@ -57,4 +63,6 @@ def project(ytd_income, ytd_expenses, months_elapsed,
         'paid_projection': round(paid_projection, 2),
         'regularization_delta': round(regularization_delta, 2),
         'months_elapsed': months,
+        'table_year': table_year,
+        'table_fallback': fallback,
     }

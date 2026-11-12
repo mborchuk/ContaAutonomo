@@ -13,6 +13,13 @@
     Change which forms in <a href="{{ url_for('settings') }}#fiscal_calendar">Settings → Fiscal Calendar</a>.
     Verify dates against the official AEAT calendar before filing.
 </p>
+{% if deadlines | rejectattr('verified') | list %}
+<p class="note">
+    ⚠️ Dates marked <em>verify</em> are generated from the standard rules for a
+    year not yet checked against the AEAT calendar. Confirm them before relying
+    on them.
+</p>
+{% endif %}
 
 <div class="table-wrap">
 <table class="data-table">
@@ -31,7 +38,7 @@
         {% set open = (d.window_start <= today) and (not closed) %}
         <tr {% if open %}class="is-highlighted"{% endif %}>
             <td><strong>Modelo {{ d.form }}</strong></td>
-            <td>{{ d.period_label }}</td>
+            <td>{{ d.period_label }}{% if not d.verified %} <span class="fine-print" title="Generated from rules; not yet checked against the AEAT calendar">(verify)</span>{% endif %}</td>
             <td>{{ d.window_start.strftime('%d/%m/%Y') }}</td>
             <td>{{ d.window_end.strftime('%d/%m/%Y') }}</td>
             <td>

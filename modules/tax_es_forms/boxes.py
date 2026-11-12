@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """
-Modelo 303 / 130 box mapping — versioned config data.
+Modelo 303 / 130 box mapping — versioned config data, keyed by fiscal year.
 
-CAVEMAN NOTE: box numbers change across AEAT form revisions. So keep them in
-this one file, stamp version, cite source. When AEAT change form, edit here
-only. This is ESTIMATE aid, not tax advice — always check against current
-official model before filing.
+Box numbers change across AEAT form revisions, so they live in this one file
+with a version stamp and the source to check. This is an estimate aid, not tax
+advice — always check against the current official model before filing.
+
+Annual update (each January): compare the boxes below with the new official
+models. If nothing changed, add the new year pointing at the same tables; if
+anything changed, add new dictionaries for that year. Years without a table
+use the latest earlier one and the drafts show a "verify" banner.
 
 Standing rule (F5-D1): box numbers below are the standard régimen general /
 estimación directa boxes. Verify against the current official AEAT models
@@ -22,7 +26,7 @@ Scope of this calculator (v1) — out of scope regimes listed in the UI fine pri
 """
 
 # Bump when box definitions are reviewed / changed.
-BOX_TABLE_VERSION = "2026.0"
+BOX_TABLE_VERSION = "2026.1"
 
 # --- Modelo 303 (IVA, quarterly, régimen general) ---
 # Only the principal boxes an estimación-directa autónomo transcribes.
@@ -63,3 +67,15 @@ MODELO_130_BOXES = {
     "06": "Retenciones e ingresos a cuenta (acumulado del ejercicio)",
     "07": "Resultado — pago fraccionado del trimestre (04 − 05 − 06)",
 }
+
+
+# Tables per fiscal year. Add a year after checking the official models.
+BOX_TABLES = {
+    2026: {"303": MODELO_303_BOXES, "130": MODELO_130_BOXES},
+}
+
+
+def boxes_for_year(year):
+    """Return (table_year, {"303": ..., "130": ...}, is_fallback)."""
+    from year_tables import resolve
+    return resolve(BOX_TABLES, year)

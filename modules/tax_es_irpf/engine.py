@@ -1,7 +1,8 @@
 """Pure IRPF calc engine — Modelo 130 (quarterly) + Modelo 100 (annual).
 
-Caveman rule for this file: NO Flask, NO DB, NO globals. Inputs in, numbers
-out. Only stdlib. So engine easy to test and reuse from hooks + routes.
+Rule for this file: no Flask, no database, no globals — inputs in, numbers
+out, standard library only. This keeps the engine easy to test and to reuse
+from both hooks and routes.
 
 Both modelos share the same money path:
   income - deductible expenses = rendimiento neto previo

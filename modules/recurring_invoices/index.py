@@ -2,9 +2,10 @@
 """
 Recurring Invoices Module (F7) — templates + cadence -> auto-generated DRAFTS.
 
-CAVEMAN NOTE: module never issue anything. It only materialize DRAFT invoices
-on schedule; user review and press Issue (F2). Draft-first is deliberate:
-auto-issuing would mint legal records unattended (bad with Verifactu coming).
+This module never issues an invoice. It only creates DRAFT invoices on
+schedule; the user reviews each one and presses Issue (F2). Draft-first is
+deliberate: issuing automatically would create legal records unattended,
+which is especially risky with Verifactu.
 
 Generation is idempotent: `next_run_date` persist after each run, catch-up is
 capped, so restarts / missed days never duplicate.
@@ -18,6 +19,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from module_manager import BaseModule
 
 from .cadence import CADENCES, due_dates
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 
 class RecurringInvoicesModule(BaseModule):
@@ -65,7 +68,7 @@ class RecurringInvoicesModule(BaseModule):
             cadence = db.Column(db.String(20), nullable=False, default='monthly')
             next_run_date = db.Column(db.Date, nullable=False)
             active = db.Column(db.Boolean, default=True)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class RecurringGeneration(db.Model):
             """Log: one row per draft materialized (feeds the dashboard nudge)."""
@@ -75,7 +78,7 @@ class RecurringInvoicesModule(BaseModule):
             template_id = db.Column(db.Integer, nullable=False)
             invoice_id = db.Column(db.Integer, nullable=False)
             run_date = db.Column(db.Date, nullable=False)
-            generated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            generated_at = db.Column(db.DateTime, default=utcnow)
 
         self.RecurringInvoice = RecurringInvoice
         self.RecurringGeneration = RecurringGeneration
@@ -124,20 +127,15 @@ class RecurringInvoicesModule(BaseModule):
 
     def _materialize(self, tpl, run_date):
         """Create one DRAFT invoice from a template for `run_date`."""
-        from app import Invoice, InvoiceItem
-        from currency_converter import get_exchange_rate, convert_usd_to_eur
+        from app import Invoice, InvoiceItem, invoice_amounts
 
         items = json.loads(tpl.items_json)
         total = sum(float(i['quantity']) * float(i['unit_price']) for i in items)
 
-        # Same currency convention as the core create route.
-        exchange_rate, _rate_date = get_exchange_rate(run_date.strftime('%Y-%m-%d'))
-        if tpl.currency == 'EUR':
-            amount_eur = total
-            amount_usd = total * exchange_rate
-        else:
-            amount_usd = total
-            amount_eur = convert_usd_to_eur(total, exchange_rate)
+        # Same conversion as the core create route. Raises NoExchangeRate when
+        # the currency cannot be converted; the caller retries on the next run.
+        amount_usd, amount_eur, exchange_rate = invoice_amounts(
+            total, tpl.currency or 'EUR', run_date.strftime('%Y-%m-%d'))
 
         # Placeholder number; the real sequential number is assigned at ISSUE.
         number = f'REC{tpl.id}-{run_date.strftime("%Y%m%d")}'
@@ -302,7 +300,7 @@ class RecurringInvoicesModule(BaseModule):
         @bp.route('/edit/<int:id>', methods=['GET', 'POST'])
         @login_required
         def recurring_edit(id):
-            tpl = module.RecurringInvoice.query.get_or_404(id)
+            tpl = db_get_or_404(module.RecurringInvoice, id)
             if request.method == 'POST':
                 try:
                     _apply_form(tpl, request.form)
@@ -319,7 +317,7 @@ class RecurringInvoicesModule(BaseModule):
         @bp.route('/toggle/<int:id>', methods=['POST'])
         @login_required
         def recurring_toggle(id):
-            tpl = module.RecurringInvoice.query.get_or_404(id)
+            tpl = db_get_or_404(module.RecurringInvoice, id)
             tpl.active = not tpl.active
             module._db.session.commit()
             flash(f'Template "{tpl.name}" {"resumed" if tpl.active else "paused"}.',
@@ -329,7 +327,7 @@ class RecurringInvoicesModule(BaseModule):
         @bp.route('/delete/<int:id>', methods=['POST'])
         @login_required
         def recurring_delete(id):
-            tpl = module.RecurringInvoice.query.get_or_404(id)
+            tpl = db_get_or_404(module.RecurringInvoice, id)
             module._db.session.delete(tpl)
             module._db.session.commit()
             flash('Template deleted (generated invoices are kept).', 'success')
@@ -339,7 +337,7 @@ class RecurringInvoicesModule(BaseModule):
         @login_required
         def recurring_from_invoice(invoice_id):
             from app import Invoice
-            inv = Invoice.query.get_or_404(invoice_id)
+            inv = db_get_or_404(Invoice, invoice_id)
             items = [{'description': it.description, 'quantity': it.quantity,
                       'unit_price': it.unit_price_usd} for it in inv.items]
             if not items:

@@ -6,14 +6,20 @@ Supports optional AES encryption, custom backup path, and external storage integ
 """
 
 from module_manager import BaseModule
+from settings_forms import secret_from_form
 from flask import (Blueprint, request, redirect, url_for,
                    flash, send_file, render_template)
 from datetime import datetime, date
 from pathlib import Path
 from io import BytesIO
-import os, re, json, shutil, zipfile
-from markupsafe import escape
+import os
+import re
+import json
+import shutil
+import zipfile
 import logging
+from secret_box import EncryptedString, encrypt_existing
+from timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +96,9 @@ class BackupModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             backup_path = db.Column(db.String(500), default='')
             encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
-            custom_password = db.Column(db.String(500), default='')
+            custom_password = db.Column(EncryptedString(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow)
 
         # We only need Settings reference for auto_backup_enabled check
         class Settings(db.Model):
@@ -219,6 +225,7 @@ class BackupModule(BaseModule):
         app.register_blueprint(bp)
 
     def on_enable(self):
+        encrypt_existing(self._db, 'backup_config', ['custom_password'])
         # Migrate: add use_external_storage column if missing
         try:
             from sqlalchemy import inspect as sa_inspect, text
@@ -284,20 +291,7 @@ class BackupModule(BaseModule):
     def _backup_key(self):
         """The deployment's backup key: BACKUP_KEY, else the key file
         (created on first use, readable by the owner only)."""
-        key = os.environ.get('BACKUP_KEY', '').strip()
-        if key:
-            return key
-        path = Path(self.core.app.config['BACKUP_KEY_FILE'])
-        if not path.exists():
-            import secrets
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w') as f:
-                f.write(secrets.token_urlsafe(32) + '\n')
-            logger.warning('Created backup key file %s — copy it to a password '
-                           'manager; encrypted backups cannot be restored '
-                           'without it', path)
-        return path.read_text().strip()
+        return self.core.deployment_key('BACKUP_KEY', 'BACKUP_KEY_FILE', 'backup')
 
     def _encryption_password(self, cfg):
         """Password used to encrypt a new backup (None = unencrypted)."""
@@ -348,227 +342,21 @@ class BackupModule(BaseModule):
 
     def get_settings_html(self, settings):
         cfg = self._get_config()
-        auto_ck = 'checked' if settings and settings.auto_backup_enabled else ''
-        bp = cfg.backup_path or ''
-        enc_none = 'checked' if cfg.encrypt_method == 'none' else ''
-        enc_cust = 'checked' if cfg.encrypt_method == 'custom' else ''
-        # Default to the backup key if not set to any known value
-        enc_key = '' if enc_none or enc_cust else 'checked'
-        cp = cfg.custom_password or ''
-        cp_show = 'block' if cfg.encrypt_method == 'custom' else 'none'
-        ext_ok = self._is_external_storage_enabled()
-        use_ext = 'checked' if cfg.use_external_storage else ''
-        backups = self._get_backup_list()
-        RS = ('width:auto!important;padding:0!important;'
-              'margin-right:8px;vertical-align:middle;')
-        return self._render_settings(
-            auto_ck, bp, enc_none, enc_key, enc_cust, cp, cp_show,
-            ext_ok, use_ext, backups, RS)
+        method = cfg.encrypt_method if cfg.encrypt_method in ('none', 'custom') else 'key'
+        return self.render_settings_template(
+            'backup_settings_panel.html',
+            cfg=cfg, method=method,
+            auto_backup=bool(settings and settings.auto_backup_enabled),
+            ext_ok=self._is_external_storage_enabled(),
+            key_source=self._key_source(),
+            demo_available=(Path(self.core.app_path) / 'demo_data.json').exists(),
+            backups=self._get_backup_list())
 
     def _key_source(self):
         """Where the backup key comes from, for the settings page (never the key)."""
         if os.environ.get('BACKUP_KEY', '').strip():
             return 'the BACKUP_KEY environment variable'
         return f"the key file {self.core.app.config['BACKUP_KEY_FILE']}"
-
-    def _render_settings(self, auto_ck, bp, enc_none, enc_key, enc_cust,
-                         cp, cp_show, ext_ok, use_ext, backups, RS):
-        h = []
-        a = h.append
-        a('<h3 style="margin-bottom:15px;color:var(--color-text);">Backup &amp; Restore</h3>')
-        a('<p style="color:var(--color-text-muted);margin-bottom:20px;">'
-          'Full backups include database (JSON) and all uploaded files '
-          'in a ZIP archive.</p>')
-
-        # auto backup checkbox
-        a('<div style="margin-bottom:15px;">')
-        a('<label style="display:block;font-weight:normal;cursor:pointer;">')
-        a(f'<input type="checkbox" name="auto_backup_enabled" {auto_ck}'
-          f' style="{RS}"> Enable automatic daily backup</label>')
-        a('<small style="display:block;margin-top:4px;margin-left:24px;'
-          'color:var(--color-text-muted);">Runs about a minute after start-up and daily at '
-          '03:00, at most once per day.</small></div>')
-
-        # custom backup path
-        a('<div class="form-group">')
-        a('<label for="bk_backup_path">Backup Directory (optional)</label>')
-        a(f'<input type="text" id="bk_backup_path" name="bk_backup_path"'
-          f' value="{bp}" placeholder="Leave empty for default (backups/)"'
-          f' style="max-width:400px;">')
-        a('<small style="display:block;margin-top:4px;color:var(--color-text-muted);">'
-          'Absolute path or relative to app root.</small></div>')
-
-        # external storage option
-        if ext_ok:
-            a('<div style="margin-bottom:15px;">')
-            a('<label style="display:block;font-weight:normal;cursor:pointer;">')
-            a(f'<input type="checkbox" name="bk_use_external_storage" {use_ext}'
-              f' style="{RS}"> Also send backups to External Storage</label>')
-            a('<small style="display:block;margin-top:4px;margin-left:24px;'
-              'color:var(--color-text-muted);">Copies archive to the storage configured in '
-              'External Storage module.</small></div>')
-        else:
-            a('<div style="margin-bottom:15px;padding:10px;background:var(--color-surface-2);'
-              'border-radius:4px;color:var(--color-text-muted);font-size:13px;">'
-              '\u2139\ufe0f Enable the <strong>External Storage</strong> '
-              'module to send backups to S3 or other remote storage.</div>')
-
-        # encryption
-        LS = 'display:block;margin-bottom:8px;font-weight:normal;cursor:pointer;'
-        a('<div style="margin-bottom:20px;">')
-        a('<label style="display:block;margin-bottom:8px;font-weight:bold;'
-          'color:var(--color-text);">Encryption</label><div style="margin-left:4px;">')
-        a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
-          f' value="none" {enc_none}'
-          f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
-          f' style="{RS}"> No encryption</label>')
-        a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
-          f' value="key" {enc_key}'
-          f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'none\'"'
-          f' style="{RS}"> Use the backup key (recommended)</label>')
-        a('<small style="display:block;margin:-4px 0 8px 24px;color:var(--color-text-muted);">'
-          f'Read from {escape(self._key_source())}. Keep a copy in a password '
-          'manager: encrypted backups cannot be restored without it.</small>')
-        a(f'<label style="{LS}"><input type="radio" name="bk_encrypt_method"'
-          f' value="custom" {enc_cust}'
-          f' onchange="document.getElementById(\'bk-custom-pw\').style.display=\'block\'"'
-          f' style="{RS}"> Use separate backup password</label>')
-        a('</div>')
-
-        a(f'<div id="bk-custom-pw" style="display:{cp_show};margin-left:24px;">')
-        a('<div class="form-group">')
-        a('<label for="bk_custom_password">Backup Password</label>')
-        a(f'<input type="password" id="bk_custom_password"'
-          f' name="bk_custom_password" value="{cp}"'
-          f' style="max-width:300px;" autocomplete="off">')
-        a('</div></div></div>')
-
-        a('<hr style="margin:20px 0;border:none;border-top:1px solid var(--color-border);">')
-
-        # create backup buttons
-        a('<h4 style="margin-bottom:10px;">Create New Backup</h4>')
-        a('<div style="margin-bottom:20px;">')
-        a(self._btn_backup(encrypt=True))
-        a(self._btn_backup(encrypt=False))
-        a('</div>')
-
-        # restore / demo data
-        a('<h4 style="margin-bottom:10px;">Restore Data</h4>')
-        a('<div style="margin-bottom:20px;">')
-        # Upload JSON backup
-        js_upload = "window.location.href='/backup/upload-restore';"
-        a(f'<button type="button" class="btn btn-info"'
-          f' style="margin-right:10px;" onclick="{js_upload}">'
-          f'\U0001f4e4 Upload JSON Backup</button>')
-        # Load demo data
-        demo_path = Path(self.core.app_path) / 'demo_data.json'
-        if demo_path.exists():
-            js_demo = (
-                "if(confirm('Load demo data? This will REPLACE all current data.')){"
-                "var f=document.createElement('form');"
-                "f.method='POST';f.action='/backup/load-demo';"
-                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
-                "var m=document.querySelector('meta[name=csrf-token]');"
-                "if(m)c.value=m.content;f.appendChild(c);"
-                "document.body.appendChild(f);f.submit();}"
-            )
-            a(f'<button type="button" class="btn btn-warning"'
-              f' style="margin-right:10px;" onclick="{js_demo}">'
-              f'\U0001f9ea Load Demo Data</button>')
-        a('</div>')
-
-        # backup list
-        a('<h4>Saved Backups</h4>')
-        if backups:
-            a(self._render_backup_table(backups))
-        else:
-            a('<div style="text-align:center;padding:30px;color:var(--color-text-faint);">'
-              '<p>No backups found.</p></div>')
-
-        return '\n'.join(h)
-
-    @staticmethod
-    def _btn_backup(encrypt):
-        val = 'yes' if encrypt else 'no'
-        label = '\U0001f512 Full Backup (Encrypted)' if encrypt else '\U0001f4e6 Full Backup (No encryption)'
-        cls = 'btn-success' if encrypt else 'btn-primary'
-        js = (
-            "var f=document.createElement('form');"
-            "f.method='POST';f.action='/backup/';"
-            "var i=document.createElement('input');"
-            "i.type='hidden';i.name='backup_type';i.value='full';"
-            "f.appendChild(i);"
-            "var e=document.createElement('input');"
-            "e.type='hidden';e.name='encrypt';e.value='" + val + "';"
-            "f.appendChild(e);"
-            "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
-            "var m=document.querySelector('meta[name=csrf-token]');"
-            "if(m)c.value=m.content;f.appendChild(c);"
-            "document.body.appendChild(f);f.submit();"
-        )
-        return (f'<button type="button" class="btn {cls}" '
-                f'style="margin-right:10px;" onclick="{js}">'
-                f'{label}</button>')
-
-    @staticmethod
-    def _render_backup_table(backups):
-        h = []
-        a = h.append
-        a('<table style="width:100%;border-collapse:collapse;margin-top:10px;">')
-        a('<thead><tr style="background:var(--color-surface-2);">')
-        a('<th style="padding:10px;text-align:left;">File</th>')
-        a('<th style="padding:10px;text-align:left;">Type</th>')
-        a('<th style="padding:10px;text-align:left;">Date</th>')
-        a('<th style="padding:10px;text-align:left;">Size</th>')
-        a('<th style="padding:10px;text-align:center;">Actions</th>')
-        a('</tr></thead><tbody>')
-        for b in backups:
-            fn = b['filename']
-            badge = 'status-active' if b['type'] == 'Manual' else 'status-paid'
-            a(f'<tr style="border-bottom:1px solid var(--color-border);">')
-            a(f'<td style="padding:10px;font-size:13px;">{fn}</td>')
-            a(f'<td style="padding:10px;">'
-              f'<span class="status-badge {badge}">'
-              f'{b["type"]}</span></td>')
-            a(f'<td style="padding:10px;">{b["date"]}</td>')
-            a(f'<td style="padding:10px;">{b["size"]}</td>')
-            a('<td style="padding:10px;text-align:center;">')
-            BS = 'padding:4px 8px;font-size:12px;margin-right:3px;'
-            a(f'<a href="/backup/download/{fn}" class="btn btn-primary"'
-              f' style="{BS}">Download</a>')
-            js_r = (
-                "if(confirm('Restore from this backup?')){"
-                "var f=document.createElement('form');"
-                "f.method='POST';"
-                "f.action='/backup/restore/" + fn + "';"
-                + ("var p=prompt('Password for this backup (leave empty to use "
-                   "the backup key; for backups made before the backup key, "
-                   "your login password)');if(p===null)return;"
-                   "var w=document.createElement('input');w.type='hidden';"
-                   "w.name='password';w.value=p;f.appendChild(w);"
-                   if fn.endswith('.enc') else '') +
-                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
-                "var m=document.querySelector('meta[name=csrf-token]');"
-                "if(m)c.value=m.content;f.appendChild(c);"
-                "document.body.appendChild(f);f.submit();}"
-            )
-            a(f'<button type="button" class="btn btn-success"'
-              f' style="{BS}" onclick="{js_r}">Restore</button>')
-            js_d = (
-                "if(confirm('Delete this backup?')){"
-                "var f=document.createElement('form');"
-                "f.method='POST';"
-                "f.action='/backup/delete/" + fn + "';"
-                "var c=document.createElement('input');c.type='hidden';c.name='csrf_token';"
-                "var m=document.querySelector('meta[name=csrf-token]');"
-                "if(m)c.value=m.content;f.appendChild(c);"
-                "document.body.appendChild(f);f.submit();}"
-            )
-            a(f'<button type="button" class="btn btn-danger"'
-              f' style="{BS}" onclick="{js_d}">Delete</button>')
-            a('</td></tr>')
-        a('</tbody></table>')
-        return '\n'.join(h)
 
     def save_settings(self, settings, form):
         # Only update auto_backup if the field was actually in the form
@@ -585,9 +373,10 @@ class BackupModule(BaseModule):
             method = form.get('bk_encrypt_method', DEFAULT_ENCRYPT_METHOD)
             cfg.encrypt_method = (method if method in ('key', 'custom', 'none')
                                   else DEFAULT_ENCRYPT_METHOD)
-            cfg.custom_password = form.get('bk_custom_password', '').strip()
+            cfg.custom_password = secret_from_form(form, 'bk_custom_password',
+                                                   cfg.custom_password or '')
             cfg.use_external_storage = form.get('bk_use_external_storage') == 'on'
-            cfg.updated_at = datetime.utcnow()
+            cfg.updated_at = utcnow()
             self._db.session.commit()
 
     # ── core backup logic ───────────────────────────────────────────
@@ -780,11 +569,13 @@ class BackupModule(BaseModule):
                 safe_t = _check_name(tname)
                 cols = [c['name'] for c in inspector.get_columns(tname)]
                 for rd in tables[tname]:
-                    # Normalize date and datetime fields if present
+                    # Normalize date and datetime fields to the text form
+                    # SQLite stores (what the deprecated sqlite3 default
+                    # adapters produced: isoformat() / isoformat(' ')).
                     for k, v in list(rd.items()):
                         if v and k in date_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v).date()
+                                rd[k] = datetime.fromisoformat(v).date().isoformat()
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
@@ -794,7 +585,7 @@ class BackupModule(BaseModule):
                                 )
                         elif v and k in dt_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v)
+                                rd[k] = datetime.fromisoformat(v).isoformat(' ')
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
@@ -822,7 +613,8 @@ class BackupModule(BaseModule):
     # ── encryption ──────────────────────────────────────────────────
 
     def _encrypt_bytes(self, data, password):
-        import hashlib, hmac
+        import hashlib
+        import hmac
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)
@@ -842,7 +634,8 @@ class BackupModule(BaseModule):
         return salt + iv + mac + ct
 
     def _decrypt_bytes(self, data, password):
-        import hashlib, hmac as hmac_mod
+        import hashlib
+        import hmac as hmac_mod
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)
@@ -891,22 +684,30 @@ class BackupModule(BaseModule):
 
     # ── file listing & utilities ────────────────────────────────────
 
+    def _backup_folders(self):
+        """Folders whose files count as backups: the configured backup
+        directory, then the legacy `backups/` in the working directory.
+
+        Never `instance/`: it holds the live database and the auth config,
+        which must not be listed, downloaded, restored from or deleted here.
+        """
+        folders = [self._backup_dir()]
+        legacy = Path('backups')
+        if legacy.is_dir() and legacy.resolve() != folders[0].resolve():
+            folders.append(legacy)
+        return folders
+
     def _get_backup_list(self):
         backups = []
-        backup_dir = self._backup_dir()
         valid_ext = {'.zip', '.enc', '.encrypted', '.db'}
-        if backup_dir.exists():
-            for f in backup_dir.iterdir():
+        for folder in self._backup_folders():
+            if not folder.exists():
+                continue
+            for f in folder.iterdir():
                 if f.is_file() and (f.suffix in valid_ext
                                      or f.name.endswith('.zip.enc')):
-                    backups.append(self._backup_info(f))
-        for legacy in [Path('backups'), Path('instance')]:
-            if legacy.exists() and legacy != backup_dir:
-                for f in legacy.iterdir():
-                    if f.is_file() and (f.suffix in valid_ext
-                                         or f.name.endswith('.zip.enc')):
-                        if not any(b['filename'] == f.name for b in backups):
-                            backups.append(self._backup_info(f))
+                    if not any(b['filename'] == f.name for b in backups):
+                        backups.append(self._backup_info(f))
         backups.sort(key=lambda x: x['sort_key'], reverse=True)
         return backups
 
@@ -931,11 +732,11 @@ class BackupModule(BaseModule):
                 'type': btype, 'sort_key': sk}
 
     def _get_backup_file_path(self, filename):
-        if '..' in filename or '/' in filename:
+        if '..' in filename or '/' in filename or '\\' in filename:
             return None
-        for folder in [self._backup_dir(), Path('backups'), Path('instance')]:
+        for folder in self._backup_folders():
             p = folder / filename
-            if p.exists():
+            if p.is_file():
                 return p
         return None
 
