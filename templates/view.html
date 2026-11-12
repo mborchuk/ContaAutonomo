@@ -90,12 +90,12 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Unit Price (USD)</label>
+                    <label>Unit Price ({{ invoice.currency or 'USD' }})</label>
                     <input type="number" value="{{ item.unit_price_usd }}" readonly style="background: var(--color-border);">
                 </div>
 
                 <div class="form-group">
-                    <label>Subtotal (USD)</label>
+                    <label>Subtotal ({{ invoice.currency or 'USD' }})</label>
                     <input type="number" value="{{ item.subtotal_usd }}" readonly style="background: var(--color-border);">
                 </div>
             </div>
@@ -115,13 +115,13 @@
                 </div>
 
                 <div class="form-group">
-                    <label>Unit Price (USD)</label>
-                    <input type="number" value="{{ invoice.unit_price_usd or invoice.amount_usd }}" readonly style="background: var(--color-border);">
+                    <label>Unit Price ({{ invoice.currency or 'USD' }})</label>
+                    <input type="number" value="{{ invoice.unit_price_usd or invoice.amount_in_currency }}" readonly style="background: var(--color-border);">
                 </div>
 
                 <div class="form-group">
-                    <label>Total (USD)</label>
-                    <input type="number" value="{{ invoice.amount_usd }}" readonly style="background: var(--color-border);">
+                    <label>Total ({{ invoice.currency or 'USD' }})</label>
+                    <input type="number" value="{{ invoice.amount_in_currency }}" readonly style="background: var(--color-border);">
                 </div>
             </div>
         </div>
@@ -129,9 +129,15 @@
 
     <div style="background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 20px;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-            <strong>Total (USD):</strong>
-            <strong style="font-size: 18px;">${{ "%.2f"|format(invoice.amount_usd) }}</strong>
+            <strong>Total ({{ invoice.currency or 'USD' }}):</strong>
+            <strong style="font-size: 18px;">{{ currency_symbol }}{{ "%.2f"|format(invoice.amount_in_currency or 0) }}</strong>
         </div>
+        {% if (invoice.currency or 'USD') != 'EUR' %}
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px;">
+            <span>EUR equivalent:</span>
+            <span>€{{ "%.2f"|format(invoice.amount_eur or 0) }}</span>
+        </div>
+        {% endif %}
     </div>
 
     <div class="form-group">
