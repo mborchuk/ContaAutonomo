@@ -865,7 +865,11 @@ Used by report type `expenses` and `combined`. `query_fn` must return:
     'contractor_name': 'Acme Corp',     # str
     'category': 'Software',            # str
     'description': 'Monthly license',   # str
-    'amount_eur': 99.00                 # float, amount in EUR
+    'amount_eur': 99.00,                # float, amount in EUR
+    # Optional (report IVA columns; '–' when missing):
+    'vat_rate_pct': 21.0,               # float | None, IVA rate in %
+    'vat_eur': 17.18,                   # float | None, IVA amount in EUR
+    'reverse_charge': False,            # bool, row shown as 'ISP' + Art. 194 note
 }]
 ```
 

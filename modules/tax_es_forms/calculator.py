@@ -16,6 +16,8 @@ expenses with zero Spanish VAT are left out of the deductible base.
 
 from datetime import date
 
+from constants import counts_as_income
+
 
 def quarter_of(d):
     """Return calendar quarter (1-4) for a date."""
@@ -70,7 +72,7 @@ def _customer_tax_type(invoice):
 
 def _active(invoice):
     """Devengo basis: everything except cancelled counts."""
-    return getattr(invoice, "status", None) != "cancelled"
+    return counts_as_income(invoice)
 
 
 def _invoice_output_vat(invoice, vat_rate):
@@ -96,6 +98,28 @@ def _invoice_output_vat(invoice, vat_rate):
         base = _invoice_base_eur(invoice)
         return base, base * vat_rate
     return 0.0, 0.0
+
+
+def invoice_vat_line(invoice, vat_rate):
+    """IVA figures for one invoice row in a report.
+
+    Returns {'vat_rate_pct', 'vat_eur', 'reverse_charge'}. Issued invoices use
+    the snapshot frozen at issue; legacy and draft invoices derive the value
+    from the customer's tax type and `vat_rate` (a fraction, e.g. 0.21).
+    `reverse_charge` is True for intra-EU B2B customers (the customer accounts
+    for the VAT).
+    """
+    _base, cuota = _invoice_output_vat(invoice, vat_rate)
+    snap_rate = getattr(invoice, 'snap_vat_rate', None)
+    if snap_rate is not None:
+        rate_pct = snap_rate or 0.0
+    else:
+        rate_pct = vat_rate * 100.0 if cuota else 0.0
+    return {
+        'vat_rate_pct': rate_pct,
+        'vat_eur': cuota or 0.0,
+        'reverse_charge': _customer_tax_type(invoice) == 'eu_b2b',
+    }
 
 
 def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,

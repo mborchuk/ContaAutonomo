@@ -644,6 +644,8 @@ class ExpensesModule(BaseModule):
                 'amount_eur': amount_eur,
                 # F4 — VAT split (None on legacy rows).
                 'vat_eur': vat_eur,
+                'vat_rate_pct': expense.vat_rate,
+                'reverse_charge': bool(expense.reverse_charge),
                 'deductible_pct': expense.deductible_pct,
             })
         return result

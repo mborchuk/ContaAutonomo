@@ -32,7 +32,10 @@ report_data = {
             'invoice_date': '30/01/2026',
             'client_name': 'Client Name',
             'amount_eur': 6730.0,
-            'status': 'paid'
+            'status': 'paid',
+            'vat_rate_pct': 21.0,      # IVA % (snapshot on issued invoices)
+            'vat_eur': 1413.3,         # IVA amount in EUR
+            'reverse_charge': False    # True -> 'ISP' + Art. 194 note
         },
         ...
     ],
@@ -42,7 +45,10 @@ report_data = {
             'contractor_name': 'Contractor Name',
             'category': 'Services',
             'description': 'Description',
-            'amount_eur': 242.0
+            'amount_eur': 242.0,
+            'vat_rate_pct': 21.0,      # optional; None -> '–'
+            'vat_eur': 42.0,           # optional; None -> '–'
+            'reverse_charge': False    # optional
         },
         ...
     ]
