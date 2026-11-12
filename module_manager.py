@@ -1099,6 +1099,22 @@ class CoreServices:
         """Application root path"""
         return self.app.root_path
 
+    def data_years(self):
+        """Years to offer in year pickers: every year with an invoice or an
+        expense, plus the current year. Newest first."""
+        from datetime import date
+        from sqlalchemy import extract, select
+        tables = self.db.metadata.tables   # no import of app (avoids a cycle)
+        years = {date.today().year}
+        for table, column in (('invoice', 'invoice_date'), ('expense', 'expense_date')):
+            if table not in tables:
+                continue
+            col = tables[table].c[column]
+            rows = self.db.session.execute(
+                select(extract('year', col)).where(col.isnot(None)).distinct())
+            years.update(int(y) for (y,) in rows if y is not None)
+        return sorted(years, reverse=True)
+
     def get_settings(self):
         """Get application settings"""
         if self._settings_model:
