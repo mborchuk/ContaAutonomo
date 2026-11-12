@@ -113,7 +113,7 @@ Key rules:
 | `/mark-paid/<id>` | POST — mark an issued/pending invoice as paid |
 | `/rectify/<id>` | POST — create a linked rectificative draft; fires `on_invoice_rectified` (blocking) |
 | `/annul/<id>` | POST — annul an issued invoice (kept, excluded from income); fires `on_invoice_annulled` (blocking) |
-| `/delete/<id>` | POST — delete invoice (drafts and legacy `pending` only) |
+| `/delete/<id>` | POST — delete invoice (drafts and legacy `pending` only); fires `on_invoice_deleted` first, then removes the PDF file once the delete is committed |
 | `/generate-pdf/<id>` | Generate/download invoice PDF |
 | `/preview-pdf/<id>` | Preview invoice PDF in browser |
 | `/settings` | Settings (all tabs — each saves independently) |
@@ -821,6 +821,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `on_invoice_issued(invoice, request)` | Called when a draft becomes issued, **before commit**. Raising aborts the transition (compliance veto). |
 | `on_invoice_rectified(new_invoice, original, request)` | Called when a rectificative draft is created, before commit. Raising aborts. |
 | `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
+| `on_invoice_deleted(invoice)` | Called when a draft invoice is deleted, before commit. Delete the module's rows that reference the invoice; raising aborts. |
 | `get_invoice_templates()` | Invoice PDF templates provided by this module |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |

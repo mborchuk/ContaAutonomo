@@ -424,6 +424,15 @@ class BaseModule(ABC):
         """
         pass
 
+    def on_invoice_deleted(self, invoice):
+        """
+        Called when a draft invoice is deleted, before the delete is committed.
+        Delete this module's rows that reference the invoice (the database
+        enforces foreign keys, so a remaining row blocks the delete). A raise
+        aborts the delete.
+        """
+        pass
+
     def get_invoice_templates(self):
         """
         Return invoice PDF templates provided by this module.
@@ -2441,6 +2450,12 @@ class ModuleManager:
         """F2 — fan out annulment. Issue-blocking (propagates)."""
         for mod in self.modules.values():
             mod.on_invoice_annulled(invoice, request)
+
+    def on_invoice_deleted(self, invoice):
+        """Fan out invoice deletion so modules remove the rows that reference
+        it. Blocking: an error propagates and the delete is rolled back."""
+        for mod in self.modules.values():
+            mod.on_invoice_deleted(invoice)
 
     def get_invoice_templates(self):
         """Collect invoice PDF templates from core + all active modules.
