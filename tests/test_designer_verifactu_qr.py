@@ -254,6 +254,10 @@ def test_form_lists_module_blocks_with_allowed_slots(designer, loaded_modules, a
     assert 'value="top-center" selected' in select and 'value="top-left"' in select
     assert 'hidden' not in select and 'footer' not in select
     assert 'name="opt_verifactu_qr_size_mm"' in html
+    # The zone map knows each module block's allowed cells and that it is required.
+    assert 'id="zoneMap"' in html and 'data-slot="top-left"' in html and 'data-slot="hidden"' in html
+    assert ('blockMeta["verifactu_qr"] = {slots: ["top-center", "top-left"], required: true}'
+            in html)
 
 
 # ---- with the Verifactu PDF hook ----
