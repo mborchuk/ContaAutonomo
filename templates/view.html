@@ -35,6 +35,9 @@
             <div class="form-group">
                 <label>Status</label>
                 <input type="text" value="{{ invoice.status.upper() }}" readonly style="background: var(--color-border);">
+                {% if legacy_settled %}
+                <small class="helper-text">Legacy invoice, never issued through the app: it has no sequential number, fiscal snapshot or Verifactu record.</small>
+                {% endif %}
             </div>
 
             <div class="form-group">
@@ -148,9 +151,16 @@
     {# F2 — lifecycle actions #}
     {% if invoice.status in ('draft', 'pending') %}
         <form method="POST" action="{{ url_for('issue_invoice', id=invoice.id) }}" style="display:inline;"
-              onsubmit="return confirm('Issue this invoice? It becomes permanent and locked — corrections then require a rectificative.');">
+              onsubmit="return confirm('Issue this invoice? It gets the next sequential number in its series, becomes permanent and is locked — corrections then require a rectificative.');">
             <button type="submit" class="btn btn-success">Issue</button>
         </form>
+        {% if invoice.status == 'pending' %}
+        {# Legacy invoices were numbered and sent before the lifecycle existed:
+           they can be marked paid without issuing (issuing renumbers them). #}
+        <form method="POST" action="{{ url_for('mark_invoice_paid', id=invoice.id) }}" style="display:inline;">
+            <button type="submit" class="btn btn-secondary">Mark paid</button>
+        </form>
+        {% endif %}
     {% elif invoice.status in ('issued', 'paid') %}
         {% if invoice.status == 'issued' %}
         <form method="POST" action="{{ url_for('mark_invoice_paid', id=invoice.id) }}" style="display:inline;">

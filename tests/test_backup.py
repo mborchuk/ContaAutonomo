@@ -166,3 +166,44 @@ def test_backups_in_the_same_second_do_not_overwrite(bk):
     assert ok
     assert filename.endswith('_2.zip')
     assert len(_backups(bk)) == 3
+
+
+# --- C-3: the live database is never treated as a backup ---------------------
+
+@pytest.fixture
+def cwd_with_instance(bk, tmp_path, monkeypatch):
+    """Working directory holding an instance/ folder with a live-looking DB
+    and a legacy backups/ folder, like a real checkout."""
+    work = tmp_path / 'cwd'
+    (work / 'instance').mkdir(parents=True)
+    (work / 'instance' / 'invoices.db').write_bytes(b'live database')
+    (work / 'backups').mkdir()
+    (work / 'backups' / 'manual_20260101_120000.zip').write_bytes(b'old backup')
+    monkeypatch.chdir(work)
+    return work
+
+
+def test_backup_list_excludes_instance_db(cwd_with_instance, bk):
+    names = [b['filename'] for b in bk._get_backup_list()]
+    assert 'invoices.db' not in names
+    assert 'manual_20260101_120000.zip' in names   # legacy backups/ still listed
+
+
+def test_instance_db_cannot_be_downloaded_restored_or_deleted(cwd_with_instance, bk, client):
+    assert bk._get_backup_file_path('invoices.db') is None
+
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    resp = client.get('/backup/download/invoices.db')
+    assert resp.status_code == 302            # "not found" flash, no file
+
+    ok, _ = bk._restore_full_backup('invoices.db', [])
+    assert not ok
+    ok, _ = bk._delete_backup_file('invoices.db')
+    assert not ok
+    assert (cwd_with_instance / 'instance' / 'invoices.db').read_bytes() == b'live database'
+
+
+@pytest.mark.parametrize('name', ['../instance/invoices.db', 'a/b.zip', 'a\\b.zip'])
+def test_backup_file_path_rejects_paths(bk, name):
+    assert bk._get_backup_file_path(name) is None
