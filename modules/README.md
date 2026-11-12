@@ -182,6 +182,7 @@ Every module must inherit from `BaseModule` and implement required properties.
 | `on_invoice_issued(invoice, request)` | `Invoice`, `Request` | `None` | Called when a draft becomes issued, **before commit** — raising aborts the transition |
 | `on_invoice_rectified(new_invoice, original, request)` | `Invoice`, `Invoice`, `Request` | `None` | Called when a rectificative draft is created, before commit — raising aborts |
 | `on_invoice_annulled(invoice, request)` | `Invoice`, `Request` | `None` | Called when an issued invoice is annulled, before commit — raising aborts |
+| `on_invoice_deleted(invoice)` | `Invoice` | `None` | Called when a draft invoice is deleted, before commit — delete this module's rows that reference the invoice (foreign keys are enforced); raising aborts the delete |
 | `get_invoice_templates()` | — | `list[dict]` | Invoice PDF templates provided by this module |
 | `get_tax_obligations(context)` | `dict` | `dict` or `None` | Tax obligation data for dashboard |
 | `get_capabilities()` | — | `list[dict]` | What other modules may call: each `{'type': str, 'action': callable, ...}`; invalid entries are skipped and logged |

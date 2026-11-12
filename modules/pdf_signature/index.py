@@ -672,6 +672,9 @@ class PDFSignatureModule(BaseModule):
         # C-2: encrypt a certificate password stored in plaintext by earlier versions.
         encrypt_existing(self._db, 'pdf_signature_config', ['certificate_password'])
 
+    def on_invoice_deleted(self, invoice):
+        self.PDFSignatureInvoice.query.filter_by(invoice_id=invoice.id).delete()
+
     def get_settings_html(self, settings):
         cfg = self._get_config()
         return self.render_settings_template(

@@ -1747,21 +1747,30 @@ def delete_invoice(id):
         flash('Issued invoices cannot be deleted. Use "Annul" to cancel it.', 'danger')
         return redirect(url_for('index'))
 
-    # Delete PDF from storage
-    if module_manager:
-        svc = module_manager.core.invoice_service
-        key = svc._resolve_storage_key(invoice)
-        if key:
-            try:
-                module_manager.core.storage.delete(key)
-                log_activity('invoice_pdf_deleted', 'invoice',
-                             f'PDF deleted for #{invoice.invoice_number}')
-            except Exception as e:
-                logger.error('Failed to delete PDF for #%s: %s', invoice.invoice_number, e)
+    # The PDF file is removed only after the database delete succeeds.
+    pdf_key = (module_manager.core.invoice_service._resolve_storage_key(invoice)
+               if module_manager else None)
 
-    db.session.delete(invoice)
-    db.session.commit()
-    log_activity('invoice_deleted', 'invoice', f'#{invoice.invoice_number}')
+    from sqlalchemy.exc import IntegrityError
+    number = invoice.invoice_number
+    try:
+        if module_manager:
+            module_manager.on_invoice_deleted(invoice)   # module rows first
+        db.session.delete(invoice)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        logger.exception('Invoice %s could not be deleted', id)
+        flash('This invoice could not be deleted because other records still refer '
+              'to it. Nothing was changed; the server log names the record.', 'danger')
+        return redirect(url_for('view_invoice', id=id))
+    if pdf_key:
+        try:
+            module_manager.core.storage.delete(pdf_key)
+            log_activity('invoice_pdf_deleted', 'invoice', f'PDF deleted for #{number}')
+        except Exception as e:  # the invoice is gone; a leftover file is only logged
+            logger.error('Failed to delete PDF for #%s: %s', number, e, exc_info=True)
+    log_activity('invoice_deleted', 'invoice', f'#{number}')
     flash('Invoice deleted successfully!', 'success')
     return redirect(url_for('index'))
 
