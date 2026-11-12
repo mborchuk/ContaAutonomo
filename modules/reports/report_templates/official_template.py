@@ -34,6 +34,24 @@ def _append_section_table(story, section_start, table, width, keep_rows=2):
     story.append(table)
 
 
+REVERSE_CHARGE_NOTE = ('ISP: Inversión del sujeto pasivo – '
+                       'Artículo 194 Directiva 2006/112/EC')
+
+
+def _vat_cells(row):
+    """IVA % and IVA (EUR) cells for a report row. Reverse-charge rows show
+    'ISP' instead of a rate; rows without VAT data show '–'."""
+    if row.get('reverse_charge'):
+        rate_cell = 'ISP'
+    elif row.get('vat_rate_pct') is None:
+        rate_cell = '–'
+    else:
+        rate_cell = f"{row['vat_rate_pct']:g}%"
+    vat = row.get('vat_eur')
+    vat_cell = '–' if vat is None else f"€ {vat:.2f}"
+    return rate_cell, vat_cell
+
+
 def generate_report(buffer, report_data, settings):
     """
     Generate a professional report PDF
@@ -127,59 +145,75 @@ def generate_report(buffer, report_data, settings):
 
         if income_data:
             total_by_currency = {}
+            income_vat_total = 0.0
+            income_has_isp = False
             if currency_mode == 'original':
                 # Original currency mode — show Currency column
                 income_table_data = [
-                    ['Invoice #', 'Date', 'Client', 'Currency', 'Amount', 'Status']
+                    ['Invoice #', 'Date', 'Client', 'Currency', 'Amount',
+                     'IVA %', 'IVA\n(EUR)', 'Status']
                 ]
                 total_by_currency = {}
                 for invoice in income_data:
                     client_name = invoice.get('client_name', '')
-                    if len(client_name) > 25:
-                        client_name = client_name[:22] + '...'
+                    if len(client_name) > 18:
+                        client_name = client_name[:15] + '...'
                     cur = invoice.get('currency', base_currency)
                     sym = get_currency_symbol(cur) + ' '
                     amt = invoice.get('amount', 0)
                     total_by_currency[cur] = total_by_currency.get(cur, 0) + amt
+                    rate_cell, vat_cell = _vat_cells(invoice)
+                    income_vat_total += invoice.get('vat_eur') or 0.0
+                    income_has_isp = income_has_isp or bool(invoice.get('reverse_charge'))
                     income_table_data.append([
                         invoice.get('invoice_number', ''),
                         invoice.get('invoice_date', ''),
                         client_name,
                         cur,
                         f"{sym} {amt:.2f}",
+                        rate_cell,
+                        vat_cell,
                         invoice.get('status', '').upper()
                     ])
-                # Total rows per currency
-                for cur, total in sorted(total_by_currency.items()):
+                # Total rows per currency; the IVA total (EUR) on the first one
+                for i, (cur, total) in enumerate(sorted(total_by_currency.items())):
                     sym = get_currency_symbol(cur) + ' '
                     income_table_data.append([
-                        '', '', '', f'TOTAL {cur}:', f"{sym} {total:.2f}", ''
+                        '', '', '', f'TOTAL {cur}:', f"{sym} {total:.2f}", '',
+                        f"€ {income_vat_total:.2f}" if i == 0 else '', ''
                     ])
-                col_widths = [2.5*cm, 2.3*cm, 5.5*cm, 2*cm, 2.5*cm, 2*cm]
+                col_widths = [2.4*cm, 2*cm, 3.1*cm, 1.9*cm, 2.3*cm, 1.4*cm, 2.1*cm, 1.8*cm]
             else:
                 # Base currency mode — single currency column
                 sym = get_currency_symbol(base_currency) + ' '
                 income_table_data = [
-                    ['Invoice #', 'Date', 'Client', f'Amount\n({base_currency})', 'Status']
+                    ['Invoice #', 'Date', 'Client', f'Amount\n({base_currency})',
+                     'IVA %', 'IVA\n(EUR)', 'Status']
                 ]
                 total_income = 0
                 for invoice in income_data:
                     client_name = invoice.get('client_name', '')
-                    if len(client_name) > 30:
-                        client_name = client_name[:27] + '...'
+                    if len(client_name) > 22:
+                        client_name = client_name[:19] + '...'
                     amt = invoice.get('amount', 0)
                     total_income += amt
+                    rate_cell, vat_cell = _vat_cells(invoice)
+                    income_vat_total += invoice.get('vat_eur') or 0.0
+                    income_has_isp = income_has_isp or bool(invoice.get('reverse_charge'))
                     income_table_data.append([
                         invoice.get('invoice_number', ''),
                         invoice.get('invoice_date', ''),
                         client_name,
                         f"{sym} {amt:.2f}",
+                        rate_cell,
+                        vat_cell,
                         invoice.get('status', '').upper()
                     ])
                 income_table_data.append([
-                    '', '', 'TOTAL:', f"{sym} {total_income:.2f}", ''
+                    '', '', 'TOTAL:', f"{sym} {total_income:.2f}", '',
+                    f"€ {income_vat_total:.2f}", ''
                 ])
-                col_widths = [2.5*cm, 2.3*cm, 7*cm, 2.7*cm, 2.3*cm]
+                col_widths = [2.4*cm, 2*cm, 4.5*cm, 2.5*cm, 1.4*cm, 2.2*cm, 2*cm]
 
             num_total_rows = len(total_by_currency) if total_by_currency else 1
 
@@ -188,8 +222,8 @@ def generate_report(buffer, report_data, settings):
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('ALIGN', (-3, -num_total_rows), (-3, -1), 'RIGHT'),
-                ('ALIGN', (-2, 0), (-2, -1), 'RIGHT'),
+                ('ALIGN', (-5, -num_total_rows), (-5, -1), 'RIGHT'),
+                ('ALIGN', (-4, 0), (-2, -1), 'RIGHT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('FONTSIZE', (0, 1), (-1, -1), 9),
@@ -204,6 +238,9 @@ def generate_report(buffer, report_data, settings):
             ]))
 
             _append_section_table(story, section_start, income_table, doc.width)
+            if income_has_isp:
+                story.append(Spacer(1, 0.2*cm))
+                story.append(Paragraph(REVERSE_CHARGE_NOTE, normal_style))
             story.append(Spacer(1, 0.5*cm))
 
             # Income summary text
@@ -240,10 +277,13 @@ def generate_report(buffer, report_data, settings):
 
             # Expenses table
             expenses_table_data = [
-                ['Invoice #', 'Date', 'Contractor', 'Category', 'Description', 'Amount\n(EUR)']
+                ['Invoice #', 'Date', 'Contractor', 'Category', 'Description', 'Amount\n(EUR)',
+                 'IVA %', 'IVA\n(EUR)']
             ]
 
             total_expenses = 0
+            expenses_vat_total = 0.0
+            expenses_has_isp = False
             for expense in expenses_data:
                 # Use Paragraph for contractor name to enable word wrap
                 contractor_name = expense.get('contractor_name', 'N/A')
@@ -265,16 +305,22 @@ def generate_report(buffer, report_data, settings):
                     contractor_para,
                     category_para,
                     description_para,
-                    f"€ {expense.get('amount_eur', 0):.2f}"
+                    f"€ {expense.get('amount_eur', 0):.2f}",
+                    *_vat_cells(expense),
                 ])
                 total_expenses += expense.get('amount_eur', 0)
+                expenses_vat_total += expense.get('vat_eur') or 0.0
+                expenses_has_isp = expenses_has_isp or bool(expense.get('reverse_charge'))
 
             # Add total row
             expenses_table_data.append([
-                '', '', '', '', 'TOTAL:', f"€ {total_expenses:.2f}"
+                '', '', '', '', 'TOTAL:', f"€ {total_expenses:.2f}", '',
+                f"€ {expenses_vat_total:.2f}"
             ])
 
-            expenses_table = Table(expenses_table_data, colWidths=[2.5*cm, 2*cm, 3*cm, 2.5*cm, 4.5*cm, 2.8*cm],
+            expenses_table = Table(expenses_table_data,
+                                   colWidths=[2.2*cm, 1.9*cm, 2.5*cm, 2.1*cm, 2.9*cm, 2.1*cm,
+                                              1.5*cm, 1.8*cm],
                                    repeatRows=1)
             expenses_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
@@ -282,7 +328,7 @@ def generate_report(buffer, report_data, settings):
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'TOP'),  # Align content to top for wrapped text
                 ('ALIGN', (4, -1), (4, -1), 'RIGHT'),  # Align TOTAL: to right
-                ('ALIGN', (5, 0), (5, -1), 'RIGHT'),
+                ('ALIGN', (5, 0), (7, -1), 'RIGHT'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, 0), 10),
                 ('FONTSIZE', (0, 1), (-1, -1), 9),  # Smaller font for data rows
@@ -297,6 +343,9 @@ def generate_report(buffer, report_data, settings):
             ]))
 
             _append_section_table(story, section_start, expenses_table, doc.width)
+            if expenses_has_isp:
+                story.append(Spacer(1, 0.2*cm))
+                story.append(Paragraph(REVERSE_CHARGE_NOTE, normal_style))
             story.append(Spacer(1, 0.5*cm))
 
             # Expenses summary
