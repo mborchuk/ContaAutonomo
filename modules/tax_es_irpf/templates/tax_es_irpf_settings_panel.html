@@ -1,0 +1,54 @@
+<h3>🧮 IRPF Estimator (España)</h3>
+<p style="color:var(--color-text-muted);">Estimate only — not tax advice. Confirm with AEAT.</p>
+<div class="form-group">
+    <label for="irpf_region">Comunidad autónoma</label>
+    <select id="irpf_region" name="irpf_region">
+        {%- for r in regions %}
+        <option value="{{ r }}"{% if profile.region == r %} selected{% endif %}>{{ r|title }}</option>
+        {%- endfor %}
+    </select>
+</div>
+<div class="form-group">
+    <label for="irpf_start_date">Alta date (start of activity)</label>
+    <input type="date" id="irpf_start_date" name="irpf_start_date" value="{{ start }}">
+</div>
+<div class="form-group">
+    <label for="irpf_age">Age</label>
+    <input type="number" id="irpf_age" name="irpf_age" min="0" value="{{ profile.age or 0 }}">
+</div>
+<div class="form-group">
+    <label for="irpf_descendientes">Descendientes (children)</label>
+    <input type="number" id="irpf_descendientes" name="irpf_descendientes" min="0" value="{{ profile.descendientes or 0 }}">
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_inicio"{% if profile.inicio_reduction_eligible %} checked{% endif %}> Eligible for 20% inicio-actividad reduction</label>
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_dificil_m130"{% if profile.apply_dificil_justif_m130 %} checked{% endif %}> Apply 5% difícil justificación inside Modelo 130 box 02 (off by default: applied in Modelo 100)</label>
+</div>
+<h4>Equipment (bienes de inversión) in Modelo 130 / 100</h4>
+<div class="form-group">
+    <label for="irpf_equipment_method">Treatment</label>
+    <select id="irpf_equipment_method" name="irpf_equipment_method">
+        <option value="depreciate"{% if depreciate %} selected{% endif %}>Depreciate (amortización)</option>
+        <option value="expense"{% if not depreciate %} selected{% endif %}>Deduct in full when bought</option>
+    </select>
+</div>
+<div class="form-group">
+    <label for="irpf_depreciation_rate">Depreciation rate (% per year, full quarter from the quarter of purchase)</label>
+    <input type="number" step="0.01" min="0" max="100" id="irpf_depreciation_rate" name="irpf_depreciation_rate" value="{{ rate }}">
+</div>
+<div class="form-group">
+    <label for="irpf_equipment_threshold">Deduct in full below (EUR, net)</label>
+    <input type="number" step="0.01" min="0" id="irpf_equipment_threshold" name="irpf_equipment_threshold" value="{{ threshold }}">
+</div>
+<div class="form-group">
+    <label for="irpf_equipment_categories">Expense categories treated as equipment (comma-separated)</label>
+    <input type="text" id="irpf_equipment_categories" name="irpf_equipment_categories" value="{{ profile.equipment_categories or 'Equipment' }}">
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_low_income"{% if profile.low_income_deduction %} checked{% endif %}> Apply art. 110.3.c low-income deduction (Modelo 130)</label>
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_mutualidad"{% if profile.uses_mutualidad %} checked{% endif %}> Uses mutualidad alternativa (cap RETA deduction)</label>
+</div>
