@@ -2036,7 +2036,7 @@ def settings():
                     setattr(app_settings, attr, request.form.get(form_key, ''))
             # Secrets are never rendered back (C-1): blank keeps the stored key.
             if 'currency_provider_api_key' in request.form:
-                from module_manager import secret_from_form
+                from settings_forms import secret_from_form
                 app_settings.currency_provider_api_key = secret_from_form(
                     request.form, 'currency_provider_api_key',
                     app_settings.currency_provider_api_key or '')
