@@ -7,6 +7,10 @@ import os
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('FLASK_DEBUG', '1')
+# Fixed Verifactu key so tests never create instance/verifactu.key in the checkout.
+os.environ.setdefault('VERIFACTU_KEY', 'test-verifactu-key')
+# Fixed credentials key so tests never create instance/credentials.key.
+os.environ.setdefault('CREDENTIALS_KEY', 'test-credentials-key')
 
 import pytest
 
@@ -64,7 +68,7 @@ def _loaded_modules_session():
     for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar',
                       'recurring_invoices', 'reta_advisor', 'invoice_email',
                       'verifactu', 'tax_management', 'bank_import', 'einvoice',
-                      'documents', 'reports', 'tax_es_irpf'):
+                      'documents', 'reports', 'tax_es_irpf', 'api'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()
@@ -78,3 +82,24 @@ def _loaded_modules_session():
 
     _db.session.remove()
     ctx.pop()
+
+
+@pytest.fixture
+def standalone_module(loaded_modules):
+    """Instance of a module the test session does not enable, without its
+    hooks, so other tests are not affected. One instance per module for the
+    whole session: declaring a module's models a second time makes
+    SQLAlchemy warn and replaces the classes other tests hold."""
+    from app import db
+    cache = loaded_modules.__dict__.setdefault('_standalone_cache', {})
+
+    def make(module_id):
+        if module_id in loaded_modules.modules:
+            return loaded_modules.modules[module_id]
+        if module_id not in cache:
+            inst = loaded_modules.discovered[module_id](loaded_modules.core)
+            inst.register_models(db)
+            cache[module_id] = inst
+        db.create_all()   # tables may have been dropped by another test
+        return cache[module_id]
+    return make

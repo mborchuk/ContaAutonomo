@@ -1,0 +1,141 @@
+{% from "_secret_field.html" import secret_input %}
+{% set RS = 'width:auto!important;padding:0!important;margin-right:8px;vertical-align:middle;' %}
+{% set LS = 'display:block;margin-bottom:8px;font-weight:normal;cursor:pointer;' %}
+{% set BS = 'padding:4px 8px;font-size:12px;margin-right:3px;' %}
+<script>
+// Submit a POST form with the CSRF token (backup actions are POST-only).
+function bkPost(action, fields) {
+    var f = document.createElement('form');
+    f.method = 'POST';
+    f.action = action;
+    Object.keys(fields || {}).forEach(function (k) {
+        var i = document.createElement('input');
+        i.type = 'hidden'; i.name = k; i.value = fields[k];
+        f.appendChild(i);
+    });
+    var c = document.createElement('input');
+    c.type = 'hidden'; c.name = 'csrf_token';
+    var m = document.querySelector('meta[name=csrf-token]');
+    if (m) c.value = m.content;
+    f.appendChild(c);
+    document.body.appendChild(f);
+    f.submit();
+}
+function bkRestore(btn) {
+    if (!confirm('Restore from this backup?')) return;
+    var fields = {};
+    if (btn.dataset.encrypted === '1') {
+        var p = prompt('Password for this backup (leave empty to use the backup key; ' +
+                       'for backups made before the backup key, your login password)');
+        if (p === null) return;
+        fields.password = p;
+    }
+    bkPost('/backup/restore/' + encodeURIComponent(btn.dataset.filename), fields);
+}
+function bkDelete(btn) {
+    if (!confirm('Delete this backup?')) return;
+    bkPost('/backup/delete/' + encodeURIComponent(btn.dataset.filename), {});
+}
+function bkShowCustomPassword(show) {
+    document.getElementById('bk-custom-pw').style.display = show ? 'block' : 'none';
+}
+</script>
+<h3 style="margin-bottom:15px;color:var(--color-text);">Backup &amp; Restore</h3>
+<p style="color:var(--color-text-muted);margin-bottom:20px;">Full backups include database (JSON) and all uploaded files in a ZIP archive.</p>
+
+<div style="margin-bottom:15px;">
+    <label style="display:block;font-weight:normal;cursor:pointer;">
+        <input type="checkbox" name="auto_backup_enabled"{% if auto_backup %} checked{% endif %} style="{{ RS }}"> Enable automatic daily backup</label>
+    <small style="display:block;margin-top:4px;margin-left:24px;color:var(--color-text-muted);">Runs about a minute after start-up and daily at 03:00, at most once per day.</small>
+</div>
+
+<div class="form-group">
+    <label for="bk_backup_path">Backup Directory (optional)</label>
+    <input type="text" id="bk_backup_path" name="bk_backup_path" value="{{ cfg.backup_path or '' }}"
+           placeholder="Leave empty for default (backups/)" style="max-width:400px;">
+    <small style="display:block;margin-top:4px;color:var(--color-text-muted);">Absolute path or relative to app root.</small>
+</div>
+
+{% if ext_ok %}
+<div style="margin-bottom:15px;">
+    <label style="display:block;font-weight:normal;cursor:pointer;">
+        <input type="checkbox" name="bk_use_external_storage"{% if cfg.use_external_storage %} checked{% endif %} style="{{ RS }}"> Also send backups to External Storage</label>
+    <small style="display:block;margin-top:4px;margin-left:24px;color:var(--color-text-muted);">Copies archive to the storage configured in External Storage module.</small>
+</div>
+{% else %}
+<div style="margin-bottom:15px;padding:10px;background:var(--color-surface-2);border-radius:4px;color:var(--color-text-muted);font-size:13px;">
+    ℹ️ Enable the <strong>External Storage</strong> module to send backups to S3 or other remote storage.
+</div>
+{% endif %}
+
+<div style="margin-bottom:20px;">
+    <label style="display:block;margin-bottom:8px;font-weight:bold;color:var(--color-text);">Encryption</label>
+    <div style="margin-left:4px;">
+        <label style="{{ LS }}"><input type="radio" name="bk_encrypt_method" value="none"{% if method == 'none' %} checked{% endif %}
+               onchange="bkShowCustomPassword(false)" style="{{ RS }}"> No encryption</label>
+        <label style="{{ LS }}"><input type="radio" name="bk_encrypt_method" value="key"{% if method == 'key' %} checked{% endif %}
+               onchange="bkShowCustomPassword(false)" style="{{ RS }}"> Use the backup key (recommended)</label>
+        <small style="display:block;margin:-4px 0 8px 24px;color:var(--color-text-muted);">Read from {{ key_source }}. Keep a copy in a password manager: encrypted backups cannot be restored without it.</small>
+        <label style="{{ LS }}"><input type="radio" name="bk_encrypt_method" value="custom"{% if method == 'custom' %} checked{% endif %}
+               onchange="bkShowCustomPassword(true)" style="{{ RS }}"> Use separate backup password</label>
+    </div>
+    <div id="bk-custom-pw" style="display:{{ 'block' if method == 'custom' else 'none' }};margin-left:24px;">
+        <div class="form-group">
+            <label for="bk_custom_password">Backup Password</label>
+            {{ secret_input('bk_custom_password', cfg.custom_password) }}
+        </div>
+    </div>
+</div>
+
+<hr style="margin:20px 0;border:none;border-top:1px solid var(--color-border);">
+
+<h4 style="margin-bottom:10px;">Create New Backup</h4>
+<div style="margin-bottom:20px;">
+    <button type="button" class="btn btn-success" style="margin-right:10px;"
+            onclick="bkPost('/backup/', {backup_type: 'full', encrypt: 'yes'})">🔒 Full Backup (Encrypted)</button>
+    <button type="button" class="btn btn-primary" style="margin-right:10px;"
+            onclick="bkPost('/backup/', {backup_type: 'full', encrypt: 'no'})">📦 Full Backup (No encryption)</button>
+</div>
+
+<h4 style="margin-bottom:10px;">Restore Data</h4>
+<div style="margin-bottom:20px;">
+    <button type="button" class="btn btn-info" style="margin-right:10px;"
+            onclick="window.location.href='/backup/upload-restore';">📤 Upload JSON Backup</button>
+    {% if demo_available %}
+    <button type="button" class="btn btn-warning" style="margin-right:10px;"
+            onclick="if (confirm('Load demo data? This will REPLACE all current data.')) bkPost('/backup/load-demo', {});">🧪 Load Demo Data</button>
+    {% endif %}
+</div>
+
+<h4>Saved Backups</h4>
+{% if backups %}
+<table style="width:100%;border-collapse:collapse;margin-top:10px;">
+    <thead><tr style="background:var(--color-surface-2);">
+        <th style="padding:10px;text-align:left;">File</th>
+        <th style="padding:10px;text-align:left;">Type</th>
+        <th style="padding:10px;text-align:left;">Date</th>
+        <th style="padding:10px;text-align:left;">Size</th>
+        <th style="padding:10px;text-align:center;">Actions</th>
+    </tr></thead>
+    <tbody>
+    {% for b in backups %}
+    <tr style="border-bottom:1px solid var(--color-border);">
+        <td style="padding:10px;font-size:13px;">{{ b.filename }}</td>
+        <td style="padding:10px;"><span class="status-badge {{ 'status-active' if b.type == 'Manual' else 'status-paid' }}">{{ b.type }}</span></td>
+        <td style="padding:10px;">{{ b.date }}</td>
+        <td style="padding:10px;">{{ b.size }}</td>
+        <td style="padding:10px;text-align:center;">
+            <a href="/backup/download/{{ b.filename|urlencode }}" class="btn btn-primary" style="{{ BS }}">Download</a>
+            <button type="button" class="btn btn-success" style="{{ BS }}"
+                    data-filename="{{ b.filename }}" data-encrypted="{{ '1' if b.filename.endswith('.enc') else '0' }}"
+                    onclick="bkRestore(this)">Restore</button>
+            <button type="button" class="btn btn-danger" style="{{ BS }}"
+                    data-filename="{{ b.filename }}" onclick="bkDelete(this)">Delete</button>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<div style="text-align:center;padding:30px;color:var(--color-text-faint);"><p>No backups found.</p></div>
+{% endif %}

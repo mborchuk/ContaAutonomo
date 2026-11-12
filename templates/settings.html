@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_secret_field.html" import secret_input %}
 
 {% block title %}Settings - Invoice Manager{% endblock %}
 
@@ -220,9 +221,9 @@
 
         <div class="form-group" id="api_key_field" style="display: {{ 'none' if cur_provider in ('ecb', 'frankfurter') else 'block' }};">
             <label for="currency_provider_api_key">API Key</label>
-            <input type="text" id="currency_provider_api_key" name="currency_provider_api_key"
-                   value="{{ settings.currency_provider_api_key if settings and settings.currency_provider_api_key else '' }}"
-                   placeholder="Enter API key for selected provider">
+            {{ secret_input('currency_provider_api_key',
+                            settings and settings.currency_provider_api_key,
+                            placeholder='Enter API key for selected provider', style='') }}
         </div>
 
         <script>

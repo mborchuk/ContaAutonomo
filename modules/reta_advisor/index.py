@@ -2,10 +2,11 @@
 """
 RETA Quota Advisor Module (F6) — project real-income bracket + regularization.
 
-CAVEMAN NOTE: replace guesswork around the static `social_security_monthly`
-setting. Count YTD income − expenses − generic deduction, annualize, map onto
-the 15-bracket RETA table, compare with what user actually pay → forecast the
-year-end regularization. ESTIMATE ONLY, big letters.
+Replaces guesswork around the static `social_security_monthly` setting. It
+takes year-to-date income minus expenses minus the generic deduction,
+annualizes it, maps it onto the 15-bracket RETA table, and compares the
+result with what the user actually pays to forecast the year-end
+regularization. This is an estimate only, and the UI says so prominently.
 
 Tax-panel integration is DISPLAY-ONLY (deductions=0, tax_total=0): the
 tax_management module keep owning the SS money line, so no double counting.
@@ -16,10 +17,12 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
+from constants import counts_as_income
 from module_manager import BaseModule
 
-from .brackets import BRACKETS, BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT
+from .brackets import BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year
 from .engine import project
+from year_tables import fallback_note
 
 
 class RetaAdvisorModule(BaseModule):
@@ -99,7 +102,7 @@ class RetaAdvisorModule(BaseModule):
         for inv in Invoice.query.all():
             if (inv.invoice_date and inv.invoice_date.year == year
                     and inv.invoice_date <= today
-                    and inv.status != 'cancelled'):
+                    and counts_as_income(inv)):
                 income += inv.amount_eur or 0.0
 
         expenses = 0.0
@@ -148,7 +151,8 @@ class RetaAdvisorModule(BaseModule):
             income, expenses, months,
             current_monthly_quota=current_quota,
             paid_ytd=self._paid_ytd(today.year),
-            deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)))
+            deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)),
+            year=today.year)
 
     # --- Routes ------------------------------------------------------------- #
 
@@ -174,9 +178,12 @@ class RetaAdvisorModule(BaseModule):
                 return redirect(url_for('reta_advisor.reta_index'))
 
             proj = module._projection()
+            _table_year, brackets, _fallback = brackets_for_year(date.today().year)
             return render_template('reta_advisor.html',
                                    proj=proj,
-                                   brackets=BRACKETS,
+                                   brackets=brackets,
+                                   table_note=(fallback_note(proj['table_year'])
+                                               if proj['table_fallback'] else ''),
                                    version=BRACKET_TABLE_VERSION,
                                    config=module._get_config(),
                                    current_year=datetime.now().year)
@@ -200,6 +207,8 @@ class RetaAdvisorModule(BaseModule):
             f"{symbol}{proj['current_monthly_quota']:.2f}/month — regularization "
             f"~{symbol}{abs(delta):.2f} {direction}. Table v{BRACKET_TABLE_VERSION}."
         ]
+        if proj.get('table_fallback'):
+            notes.append(f"RETA advisor: {fallback_note(proj['table_year'])}")
         return {
             'summary_columns': [],
             'breakdown_rows': [],
