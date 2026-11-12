@@ -138,12 +138,8 @@ def test_google_helpers():
 # --- module API handler with a stub provider ----------------------------------
 
 @pytest.fixture
-def ai_module(loaded_modules):
-    from app import db
-    inst = loaded_modules.discovered['ai_parser'](loaded_modules.core)
-    inst.register_models(db)
-    db.create_all()
-    return inst
+def ai_module(standalone_module):
+    return standalone_module('ai_parser')
 
 
 def _request(filename, data, doc_type='invoice'):

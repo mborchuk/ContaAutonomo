@@ -7,14 +7,11 @@ from pypdf import PdfReader
 
 
 @pytest.fixture
-def designer(loaded_modules, monkeypatch):
+def designer(standalone_module, monkeypatch):
     """Standalone instance (the module is not enabled in the test session, and
     blueprints cannot be registered after the first request), with url_for
     stubbed for its redirects."""
-    from app import db
-    inst = loaded_modules.discovered['invoice_designer'](loaded_modules.core)
-    inst.register_models(db)
-    db.create_all()
+    inst = standalone_module('invoice_designer')
     module_globals = type(inst)._save_template.__globals__
     monkeypatch.setitem(module_globals, 'url_for', lambda endpoint, **kw: f'/{endpoint}/{kw}')
     return inst, module_globals
