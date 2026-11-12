@@ -93,10 +93,13 @@ app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
 app.config['INIT_LOCK_PATH'] = os.path.join(
     os.path.dirname(app.config['SCHEDULER_LOCK_PATH']), 'init.lock')
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+app.config['CREDENTIALS_KEY_FILE'] = os.environ.get(
+    'CREDENTIALS_KEY_FILE', os.path.join(app.instance_path, 'credentials.key'))
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
 
 from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+from secret_box import EncryptedString, encrypt_existing
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -439,7 +442,7 @@ class Settings(db.Model):
     default_irpf_rate = db.Column(db.Float, default=20.0)  # Income tax retention rate in %
     # Currency provider settings
     currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
-    currency_provider_api_key = db.Column(db.String(200), default='')  # API key for providers that need it
+    currency_provider_api_key = db.Column(EncryptedString(500), default='')  # encrypted at rest (C-2)
     payment_methods = db.Column(db.Text, default='Bank Transfer,PayPal,Credit Card,Cash,Crypto')
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -2414,6 +2417,7 @@ def init_database():
     """
     from schema_migrations import run_migrations
     run_migrations(db.engine, db.metadata)
+    encrypt_existing(db, 'settings', ['currency_provider_api_key'])
 
     if not Settings.query.first():
         db.session.add(Settings(

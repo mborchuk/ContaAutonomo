@@ -29,6 +29,7 @@ from werkzeug.wrappers import Response as WerkzeugResponse
 from sqlalchemy import inspect as sa_inspect, text
 
 from module_manager import BaseModule
+import secret_box
 
 # API surface version (path is /api/v1). Bump when the contract changes.
 API_VERSION = 'v1'
@@ -117,6 +118,12 @@ class ApiModule(BaseModule):
             self.logger.error('api_token migration failed: %s', e, exc_info=True)
             return
 
+        # C-2: encrypt a token stored in plaintext by earlier versions.
+        try:
+            secret_box.encrypt_existing(db, 'settings', ['api_token'])
+        except Exception as e:
+            self.logger.error('api_token encryption failed: %s', e)
+
         # Generate an initial token if a settings row exists but has none.
         try:
             self._ensure_token()
@@ -137,7 +144,7 @@ class ApiModule(BaseModule):
             return ''
         if not row:
             return ''
-        return row[0] or ''
+        return secret_box.decrypt(row[0] or '') or ''
 
     def _set_token(self, token):
         """Persist a new API token on the settings singleton."""
@@ -145,7 +152,7 @@ class ApiModule(BaseModule):
         db.session.execute(
             text('UPDATE settings SET api_token = :t WHERE id = ('
                  'SELECT id FROM settings ORDER BY id LIMIT 1)'),
-            {'t': token})
+            {'t': secret_box.encrypt(token)})  # encrypted at rest (C-2)
         db.session.commit()
 
     def _ensure_token(self):
