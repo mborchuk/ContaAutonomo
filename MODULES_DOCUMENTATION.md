@@ -88,6 +88,12 @@ Key rules:
   `on_invoice_annulled`) run **inside the transition transaction**: a raising
   module aborts the transition. This is how the Verifactu module guarantees a
   billing record exists for every issued invoice.
+- **Invoice PDF**: a PDF the app generated (`invoice.pdf_generated`) is
+  discarded when a draft is edited and when it is issued, so the next preview
+  or download is rebuilt with the current data — after Issue: the final
+  number, the IVA snapshot and the Verifactu QR. A PDF attached by the user is
+  never discarded. *Regenerate PDF* on the invoice page rebuilds any unpaid
+  invoice's PDF on request.
 - **Income rule** (devengo, owner decision 2026-10-03): an invoice counts as
   income in the year of its `invoice_date` whatever its payment status; only
   `cancelled` invoices are excluded. One helper, `constants.counts_as_income()`,
