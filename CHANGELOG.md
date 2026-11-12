@@ -6,6 +6,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Modelo 390 draft** (#125): annual VAT summary at `/tax-forms-draft/390/<year>`,
+  each casilla the sum of the four quarterly 303 drafts; casillas checked
+  against the AEAT 2025 instructions.
+- **Year-keyed tax data** (#118): the fiscal calendar works for any year
+  (weekend deadlines move to Monday); Modelo 303/130 boxes and RETA brackets
+  are keyed by year and show "figures use the <year> table — verify" when an
+  earlier table is used. Annual checklist in `CONTRIBUTING.md`.
+- **IVA in report PDFs** (#115): IVA % and IVA (EUR) columns with totals in the
+  income and expenses tables; reverse-charge rows marked `ISP` with the
+  Art. 194 note.
+- **Bank import expense suggestions** (#124): debit movements get ranked
+  expense suggestions and a Link button (confirmation required).
+- **Facturae XAdES-EPES signature** (#126): exports are signed with the PDF
+  Signature certificate when one is configured (`.xsig`); unsigned otherwise.
+- **Verifactu QR on invoice PDFs** (#127): every PDF of an issued invoice
+  carries the AEAT QR (30 mm, level M, "QR tributario:"); official hash and
+  QR URL formats in `modules/verifactu/aeat.py`; comparison with the AEAT
+  specifications in `modules/verifactu/SPEC_COMPARISON.md`. Submission to AEAT
+  is not available, so the QR uses the non-VERI*FACTU URL.
+- **Lint and coverage** (#120): `ruff` (`make lint`), coverage in CI.
 - **Invoice lifecycle (F2)**: `draft → issued → paid` states with issued-invoice
   immutability. Issuing assigns a per-series sequential number (e.g. `2026/0001`)
   and freezes a fiscal snapshot (VAT rate/amount, taxable base, customer fiscal
@@ -71,6 +91,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Invoice status only through lifecycle actions** (#91): new invoices are
+  always drafts; the status field is gone from the forms and the API
+  (`POST /invoices/<id>/issue`, `/mark-paid`); annulled invoices are locked.
+- **Dashboard income** (#112) counts every invoice dated in the year except
+  cancelled ones, like the tax drafts (`constants.counts_as_income`).
+- **Dashboard tax deadlines** (#119) come from the Fiscal Calendar module; the
+  core list is removed.
+- **Reports year picker** (#94) lists the current year and every year with data.
+- **Deprecated calls replaced** (#121): `utcnow()` and `Query.get()`; the test
+  run has no warnings.
+- Module comments rewritten in plain English (#122); tests for four modules
+  that had none (#123).
 - SECRET_KEY now required in production (hard fail), warns in dev.
 - SQLite: WAL journal + `foreign_keys=ON`; SQLAlchemy `pool_pre_ping`/`pool_recycle`.
 - `MAX_CONTENT_LENGTH` = 50 MB + friendly 413 handling.
@@ -81,7 +113,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `Content-Security-Policy-Report-Only` header added.
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
+### Fixed
+- Invoices in currencies other than EUR/USD are converted with their own rate,
+  not the USD rate; a missing rate stops the save instead of using 1:1 (#114).
+- The invoice view shows the invoice currency instead of "(USD)" (#113).
+- The backup list no longer offers the live database for download, restore
+  or delete (#92).
+
 ### Security
+- **Module settings panels are auto-escaped and never show stored secrets**
+  (#116): passwords, API keys and tokens are write-only fields; the API token
+  is shown once after generation or rotation.
+- **Service credentials encrypted at rest** (#117) with `CREDENTIALS_KEY` (or
+  `instance/credentials.key`); existing values are encrypted on start-up.
+- **Verifactu records signed with a dedicated key** (#93) — `VERIFACTU_KEY` or
+  `instance/verifactu.key` — so rotating `SECRET_KEY` no longer breaks the
+  chain; existing records are re-signed once.
 - `delete_invoice` is POST-only + CSRF (was GET).
 - Session cleared before populating identity (session-fixation defense).
 - Failed logins recorded to the activity log.
