@@ -255,16 +255,7 @@ class TaxEsFormsModule(BaseModule):
         return result
 
     def _available_years(self):
-        years = set()
-        for inv in self._all_invoices():
-            if inv.invoice_date:
-                years.add(inv.invoice_date.year)
-        for exp in self._all_expenses():
-            if exp.expense_date:
-                years.add(exp.expense_date.year)
-        if not years:
-            years.add(datetime.now().year)
-        return sorted(years, reverse=True)
+        return self.core.data_years()
 
     # --- Routes ----------------------------------------------------------- #
 

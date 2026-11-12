@@ -95,8 +95,19 @@ app.config['INIT_LOCK_PATH'] = os.path.join(
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
+# Verifactu signing key file, used when VERIFACTU_KEY is not set. Separate
+# from SECRET_KEY so rotating the session key never breaks the record chain.
+app.config['VERIFACTU_KEY_FILE'] = os.environ.get(
+    'VERIFACTU_KEY_FILE', os.path.join(app.instance_path, 'verifactu.key'))
 
-from constants import MAX_CONTENT_LENGTH_BYTES, SESSION_LIFETIME_SECONDS
+from constants import (
+    INITIAL_INVOICE_STATUS,
+    LOCKED_INVOICE_STATUSES,
+    MAX_CONTENT_LENGTH_BYTES,
+    SESSION_LIFETIME_SECONDS,
+    invoice_locked,
+    is_legacy_settled,
+)
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -1059,13 +1070,10 @@ def index():
 
 
 # --- F2: Invoice lifecycle -------------------------------------------------- #
-
-LOCKED_INVOICE_STATUSES = ('issued', 'paid')
-
-
-def _invoice_locked(invoice):
-    """F2 — issued/paid invoices are read-only (change via rectificative)."""
-    return invoice is not None and invoice.status in LOCKED_INVOICE_STATUSES
+# The lock rule and the initial status live in constants.py (LOCKED_INVOICE_STATUSES,
+# INITIAL_INVOICE_STATUS, invoice_locked, is_legacy_settled).
+_invoice_locked = invoice_locked
+_is_legacy_settled = is_legacy_settled
 
 
 def _next_sequence_for_series(series):
@@ -1283,9 +1291,13 @@ def create_invoice():
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — new invoices start as DRAFT (freely editable) unless the form
-            # explicitly sets a status. Issuing is a separate, one-way action.
-            status = request.form.get('status') or 'draft'
+            # F2 — new invoices always start as DRAFT. Issue, Mark paid and
+            # Annul are the only ways to change the status afterwards.
+            status = request.form.get('status') or INITIAL_INVOICE_STATUS
+            if status != INITIAL_INVOICE_STATUS:
+                flash('New invoices are created as drafts. Issue the invoice, '
+                      'then use Mark paid or Annul to change its status.', 'danger')
+                return redirect(url_for('create_invoice'))
             notes = request.form.get('notes', '')
             bank_id = request.form.get('bank_id')
 
@@ -1562,11 +1574,13 @@ def edit_invoice(id):
 
             invoice_date_str = request.form['invoice_date']
             due_date_str = request.form.get('due_date')
-            # F2 — issuing must go through the Issue action (assigns series,
-            # sequence and the fiscal snapshot). Ignore a direct 'issued' here.
-            _new_status = request.form['status']
-            if _new_status != 'issued':
-                invoice.status = _new_status
+            # F2 — the status never changes through the edit form: issuing,
+            # payment and annulment are lifecycle actions on the invoice view.
+            posted_status = request.form.get('status')
+            if posted_status is not None and posted_status != invoice.status:
+                flash('The status cannot be changed here. Use Issue, Mark paid '
+                      'or Annul on the invoice page.', 'danger')
+                return redirect(url_for('edit_invoice', id=id))
             invoice.notes = request.form.get('notes', '')
             invoice.payment_method = request.form.get('payment_method', 'Bank Transfer')
             bank_id = request.form.get('bank_id')
@@ -1736,7 +1750,9 @@ def view_invoice(id):
 
     customers = Customer.query.order_by(Customer.name).all()
     banks = Bank.query.order_by(Bank.name).all()
-    return render_template('view.html', invoice=invoice, customers=customers, banks=banks, hash_mismatch=hash_mismatch,
+    return render_template('view.html', invoice=invoice, customers=customers, banks=banks,
+                           hash_mismatch=hash_mismatch,
+                           legacy_settled=_is_legacy_settled(invoice),
                            currency_symbol=get_currency_symbol(invoice.currency or 'USD'))
 
 

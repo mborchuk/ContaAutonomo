@@ -44,15 +44,25 @@ stateDiagram-v2
 
 Key rules:
 
+- **New invoices are always drafts.** The create and edit forms and the REST
+  API never set the status directly; it changes only through the lifecycle
+  actions (Issue, Mark paid, Annul, Rectify). A posted status other than the
+  current one is rejected.
 - **Draft** invoices behave like the legacy `pending` status: freely editable
-  and deletable. Legacy `pending` invoices keep those semantics unchanged.
+  and deletable. Legacy `pending` invoices keep those semantics unchanged and
+  can be marked paid without issuing (issuing renumbers them).
 - **Issue** is one-way. It assigns the next sequential number for the series
   (derived from `MAX(sequence_number)`, collision-safe) and freezes the fiscal
   snapshot, so later edits to the customer or tax settings never change the
   meaning of an issued invoice.
-- **Issued/paid** invoices cannot be edited or deleted — enforced in the core
-  routes, in `InvoiceService`, and in the REST API. The only forward
-  transitions are *Mark paid* and *Annul*.
+- **Issued, paid and annulled** invoices cannot be edited or deleted —
+  enforced in the core routes, in `InvoiceService`, and in the REST API
+  (one rule: `constants.invoice_locked`). The only forward transitions are *Mark
+  paid* and *Annul*. Legacy invoices cancelled before the lifecycle existed
+  (no `issued_at`) stay editable.
+- **Legacy settled invoices** — paid or cancelled without ever being issued
+  through the app — are left as they are; the invoice page labels them
+  (no sequential number, fiscal snapshot or Verifactu record).
 - **Rectify** creates a new draft pre-filled from the original, linked via
   `rectifies_invoice_id` + `rectification_type` (`sustitucion` | `diferencias`),
   in a dedicated `R<year>` series. The original invoice is never mutated.
@@ -67,8 +77,8 @@ Key rules:
 |-------|-------------|
 | `/` | Dashboard (clickable invoice rows navigate to view) |
 | `/invoices` | Invoice list with filters, sorting, pagination (clickable rows) |
-| `/create` | Create invoice — defaults to `draft` (calls `module_manager.on_invoice_created` after commit) |
-| `/edit/<id>` | Edit invoice — blocked for issued/paid (calls `module_manager.on_invoice_updated` after commit) |
+| `/create` | Create invoice — always `draft` (calls `module_manager.on_invoice_created` after commit) |
+| `/edit/<id>` | Edit invoice — blocked once issued; never changes the status (calls `module_manager.on_invoice_updated` after commit) |
 | `/view/<id>` | View invoice (renders `module_manager.get_invoice_actions` + `get_invoice_view_panels`) |
 | `/issue/<id>` | POST — issue a draft: sequential number + fiscal snapshot; fires `on_invoice_issued` (blocking) |
 | `/mark-paid/<id>` | POST — mark an issued/pending invoice as paid |
