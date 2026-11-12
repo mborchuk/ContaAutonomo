@@ -618,9 +618,7 @@ class TaxManagementModule(BaseModule):
                  for f in self.TaxForm.query.filter_by(year=year).all()}
 
         out = []
-        for entry in all_deadlines():
-            if entry['year'] != year:
-                continue
+        for entry in all_deadlines(years=[year]):
             if selected is not None and entry['form'] not in selected:
                 continue
             key = f"{entry['form']}|{entry['year']}|{entry['quarter'] or 0}"
