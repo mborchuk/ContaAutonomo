@@ -7,6 +7,8 @@ import os
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
 os.environ.setdefault('FLASK_DEBUG', '1')
+# Fixed Verifactu key so tests never create instance/verifactu.key in the checkout.
+os.environ.setdefault('VERIFACTU_KEY', 'test-verifactu-key')
 # Fixed credentials key so tests never create instance/credentials.key.
 os.environ.setdefault('CREDENTIALS_KEY', 'test-credentials-key')
 
@@ -66,7 +68,7 @@ def _loaded_modules_session():
     for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar',
                       'recurring_invoices', 'reta_advisor', 'invoice_email',
                       'verifactu', 'tax_management', 'bank_import', 'einvoice',
-                      'documents', 'reports', 'tax_es_irpf'):
+                      'documents', 'reports', 'tax_es_irpf', 'api'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()
