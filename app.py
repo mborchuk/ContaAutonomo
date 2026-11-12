@@ -640,65 +640,6 @@ def delete_customer(id):
     return redirect(url_for('settings') + '#customers')
 
 
-def _get_upcoming_tax_deadlines():
-    """
-    Get upcoming Spanish Autónomo tax deadlines grouped by date.
-    If a deadline falls on weekend, it moves to the next business day.
-    """
-    from datetime import date, timedelta
-
-    today = date.today()
-    year = today.year
-
-    # All deadlines: (date, list of forms)
-    raw_deadlines = [
-        (date(year, 1, 20), [
-            ('130, 303, 349', f'Q4 {year-1}'),
-        ]),
-        (date(year, 1, 30), [
-            ('390', f'Annual VAT {year-1}'),
-        ]),
-        (date(year, 4, 20), [
-            ('130, 303, 349', f'Q1 {year}'),
-        ]),
-        (date(year, 6, 30), [
-            ('100', f'Renta {year-1}'),
-        ]),
-        (date(year, 7, 20), [
-            ('130, 303, 349', f'Q2 {year}'),
-        ]),
-        (date(year, 10, 20), [
-            ('130, 303, 349', f'Q3 {year}'),
-        ]),
-        (date(year + 1, 1, 20), [
-            ('130, 303, 349', f'Q4 {year}'),
-        ]),
-        (date(year + 1, 1, 30), [
-            ('390', f'Annual VAT {year}'),
-        ]),
-    ]
-
-    def adjust_to_business_day(d):
-        while d.weekday() >= 5:
-            d += timedelta(days=1)
-        return d
-
-    upcoming = []
-    for deadline_date, forms in raw_deadlines:
-        adjusted = adjust_to_business_day(deadline_date)
-        if adjusted >= today:
-            days_left = (adjusted - today).days
-            upcoming.append({
-                'date': adjusted.strftime('%d/%m/%Y'),
-                'days_left': days_left,
-                'urgent': days_left <= 14,
-                'forms': forms,
-            })
-
-    upcoming.sort(key=lambda x: x['days_left'])
-    return upcoming[:4]
-
-
 @app.route('/')
 @login_required
 def dashboard():
@@ -985,9 +926,16 @@ def dashboard():
     except Exception:
         logger.exception("Failed to fetch public holidays from Nager.Date API")
 
-    # Tax deadlines for Spanish Autónomo
-    from datetime import date, timedelta
-    tax_deadlines = _get_upcoming_tax_deadlines()
+    # Tax deadlines: one source, the Fiscal Calendar module. None = module
+    # disabled (the dashboard then shows a hint to enable it).
+    tax_deadlines = None
+    fiscal_calendar = module_manager.provider_of('fiscal_calendar') if module_manager else None
+    if fiscal_calendar is not None:
+        try:
+            tax_deadlines = fiscal_calendar.upcoming_deadlines(limit=4)
+        except Exception:
+            logger.exception('Fiscal Calendar deadlines unavailable')
+            tax_deadlines = []
 
     # Collect module dashboard panels
     module_panels = []

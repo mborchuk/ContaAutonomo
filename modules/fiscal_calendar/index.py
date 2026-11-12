@@ -121,6 +121,12 @@ class FiscalCalendarModule(BaseModule):
 
     # --- Dashboard panel (F3-D2) ------------------------------------------ #
 
+    def upcoming_deadlines(self, limit=4, today=None):
+        """Next open or upcoming filing windows for the selected forms, for the
+        compact "Tax Deadlines" column on the dashboard."""
+        items = upcoming(366, today=today, selected_forms=self._selected_forms())
+        return items[:limit]
+
     def get_dashboard_panels(self):
         items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())
         if not items:
