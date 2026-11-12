@@ -14,6 +14,7 @@ from pathlib import Path
 from io import BytesIO
 import os, re, json, shutil, zipfile
 import logging
+from secret_box import EncryptedString, encrypt_existing
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ class BackupModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             backup_path = db.Column(db.String(500), default='')
             encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
-            custom_password = db.Column(db.String(500), default='')
+            custom_password = db.Column(EncryptedString(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
             updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -219,6 +220,7 @@ class BackupModule(BaseModule):
         app.register_blueprint(bp)
 
     def on_enable(self):
+        encrypt_existing(self._db, 'backup_config', ['custom_password'])
         # Migrate: add use_external_storage column if missing
         try:
             from sqlalchemy import inspect as sa_inspect, text

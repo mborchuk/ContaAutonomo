@@ -13,6 +13,8 @@ services:
       - BACKUP_KEY=${BACKUP_KEY:-}
       # Verifactu signing key; empty = key file instance/verifactu.key (created on first start)
       - VERIFACTU_KEY=${VERIFACTU_KEY:-}
+      # Credentials encryption key; empty = key file instance/credentials.key (created on first start)
+      - CREDENTIALS_KEY=${CREDENTIALS_KEY:-}
       # Set to the number of reverse proxies in front of the app (0 = direct access)
       - TRUSTED_PROXY_COUNT=${TRUSTED_PROXY_COUNT:-0}
     volumes:
