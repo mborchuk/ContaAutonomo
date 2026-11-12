@@ -100,7 +100,7 @@ def test_issue_writes_alta_record_and_chain_verifies(verifactu):
     assert payload['invoice_number'] == inv.invoice_number
     assert payload['vat_amount'] == 21.0      # snapshot: 21% of 100
 
-    _records, (ok, bad, reason) = verifactu._verify_all()
+    ok, bad, reason = verifactu._verify_all()[1]
     assert ok, f'chain broken at {bad}: {reason}'
 
 
@@ -155,7 +155,7 @@ def test_rotating_secret_key_keeps_chain_valid(verifactu, monkeypatch):
 
     _issue_one(db, 'VF-K2')
     monkeypatch.setitem(verifactu.core.app.config, 'SECRET_KEY', 'rotated-session-key')
-    _records, (ok, bad, reason) = verifactu._verify_all()
+    ok, bad, reason = verifactu._verify_all()[1]
     assert ok, f'chain broken at {bad}: {reason}'
 
 
@@ -182,13 +182,13 @@ def test_legacy_records_verify_with_secret_key_then_migrate(verifactu):
     from modules.verifactu.chain import key_id
 
     rec = _append_legacy_record(verifactu, verifactu._legacy_secret())
-    _records, (ok, _bad, _reason) = verifactu._verify_all()
+    ok, _bad, _reason = verifactu._verify_all()[1]
     assert ok, 'legacy record must verify with SECRET_KEY before migration'
 
     verifactu._migrate_signing_key()
     assert rec.key_id == key_id('test-verifactu-key')
     assert rec.signature == sign_hash(rec.record_hash, 'test-verifactu-key')
-    _records, (ok, bad, reason) = verifactu._verify_all()
+    ok, bad, reason = verifactu._verify_all()[1]
     assert ok, f'chain broken at {bad}: {reason}'
 
     verifactu._migrate_signing_key()  # idempotent
@@ -201,7 +201,7 @@ def test_migration_leaves_records_with_bad_signature_alone(verifactu):
     rec = _append_legacy_record(verifactu, 'some-other-key')
     verifactu._migrate_signing_key()
     assert rec.key_id is None
-    _records, (ok, _bad, reason) = verifactu._verify_all()
+    ok, _bad, reason = verifactu._verify_all()[1]
     assert not ok and 'signature' in reason
     db.session.delete(rec)
     db.session.commit()
