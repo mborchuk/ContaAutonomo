@@ -2,10 +2,11 @@
 """
 RETA Quota Advisor Module (F6) — project real-income bracket + regularization.
 
-CAVEMAN NOTE: replace guesswork around the static `social_security_monthly`
-setting. Count YTD income − expenses − generic deduction, annualize, map onto
-the 15-bracket RETA table, compare with what user actually pay → forecast the
-year-end regularization. ESTIMATE ONLY, big letters.
+Replaces guesswork around the static `social_security_monthly` setting. It
+takes year-to-date income minus expenses minus the generic deduction,
+annualizes it, maps it onto the 15-bracket RETA table, and compares the
+result with what the user actually pays to forecast the year-end
+regularization. This is an estimate only, and the UI says so prominently.
 
 Tax-panel integration is DISPLAY-ONLY (deductions=0, tax_total=0): the
 tax_management module keep owning the SS money line, so no double counting.

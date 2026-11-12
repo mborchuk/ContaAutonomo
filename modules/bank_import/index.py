@@ -2,12 +2,13 @@
 """
 Bank Import Module (F12) — statement import (Norma 43 / CSV) + reconciliation.
 
-CAVEMAN NOTE: import movements, dedup by hash, suggest matches against unpaid
-invoices (matching.py rank, user always confirm), one click -> invoice paid via
-the NORMAL core transition (_mark_invoice_paid) so F2/F1 semantics hold —
-Verifactu see nothing (paid is not a record event), lifecycle log fire.
-Import-good-skip-bad with a report; batches reversible until a movement is
-matched.
+Imports bank movements, removes duplicates by hash, and suggests matches
+against unpaid invoices (ranked by matching.py; the user always confirms).
+Confirming marks the invoice paid through the normal core transition
+(_mark_invoice_paid), so the F2/F1 rules hold: Verifactu records nothing
+(paid is not a record event) and the lifecycle log entry is written. Valid
+rows are imported and invalid ones skipped with a report; a batch can be
+reverted until one of its movements is matched.
 """
 
 import json

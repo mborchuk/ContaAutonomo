@@ -2,9 +2,10 @@
 """
 Recurring Invoices Module (F7) — templates + cadence -> auto-generated DRAFTS.
 
-CAVEMAN NOTE: module never issue anything. It only materialize DRAFT invoices
-on schedule; user review and press Issue (F2). Draft-first is deliberate:
-auto-issuing would mint legal records unattended (bad with Verifactu coming).
+This module never issues an invoice. It only creates DRAFT invoices on
+schedule; the user reviews each one and presses Issue (F2). Draft-first is
+deliberate: issuing automatically would create legal records unattended,
+which is especially risky with Verifactu.
 
 Generation is idempotent: `next_run_date` persist after each run, catch-up is
 capped, so restarts / missed days never duplicate.
