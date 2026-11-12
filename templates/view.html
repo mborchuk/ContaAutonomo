@@ -153,6 +153,10 @@
     <a href="{{ url_for('index') }}" class="btn btn-primary">Back to List</a>
     <a href="{{ url_for('preview_invoice_pdf', id=invoice.id) }}" target="_blank" class="btn btn-secondary">Preview PDF</a>
     <a href="{{ url_for('generate_pdf', id=invoice.id) }}" class="btn btn-success">Download PDF</a>
+    {% if invoice.pdf_storage_key and invoice.status not in ('paid', 'cancelled') %}
+    <a href="{{ url_for('generate_pdf', id=invoice.id, force='true') }}" class="btn btn-secondary"
+       onclick="return confirm('Rebuild the PDF from the current invoice data? It replaces the stored PDF{% if invoice.pdf_generated is sameas false %}, including the file you attached{% endif %}.');">Regenerate PDF</a>
+    {% endif %}
 
     {# F2 — lifecycle actions #}
     {% if invoice.status in ('draft', 'pending') %}
