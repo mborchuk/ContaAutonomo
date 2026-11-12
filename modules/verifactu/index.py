@@ -27,9 +27,11 @@ from .chain import (
     CHAIN_SPEC_VERSION,
     GENESIS_HASH,
     canonical_payload,
+    key_id,
     record_hash,
     sign_hash,
     verify_chain,
+    verify_signature,
 )
 
 
@@ -76,6 +78,9 @@ class VerifactuModule(BaseModule):
             prev_hash = db.Column(db.String(64), nullable=False)
             record_hash = db.Column(db.String(64), nullable=False, unique=True)
             signature = db.Column(db.String(64), nullable=False)
+            # Fingerprint of the signing key (chain.key_id). NULL = signed with
+            # the key derived from SECRET_KEY, before VERIFACTU_KEY existed.
+            key_id = db.Column(db.String(16))
             spec_version = db.Column(db.String(20), default=CHAIN_SPEC_VERSION)
             created_at = db.Column(db.DateTime, default=datetime.utcnow)
             submitted_at = db.Column(db.DateTime)  # VERI*FACTU mode only
@@ -84,6 +89,7 @@ class VerifactuModule(BaseModule):
         return {'VerifactuRecord': VerifactuRecord}
 
     def on_enable(self):
+        self._migrate_signing_key()
         # VERI*FACTU submission job — no-op until an AEAT endpoint is
         # configured (F1-D6 is gated on test-environment access).
         try:
@@ -101,7 +107,58 @@ class VerifactuModule(BaseModule):
     # --- Record building ---------------------------------------------------- #
 
     def _secret(self):
+        """The signing key: VERIFACTU_KEY, else instance/verifactu.key."""
+        return self.core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE',
+                                        'Verifactu signing')
+
+    def _legacy_secret(self):
+        """Key of records signed before VERIFACTU_KEY existed."""
         return self.core.app.config.get('SECRET_KEY', '')
+
+    def _key_for(self, record):
+        """Key that signed `record`, or None when it is not available."""
+        rec_key_id = getattr(record, 'key_id', None)
+        if rec_key_id is None:
+            return self._legacy_secret()
+        current = self._secret()
+        return current if key_id(current) == rec_key_id else None
+
+    def _verify_all(self):
+        records = self.VerifactuRecord.query.order_by(self.VerifactuRecord.id).all()
+        return records, verify_chain(records, self._key_for)
+
+    def _migrate_signing_key(self):
+        """Add `key_id` and move records signed with SECRET_KEY to VERIFACTU_KEY.
+
+        Idempotent. Only the signature and key_id change; the record hash and
+        chain are untouched. A record whose signature no longer verifies with
+        the current SECRET_KEY is left as it is, so a real mismatch stays
+        visible on the status page.
+        """
+        from sqlalchemy import inspect as sa_inspect, text
+        try:
+            cols = [c['name'] for c in sa_inspect(self._db.engine).get_columns('verifactu_record')]
+            if 'key_id' not in cols:
+                with self._db.engine.connect() as conn:
+                    conn.execute(text('ALTER TABLE verifactu_record ADD COLUMN key_id VARCHAR(16)'))
+                    conn.commit()
+            legacy = self.VerifactuRecord.query.filter(
+                self.VerifactuRecord.key_id.is_(None)).all()
+            if not legacy:
+                return
+            old_key, new_key = self._legacy_secret(), self._secret()
+            moved = 0
+            for rec in legacy:
+                if verify_signature(rec.record_hash, rec.signature, old_key):
+                    rec.signature = sign_hash(rec.record_hash, new_key)
+                    rec.key_id = key_id(new_key)
+                    moved += 1
+            self._db.session.commit()
+            if moved:
+                self.logger.info('Re-signed %d Verifactu record(s) with VERIFACTU_KEY', moved)
+        except Exception as e:  # pragma: no cover - defensive
+            self._db.session.rollback()
+            self.logger.error('Verifactu signing-key migration failed: %s', e)
 
     def _last_hash(self):
         last = self.VerifactuRecord.query.order_by(
@@ -146,6 +203,7 @@ class VerifactuModule(BaseModule):
         payload = self._build_payload(invoice, record_type)
         prev = self._last_hash()
         rec_hash = record_hash(prev, payload)
+        secret = self._secret()
         record = self.VerifactuRecord(
             record_type=record_type,
             invoice_id=invoice.id,
@@ -153,7 +211,8 @@ class VerifactuModule(BaseModule):
             payload=canonical_payload(payload),
             prev_hash=prev,
             record_hash=rec_hash,
-            signature=sign_hash(rec_hash, self._secret()),
+            signature=sign_hash(rec_hash, secret),
+            key_id=key_id(secret),
         )
         self._db.session.add(record)
         self._db.session.flush()
@@ -256,9 +315,7 @@ class VerifactuModule(BaseModule):
         @bp.route('/')
         @login_required
         def verifactu_index():
-            records = module.VerifactuRecord.query.order_by(
-                module.VerifactuRecord.id).all()
-            ok, bad_idx, reason = verify_chain(records, module._secret())
+            records, (ok, bad_idx, reason) = module._verify_all()
             return render_template('verifactu_status.html',
                                    records=records[-20:],
                                    record_count=len(records),
@@ -276,7 +333,8 @@ class VerifactuModule(BaseModule):
                 'id': r.id, 'record_type': r.record_type,
                 'invoice_number': r.invoice_number, 'payload': r.payload,
                 'prev_hash': r.prev_hash, 'record_hash': r.record_hash,
-                'signature': r.signature, 'spec_version': r.spec_version,
+                'signature': r.signature, 'key_id': r.key_id,
+                'spec_version': r.spec_version,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
             }, ensure_ascii=False) for r in records]
             return Response('\n'.join(lines), mimetype='application/x-ndjson',

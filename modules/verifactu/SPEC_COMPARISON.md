@@ -103,8 +103,7 @@ app therefore works as a **non-VERI\*FACTU** system: the QR uses
 2. Add `CHAIN_SPEC_VERSION = "aeat-1"`: new records carry the official huella
    (`aeat.huella_alta` / `huella_anulacion`), chained by the previous huella.
    Old `draft-1` records stay verifiable with the current algorithm; the
-   verifier picks the algorithm by the record's `spec_version`. Do this after
-   the dedicated signing key (task C-4) is merged, because both change
-   `index.py` and `chain.py`.
+   verifier picks the algorithm by the record's `spec_version` (and the
+   signing key by `key_id`, from the dedicated signing key).
 3. With AEAT test access: build the XML records, sign and submit them,
    handle responses, then switch `VERIFACTU_MODE` to `verifactu`.
