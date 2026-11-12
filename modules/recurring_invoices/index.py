@@ -126,20 +126,15 @@ class RecurringInvoicesModule(BaseModule):
 
     def _materialize(self, tpl, run_date):
         """Create one DRAFT invoice from a template for `run_date`."""
-        from app import Invoice, InvoiceItem
-        from currency_converter import get_exchange_rate, convert_usd_to_eur
+        from app import Invoice, InvoiceItem, invoice_amounts
 
         items = json.loads(tpl.items_json)
         total = sum(float(i['quantity']) * float(i['unit_price']) for i in items)
 
-        # Same currency convention as the core create route.
-        exchange_rate, _rate_date = get_exchange_rate(run_date.strftime('%Y-%m-%d'))
-        if tpl.currency == 'EUR':
-            amount_eur = total
-            amount_usd = total * exchange_rate
-        else:
-            amount_usd = total
-            amount_eur = convert_usd_to_eur(total, exchange_rate)
+        # Same conversion as the core create route. Raises NoExchangeRate when
+        # the currency cannot be converted; the caller retries on the next run.
+        amount_usd, amount_eur, exchange_rate = invoice_amounts(
+            total, tpl.currency or 'EUR', run_date.strftime('%Y-%m-%d'))
 
         # Placeholder number; the real sequential number is assigned at ISSUE.
         number = f'REC{tpl.id}-{run_date.strftime("%Y%m%d")}'

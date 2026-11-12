@@ -151,18 +151,7 @@ class ExpensesModule(BaseModule):
     def get_settings_html(self, settings):
         import json
         current = json.dumps(self.get_category_defaults(), indent=2, ensure_ascii=False)
-        return f'''
-        <h3>Expense Category VAT Defaults</h3>
-        <p style="font-size: 13px; color: var(--color-text-muted);">
-            JSON map of category → default VAT rate (%) and deductible (%). Applied
-            when picking a category on the expense form (never overwrites a field
-            you already touched).
-        </p>
-        <div class="form-group">
-            <textarea name="expense_category_defaults" rows="12"
-                      style="width: 100%; font-family: monospace; font-size: 12px;">{current}</textarea>
-        </div>
-        '''
+        return self.render_settings_template('expenses_settings_panel.html', current=current)
 
     def save_settings(self, settings, form):
         import json
@@ -657,6 +646,8 @@ class ExpensesModule(BaseModule):
                 'amount_eur': amount_eur,
                 # F4 — VAT split (None on legacy rows).
                 'vat_eur': vat_eur,
+                'vat_rate_pct': expense.vat_rate,
+                'reverse_charge': bool(expense.reverse_charge),
                 'deductible_pct': expense.deductible_pct,
             })
         return result

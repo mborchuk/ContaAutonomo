@@ -27,13 +27,11 @@
             </div>
 
             <div class="form-group">
-                <label for="status">Status *</label>
-                <select id="status" name="status" required>
-                    <option value="draft" {% if invoice.status == 'draft' %}selected{% endif %}>Draft</option>
-                    <option value="pending" {% if invoice.status == 'pending' %}selected{% endif %}>Pending (legacy)</option>
-                    <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>Paid</option>
-                    <option value="cancelled" {% if invoice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                </select>
+                <label>Status</label>
+                <p class="helper-text">
+                    <strong>{{ invoice.status|capitalize }}</strong>{% if invoice.status == 'pending' %} (legacy){% endif %}.
+                    Change it with the lifecycle actions on the invoice page (Issue, Mark paid, Annul).
+                </p>
             </div>
 
             <div class="form-group">

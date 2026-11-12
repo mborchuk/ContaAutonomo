@@ -121,6 +121,12 @@ class FiscalCalendarModule(BaseModule):
 
     # --- Dashboard panel (F3-D2) ------------------------------------------ #
 
+    def upcoming_deadlines(self, limit=4, today=None):
+        """Next open or upcoming filing windows for the selected forms, for the
+        compact "Tax Deadlines" column on the dashboard."""
+        items = upcoming(366, today=today, selected_forms=self._selected_forms())
+        return items[:limit]
+
     def get_dashboard_panels(self):
         items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())
         if not items:
@@ -159,24 +165,9 @@ class FiscalCalendarModule(BaseModule):
     # --- Settings panel (F3-D3) ------------------------------------------- #
 
     def get_settings_html(self, settings):
-        selected = self._selected_forms()
-        checkboxes = []
-        for form in available_forms():
-            checked = 'checked' if form in selected else ''
-            checkboxes.append(
-                f'<label style="display:inline-flex;align-items:center;gap:6px;'
-                f'margin-right:14px;font-size:14px;">'
-                f'<input type="checkbox" name="fiscal_forms" value="{form}" {checked}> '
-                f'Modelo {form}</label>')
-        return f'''
-        <h3>Which forms do you file?</h3>
-        <p style="font-size:13px;color:var(--color-text-muted);">
-            Only checked forms show on the dashboard and trigger reminders.
-            Defaults are inferred from your uploaded tax forms.
-        </p>
-        <div style="margin:10px 0;">{''.join(checkboxes)}</div>
-        <input type="hidden" name="fiscal_calendar_submitted" value="1">
-        '''
+        return self.render_settings_template(
+            'fiscal_calendar_settings_panel.html',
+            forms=available_forms(), selected=self._selected_forms())
 
     def save_settings(self, settings, form):
         if 'fiscal_calendar_submitted' not in form:
@@ -216,7 +207,7 @@ class FiscalCalendarModule(BaseModule):
         selected = self._selected_forms()
         state = self._reminder_state()
         fired = []
-        for entry in all_deadlines():
+        for entry in all_deadlines(today=today):
             if entry['form'] not in selected:
                 continue
             days_to_end = (entry['window_end'] - today).days
