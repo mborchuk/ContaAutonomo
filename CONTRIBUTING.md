@@ -63,8 +63,12 @@ python -m pytest
 - **Tax logic** must state its scope and carry "estimate, not tax advice"
   framing; cite the official source (AEAT, BOE, Seguridad Social) for any
   rates, boxes, or deadlines you add or change.
-- Match the style of the surrounding code. There is no formatter or linter
-  configuration; keep diffs focused on the change.
+- Run `make lint` before pushing; CI runs the same `ruff check` (rules in
+  `pyproject.toml`, intentionally small for now and tightened over time).
+  `make format` formats the Python files you changed; the repository is not
+  formatted as a whole yet, so do not reformat unrelated code.
+- `make coverage` runs the tests with a coverage report; CI publishes the
+  coverage table in each run's summary.
 - Update the documentation (`README.md`, `MODULES_DOCUMENTATION.md`, module
   READMEs, `CHANGELOG.md`) when behavior changes.
 

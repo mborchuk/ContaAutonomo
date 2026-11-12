@@ -916,7 +916,6 @@ class TaskScheduler:
             timeout:     max seconds a single run may take before being
                          abandoned so it can't block the scheduler forever
         """
-        from datetime import datetime
         with self._lock:
             self._jobs[job_id] = {
                 'func': func,

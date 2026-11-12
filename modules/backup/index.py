@@ -12,7 +12,11 @@ from flask import (Blueprint, request, redirect, url_for,
 from datetime import datetime, date
 from pathlib import Path
 from io import BytesIO
-import os, re, json, shutil, zipfile
+import os
+import re
+import json
+import shutil
+import zipfile
 import logging
 from secret_box import EncryptedString, encrypt_existing
 
@@ -606,7 +610,8 @@ class BackupModule(BaseModule):
     # ── encryption ──────────────────────────────────────────────────
 
     def _encrypt_bytes(self, data, password):
-        import hashlib, hmac
+        import hashlib
+        import hmac
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)
@@ -626,7 +631,8 @@ class BackupModule(BaseModule):
         return salt + iv + mac + ct
 
     def _decrypt_bytes(self, data, password):
-        import hashlib, hmac as hmac_mod
+        import hashlib
+        import hmac as hmac_mod
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)

@@ -3,3 +3,5 @@
 -c requirements.txt
 pytest>=9.2.0
 hypothesis>=6.170.15
+pytest-cov>=7.0.0
+ruff>=0.14.0

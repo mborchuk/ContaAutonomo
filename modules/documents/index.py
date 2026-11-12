@@ -7,7 +7,7 @@ Categories are auto-collected from documents + managed via a dedicated page.
 
 from module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
-                   url_for, flash, jsonify)
+                   url_for, flash)
 from datetime import datetime, date, timedelta
 import os
 
