@@ -79,7 +79,10 @@ technical documents (hash v0.1.2, QR v0.5.0) and lists the remaining work.
   AEAT's worked examples — and the cotejo URL.
 - Every generated PDF of an issued invoice carries the QR on page 1
   (`pdf_qr.py`, through the core `filter_invoice_pdf` hook): 30 mm, error
-  correction M, "QR tributario:" above it.
+  correction M, "QR tributario:" above it. The draft PDF stored when the
+  invoice was created is discarded at Issue, so the issued PDF is rebuilt with
+  the QR. A PDF the user attached (Invoice Attachments) is served as uploaded,
+  without a QR.
 - `VERIFACTU_MODE` (default `no_verifactu`) selects `ValidarQRNoVerifactu`
   and omits the "VERI*FACTU" phrase. Switch to `verifactu` only when records
   are submitted to AEAT. `VERIFACTU_QR_ENV=test` uses the AEAT test host.

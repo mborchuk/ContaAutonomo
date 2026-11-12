@@ -1693,6 +1693,8 @@ class InvoiceService:
         invoice.pdf_hash = pdf_hash
         if hasattr(invoice, 'pdf_storage_key'):
             invoice.pdf_storage_key = new_key
+        if hasattr(invoice, 'pdf_generated'):
+            invoice.pdf_generated = False   # attached by the user: never rebuilt
         self._core.db.session.commit()
 
         size_kb = len(content) / 1024
