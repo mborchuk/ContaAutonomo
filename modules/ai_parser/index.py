@@ -5,7 +5,8 @@ Pluggable AI-powered document parsing for invoices and expenses.
 Supports multiple backends: OpenAI (GPT-4o), Google Document AI, Anthropic Claude.
 """
 
-from module_manager import BaseModule, secret_from_form
+from module_manager import BaseModule
+from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
 import json
 import base64

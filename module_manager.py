@@ -23,8 +23,6 @@ import importlib.util
 from abc import ABC, abstractmethod
 
 from constants import invoice_locked
-# Re-exported for modules: `from module_manager import secret_from_form`.
-from settings_forms import secret_from_form  # noqa: F401
 
 
 def valid_capability(cap):

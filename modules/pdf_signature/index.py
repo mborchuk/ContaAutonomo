@@ -9,7 +9,8 @@ import io
 from datetime import datetime
 import importlib.util
 
-from module_manager import BaseModule, secret_from_form
+from module_manager import BaseModule
+from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
 
 # Graceful degradation: try importing optional dependencies

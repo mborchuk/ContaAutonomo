@@ -655,7 +655,8 @@ auto-escaped, so stored values cannot inject markup, and it works for modules
 without a blueprint.
 
 ```python
-from module_manager import BaseModule, secret_from_form
+from module_manager import BaseModule
+from settings_forms import secret_from_form
 
 @property
 def settings_tab(self):

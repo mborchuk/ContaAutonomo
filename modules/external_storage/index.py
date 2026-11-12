@@ -5,7 +5,8 @@ Intercepts core file operations and routes them to configurable storage backends
 Supports: Local filesystem (default), AWS S3, Google Cloud Storage, Google Drive.
 """
 
-from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend, secret_from_form
+from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
+from settings_forms import secret_from_form
 from flask import Blueprint, redirect, url_for, flash
 from datetime import datetime
 import logging

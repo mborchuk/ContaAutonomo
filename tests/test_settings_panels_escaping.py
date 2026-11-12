@@ -2,7 +2,7 @@
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from module_manager import secret_from_form
+from settings_forms import secret_from_form
 
 XSS = '"><script>alert(1)</script>'
 SECRET = 'S3cr3t-value-that-must-not-leak'

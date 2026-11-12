@@ -18,7 +18,8 @@ from email.message import EmailMessage
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from module_manager import BaseModule, secret_from_form
+from module_manager import BaseModule
+from settings_forms import secret_from_form
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)

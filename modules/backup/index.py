@@ -5,7 +5,8 @@ Full backup/restore: DB (JSON) + all uploaded files in a single ZIP archive.
 Supports optional AES encryption, custom backup path, and external storage integration.
 """
 
-from module_manager import BaseModule, secret_from_form
+from module_manager import BaseModule
+from settings_forms import secret_from_form
 from flask import (Blueprint, request, redirect, url_for,
                    flash, send_file, render_template)
 from datetime import datetime, date
