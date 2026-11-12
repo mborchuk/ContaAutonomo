@@ -27,6 +27,24 @@ Technical reference for the Autónomos application architecture.
 | `Contractor` | `contractor` | Contractor/vendor info |
 | `Expense` | `expense` | Expense records with VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`, `deductible`, `deductible_pct`) |
 
+#### Invoice amount columns
+
+The amount columns keep historical names. Their meaning depends on the invoice
+currency:
+
+| Column | EUR invoice | Any other currency (USD, GBP, CZK, …) |
+|--------|-------------|----------------------------------------|
+| `amount_eur` | Entered total | Total converted to EUR — the tax base |
+| `amount_usd` | Total converted to USD | Entered total, in the invoice currency |
+| `exchange_rate` | USD→EUR rate | USD→EUR for USD invoices; `<currency>`→EUR otherwise |
+| `unit_price_usd`, `subtotal_usd` (items) | Invoice currency | Invoice currency |
+
+`app.invoice_amounts()` is the single conversion used by the create and edit
+routes and by Recurring Invoices. Currencies other than EUR and USD are
+converted through `CurrencyService.convert()` with the configured rate
+provider; when no rate is available the invoice is not saved. Renaming the
+columns (for example to `amount_original`) is a planned follow-up.
+
 ### Invoice Lifecycle
 
 Invoices move through an explicit lifecycle. Issued and paid invoices are
