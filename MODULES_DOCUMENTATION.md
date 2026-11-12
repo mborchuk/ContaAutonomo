@@ -60,6 +60,11 @@ Key rules:
   `on_invoice_annulled`) run **inside the transition transaction**: a raising
   module aborts the transition. This is how the Verifactu module guarantees a
   billing record exists for every issued invoice.
+- **Income rule** (devengo, owner decision 2026-10-03): an invoice counts as
+  income in the year of its `invoice_date` whatever its payment status; only
+  `cancelled` invoices are excluded. One helper, `constants.counts_as_income()`,
+  is used by the dashboard, the Modelo 130/303 drafts, the IRPF Estimator and
+  the RETA Advisor, so their figures agree.
 
 ### Core Routes
 

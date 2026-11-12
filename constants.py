@@ -7,6 +7,18 @@ Import from here rather than re-declaring values inline.
 DEFAULT_VAT_RATE = 21.0       # Spain default; Tax Poland module overrides to 23
 DEFAULT_IRPF_RATE = 20.0      # Income tax advance
 
+# --- Income rule (devengo, owner decision 2026-10-03) ---
+# An invoice counts as income in the year of its invoice_date whatever its
+# payment status; only these statuses are excluded. Used by the dashboard, the
+# Modelo 130/303 drafts, the IRPF estimate and the RETA advisor.
+NON_INCOME_INVOICE_STATUSES = ('cancelled',)
+
+
+def counts_as_income(invoice):
+    """True when `invoice` counts toward income and output VAT."""
+    return getattr(invoice, 'status', None) not in NON_INCOME_INVOICE_STATUSES
+
+
 # --- Sessions / uploads ---
 SESSION_LIFETIME_SECONDS = 3600          # 1 hour
 MAX_CONTENT_LENGTH_BYTES = 50 * 1024 * 1024  # 50 MB upload cap
