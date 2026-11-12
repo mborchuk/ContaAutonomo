@@ -125,16 +125,16 @@ MODELO_390_ORDER = ["05", "06", "551", "552", "27", "28", "33", "34", "47",
 
 # Not covered by the 390 draft (listed on the page).
 MODELO_390_OUT_OF_SCOPE = [
-    "Rates other than 21 % (casillas 01–04, 700–703, 667–670): invoices at "
-    "other rates are flagged and must be split by hand",
-    "Intra-EU acquisitions of goods (casillas 21–26, 56–57): purchases are "
-    "reported as services (551/552, 597/598) — move goods if you bought any",
-    "Recargo de equivalencia, régimen simplificado, criterio de caja, "
-    "bienes usados, agencias de viaje, operaciones intragrupo",
-    "Importaciones (casillas 52–55, 659), prorrata (522) and regularizaciones "
-    "of bienes de inversión (63)",
-    "Exempt operations (104, 105), operaciones específicas (section 11) and "
-    "tributación por razón del territorio (87–91)",
+    ("Rates other than 21 % (casillas 01–04, 700–703, 667–670): invoices at "
+     + "other rates are flagged and must be split by hand"),
+    ("Intra-EU acquisitions of goods (casillas 21–26, 56–57): purchases are "
+     + "reported as services (551/552, 597/598) — move goods if you bought any"),
+    ("Recargo de equivalencia, régimen simplificado, criterio de caja, "
+     + "bienes usados, agencias de viaje, operaciones intragrupo"),
+    ("Importaciones (casillas 52–55, 659), prorrata (522) and regularizaciones "
+     + "of bienes de inversión (63)"),
+    ("Exempt operations (104, 105), operaciones específicas (section 11) and "
+     + "tributación por razón del territorio (87–91)"),
     "Taxpayers in the SII do not file Modelo 390",
 ]
 
