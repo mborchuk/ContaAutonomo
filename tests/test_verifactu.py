@@ -122,8 +122,10 @@ def test_qr_payload_contains_invoice_fields(verifactu):
 
     inv = _issue_one(db, 'VF-C')
     url = verifactu.qr_payload(inv)
-    assert f'numserie={inv.invoice_number}' in url
-    assert 'importe=100.00' in url
+    from urllib.parse import quote
+    assert f'numserie={quote(inv.invoice_number, safe="")}' in url
+    assert 'importe=121.00' in url          # total = base 100 + IVA 21
+    assert '/ValidarQRNoVerifactu?' in url   # not submitting to AEAT yet
 
 
 # --- C-4: dedicated signing key ------------------------------------------------

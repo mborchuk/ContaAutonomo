@@ -210,6 +210,12 @@ class BaseModule(ABC):
         """
         return []
 
+    def filter_invoice_pdf(self, invoice, pdf_bytes):
+        """Return the invoice PDF bytes, optionally changed (for example the
+        Verifactu module adds the AEAT QR code). Called for every generated
+        invoice PDF; return `pdf_bytes` unchanged when not relevant."""
+        return pdf_bytes
+
     def render_settings_template(self, filename, **context):
         """Render `templates/<filename>` from this module's folder, auto-escaped.
 
@@ -2283,6 +2289,17 @@ class ModuleManager:
                 logger.error("Module '%s' get_api_routes error: %s",
                              _sanitize_log(mod_id), e)
         return routes
+
+    def filter_invoice_pdf(self, invoice, pdf_bytes):
+        """Pass a generated invoice PDF through every module's
+        filter_invoice_pdf hook. A failing module is logged and skipped."""
+        for mod in self.modules.values():
+            try:
+                pdf_bytes = mod.filter_invoice_pdf(invoice, pdf_bytes)
+            except Exception:
+                logger.exception("Module '%s' filter_invoice_pdf failed",
+                                 _sanitize_log(mod.module_id))
+        return pdf_bytes
 
     def get_settings_html(self, settings):
         """Get settings HTML panels from all active modules"""

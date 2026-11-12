@@ -1766,6 +1766,13 @@ def delete_invoice(id):
     return redirect(url_for('index'))
 
 
+
+def _filter_invoice_pdf(invoice, pdf_bytes):
+    """Let modules adjust a generated invoice PDF (e.g. the Verifactu QR)."""
+    if module_manager:
+        return module_manager.filter_invoice_pdf(invoice, pdf_bytes)
+    return pdf_bytes
+
 @app.route('/generate-pdf/<int:id>')
 @login_required
 def generate_pdf(id):
@@ -1838,6 +1845,7 @@ def generate_pdf(id):
             pdf_content = generate_pdf_from_config(
                 invoice, customer, app_settings, merged,
                 storage=module_manager.core.storage if module_manager else None)
+            pdf_content = _filter_invoice_pdf(invoice, pdf_content)
             pdf_hash = hashlib.sha256(pdf_content).hexdigest()
             if storage:
                 relative_path = os.path.join('invoices_pdf', pdf_filename)
@@ -1876,8 +1884,8 @@ def generate_pdf(id):
         else:
             buffer = template_module.generate_invoice_pdf(invoice, customer, app_settings)
 
-        pdf_content = buffer.read()
-        buffer.seek(0)
+        pdf_content = _filter_invoice_pdf(invoice, buffer.read())
+        buffer = io.BytesIO(pdf_content)
 
         pdf_hash = hashlib.sha256(pdf_content).hexdigest()
 
@@ -1962,6 +1970,7 @@ def preview_invoice_pdf(id):
                 pdf_content = generate_pdf_from_config(
                     invoice, customer, app_settings, merged,
                     storage=module_manager.core.storage if module_manager else None)
+                pdf_content = _filter_invoice_pdf(invoice, pdf_content)
                 return Response(pdf_content, mimetype='application/pdf',
                                 headers={'Content-Disposition': 'inline'})
 
@@ -1981,7 +1990,7 @@ def preview_invoice_pdf(id):
         else:
             buf = tmpl.generate_invoice_pdf(invoice, customer, app_settings)
 
-        pdf_content = buf.read()
+        pdf_content = _filter_invoice_pdf(invoice, buf.read())
         return Response(pdf_content, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
     except Exception as e:
