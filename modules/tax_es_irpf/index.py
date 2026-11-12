@@ -21,7 +21,6 @@ import json
 from datetime import date, datetime
 
 from flask import Blueprint, render_template, request
-from markupsafe import escape
 
 from module_manager import BaseModule
 
@@ -678,70 +677,12 @@ class TaxEsIrpfModule(BaseModule):
         profile = self._get_profile()
         params = self._params(date.today().year)
         regions = [r for r in params.get('regional_scales', {}) if r != 'supletoria']
-        options = ''.join(
-            f'<option value="{r}"{" selected" if profile.region == r else ""}>'
-            f'{r.title()}</option>' for r in regions)
-        low_income = 'checked' if profile.low_income_deduction else ''
-        inicio = 'checked' if profile.inicio_reduction_eligible else ''
-        mutualidad = 'checked' if profile.uses_mutualidad else ''
-        dificil = 'checked' if profile.apply_dificil_justif_m130 else ''
         depreciate, rate, threshold, _ = self._equipment_rule(profile)
-        dep_sel = ' selected' if depreciate else ''
-        exp_sel = '' if depreciate else ' selected'
-        categories = escape(profile.equipment_categories or 'Equipment')
-        start = profile.start_date.isoformat() if profile.start_date else ''
-        return f'''
-        <h3>🧮 IRPF Estimator (España)</h3>
-        <p style="color:var(--color-text-muted);">Estimate only — not tax advice. Confirm with AEAT.</p>
-        <div class="form-group">
-            <label for="irpf_region">Comunidad autónoma</label>
-            <select id="irpf_region" name="irpf_region">{options}</select>
-        </div>
-        <div class="form-group">
-            <label for="irpf_start_date">Alta date (start of activity)</label>
-            <input type="date" id="irpf_start_date" name="irpf_start_date" value="{start}">
-        </div>
-        <div class="form-group">
-            <label for="irpf_age">Age</label>
-            <input type="number" id="irpf_age" name="irpf_age" min="0" value="{profile.age or 0}">
-        </div>
-        <div class="form-group">
-            <label for="irpf_descendientes">Descendientes (children)</label>
-            <input type="number" id="irpf_descendientes" name="irpf_descendientes" min="0" value="{profile.descendientes or 0}">
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" name="irpf_inicio" {inicio}> Eligible for 20% inicio-actividad reduction</label>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" name="irpf_dificil_m130" {dificil}> Apply 5% difícil justificación inside Modelo 130 box 02 (off by default: applied in Modelo 100)</label>
-        </div>
-        <h4>Equipment (bienes de inversión) in Modelo 130 / 100</h4>
-        <div class="form-group">
-            <label for="irpf_equipment_method">Treatment</label>
-            <select id="irpf_equipment_method" name="irpf_equipment_method">
-                <option value="depreciate"{dep_sel}>Depreciate (amortización)</option>
-                <option value="expense"{exp_sel}>Deduct in full when bought</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label for="irpf_depreciation_rate">Depreciation rate (% per year, full quarter from the quarter of purchase)</label>
-            <input type="number" step="0.01" min="0" max="100" id="irpf_depreciation_rate" name="irpf_depreciation_rate" value="{rate}">
-        </div>
-        <div class="form-group">
-            <label for="irpf_equipment_threshold">Deduct in full below (EUR, net)</label>
-            <input type="number" step="0.01" min="0" id="irpf_equipment_threshold" name="irpf_equipment_threshold" value="{threshold}">
-        </div>
-        <div class="form-group">
-            <label for="irpf_equipment_categories">Expense categories treated as equipment (comma-separated)</label>
-            <input type="text" id="irpf_equipment_categories" name="irpf_equipment_categories" value="{categories}">
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" name="irpf_low_income" {low_income}> Apply art. 110.3.c low-income deduction (Modelo 130)</label>
-        </div>
-        <div class="form-group">
-            <label><input type="checkbox" name="irpf_mutualidad" {mutualidad}> Uses mutualidad alternativa (cap RETA deduction)</label>
-        </div>
-        '''
+        return self.render_settings_template(
+            'tax_es_irpf_settings_panel.html',
+            profile=profile, regions=regions, depreciate=depreciate, rate=rate,
+            threshold=threshold,
+            start=profile.start_date.isoformat() if profile.start_date else '')
 
     def save_settings(self, settings, form):
         if 'irpf_region' not in form:

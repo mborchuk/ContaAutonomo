@@ -71,6 +71,9 @@ never bypassed, and money amounts are computed server-side by
 - The `/api/v1` Blueprint is **CSRF-exempt** — the token replaces CSRF (same as
   the auth Blueprint). This is additive; the human session login is untouched.
 - One token = full access for the single app user. The PAID lock still binds it.
+- Settings → API shows the full token **once**: when it is first generated and
+  right after a rotation. Afterwards only the last four characters are shown.
+  Copy it when it is displayed; if it is lost, rotate it.
 
 ```mermaid
 sequenceDiagram
