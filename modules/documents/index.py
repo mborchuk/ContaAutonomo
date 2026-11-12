@@ -7,9 +7,11 @@ Categories are auto-collected from documents + managed via a dedicated page.
 
 from module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
-                   url_for, flash, jsonify)
+                   url_for, flash)
 from datetime import datetime, date, timedelta
 import os
+from db_helpers import db_get, db_get_or_404
+from timeutil import utcnow
 
 
 class DocumentsModule(BaseModule):
@@ -61,8 +63,8 @@ class DocumentsModule(BaseModule):
             original_filename = db.Column(db.String(300))
             file_size = db.Column(db.Integer)
             file_format = db.Column(db.String(10))
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
         class DocumentCategory(db.Model):
             __tablename__ = 'document_category'
@@ -80,7 +82,7 @@ class DocumentsModule(BaseModule):
             original_filename = db.Column(db.String(300))
             file_size = db.Column(db.Integer)
             file_format = db.Column(db.String(10))
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class DocumentConfig(db.Model):
             __tablename__ = 'document_config'
@@ -95,7 +97,7 @@ class DocumentsModule(BaseModule):
             document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
             action = db.Column(db.String(50), nullable=False)  # created, updated, file_added, file_removed, status_changed
             details = db.Column(db.Text)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class DocumentNote(db.Model):
             __tablename__ = 'document_note'
@@ -104,8 +106,8 @@ class DocumentsModule(BaseModule):
             document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
             title = db.Column(db.String(200), nullable=False)
             text = db.Column(db.Text, nullable=False)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
         self.Document = Document
         self.DocumentCategory = DocumentCategory
@@ -358,7 +360,7 @@ class DocumentsModule(BaseModule):
 
     def _api_get_document(self, request, doc_id=None):
         from modules.api.index import ApiError
-        doc = self.Document.query.get(doc_id)
+        doc = db_get(self.Document, doc_id)
         if not doc:
             raise ApiError(404, 'not_found', f'Document #{doc_id} not found')
         return self._api_serialize_document(doc), 200
@@ -366,11 +368,11 @@ class DocumentsModule(BaseModule):
     # ---- helpers ----
 
     def _get_config(self, key, default=''):
-        row = self.DocumentConfig.query.get(key)
+        row = db_get(self.DocumentConfig, key)
         return row.value if row else default
 
     def _set_config(self, key, value):
-        row = self.DocumentConfig.query.get(key)
+        row = db_get(self.DocumentConfig, key)
         if row:
             row.value = value
         else:
@@ -463,7 +465,7 @@ class DocumentsModule(BaseModule):
     # ---- document CRUD ----
 
     def _view_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         doc_files = self.DocumentFile.query.filter_by(
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         history = self.DocumentHistory.query.filter_by(
@@ -627,7 +629,7 @@ class DocumentsModule(BaseModule):
                                all_tags=self._get_all_tags())
 
     def _edit_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         if request.method == 'POST':
             try:
                 # Track changes before applying
@@ -655,7 +657,7 @@ class DocumentsModule(BaseModule):
                 doc.reference_number = request.form.get('reference_number', '').strip() or None
                 doc.counterparty = request.form.get('counterparty', '').strip() or None
                 doc.status = request.form.get('status', 'active').strip()
-                doc.updated_at = datetime.utcnow()
+                doc.updated_at = utcnow()
 
                 # Add new files
                 files = request.files.getlist('files')
@@ -729,7 +731,7 @@ class DocumentsModule(BaseModule):
             synchronize_session=False)
 
     def _delete_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         try:
             self._delete_document_children(doc)
             self._db.session.delete(doc)
@@ -742,7 +744,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.documents_index'))
 
     def _download_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         # Try first attached file
         df = self.DocumentFile.query.filter_by(document_id=doc.id).first()
         if df:
@@ -755,7 +757,7 @@ class DocumentsModule(BaseModule):
                                       download_name=doc.original_filename)
 
     def _preview_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         # Try first attached file
         df = self.DocumentFile.query.filter_by(document_id=doc.id).first()
         if df:
@@ -790,7 +792,7 @@ class DocumentsModule(BaseModule):
 
     def _download_file(self, file_id):
         """Download a single attached file."""
-        df = self.DocumentFile.query.get_or_404(file_id)
+        df = db_get_or_404(self.DocumentFile, file_id)
         if not self.core.storage.exists(df.file_path):
             flash('File not found.', 'danger')
             return redirect(url_for('documents.documents_edit', id=df.document_id))
@@ -799,7 +801,7 @@ class DocumentsModule(BaseModule):
 
     def _preview_file(self, file_id):
         """Preview a single attached file inline."""
-        df = self.DocumentFile.query.get_or_404(file_id)
+        df = db_get_or_404(self.DocumentFile, file_id)
         resp = self.core.preview_file(df.file_path, df.original_filename)
         if not resp:
             flash('File not found.', 'danger')
@@ -808,7 +810,7 @@ class DocumentsModule(BaseModule):
 
     def _delete_file(self, file_id):
         """Delete a single attached file."""
-        df = self.DocumentFile.query.get_or_404(file_id)
+        df = db_get_or_404(self.DocumentFile, file_id)
         doc_id = df.document_id
         fname = df.original_filename or 'file'
         try:
@@ -853,7 +855,7 @@ class DocumentsModule(BaseModule):
 
     def _sign_file(self, file_id, cap_index):
         """Sign a PDF file using a discovered capability."""
-        df = self.DocumentFile.query.get_or_404(file_id)
+        df = db_get_or_404(self.DocumentFile, file_id)
         doc_id = df.document_id
 
         fmt = (df.file_format or '').lower()
@@ -921,7 +923,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.categories_index'))
 
     def _update_category_color(self, id):
-        cat = self.DocumentCategory.query.get_or_404(id)
+        cat = db_get_or_404(self.DocumentCategory, id)
         color = request.form.get('color', '').strip()
         if color:
             cat.color = color
@@ -929,7 +931,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.categories_index'))
 
     def _delete_category(self, id):
-        cat = self.DocumentCategory.query.get_or_404(id)
+        cat = db_get_or_404(self.DocumentCategory, id)
         name = cat.name
         self._db.session.delete(cat)
         self._db.session.commit()
@@ -942,7 +944,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.categories_index'))
 
     def _duplicate_document(self, id):
-        doc = self.Document.query.get_or_404(id)
+        doc = db_get_or_404(self.Document, id)
         new_doc = self.Document(
             name=f'{doc.name} (copy)',
             category=doc.category,
@@ -1025,7 +1027,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.documents_view', id=doc_id))
 
     def _edit_note(self, note_id):
-        note = self.DocumentNote.query.get_or_404(note_id)
+        note = db_get_or_404(self.DocumentNote, note_id)
         title = request.form.get('note_title', '').strip()
         text = request.form.get('note_text', '').strip()
         if title and text:
@@ -1035,7 +1037,7 @@ class DocumentsModule(BaseModule):
         return redirect(url_for('documents.documents_view', id=note.document_id))
 
     def _delete_note(self, note_id):
-        note = self.DocumentNote.query.get_or_404(note_id)
+        note = db_get_or_404(self.DocumentNote, note_id)
         doc_id = note.document_id
         self._log_history(doc_id, 'updated', f'Note removed: {note.title}')
         self._db.session.delete(note)

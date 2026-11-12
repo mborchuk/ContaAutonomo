@@ -43,7 +43,6 @@ def test_obligation_rows_cross_calendar_with_filings(tax_mgmt, loaded_modules):
 
 
 def test_record_filing_creates_and_updates(tax_mgmt, loaded_modules, client):
-    from app import db
 
     _pin_forms(loaded_modules, ['130'])
     with client.session_transaction() as sess:

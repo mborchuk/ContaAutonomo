@@ -97,6 +97,19 @@
                     <button type="submit" class="btn btn-success btn-sm"
                             onclick="return confirm('Confirm match? The invoice will be marked PAID.');">✓ Confirm</button>
                 </form>
+                {% elif expense_suggestions.get(m.id) %}
+                <form method="POST" action="{{ url_for('bank_import.bank_link_expense', movement_id=m.id) }}"
+                      style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                    <select name="expense_id">
+                        {% for score, exp, reason in expense_suggestions[m.id] %}
+                        <option value="{{ exp.id }}" title="{{ reason }}">
+                            Expense {{ exp.expense_date.strftime('%d/%m/%Y') if exp.expense_date }} — {{ exp.contractor_name or exp.description[:30] }} — {{ "%.2f"|format(exp.amount) }} {{ exp.currency }} ({{ score }}pts: {{ reason }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-success btn-sm"
+                            onclick="return confirm('Link this movement to the selected expense?');">✓ Link</button>
+                </form>
                 {% else %}
                 <span class="muted">no suggestion</span>
                 {% endif %}

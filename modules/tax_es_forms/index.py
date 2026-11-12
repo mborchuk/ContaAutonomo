@@ -2,10 +2,10 @@
 """
 Tax ES Forms Module (F5) — Modelo 303 / 130 draft calculator.
 
-CAVEMAN NOTE: this module DO NOT file anything and give NO tax advice. It just
-add up numbers already in the app and lay them out in the boxes of Modelo 303
-(IVA) and Modelo 130 (IRPF pago fraccionado), so user can copy them into AEAT
-portal. Every page shout "estimate, not tax advice".
+This module does not file anything and gives no tax advice. It adds up the
+figures already in the app and lays them out in the boxes of Modelo 303 (IVA)
+and Modelo 130 (IRPF pago fraccionado), so the user can copy them into the
+AEAT portal. Every page states "estimate, not tax advice".
 
 Pure math live in calculator.py; box numbers live in boxes.py (versioned).
 This file only fetch data and render.
@@ -19,13 +19,16 @@ from module_manager import BaseModule
 
 from .boxes import (
     BOX_TABLE_VERSION,
-    MODELO_303_BOXES,
-    MODELO_130_BOXES,
+    MODELO_390_ORDER,
+    MODELO_390_OUT_OF_SCOPE,
+    boxes_for_year,
+    modelo_390_boxes_for_year,
 )
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
     compute_modelo_349,
+    compute_modelo_390,
     quarter_of,
 )
 
@@ -186,17 +189,17 @@ class TaxEsFormsModule(BaseModule):
             carried_forward=carried)
         result['meta']['carried_from'] = carried_from
         result['meta']['checks'] = self._data_checks(invoices, expenses)
-        result['labels'] = MODELO_303_BOXES
+        result['labels'] = self._box_labels(year, '303')
+        result.update(self._table_info(year))
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
         return result
 
     def _draft_349(self, year, quarter):
         result = compute_modelo_349(self._invoices_in(year, quarter=quarter))
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
+        result.update(self._table_info(year))
         result['box_59'] = self._draft_303(year, quarter)['boxes']['59']
         return result
 
@@ -234,8 +237,8 @@ class TaxEsFormsModule(BaseModule):
             boxes, rate = irpf.modelo130_boxes(year, quarter)
             return {
                 'form': '130', 'boxes': boxes, 'irpf_rate': rate,
-                'labels': MODELO_130_BOXES, 'year': year, 'quarter': quarter,
-                'table_version': BOX_TABLE_VERSION,
+                'labels': self._box_labels(year, '130'), 'year': year, 'quarter': quarter,
+                **self._table_info(year),
                 'meta': {'basis': 'cumulative_ytd', 'source': 'tax_es_irpf'},
             }
         _, irpf_rate = self._rates()
@@ -247,12 +250,57 @@ class TaxEsFormsModule(BaseModule):
             invoices_ytd, expenses_ytd, irpf_rate,
             prior_income=prior_income, prior_expenses=prior_expenses,
             convert_expense=self._convert_to_eur)
-        result['labels'] = MODELO_130_BOXES
+        result['labels'] = self._box_labels(year, '130')
         result['meta']['source'] = 'tax_es_forms'
         result['year'] = year
         result['quarter'] = quarter
-        result['table_version'] = BOX_TABLE_VERSION
+        result.update(self._table_info(year))
         return result
+
+    def _draft_390(self, year):
+        """Annual VAT summary: the four quarterly 303 drafts added up."""
+        from year_tables import fallback_note
+        quarters = [self._draft_303(year, q) for q in (1, 2, 3, 4)]
+        result = compute_modelo_390([q['boxes'] for q in quarters])
+        table_year, labels, fallback = modelo_390_boxes_for_year(year)
+        checks = []
+        other_rates = sorted({
+            inv.snap_vat_rate for inv in self._invoices_in(year)
+            if getattr(inv, 'status', None) != 'cancelled'
+            and getattr(inv, 'snap_vat_rate', None) not in (None, 0, 0.0, 21, 21.0)})
+        if other_rates:
+            checks.append(
+                'Invoices at VAT rates other than 21 % ('
+                + ', '.join(f'{r:g} %' for r in other_rates)
+                + ') are included in casillas 05/06 — move them to the casillas '
+                'for their rate (01–04) before filing.')
+        for q in quarters:
+            for check in q['meta'].get('checks', []):
+                checks.append(f"Q{q['quarter']}: {check}")
+        result.update({
+            'year': year, 'labels': labels, 'order': MODELO_390_ORDER,
+            'out_of_scope': MODELO_390_OUT_OF_SCOPE,
+            'quarters': [{'quarter': q['quarter'], 'boxes': q['boxes']} for q in quarters],
+            'table_year': table_year, 'table_fallback': fallback,
+            'table_note': fallback_note(table_year) if fallback else '',
+            'meta': {'checks': checks, 'basis': 'sum of quarterly 303 drafts'},
+        })
+        return result
+
+    @staticmethod
+    def _box_labels(year, form):
+        _table_year, tables, _fallback = boxes_for_year(year)
+        return tables[form]
+
+    @staticmethod
+    def _table_info(year):
+        """Box table metadata for a draft: version, the table year used, and
+        whether it is a fallback from an earlier year (shown as a warning)."""
+        from year_tables import fallback_note
+        table_year, _tables, fallback = boxes_for_year(year)
+        return {'table_version': BOX_TABLE_VERSION, 'table_year': table_year,
+                'table_fallback': fallback,
+                'table_note': fallback_note(table_year) if fallback else ''}
 
     def _available_years(self):
         return self.core.data_years()
@@ -292,6 +340,11 @@ class TaxEsFormsModule(BaseModule):
                 abort(404)
             draft = module._draft_130(year, quarter)
             return render_template('tax_forms_draft_130.html', draft=draft)
+
+        @bp.route('/390/<int:year>')
+        @login_required
+        def draft_390(year):
+            return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
 
         @bp.route('/349/<int:year>/<int:quarter>')
         @login_required

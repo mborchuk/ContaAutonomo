@@ -2,10 +2,11 @@
 """
 Invoice Email Module (F8) — send invoice PDFs by SMTP + overdue reminders.
 
-CAVEMAN NOTE: app had zero mail code. This module bring stdlib smtplib, an
-SMTP settings tab, a "send by email" panel on the invoice view with a send log,
-a daily overdue-reminder job (opt-in, idempotent), and a `notify` capability so
-fiscal_calendar reminders can ride email with zero coupling.
+The app had no mail code before this module. It adds sending through the
+standard library's smtplib, an SMTP settings tab, a "send by email" panel on
+the invoice view with a send log, a daily overdue-reminder job (opt-in and
+idempotent), and a `notify` capability so Fiscal Calendar reminders can be
+sent by email without the two modules depending on each other.
 
 Password stored in module config (plaintext SQLite) — same posture as the
 existing AI-provider API keys; documented, self-hosted single-user app.
@@ -13,13 +14,16 @@ existing AI-provider API keys; documented, self-hosted single-user app.
 
 import json
 import smtplib
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from email.message import EmailMessage
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
 from module_manager import BaseModule
+import secret_box
 from settings_forms import secret_from_form
+from db_helpers import db_get_or_404
+from timeutil import utcnow
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)
@@ -69,7 +73,7 @@ class InvoiceEmailModule(BaseModule):
             subject = db.Column(db.String(500))
             status = db.Column(db.String(20))  # sent | failed
             error = db.Column(db.Text)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         self.Config = InvoiceEmailConfig
         self.EmailLog = EmailLog
@@ -87,6 +91,21 @@ class InvoiceEmailModule(BaseModule):
             )
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register reminder job: %s', e)
+        self._encrypt_stored_password()
+
+    def _encrypt_stored_password(self):
+        """C-2: re-save an SMTP password stored in plaintext by earlier versions."""
+        try:
+            row = self.Config.query.filter_by(key='smtp').first()
+            if not row or not row.value:
+                return
+            stored = json.loads(row.value).get('password') or ''
+            if stored and not secret_box.is_encrypted(stored):
+                self._save_smtp_config(self._smtp_config())
+                self.logger.info('Encrypted the stored SMTP password')
+        except Exception as e:  # pragma: no cover - defensive
+            self._db.session.rollback()
+            self.logger.error('Encrypting the SMTP password failed: %s', e)
 
     # --- SMTP config ---------------------------------------------------------- #
 
@@ -104,6 +123,7 @@ class InvoiceEmailModule(BaseModule):
                 cfg.update(json.loads(row.value))
         except Exception as e:  # pragma: no cover - defensive
             self.logger.warning('Reading SMTP config failed: %s', e)
+        cfg['password'] = secret_box.decrypt(cfg.get('password') or '')
         return cfg
 
     def _save_smtp_config(self, cfg):
@@ -111,7 +131,9 @@ class InvoiceEmailModule(BaseModule):
         if not row:
             row = self.Config(key='smtp')
             self._db.session.add(row)
-        row.value = json.dumps(cfg)
+        stored = dict(cfg)
+        stored['password'] = secret_box.encrypt(cfg.get('password') or '')  # C-2
+        row.value = json.dumps(stored)
         self._db.session.commit()
 
     def _configured(self):
@@ -217,7 +239,7 @@ class InvoiceEmailModule(BaseModule):
         @login_required
         def email_send(invoice_id):
             from app import Invoice
-            invoice = Invoice.query.get_or_404(invoice_id)
+            invoice = db_get_or_404(Invoice, invoice_id)
             recipient = (request.form.get('recipient') or '').strip()
             if not recipient or '@' not in recipient:
                 flash('A valid recipient email is required.', 'danger')

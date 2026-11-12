@@ -161,7 +161,8 @@ def test_130_converts_expense_currency():
     invoices = [_inv(1000.0, tax_type='standard')]
     # 100 USD expense, convert fn doubles it to EUR.
     expenses = [_exp(100.0, currency='USD')]
-    convert = lambda amount, currency, when: amount * 2 if currency == 'USD' else amount
+    def convert(amount, currency, when):
+        return amount * 2 if currency == 'USD' else amount
     result = compute_modelo_130(invoices, expenses, irpf_rate=0.20,
                                convert_expense=convert)
     assert result['boxes']['02'] == 200.0

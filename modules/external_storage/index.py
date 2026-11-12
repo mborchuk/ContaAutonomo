@@ -8,10 +8,11 @@ Supports: Local filesystem (default), AWS S3, Google Cloud Storage, Google Drive
 from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
 from settings_forms import secret_from_form
 from flask import Blueprint, redirect, url_for, flash
-from datetime import datetime
 import logging
 import os
 import io
+from secret_box import EncryptedString, encrypt_existing
+from timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -592,8 +593,8 @@ class ExternalStorageModule(BaseModule):
             s3_bucket = db.Column(db.String(200))
             s3_prefix = db.Column(db.String(200), default='')
             s3_region = db.Column(db.String(50))
-            s3_access_key = db.Column(db.String(200))
-            s3_secret_key = db.Column(db.String(500))
+            s3_access_key = db.Column(EncryptedString(500))
+            s3_secret_key = db.Column(EncryptedString(500))
             s3_profile = db.Column(db.String(100))
             s3_auth_method = db.Column(db.String(20), default='sdk')
             # Google Cloud Storage
@@ -606,7 +607,7 @@ class ExternalStorageModule(BaseModule):
             gdrive_credentials_json = db.Column(db.String(500))
             gdrive_auth_method = db.Column(db.String(20), default='adc')
             # Meta
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow)
 
         self.StorageConfig = StorageConfig
         return {'StorageConfig': StorageConfig}
@@ -628,6 +629,7 @@ class ExternalStorageModule(BaseModule):
     def on_enable(self):
         # Ensure new columns exist (migration for upgrades from v0.1)
         self._migrate_columns()
+        encrypt_existing(self._db, 'storage_config', ['s3_access_key', 's3_secret_key'])
         self._apply_backend()
 
     def _migrate_columns(self):
@@ -759,6 +761,6 @@ class ExternalStorageModule(BaseModule):
         config.gdrive_folder_id = form.get('es_gdrive_folder_id', '') or None
         config.gdrive_auth_method = form.get('es_gdrive_auth_method', 'adc')
         config.gdrive_credentials_json = form.get('es_gdrive_credentials_json', '') or None
-        config.updated_at = datetime.utcnow()
+        config.updated_at = utcnow()
         self._db.session.commit()
         self._apply_backend()

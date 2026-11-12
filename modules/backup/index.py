@@ -12,8 +12,14 @@ from flask import (Blueprint, request, redirect, url_for,
 from datetime import datetime, date
 from pathlib import Path
 from io import BytesIO
-import os, re, json, shutil, zipfile
+import os
+import re
+import json
+import shutil
+import zipfile
 import logging
+from secret_box import EncryptedString, encrypt_existing
+from timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +96,9 @@ class BackupModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             backup_path = db.Column(db.String(500), default='')
             encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
-            custom_password = db.Column(db.String(500), default='')
+            custom_password = db.Column(EncryptedString(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
-            updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+            updated_at = db.Column(db.DateTime, default=utcnow)
 
         # We only need Settings reference for auto_backup_enabled check
         class Settings(db.Model):
@@ -219,6 +225,7 @@ class BackupModule(BaseModule):
         app.register_blueprint(bp)
 
     def on_enable(self):
+        encrypt_existing(self._db, 'backup_config', ['custom_password'])
         # Migrate: add use_external_storage column if missing
         try:
             from sqlalchemy import inspect as sa_inspect, text
@@ -369,7 +376,7 @@ class BackupModule(BaseModule):
             cfg.custom_password = secret_from_form(form, 'bk_custom_password',
                                                    cfg.custom_password or '')
             cfg.use_external_storage = form.get('bk_use_external_storage') == 'on'
-            cfg.updated_at = datetime.utcnow()
+            cfg.updated_at = utcnow()
             self._db.session.commit()
 
     # ── core backup logic ───────────────────────────────────────────
@@ -562,11 +569,13 @@ class BackupModule(BaseModule):
                 safe_t = _check_name(tname)
                 cols = [c['name'] for c in inspector.get_columns(tname)]
                 for rd in tables[tname]:
-                    # Normalize date and datetime fields if present
+                    # Normalize date and datetime fields to the text form
+                    # SQLite stores (what the deprecated sqlite3 default
+                    # adapters produced: isoformat() / isoformat(' ')).
                     for k, v in list(rd.items()):
                         if v and k in date_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v).date()
+                                rd[k] = datetime.fromisoformat(v).date().isoformat()
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
@@ -576,7 +585,7 @@ class BackupModule(BaseModule):
                                 )
                         elif v and k in dt_fields:
                             try:
-                                rd[k] = datetime.fromisoformat(v)
+                                rd[k] = datetime.fromisoformat(v).isoformat(' ')
                             except (ValueError, TypeError) as exc:
                                 safe_k = _sanitize_for_log(k)
                                 safe_v = _sanitize_for_log(repr(v))
@@ -604,7 +613,8 @@ class BackupModule(BaseModule):
     # ── encryption ──────────────────────────────────────────────────
 
     def _encrypt_bytes(self, data, password):
-        import hashlib, hmac
+        import hashlib
+        import hmac
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)
@@ -624,7 +634,8 @@ class BackupModule(BaseModule):
         return salt + iv + mac + ct
 
     def _decrypt_bytes(self, data, password):
-        import hashlib, hmac as hmac_mod
+        import hashlib
+        import hmac as hmac_mod
         try:
             from cryptography.hazmat.primitives.ciphers import (
                 Cipher, algorithms, modes)

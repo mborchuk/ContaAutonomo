@@ -8,6 +8,10 @@
     <span class="fine-print">Bracket table version: {{ version }}</span>
 </div>
 
+{% if table_note %}
+<div class="note note-warning">⚠ {{ table_note }}</div>
+{% endif %}
+
 <div class="note note-info">
     <strong>Estimate, not advice.</strong> Projection from your invoices/expenses,
     simple linear annualization. Regularization is settled by Seguridad Social after

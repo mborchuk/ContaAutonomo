@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tax ES IRPF Module — Modelo 130 + Modelo 100 estimator.
 
-Caveman summary: this module guess two numbers for Spanish autónomo.
-  - Modelo 130 = how much IRPF to prepay this quarter (cumulative YTD).
-  - Modelo 100 = what final year IRPF look like after prepays + retenciones.
+Summary: this module estimates two figures for a Spanish autónomo.
+  - Modelo 130: how much IRPF to prepay this quarter (cumulative year to date).
+  - Modelo 100: what the final annual IRPF looks like after the prepayments
+    and withholdings (retenciones).
 
 Both modelos live in ONE module because they share the same money path
 (net profit, expense handling, 5% difícil justificación cap). The actual math
@@ -34,6 +35,8 @@ from .engine import (
 )
 from .depreciation import depreciation_in_year
 from .params_store import available_years, load_params
+from db_helpers import db_get
+from timeutil import utcnow
 
 # Quarter → last calendar day (month, day), used for cumulative YTD windows.
 _QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
@@ -131,7 +134,7 @@ class TaxEsIrpfModule(BaseModule):
             dificil_just = db.Column(db.Float, default=0.0)
             retenciones = db.Column(db.Float, default=0.0)
             payment_due = db.Column(db.Float, default=0.0)
-            computed_at = db.Column(db.DateTime, default=datetime.utcnow)
+            computed_at = db.Column(db.DateTime, default=utcnow)
 
         self.IrpfProfile = IrpfProfile
         self.IrpfQuarter = IrpfQuarter
@@ -662,7 +665,7 @@ class TaxEsIrpfModule(BaseModule):
         except (TypeError, ValueError):
             return
         try:
-            inv = self.Invoice.query.get(invoice.id)
+            inv = db_get(self.Invoice, invoice.id)
             if inv is None:
                 return
             inv.irpf_retention_pct = pct

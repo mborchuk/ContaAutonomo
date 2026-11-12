@@ -23,9 +23,10 @@ import hashlib
 if __name__ == '__main__':
     sys.modules.setdefault('app', sys.modules['__main__'])
 
-from currency_converter import get_exchange_rate, convert_usd_to_eur, get_currency_symbol
+from currency_converter import convert_usd_to_eur, get_currency_symbol
 import logging
 import logging.config
+from timeutil import utcnow
 
 
 class _RequestIdFilter(logging.Filter):
@@ -93,6 +94,8 @@ app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
 app.config['INIT_LOCK_PATH'] = os.path.join(
     os.path.dirname(app.config['SCHEDULER_LOCK_PATH']), 'init.lock')
 # Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+app.config['CREDENTIALS_KEY_FILE'] = os.environ.get(
+    'CREDENTIALS_KEY_FILE', os.path.join(app.instance_path, 'credentials.key'))
 app.config['BACKUP_KEY_FILE'] = os.environ.get(
     'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
 # Verifactu signing key file, used when VERIFACTU_KEY is not set. Separate
@@ -109,6 +112,7 @@ from constants import (
     invoice_locked,
     is_legacy_settled,
 )
+from secret_box import EncryptedString, encrypt_existing
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -328,7 +332,7 @@ class Customer(db.Model):
     phone = db.Column(db.String(50))
     is_default = db.Column(db.Boolean, default=False)
     tax_type = db.Column(db.String(20), default='eu_b2b')  # non_eu, eu_b2b, standard
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     invoices = db.relationship('Invoice', backref='customer', lazy=True)
 
     def __repr__(self):
@@ -358,7 +362,7 @@ class Invoice(db.Model):
     # estimator). Defaults to 0 so legacy invoices stay unaffected.
     irpf_retention_pct = db.Column(db.Float, default=0)
     irpf_retention_amount = db.Column(db.Float, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=True)
     bank_id = db.Column(db.Integer, db.ForeignKey('bank.id'), nullable=True)
     # F2 — lifecycle: series + per-series sequence assigned at ISSUE time.
@@ -402,7 +406,7 @@ class InvoiceItem(db.Model):
     subtotal_usd = db.Column(db.Float, nullable=False)
     # F2-D4 — per-line VAT rate (nullable; defaults to the header rate at issue).
     vat_rate = db.Column(db.Float)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<InvoiceItem {self.description}>'
@@ -415,7 +419,7 @@ class Bank(db.Model):
     swift = db.Column(db.String(50))
     bank_name = db.Column(db.String(200))
     is_default = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     invoices = db.relationship('Invoice', backref='bank', lazy=True)
 
     def __repr__(self):
@@ -463,9 +467,9 @@ class Settings(db.Model):
     default_irpf_rate = db.Column(db.Float, default=20.0)  # Income tax retention rate in %
     # Currency provider settings
     currency_provider = db.Column(db.String(50), default='ecb')  # Active exchange rate provider
-    currency_provider_api_key = db.Column(db.String(200), default='')  # API key for providers that need it
+    currency_provider_api_key = db.Column(EncryptedString(500), default='')  # encrypted at rest (C-2)
     payment_methods = db.Column(db.Text, default='Bank Transfer,PayPal,Credit Card,Cash,Crypto')
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
     def __repr__(self):
         return f'<Settings {self.business_name}>'
@@ -482,7 +486,7 @@ class Contractor(db.Model):
     email = db.Column(db.String(200))
     phone = db.Column(db.String(50))
     notes = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     expenses = db.relationship('Expense', backref='contractor', lazy=True)
 
     def __repr__(self):
@@ -511,7 +515,7 @@ class Expense(db.Model):
     # supplier in another EU country ('eu') or outside the EU ('non_eu') with
     # no Spanish VAT invoiced; the buyer self-assesses it on Modelo 303.
     reverse_charge = db.Column(db.String(10))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<Expense {self.id} - {self.amount} {self.currency}>'
@@ -524,7 +528,7 @@ class TaxForm(db.Model):
     quarter = db.Column(db.Integer)  # 1-4 for quarterly forms, NULL for annual
     file_path = db.Column(db.String(500), nullable=False)
     original_filename = db.Column(db.String(200))
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_at = db.Column(db.DateTime, default=utcnow)
     notes = db.Column(db.Text)
 
     def __repr__(self):
@@ -541,7 +545,7 @@ class Document(db.Model):
     description = db.Column(db.Text)
     file_path = db.Column(db.String(500), nullable=False)
     original_filename = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<Document {self.name}>'
@@ -552,7 +556,7 @@ class SSPayment(db.Model):
     payment_date = db.Column(db.Date, nullable=False)
     amount = db.Column(db.Float, nullable=False)
     description = db.Column(db.String(300))
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
 
     def __repr__(self):
         return f'<SSPayment {self.payment_date} {self.amount}>'
@@ -592,7 +596,7 @@ def create_customer():
 @app.route('/customers/<int:id>')
 @login_required
 def view_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
 
     # Get base currency from settings
     app_settings = Settings.query.first()
@@ -607,7 +611,7 @@ def view_customer(id):
 @app.route('/customers/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
 
     if request.method == 'POST':
         customer.name = request.form['name']
@@ -630,70 +634,11 @@ def edit_customer(id):
 @app.route('/customers/<int:id>/delete', methods=['POST'])
 @login_required
 def delete_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
     db.session.delete(customer)
     db.session.commit()
     flash('Customer deleted successfully!', 'success')
     return redirect(url_for('settings') + '#customers')
-
-
-def _get_upcoming_tax_deadlines():
-    """
-    Get upcoming Spanish Autónomo tax deadlines grouped by date.
-    If a deadline falls on weekend, it moves to the next business day.
-    """
-    from datetime import date, timedelta
-
-    today = date.today()
-    year = today.year
-
-    # All deadlines: (date, list of forms)
-    raw_deadlines = [
-        (date(year, 1, 20), [
-            ('130, 303, 349', f'Q4 {year-1}'),
-        ]),
-        (date(year, 1, 30), [
-            ('390', f'Annual VAT {year-1}'),
-        ]),
-        (date(year, 4, 20), [
-            ('130, 303, 349', f'Q1 {year}'),
-        ]),
-        (date(year, 6, 30), [
-            ('100', f'Renta {year-1}'),
-        ]),
-        (date(year, 7, 20), [
-            ('130, 303, 349', f'Q2 {year}'),
-        ]),
-        (date(year, 10, 20), [
-            ('130, 303, 349', f'Q3 {year}'),
-        ]),
-        (date(year + 1, 1, 20), [
-            ('130, 303, 349', f'Q4 {year}'),
-        ]),
-        (date(year + 1, 1, 30), [
-            ('390', f'Annual VAT {year}'),
-        ]),
-    ]
-
-    def adjust_to_business_day(d):
-        while d.weekday() >= 5:
-            d += timedelta(days=1)
-        return d
-
-    upcoming = []
-    for deadline_date, forms in raw_deadlines:
-        adjusted = adjust_to_business_day(deadline_date)
-        if adjusted >= today:
-            days_left = (adjusted - today).days
-            upcoming.append({
-                'date': adjusted.strftime('%d/%m/%Y'),
-                'days_left': days_left,
-                'urgent': days_left <= 14,
-                'forms': forms,
-            })
-
-    upcoming.sort(key=lambda x: x['days_left'])
-    return upcoming[:4]
 
 
 @app.route('/')
@@ -701,7 +646,7 @@ def _get_upcoming_tax_deadlines():
 def dashboard():
     """Main dashboard page with invoice summary table"""
     # Get all invoices with valid invoice_date
-    invoices = Invoice.query.filter(Invoice.invoice_date != None).order_by(Invoice.invoice_date.desc()).all()
+    invoices = Invoice.query.filter(Invoice.invoice_date.isnot(None)).order_by(Invoice.invoice_date.desc()).all()
 
     # Additional safety check - filter out any None objects or invoices with None dates
     invoices = [inv for inv in invoices if inv is not None and hasattr(inv, 'invoice_date') and inv.invoice_date is not None]
@@ -982,9 +927,16 @@ def dashboard():
     except Exception:
         logger.exception("Failed to fetch public holidays from Nager.Date API")
 
-    # Tax deadlines for Spanish Autónomo
-    from datetime import date, timedelta
-    tax_deadlines = _get_upcoming_tax_deadlines()
+    # Tax deadlines: one source, the Fiscal Calendar module. None = module
+    # disabled (the dashboard then shows a hint to enable it).
+    tax_deadlines = None
+    fiscal_calendar = module_manager.provider_of('fiscal_calendar') if module_manager else None
+    if fiscal_calendar is not None:
+        try:
+            tax_deadlines = fiscal_calendar.upcoming_deadlines(limit=4)
+        except Exception:
+            logger.exception('Fiscal Calendar deadlines unavailable')
+            tax_deadlines = []
 
     # Collect module dashboard panels
     module_panels = []
@@ -1028,7 +980,7 @@ def index():
     sort_order = request.args.get('sort_order', 'desc')
 
     # Build select statement
-    stmt = select(Invoice).where(Invoice.id != None)
+    stmt = select(Invoice).where(Invoice.id.isnot(None))
 
     if status_filter:
         stmt = stmt.where(Invoice.status == status_filter)
@@ -1135,7 +1087,7 @@ def _issue_invoice(invoice, series=None, request_obj=None):
         invoice.sequence_number = seq
         invoice.invoice_number = f'{series}/{seq:04d}'
         invoice.status = 'issued'
-        invoice.issued_at = datetime.utcnow()
+        invoice.issued_at = utcnow()
         try:
             db.session.flush()  # surfaces unique-number collisions early
             break
@@ -1157,7 +1109,7 @@ def _issue_invoice(invoice, series=None, request_obj=None):
 @app.route('/issue/<int:id>', methods=['POST'])
 @login_required
 def issue_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if _invoice_locked(invoice):
         flash('Invoice is already issued.', 'warning')
         return redirect(url_for('view_invoice', id=id))
@@ -1194,7 +1146,7 @@ def _mark_invoice_paid(invoice):
 @app.route('/mark-paid/<int:id>', methods=['POST'])
 @login_required
 def mark_invoice_paid(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     try:
         _mark_invoice_paid(invoice)
         flash(f'Invoice {invoice.invoice_number} marked as paid.', 'success')
@@ -1210,7 +1162,7 @@ def mark_invoice_paid(id):
 @app.route('/annul/<int:id>', methods=['POST'])
 @login_required
 def annul_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if invoice.status not in LOCKED_INVOICE_STATUSES:
         flash('Only issued invoices can be annulled.', 'warning')
         return redirect(url_for('view_invoice', id=id))
@@ -1232,23 +1184,23 @@ def annul_invoice(id):
 @app.route('/rectify/<int:id>', methods=['POST'])
 @login_required
 def rectify_invoice(id):
-    original = Invoice.query.get_or_404(id)
+    original = db.get_or_404(Invoice, id)
     if original.status not in LOCKED_INVOICE_STATUSES:
         flash('Only issued invoices can be rectified.', 'warning')
         return redirect(url_for('view_invoice', id=id))
     rtype = request.form.get('rectification_type', 'sustitucion')
     if rtype not in ('sustitucion', 'diferencias'):
         rtype = 'sustitucion'
-    year = datetime.utcnow().year
+    year = utcnow().year
     try:
         # New DRAFT pre-filled from the original; original is never mutated.
         draft = Invoice(
-            invoice_number=f'RECT-{original.id}-{datetime.utcnow().strftime("%Y%m%d%H%M%S")}',
+            invoice_number=f'RECT-{original.id}-{utcnow().strftime("%Y%m%d%H%M%S")}',
             client_name=original.client_name,
             amount_usd=original.amount_usd,
             amount_eur=original.amount_eur,
             exchange_rate=original.exchange_rate,
-            invoice_date=datetime.utcnow().date(),
+            invoice_date=utcnow().date(),
             due_date=original.due_date,
             description=original.description,
             quantity=original.quantity,
@@ -1593,7 +1545,7 @@ def create_invoice():
 @app.route('/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # F2 — issued/paid invoices are immutable; changes go via a rectificative.
     if _invoice_locked(invoice):
@@ -1762,7 +1714,7 @@ def edit_invoice(id):
 @app.route('/view/<int:id>')
 @login_required
 def view_invoice(id):
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # Check if invoice is paid and has hash — verify integrity via storage
     hash_mismatch = False
@@ -1788,7 +1740,7 @@ def view_invoice(id):
 def delete_invoice(id):
     # POST-only + CSRF token. A GET delete could be triggered by an
     # <img src="/delete/42"> and is not covered by CSRF protection.
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
 
     # F2 — issued/paid invoices cannot be deleted; annul them instead.
     if _invoice_locked(invoice):
@@ -1828,7 +1780,7 @@ def generate_pdf(id):
     import importlib.util
     from pathlib import Path
 
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     customer = invoice.customer
     app_settings = Settings.query.first()
 
@@ -1967,7 +1919,7 @@ def generate_pdf(id):
 @login_required
 def preview_invoice_pdf(id):
     """Preview invoice PDF inline in the browser"""
-    invoice = Invoice.query.get_or_404(id)
+    invoice = db.get_or_404(Invoice, id)
     if not module_manager:
         flash('Module manager not available.', 'danger')
         return redirect(url_for('index'))
@@ -2195,7 +2147,7 @@ def add_bank():
 @login_required
 def edit_bank(id):
     """Edit a bank"""
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
 
     if request.method == 'POST':
         bank.name = request.form.get('name', '')
@@ -2225,7 +2177,7 @@ def edit_bank(id):
 @login_required
 def delete_bank(id):
     """Delete a bank"""
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
 
     # Check if any invoices use this bank
     invoice_count = Invoice.query.filter_by(bank_id=id).count()
@@ -2247,7 +2199,7 @@ def set_default_bank(id):
     Bank.query.update({Bank.is_default: False})
 
     # Set this one as default
-    bank = Bank.query.get_or_404(id)
+    bank = db.get_or_404(Bank, id)
     bank.is_default = True
     db.session.commit()
 
@@ -2263,7 +2215,7 @@ def set_default_customer(id):
     Customer.query.update({Customer.is_default: False})
 
     # Set this one as default
-    customer = Customer.query.get_or_404(id)
+    customer = db.get_or_404(Customer, id)
     customer.is_default = True
     db.session.commit()
 
@@ -2342,7 +2294,7 @@ def create_contractor():
 @login_required
 def edit_contractor(id):
     """Edit a contractor"""
-    contractor = Contractor.query.get_or_404(id)
+    contractor = db.get_or_404(Contractor, id)
 
     if request.method == 'POST':
         try:
@@ -2371,7 +2323,7 @@ def edit_contractor(id):
 @login_required
 def delete_contractor(id):
     """Delete a contractor"""
-    contractor = Contractor.query.get_or_404(id)
+    contractor = db.get_or_404(Contractor, id)
 
     # Check if contractor has expenses
     if contractor.expenses:
@@ -2484,6 +2436,7 @@ def init_database():
     """
     from schema_migrations import run_migrations
     run_migrations(db.engine, db.metadata)
+    encrypt_existing(db, 'settings', ['currency_provider_api_key'])
 
     if not Settings.query.first():
         db.session.add(Settings(
@@ -2564,7 +2517,7 @@ def _apply_currency_provider(s, mgr):
     """Apply currency provider from Settings to CurrencyService."""
     if not s or not mgr:
         return
-    from currency_converter import BUILTIN_PROVIDERS, make_frankfurter_provider, \
+    from currency_converter import make_frankfurter_provider, \
         make_open_exchange_rates_provider, make_fixer_provider
     provider_name = getattr(s, 'currency_provider', 'ecb') or 'ecb'
     api_key = getattr(s, 'currency_provider_api_key', '') or ''

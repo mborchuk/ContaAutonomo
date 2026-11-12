@@ -2,10 +2,11 @@
 """
 Fiscal Calendar Module (F3) — Spanish AEAT deadlines + reminders.
 
-CAVEMAN NOTE: local data (calendar_data.py), no external API. Show a dashboard
-panel of upcoming filing windows for the forms user actually file, and a daily
-scheduler job that shout reminders at T-14/7/1. Reminders ride the `notify`
-capability seam (F8 email plug in later) and always write the activity log.
+Uses local data (calendar_data.py), no external API. Shows a dashboard panel
+of upcoming filing windows for the forms the user actually files, and runs a
+daily scheduler job that sends reminders 14, 7 and 1 days before a deadline.
+Reminders go through the `notify` capability (email plugs in through F8) and
+are always written to the activity log.
 """
 
 import json
@@ -121,6 +122,12 @@ class FiscalCalendarModule(BaseModule):
 
     # --- Dashboard panel (F3-D2) ------------------------------------------ #
 
+    def upcoming_deadlines(self, limit=4, today=None):
+        """Next open or upcoming filing windows for the selected forms, for the
+        compact "Tax Deadlines" column on the dashboard."""
+        items = upcoming(366, today=today, selected_forms=self._selected_forms())
+        return items[:limit]
+
     def get_dashboard_panels(self):
         items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())
         if not items:
@@ -201,7 +208,7 @@ class FiscalCalendarModule(BaseModule):
         selected = self._selected_forms()
         state = self._reminder_state()
         fired = []
-        for entry in all_deadlines():
+        for entry in all_deadlines(today=today):
             if entry['form'] not in selected:
                 continue
             days_to_end = (entry['window_end'] - today).days

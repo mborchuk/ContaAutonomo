@@ -2,12 +2,13 @@
 """
 Verifactu Module (F1) — tamper-evident billing records per RD 1007/2023.
 
-CAVEMAN NOTE: every invoice ISSUE / ANNUL write one append-only record into a
-hash chain (see chain.py). Record write ride the same transaction as the F2
-lifecycle transition — record fail => transition roll back (compliance veto).
-QR payload render on the invoice view. Local conservation first; VERI*FACTU
-real-time submission is scaffolded but gated on AEAT test-environment access
-(F1-D6) — job no-ops with a log until an endpoint is configured.
+Every invoice issue or annulment writes one append-only record into a hash
+chain (see chain.py). The record is written in the same transaction as the
+F2 lifecycle transition: if the record fails, the transition is rolled back
+(a compliance veto). The QR payload is rendered on the invoice view. Records
+are kept locally first; real-time VERI*FACTU submission is scaffolded but
+waits for access to the AEAT test environment (F1-D6) — until an endpoint is
+configured, the job only logs and does nothing.
 
 STANDING RULE: record format, QR content and chaining are versioned drafts —
 verify against current AEAT technical specs before real use (see chain.py and
@@ -15,7 +16,6 @@ README.md). Compliance assist, not legal advice.
 """
 
 import json
-from datetime import datetime
 
 from flask import Blueprint, render_template, Response, url_for
 
@@ -33,6 +33,7 @@ from .chain import (
     verify_chain,
     verify_signature,
 )
+from timeutil import utcnow
 
 
 class VerifactuModule(BaseModule):
@@ -82,7 +83,7 @@ class VerifactuModule(BaseModule):
             # the key derived from SECRET_KEY, before VERIFACTU_KEY existed.
             key_id = db.Column(db.String(16))
             spec_version = db.Column(db.String(20), default=CHAIN_SPEC_VERSION)
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
             submitted_at = db.Column(db.DateTime)  # VERI*FACTU mode only
 
         self.VerifactuRecord = VerifactuRecord
@@ -191,7 +192,7 @@ class VerifactuModule(BaseModule):
             'total_eur': invoice.amount_eur,
             'rectifies': getattr(invoice, 'rectifies_invoice_id', None),
             'rectification_type': getattr(invoice, 'rectification_type', None),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': utcnow().isoformat(),
         }
 
     def _append_record(self, invoice, record_type):

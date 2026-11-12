@@ -11,12 +11,14 @@ nothing and provides no tax advice — every page carries a non-dismissible
 1. [Features](#features)
 2. [Box mapping](#box-mapping)
 3. [How the figures are computed](#how-the-figures-are-computed)
-4. [Scope exclusions](#scope-exclusions)
+4. [Modelo 390 (annual summary)](#modelo-390-annual-summary)
+5. [Scope exclusions](#scope-exclusions)
 
 ## Features
 
 - Draft pages per quarter: `/tax-forms-draft/303/<year>/<q>` and
   `/tax-forms-draft/130/<year>/<q>`, with an index at `/tax-forms-draft/`
+- Annual VAT summary: `/tax-forms-draft/390/<year>` (Modelo 390)
 - Copy-to-clipboard per box; print / save-as-PDF via a print stylesheet
 - Dashboard Tax Obligations panel: current-quarter running 303/130 position
   (display-only — it never changes the panel's grand total)
@@ -87,6 +89,32 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   positive result, minus the estimated payments from earlier quarters of the
   same year. The result never goes below zero.
 
+## Modelo 390 (annual summary)
+
+`compute_modelo_390()` adds up the four quarterly 303 drafts of a year, so
+every casilla agrees with the quarterly figures by construction. Casillas were
+checked against the official AEAT *Instrucciones modelo 390 — 2025*; a later
+fiscal year uses that table and shows a "verify" banner until it is reviewed.
+
+| 390 casilla | From the 303 boxes (sum of Q1–Q4) |
+|-------------|-----------------------------------|
+| 05 / 06 — régimen ordinario 21 % | 01 / 03 |
+| 551 / 552 — adquisiciones intracomunitarias de servicios 21 % | 10 / 11 |
+| 27 / 28 — otros supuestos de inversión del sujeto pasivo | 12 / 13 |
+| 33 / 34 / 47 — totals | 05+551+27 / 06+552+28 / 34 |
+| 48 / 49 — deducible, interiores corrientes | 28 / 29 |
+| 50 / 51 — deducible, interiores bienes de inversión | 30 / 31 |
+| 597 / 598 — deducible, adquisiciones intracomunitarias de servicios | 36 / 37 |
+| 58 / 59 — deducible, adquisiciones intracomunitarias bienes de inversión | 38 / 39 |
+| 64 — suma de deducciones; 65 — resultado (47 − 64) | = Σ 45; = Σ 46 |
+| 85 — compensación aplicada; 86 — resultado liquidación | Σ 78; = Σ 71 |
+| 95 — total a ingresar; 97 — último periodo a compensar | positive 71s; negative Q4 71 |
+| 99 / 103 / 110 / 108 — volumen de operaciones | 01 / 59 / 120 / sum |
+
+The page lists what is out of scope (other VAT rates, intra-EU goods,
+imports, special regimes, exempt operations, SII taxpayers) and flags invoices
+at rates other than 21 %.
+
 ## Scope exclusions
 
 Out of scope in v1 (also listed in the UI fine print): régimen simplificado
@@ -94,5 +122,4 @@ Out of scope in v1 (also listed in the UI fine print): régimen simplificado
 only), imports (boxes 32–35) and intra-EU acquisitions of goods with
 Spanish-VAT exceptions.
 
-A fast-follow for annual summaries (Modelo 390 and 100) can reuse the same
-engine by aggregating four quarters; it is intentionally not built yet.
+Modelo 100 (annual IRPF) is estimated by the `tax_es_irpf` module.

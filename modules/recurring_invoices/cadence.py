@@ -2,8 +2,9 @@
 """
 Cadence math for recurring invoices — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: keep dumb so tests feed dates and check dates. Monthly and
-quarterly only (per PM scope, closed-ended picker).
+Kept deliberately simple so tests can pass dates in and check dates out.
+Only monthly and quarterly cadences are supported (product scope: a closed
+list in the picker).
 """
 
 from datetime import date

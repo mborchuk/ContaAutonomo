@@ -2,10 +2,10 @@
 """
 Verifactu record chain — pure functions, no Flask, no DB.
 
-CAVEMAN NOTE: tamper-evidence come from two thing: every record carry
-SHA-256 of (prev_hash + canonical payload), and an HMAC-SHA256 signature over
-the record hash. Change any old record -> every later hash break -> chain
-verify go red.
+Tamper evidence comes from two things: every record carries the SHA-256 of
+(previous hash + canonical payload), and an HMAC-SHA256 signature over the
+record hash. Changing any earlier record breaks every later hash, so chain
+verification fails.
 
 STANDING RULE (F1-D1, PENDING): the exact record field list, hash algorithm
 input ordering, and signature requirements of RD 1007/2023 must be verified

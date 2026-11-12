@@ -1,0 +1,27 @@
+# Tool configuration only — the app is not packaged.
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+extend-exclude = [".venv", "instance", "backups", "logs"]
+
+[tool.ruff.lint]
+# Start small (task E-1): pyflakes plus the pycodestyle error classes that
+# catch real bugs. Tighten in later pull requests, one rule family at a time.
+select = ["E4", "E7", "E9", "F"]
+# E741 (variable named l / O / I) is style only.
+ignore = ["E741"]
+
+[tool.ruff.lint.per-file-ignores]
+# These files configure logging / the environment before importing the rest
+# on purpose (baseline; revisit when app.py is split, task E-3).
+"app.py" = ["E402"]
+"auth_routes.py" = ["E402"]
+"module_manager.py" = ["E402"]
+
+[tool.coverage.run]
+source = ["."]
+omit = [".venv/*", "tests/*"]
+
+[tool.coverage.report]
+skip_empty = true
