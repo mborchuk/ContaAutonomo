@@ -2029,12 +2029,17 @@ def settings():
                 'report_template': 'report_template',
                 'invoice_template': 'invoice_template',
                 'currency_provider': 'currency_provider',
-                'currency_provider_api_key': 'currency_provider_api_key',
                 'payment_methods': 'payment_methods',
             }
             for form_key, attr in field_map.items():
                 if form_key in request.form:
                     setattr(app_settings, attr, request.form.get(form_key, ''))
+            # Secrets are never rendered back (C-1): blank keeps the stored key.
+            if 'currency_provider_api_key' in request.form:
+                from module_manager import secret_from_form
+                app_settings.currency_provider_api_key = secret_from_form(
+                    request.form, 'currency_provider_api_key',
+                    app_settings.currency_provider_api_key or '')
 
             # Update dashboard settings (checkboxes — only from general tab)
             if active_tab == 'general':

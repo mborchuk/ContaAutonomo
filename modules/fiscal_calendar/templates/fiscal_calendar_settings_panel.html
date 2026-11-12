@@ -1,0 +1,12 @@
+<h3>Which forms do you file?</h3>
+<p style="font-size:13px;color:var(--color-text-muted);">
+    Only checked forms show on the dashboard and trigger reminders.
+    Defaults are inferred from your uploaded tax forms.
+</p>
+<div style="margin:10px 0;">
+    {%- for form in forms %}
+    <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;font-size:14px;">
+        <input type="checkbox" name="fiscal_forms" value="{{ form }}"{% if form in selected %} checked{% endif %}> Modelo {{ form }}</label>
+    {%- endfor %}
+</div>
+<input type="hidden" name="fiscal_calendar_submitted" value="1">

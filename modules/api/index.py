@@ -934,77 +934,33 @@ class ApiModule(BaseModule):
     # ------------------------------------------------------------------ #
 
     def get_settings_html(self, settings):
-        from markupsafe import escape
+        """Settings panel. The token is shown in full only once — right after
+        it is generated or rotated — and masked afterwards (C-1)."""
+        from flask import session
 
+        reveal = session.pop('api_token_reveal', False)
         token = ''
         try:
-            token = self._ensure_token()
+            token = self._get_token()
+            if not token:
+                token = self._ensure_token()
+                reveal = bool(token)
         except Exception as e:
             self.logger.debug('Token unavailable for settings render: %s', e)
 
         base = f'/api/{API_VERSION}'
-        manifest = f'{base}/openapi.json'
-        # HTML-escape the token before it touches any HTML context. The token is
-        # url-safe so this is a no-op in practice, but it removes the taint flow
-        # CodeQL reports (reflected XSS) and is correct defense-in-depth.
-        safe_token = escape(token)
-
-        if token:
-            token_block = (
-                '<p>Send this token in the <code>X-API-Token</code> header on '
-                'every request.</p>'
-                '<div style="display:flex;gap:.5rem;align-items:center;">'
-                f'<input type="text" id="api-token-field" readonly value="{safe_token}" '
-                'style="flex:1;font-family:monospace;" onclick="this.select()">'
-                '<button type="button" class="btn btn-secondary" '
-                "onclick=\"(function(b){var i=document.getElementById('api-token-field');"
-                'i.select();'
-                'if(navigator.clipboard){navigator.clipboard.writeText(i.value);}'
-                "else{document.execCommand('copy');}"
-                "var t=b.textContent;b.textContent='Copied!';"
-                'setTimeout(function(){b.textContent=t;},1200);})(this)">Copy</button>'
-                '</div>'
-                # Quick-start. Token is read from the input field above by the copy
-                # button; in these curl examples we show a placeholder rather than
-                # the raw secret to avoid echoing it into extra HTML contexts.
-                '<p style="margin-top:.75rem;">Quick start (use the token above):</p>'
-                '<pre style="white-space:pre-wrap;background:var(--color-surface-2);padding:.5rem;'
-                'border-radius:4px;">'
-                'curl -H "X-API-Token: $TOKEN" \\\n'
-                f'  $ORIGIN{base}/invoices\n\n'
-                'curl -X POST -H "X-API-Token: $TOKEN" \\\n'
-                '  -H "Content-Type: application/json" \\\n'
-                '  -d \'{"client_name":"ACME","items":'
-                '[{"description":"Work","quantity":1,"unit_price_usd":100}]}\' \\\n'
-                f'  $ORIGIN{base}/invoices'
-                '</pre>'
-                '<small>Replace <code>$ORIGIN</code> with your server URL and '
-                '<code>$TOKEN</code> with the token above.</small>'
-            )
-        else:
-            token_block = '<p><em>No token yet — save once to generate one.</em></p>'
-
-        return (
-            '<h3>AI Communication API</h3>'
-            f'<p>Base URL: <code>{base}</code> · '
-            f'Manifest: <a href="{manifest}" target="_blank"><code>{manifest}</code></a></p>'
-            '<div class="form-group">'
-            '<label>API Token</label>'
-            f'{token_block}'
-            '</div>'
-            '<div class="form-group">'
-            '<label><input type="checkbox" name="api_rotate_token" value="1"> '
-            'Rotate token on save</label>'
-            '<small style="display:block;color:var(--color-danger-fg);">Rotating invalidates the '
-            'current token immediately. Serve the API over HTTPS only '
-            '(set <code>FORCE_HTTPS=1</code>).</small>'
-            '</div>'
-        )
+        return self.render_settings_template(
+            'api_settings_panel.html',
+            base=base, manifest=f'{base}/openapi.json',
+            reveal_token=token if reveal else '',
+            token_hint=token[-4:] if token else '')
 
     def save_settings(self, settings, form):
         # Only act on this tab's submit, and only when asked to rotate.
         if 'api_rotate_token' not in form:
             return
         if form.get('api_rotate_token') == '1':
+            from flask import session
             self._rotate_token()
+            session['api_token_reveal'] = True  # show the new token once
             self.core.flash('API token rotated.', 'success')

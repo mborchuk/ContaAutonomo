@@ -30,6 +30,18 @@ def valid_capability(cap):
             and bool(cap['type']) and callable(cap.get('action')))
 
 
+def secret_from_form(form, field, current):
+    """New value for a stored secret posted from a settings form (C-1).
+
+    Secrets are never rendered back into the page, so an empty field means
+    "keep the stored value". The `<field>__clear` checkbox removes it.
+    """
+    if form.get(f'{field}__clear'):
+        return ''
+    value = (form.get(field) or '').strip()
+    return value if value else current
+
+
 class BaseModule(ABC):
     """
     Base class for all modules. Every module must inherit from this
@@ -205,6 +217,23 @@ class BaseModule(ABC):
             list of dicts: [{'id': 'ss_payments', 'title': 'Social Security', 'generator': callable}]
         """
         return []
+
+    def render_settings_template(self, filename, **context):
+        """Render `templates/<filename>` from this module's folder, auto-escaped.
+
+        Use it in get_settings_html instead of building HTML with f-strings:
+        stored values are escaped, and the shared `_secret_field.html` macro
+        can be imported. Works for modules without a blueprint.
+        """
+        from flask import render_template_string
+        module_dir = getattr(type(self), 'module_dir', None)  # set by discovery
+        if not module_dir:
+            import inspect
+            module_dir = os.path.dirname(inspect.getfile(type(self)))
+        folder = os.path.join(module_dir, 'templates')
+        with open(os.path.join(folder, filename), encoding='utf-8') as f:
+            source = f.read()
+        return render_template_string(source, **context)
 
     def get_settings_html(self, settings):
         """
@@ -1777,6 +1806,7 @@ class ModuleManager:
                         if (isinstance(attr, type) and
                             issubclass(attr, BaseModule) and
                             attr is not BaseModule):
+                            attr.module_dir = module_path
                             self.discovered[item] = attr
                             break
                 except Exception as e:
