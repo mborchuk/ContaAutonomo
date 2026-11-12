@@ -35,6 +35,9 @@ def _pfx(password=PASSWORD):
 @pytest.fixture
 def issued(loaded_modules):
     from app import Customer, Invoice, Settings, _issue_invoice, db
+    # Other tests drop and recreate the tables; forget their rows so a new
+    # Settings() does not clash with a stale one in the session.
+    db.session.expunge_all()
     settings = Settings.query.first() or Settings()
     db.session.add(settings)
     settings.business_name, settings.vat_number = 'Mi Negocio SL', 'B12345678'
