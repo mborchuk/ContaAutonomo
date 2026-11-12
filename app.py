@@ -1782,7 +1782,7 @@ def delete_invoice(id):
                if module_manager else None)
 
     from sqlalchemy.exc import IntegrityError
-    number = invoice.invoice_number
+    number, invoice_id = invoice.invoice_number, invoice.id   # values from the database
     try:
         if module_manager:
             module_manager.on_invoice_deleted(invoice)   # module rows first
@@ -1790,10 +1790,10 @@ def delete_invoice(id):
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        logger.exception('Invoice %s could not be deleted', id)
+        logger.exception('Invoice %s could not be deleted', invoice_id)
         flash('This invoice could not be deleted because other records still refer '
               'to it. Nothing was changed; the server log names the record.', 'danger')
-        return redirect(url_for('view_invoice', id=id))
+        return redirect(url_for('view_invoice', id=invoice_id))
     if pdf_key:
         try:
             module_manager.core.storage.delete(pdf_key)
