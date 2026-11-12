@@ -10,6 +10,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from repositories import ExpenseRepository, SettingsRepository
 import os
+from db_helpers import db_get, db_get_or_404
+from timeutil import utcnow
 
 
 class ExpensesModule(BaseModule):
@@ -64,7 +66,7 @@ class ExpensesModule(BaseModule):
             deductible = db.Column(db.Boolean, default=True)
             deductible_pct = db.Column(db.Float, default=100.0)
             reverse_charge = db.Column(db.String(10))  # '' / 'eu' / 'non_eu'
-            created_at = db.Column(db.DateTime, default=datetime.utcnow)
+            created_at = db.Column(db.DateTime, default=utcnow)
 
         class Contractor(db.Model):
             __tablename__ = 'contractor'
@@ -340,7 +342,7 @@ class ExpensesModule(BaseModule):
 
     def _api_get_expense(self, request, exp_id=None):
         from modules.api.index import ApiError
-        exp = self.Expense.query.get(exp_id)
+        exp = db_get(self.Expense, exp_id)
         if not exp:
             raise ApiError(404, 'not_found', f'Expense #{exp_id} not found')
         return self._api_serialize_expense(exp), 200
@@ -523,7 +525,7 @@ class ExpensesModule(BaseModule):
 
     def _download_expense(self, id):
         """Download expense file using storage key from DB"""
-        expense = self.Expense.query.get_or_404(id)
+        expense = db_get_or_404(self.Expense, id)
         if not expense.file_path:
             flash('No file attached to this expense.', 'danger')
             return redirect(url_for('expenses.expenses_index'))
@@ -535,7 +537,7 @@ class ExpensesModule(BaseModule):
 
     def _preview_expense(self, id):
         """Preview expense file inline in the browser"""
-        expense = self.Expense.query.get_or_404(id)
+        expense = db_get_or_404(self.Expense, id)
         if not expense.file_path:
             flash('No file attached to this expense.', 'danger')
             return redirect(url_for('expenses.expenses_index'))
