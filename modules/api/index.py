@@ -40,8 +40,10 @@ HEAVY_LIMIT = '10/minute'
 
 # Fields a PATCH is allowed to touch. Everything else is rejected so a client
 # can never set amounts/hashes directly (those are server-computed).
+# The status is not patchable: it changes only through the lifecycle actions
+# (POST /invoices/<id>/issue and /invoices/<id>/mark-paid).
 PATCHABLE_FIELDS = {
-    'client_name', 'status', 'due_date', 'invoice_date',
+    'client_name', 'due_date', 'invoice_date',
     'notes', 'payment_method', 'currency', 'description',
 }
 
@@ -376,6 +378,18 @@ class ApiModule(BaseModule):
         def api_invoice_delete(invoice_id):
             return module._handle(module._delete_invoice, invoice_id)
 
+        @bp.route('/invoices/<int:invoice_id>/issue', methods=['POST'])
+        @require_token
+        @limit(WRITE_LIMIT)
+        def api_invoice_issue(invoice_id):
+            return module._handle(module._issue_invoice, invoice_id)
+
+        @bp.route('/invoices/<int:invoice_id>/mark-paid', methods=['POST'])
+        @require_token
+        @limit(WRITE_LIMIT)
+        def api_invoice_mark_paid(invoice_id):
+            return module._handle(module._mark_paid, invoice_id)
+
         @bp.route('/invoices/<int:invoice_id>/pdf', methods=['GET'])
         @require_token
         @limit(HEAVY_LIMIT)
@@ -590,7 +604,12 @@ class ApiModule(BaseModule):
             raise ApiError(409, 'conflict',
                            f'invoice_number {invoice_number} already exists')
 
-        status = body.get('status', 'pending')
+        from constants import INITIAL_INVOICE_STATUS
+        status = body.get('status', INITIAL_INVOICE_STATUS)
+        if status != INITIAL_INVOICE_STATUS:
+            raise ApiError(400, 'bad_request',
+                           'New invoices are created as drafts; use '
+                           '/invoices/<id>/issue and /invoices/<id>/mark-paid')
         first = items_data[0]
         invoice = Invoice(
             invoice_number=invoice_number,
@@ -673,7 +692,7 @@ class ApiModule(BaseModule):
             inv = svc.update(invoice_id, **fields)
         except ValueError:
             raise ApiError(409, 'conflict',
-                           f'Invoice #{invoice_id} is PAID and cannot be modified')
+                           f'Invoice #{invoice_id} is issued and cannot be modified')
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _delete_invoice(self, invoice_id):
@@ -684,13 +703,45 @@ class ApiModule(BaseModule):
             raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
         if svc.is_locked(inv):
             raise ApiError(409, 'conflict',
-                           f'Invoice #{inv.invoice_number} is PAID and cannot be deleted')
+                           f'Invoice #{inv.invoice_number} is issued and cannot be deleted')
         number = inv.invoice_number
         db.session.delete(inv)  # items cascade via relationship
         db.session.commit()
         self.core.log_activity('invoice_deleted', 'invoice',
                                {'invoice_number': number, 'via': 'api'})
         return {'data': {'deleted': True, 'invoice_number': number}}, 200
+
+    def _issue_invoice(self, invoice_id):
+        from app import _issue_invoice, db
+        svc = self.core.invoice_service
+        inv = svc.get(invoice_id)
+        if not inv:
+            raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
+        if inv.status not in ('draft', 'pending'):
+            raise ApiError(409, 'conflict',
+                           f'Only draft invoices can be issued (status: {inv.status})')
+        try:
+            _issue_invoice(inv, request_obj=request)
+        except ValueError:
+            db.session.rollback()
+            raise ApiError(409, 'conflict', f'Invoice #{invoice_id} could not be issued')
+        self.core.log_activity('invoice_issued', 'invoice',
+                               {'invoice_number': inv.invoice_number, 'via': 'api'})
+        return {'data': self._serialize_invoice(inv, svc)}, 200
+
+    def _mark_paid(self, invoice_id):
+        from app import _mark_invoice_paid, db
+        svc = self.core.invoice_service
+        inv = svc.get(invoice_id)
+        if not inv:
+            raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')
+        try:
+            _mark_invoice_paid(inv)
+        except ValueError:
+            db.session.rollback()
+            raise ApiError(409, 'conflict',
+                           f'Only issued invoices can be marked paid (status: {inv.status})')
+        return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _invoice_pdf(self, invoice_id):
         svc = self.core.invoice_service
@@ -864,15 +915,25 @@ class ApiModule(BaseModule):
         paths['/invoices/{id}'] = {
             'get': {'summary': 'Get one invoice + items',
                     'responses': {'200': {'description': 'OK'}}},
-            'patch': {'summary': 'Update invoice fields (blocked if PAID)',
+            'patch': {'summary': 'Update invoice fields (blocked once issued; status not patchable)',
                       'requestBody': {'required': True,
                                       'content': {'application/json':
                                                   {'schema': {'type': 'object'}}}},
                       'responses': {'200': {'description': 'OK'},
-                                    '409': {'description': 'PAID lock'}}},
-            'delete': {'summary': 'Delete invoice (blocked if PAID)',
+                                    '409': {'description': 'Issued lock'}}},
+            'delete': {'summary': 'Delete invoice (blocked once issued)',
                        'responses': {'200': {'description': 'OK'},
-                                     '409': {'description': 'PAID lock'}}},
+                                     '409': {'description': 'Issued lock'}}},
+        }
+        paths['/invoices/{id}/issue'] = {
+            'post': {'summary': 'Issue a draft: sequential number + fiscal snapshot',
+                     'responses': {'200': {'description': 'OK'},
+                                   '409': {'description': 'Not a draft'}}},
+        }
+        paths['/invoices/{id}/mark-paid'] = {
+            'post': {'summary': 'Mark an issued (or legacy pending) invoice paid',
+                     'responses': {'200': {'description': 'OK'},
+                                   '409': {'description': 'Not issued'}}},
         }
         paths['/invoices/{id}/pdf'] = op('get', 'Download invoice PDF bytes')
         paths['/customers'] = op('get', 'List customers')

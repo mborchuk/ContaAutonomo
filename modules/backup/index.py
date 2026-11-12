@@ -283,20 +283,7 @@ class BackupModule(BaseModule):
     def _backup_key(self):
         """The deployment's backup key: BACKUP_KEY, else the key file
         (created on first use, readable by the owner only)."""
-        key = os.environ.get('BACKUP_KEY', '').strip()
-        if key:
-            return key
-        path = Path(self.core.app.config['BACKUP_KEY_FILE'])
-        if not path.exists():
-            import secrets
-            path.parent.mkdir(parents=True, exist_ok=True)
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, 'w') as f:
-                f.write(secrets.token_urlsafe(32) + '\n')
-            logger.warning('Created backup key file %s — copy it to a password '
-                           'manager; encrypted backups cannot be restored '
-                           'without it', path)
-        return path.read_text().strip()
+        return self.core.deployment_key('BACKUP_KEY', 'BACKUP_KEY_FILE', 'backup')
 
     def _encryption_password(self, cfg):
         """Password used to encrypt a new backup (None = unencrypted)."""
@@ -685,22 +672,30 @@ class BackupModule(BaseModule):
 
     # ── file listing & utilities ────────────────────────────────────
 
+    def _backup_folders(self):
+        """Folders whose files count as backups: the configured backup
+        directory, then the legacy `backups/` in the working directory.
+
+        Never `instance/`: it holds the live database and the auth config,
+        which must not be listed, downloaded, restored from or deleted here.
+        """
+        folders = [self._backup_dir()]
+        legacy = Path('backups')
+        if legacy.is_dir() and legacy.resolve() != folders[0].resolve():
+            folders.append(legacy)
+        return folders
+
     def _get_backup_list(self):
         backups = []
-        backup_dir = self._backup_dir()
         valid_ext = {'.zip', '.enc', '.encrypted', '.db'}
-        if backup_dir.exists():
-            for f in backup_dir.iterdir():
+        for folder in self._backup_folders():
+            if not folder.exists():
+                continue
+            for f in folder.iterdir():
                 if f.is_file() and (f.suffix in valid_ext
                                      or f.name.endswith('.zip.enc')):
-                    backups.append(self._backup_info(f))
-        for legacy in [Path('backups'), Path('instance')]:
-            if legacy.exists() and legacy != backup_dir:
-                for f in legacy.iterdir():
-                    if f.is_file() and (f.suffix in valid_ext
-                                         or f.name.endswith('.zip.enc')):
-                        if not any(b['filename'] == f.name for b in backups):
-                            backups.append(self._backup_info(f))
+                    if not any(b['filename'] == f.name for b in backups):
+                        backups.append(self._backup_info(f))
         backups.sort(key=lambda x: x['sort_key'], reverse=True)
         return backups
 
@@ -725,11 +720,11 @@ class BackupModule(BaseModule):
                 'type': btype, 'sort_key': sk}
 
     def _get_backup_file_path(self, filename):
-        if '..' in filename or '/' in filename:
+        if '..' in filename or '/' in filename or '\\' in filename:
             return None
-        for folder in [self._backup_dir(), Path('backups'), Path('instance')]:
+        for folder in self._backup_folders():
             p = folder / filename
-            if p.exists():
+            if p.is_file():
                 return p
         return None
 

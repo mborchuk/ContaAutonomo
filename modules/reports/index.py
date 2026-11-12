@@ -98,6 +98,7 @@ class ReportsModule(BaseModule):
             base_currency = settings.base_currency if settings and settings.base_currency else 'EUR'
             return render_template('reports.html',
                                    current_year=current_year,
+                                   years=module.core.data_years(),
                                    available_sections=available_sections,
                                    base_currency=base_currency)
 

@@ -109,8 +109,10 @@ sequenceDiagram
 | `GET` | `/api/v1/invoices` | List invoices (`status`, `page`, `per_page`) |
 | `POST` | `/api/v1/invoices` | Create invoice |
 | `GET` | `/api/v1/invoices/{id}` | One invoice + line items |
-| `PATCH` | `/api/v1/invoices/{id}` | Update fields (blocked if PAID → `409`) |
-| `DELETE` | `/api/v1/invoices/{id}` | Delete (blocked if PAID → `409`) |
+| `PATCH` | `/api/v1/invoices/{id}` | Update fields; `status` is not patchable (blocked once issued → `409`) |
+| `DELETE` | `/api/v1/invoices/{id}` | Delete (blocked once issued → `409`) |
+| `POST` | `/api/v1/invoices/{id}/issue` | Issue a draft: sequential number + fiscal snapshot (not a draft → `409`) |
+| `POST` | `/api/v1/invoices/{id}/mark-paid` | Mark an issued (or legacy `pending`) invoice paid (otherwise `409`) |
 | `GET` | `/api/v1/invoices/{id}/pdf` | Download PDF bytes |
 | `GET` | `/api/v1/customers` | List customers |
 | `GET` | `/api/v1/expenses` | List expenses (only if `expenses` enabled) |
@@ -160,7 +162,7 @@ Verbs follow REST: read = `GET`, make = `POST`, change = `PATCH`, remove =
 ```json
 // 201 Created
 {
-  "data": { "id": 42, "invoice_number": "2026-014", "status": "pending" },
+  "data": { "id": 42, "invoice_number": "2026-014", "status": "draft" },
   "links": { "self": "/api/v1/invoices/42", "pdf": "/api/v1/invoices/42/pdf" }
 }
 ```
@@ -168,6 +170,12 @@ Verbs follow REST: read = `GET`, make = `POST`, change = `PATCH`, remove =
 The server fills `amount_usd`, `amount_eur`, and `exchange_rate` via
 `currency_service`. If `invoice_number` is omitted it is auto-generated as
 `YYYY-NNN`.
+
+New invoices are always created as `draft`; a `status` other than `draft` in
+the body is rejected with `400`. The status then changes only through the
+lifecycle actions: `POST /api/v1/invoices/{id}/issue` (assigns the next
+sequential number in the series — this replaces `invoice_number` — and
+freezes the fiscal snapshot), then `POST /api/v1/invoices/{id}/mark-paid`.
 
 **Rates** — `GET /api/v1/rates?from=USD&to=EUR&date=2026-03-17`
 
