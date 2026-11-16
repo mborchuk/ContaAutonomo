@@ -326,7 +326,9 @@ Track business expenses with file uploads, categories, contractor linking, and
 a full VAT breakdown.
 
 - Routes: `/expenses/`, `/expenses/create`, `/expenses/edit/<id>`, `/expenses/delete/<id>`, download/preview per expense
-- Models: `Expense` (extends the core model), `ExpensesConfig` (category defaults)
+- Models: `Expense` (extends the core model), `ExpensesConfig` (category
+  defaults, home-office share), `ExpenseNoticeDismissal` (dismissed deduction
+  notices)
 - VAT breakdown: `net_amount`, `vat_rate`, `vat_amount`, `deductible`,
   `deductible_pct`. The form auto-splits gross + rate into net + VAT; category
   defaults apply on selection without overwriting user input. Legacy rows keep

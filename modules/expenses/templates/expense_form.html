@@ -5,6 +5,27 @@
 {% block content %}
 <h1>{{ 'Edit' if expense else 'Create' }} Expense</h1>
 
+{# G-6 — deduction checks: notices only, the expense is never changed. #}
+{% if notices or dismissed_notices %}
+<section id="deduction-notices" aria-labelledby="deduction-notices-title">
+    <h2 id="deduction-notices-title" class="sr-only">Deduction checks</h2>
+    {% for n in notices %}
+    <div class="note {{ 'note-danger' if n.severity == 'exceeds' else 'note-warning' }}">
+        <strong>{{ n.severity_label }} — {{ n.title }}.</strong> {{ n.message }}
+        <span class="fine-print">Rule: {{ n.source }}. Estimate, not tax advice.</span>
+        <form method="POST" class="inline-panel"
+              action="{{ url_for('expenses.expenses_dismiss_notice', id=expense.id, rule_id=n.rule_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Dismiss for this expense</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% for n in dismissed_notices %}
+    <p class="fine-print">Dismissed: {{ n.title }} — {{ n.message }}</p>
+    {% endfor %}
+</section>
+{% endif %}
+
 {# F11 — in-form AI receipt parse: one upload both prefills the form and
    becomes the attached receipt. Only shown when ai_parser is enabled. #}
 {% if module_manager and module_manager.modules.get('ai_parser') %}
@@ -57,6 +78,8 @@
                     <option value="Office Supplies">
                     <option value="Software">
                     <option value="Travel">
+                    <option value="Meals">
+                    <option value="Vehicle">
                     <option value="Equipment">
                     <option value="Services">
                     <option value="Utilities">
