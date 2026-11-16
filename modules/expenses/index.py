@@ -10,6 +10,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from repositories import ExpenseRepository, SettingsRepository
 import os
+from . import deduction_rules
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
@@ -86,12 +87,24 @@ class ExpensesModule(BaseModule):
             key = db.Column(db.String(100), unique=True, nullable=False)
             value = db.Column(db.Text)
 
+        class ExpenseNoticeDismissal(db.Model):
+            """G-6 — the owner dismissed one deduction notice for one expense."""
+            __tablename__ = 'expense_notice_dismissal'
+            __table_args__ = (db.UniqueConstraint('expense_id', 'rule_id'),
+                              {'extend_existing': True})
+            id = db.Column(db.Integer, primary_key=True)
+            expense_id = db.Column(db.Integer, nullable=False, index=True)
+            rule_id = db.Column(db.String(50), nullable=False)
+            dismissed_at = db.Column(db.DateTime, default=utcnow)
+
         self.Expense = Expense
         self.Contractor = Contractor
         self.Settings = Settings
         self.ExpensesConfig = ExpensesConfig
-        # expenses_config is module-owned -> let the manager create it.
-        return {'ExpensesConfig': ExpensesConfig}
+        self.NoticeDismissal = ExpenseNoticeDismissal
+        # Module-owned tables -> let the manager create them.
+        return {'ExpensesConfig': ExpensesConfig,
+                'ExpenseNoticeDismissal': ExpenseNoticeDismissal}
 
     # F4 — seed category defaults (VAT rate % + deductible %). Shipped values;
     # user override stored as JSON in expenses_config['category_defaults'].
@@ -104,6 +117,9 @@ class ExpensesModule(BaseModule):
         'Telecommunications': {'vat_rate': 21.0, 'deductible_pct': 100.0},
         'Utilities': {'vat_rate': 21.0, 'deductible_pct': 100.0},
         'Travel': {'vat_rate': 10.0, 'deductible_pct': 100.0},
+        # G-6: categories the deduction checks look at (deduction_rules.py).
+        'Meals': {'vat_rate': 10.0, 'deductible_pct': 100.0},
+        'Vehicle': {'vat_rate': 21.0, 'deductible_pct': 50.0},  # LIVA 95.Tres.2ª
         'Insurance': {'vat_rate': 0.0, 'deductible_pct': 100.0},   # exempt
         'Social Security': {'vat_rate': 0.0, 'deductible_pct': 100.0},
     }
@@ -151,12 +167,104 @@ class ExpensesModule(BaseModule):
     def get_settings_html(self, settings):
         import json
         current = json.dumps(self.get_category_defaults(), indent=2, ensure_ascii=False)
-        return self.render_settings_template('expenses_settings_panel.html', current=current)
+        area = self.home_office_area_pct()
+        return self.render_settings_template(
+            'expenses_settings_panel.html', current=current,
+            home_office_area_pct='' if area is None else f'{area:g}')
+
+    # --- Deduction checks (G-6) ------------------------------------------- #
+
+    def home_office_area_pct(self):
+        """Share of the home's floor area used for the activity (%), or None."""
+        try:
+            row = self.ExpensesConfig.query.filter_by(key='home_office_area_pct').first()
+            return float(row.value) if row and row.value not in (None, '') else None
+        except (TypeError, ValueError):
+            return None
+
+    def _expense_eur(self, exp):
+        amount = exp.amount or 0.0
+        if (exp.currency or 'EUR') == 'EUR' or not amount:
+            return amount
+        try:
+            converted, _rate, _d = self.core.currency_service.convert(
+                amount, exp.currency, 'EUR', exp.expense_date.strftime('%Y-%m-%d'))
+            if converted is not None:
+                return converted
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.warning('Currency conversion for a deduction check failed: %s', e)
+        return amount
+
+    def _dismissed(self, expense_ids):
+        """{expense_id: {rule_id, ...}} of dismissed notices."""
+        out = {}
+        if not expense_ids:
+            return out
+        rows = self.NoticeDismissal.query.filter(
+            self.NoticeDismissal.expense_id.in_(list(expense_ids))).all()
+        for row in rows:
+            out.setdefault(row.expense_id, set()).add(row.rule_id)
+        return out
+
+    def deduction_notices(self, expenses):
+        """({expense_id: [active notice]}, {expense_id: [dismissed notice]}).
+
+        Same-day meal expenses are added to the check so the daily total is
+        complete. Reads only."""
+        expenses = list(expenses)
+        meal_days = {e.expense_date for e in expenses
+                     if (e.category or '').strip().lower() in deduction_rules.MEAL_CATEGORIES}
+        pool = {e.id: e for e in expenses}
+        if meal_days:
+            for e in self.Expense.query.filter(self.Expense.expense_date.in_(meal_days)).all():
+                pool.setdefault(e.id, e)
+        found = deduction_rules.check_expenses(
+            pool.values(), home_office_area_pct=self.home_office_area_pct(),
+            to_eur=self._expense_eur)
+        wanted = {e.id for e in expenses}
+        dismissed = self._dismissed(wanted & set(found))
+        active, done = {}, {}
+        for exp_id, notices in found.items():
+            if exp_id not in wanted:
+                continue
+            for n in notices:
+                target = done if n['rule_id'] in dismissed.get(exp_id, set()) else active
+                target.setdefault(exp_id, []).append(n)
+        return active, done
+
+    def _dismiss_notice(self, id, rule_id):
+        expense = db_get_or_404(self.Expense, id)
+        if rule_id not in deduction_rules.RULES_BY_ID:
+            flash('Unknown deduction rule.', 'danger')
+            return redirect(url_for('expenses.expenses_edit', id=expense.id))
+        exists = self.NoticeDismissal.query.filter_by(
+            expense_id=expense.id, rule_id=rule_id).first()
+        if not exists:
+            self._db.session.add(self.NoticeDismissal(expense_id=expense.id, rule_id=rule_id))
+            self._db.session.commit()
+            self.core.log_activity('expense_notice_dismissed', 'expenses',
+                                   {'expense_id': expense.id, 'rule': rule_id})
+        flash('Notice dismissed for this expense.', 'success')
+        return redirect(url_for('expenses.expenses_edit', id=expense.id))
 
     def save_settings(self, settings, form):
         import json
         if 'expense_category_defaults' not in form:
             return  # guard: unrelated tab save
+        area_raw = (form.get('expense_home_office_area_pct') or '').strip().replace(',', '.')
+        try:
+            area = float(area_raw) if area_raw else None
+            if area is not None and not 0 <= area <= 100:
+                raise ValueError('out of range')
+        except ValueError:
+            self.core.flash('Home-office share not saved: enter a percentage from 0 to 100.',
+                            'danger')
+        else:
+            row = self.ExpensesConfig.query.filter_by(key='home_office_area_pct').first()
+            if not row:
+                row = self.ExpensesConfig(key='home_office_area_pct')
+                self._db.session.add(row)
+            row.value = '' if area is None else f'{area:g}'
         raw = form.get('expense_category_defaults', '').strip()
         try:
             parsed = json.loads(raw) if raw else {}
@@ -203,6 +311,11 @@ class ExpensesModule(BaseModule):
         @login_required
         def expenses_delete(id):
             return module._delete_expense(id)
+
+        @bp.route('/<int:id>/notices/<rule_id>/dismiss', methods=['POST'])
+        @login_required
+        def expenses_dismiss_notice(id, rule_id):
+            return module._dismiss_notice(id, rule_id)
 
         @bp.route('/file/<path:filename>')
         @login_required
@@ -361,12 +474,21 @@ class ExpensesModule(BaseModule):
         # contractor_id — same trick report code already use.
         contractors_map = {c.id: c.name for c in contractors}
 
+        listed = [e for quarters in expenses_by_year.values()
+                  for rows in quarters.values() for e in rows]
+        try:
+            notices, _dismissed = self.deduction_notices(listed)
+        except Exception:  # pragma: no cover - a check must never break the list
+            self.logger.exception('Deduction checks failed')
+            notices = {}
+
         return render_template('expenses.html',
                              expenses_by_year=expenses_by_year,
                              years=years,
                              contractors=contractors,
                              contractors_map=contractors_map,
-                             categories=categories)
+                             categories=categories,
+                             notices=notices)
 
     @staticmethod
     def _parse_vat_fields(form, gross):
@@ -484,15 +606,25 @@ class ExpensesModule(BaseModule):
 
         contractors = repo.get_all_contractors()
         tracked_currencies = settings_repo.get_tracked_currencies()
+        notices, dismissed = {}, {}
+        if expense is not None:
+            try:
+                notices, dismissed = self.deduction_notices([expense])
+            except Exception:  # pragma: no cover - a check must never break the form
+                self.logger.exception('Deduction checks failed')
         return render_template('expense_form.html', expense=expense,
                              contractors=contractors, tracked_currencies=tracked_currencies,
-                             category_defaults=self.get_category_defaults())
+                             category_defaults=self.get_category_defaults(),
+                             notices=notices.get(expense.id, []) if expense else [],
+                             dismissed_notices=dismissed.get(expense.id, []) if expense else [])
 
     def _delete_expense(self, id):
         """Delete an expense"""
         repo = self._get_repo()
         try:
             expense = repo.get_by_id(id)
+            # Dismissed deduction notices belong to the expense (G-6).
+            self.NoticeDismissal.query.filter_by(expense_id=expense.id).delete()
             repo.delete_with_file(self.core.app, expense, storage=self.core)
             flash('Expense deleted successfully!', 'success')
         except Exception as e:

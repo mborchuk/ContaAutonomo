@@ -326,7 +326,9 @@ Track business expenses with file uploads, categories, contractor linking, and
 a full VAT breakdown.
 
 - Routes: `/expenses/`, `/expenses/create`, `/expenses/edit/<id>`, `/expenses/delete/<id>`, download/preview per expense
-- Models: `Expense` (extends the core model), `ExpensesConfig` (category defaults)
+- Models: `Expense` (extends the core model), `ExpensesConfig` (category
+  defaults, home-office share), `ExpenseNoticeDismissal` (dismissed deduction
+  notices)
 - VAT breakdown: `net_amount`, `vat_rate`, `vat_amount`, `deductible`,
   `deductible_pct`. The form auto-splits gross + rate into net + VAT; category
   defaults apply on selection without overwriting user input. Legacy rows keep
@@ -337,8 +339,29 @@ a full VAT breakdown.
 - Nav: Expenses (with group support)
 - Reports: expense data including the VAT split; receipt files can be attached
   to report ZIPs
-- Settings: category VAT/deductibility defaults (Expenses tab)
+- Settings: category VAT/deductibility defaults and the home-office share
+  (Expenses tab)
 - API: expenses CRUD including the VAT fields
+- **Deduction checks** (`deduction_rules.py`, pure, `RULES_VERSION`): a rule
+  table, each rule with its legal citation, checked on 2026-11-16:
+  - *Home-office supplies* (category Utilities and supply names): deductible
+    at 30 % of the share of the home used for the activity (LIRPF art.
+    30.2.5ª b). The share is a setting; without it only claims above 30 % are
+    flagged.
+  - *Dietas* (category Meals, Dietas…): daily total against 26.67 / 53.34 EUR
+    in Spain and 48.08 / 91.35 EUR abroad, without / with an overnight stay
+    (LIRPF 30.2.5ª c, RIRPF 9.A.3.a). A non-EUR expense counts as abroad.
+  - *Vehicle costs* (category Vehicle, Fuel…): above 50 % needs proof of
+    exclusive use; below 50 % looks under-claimed (RIRPF 22.4, LIVA
+    95.Tres.2ª).
+
+  Notices ("Breaks a rule", "Check", "Looks under-claimed") show as badges in
+  the list and as notes on the edit form. They never change the expense. A
+  notice can be dismissed for one expense (POST
+  `/expenses/<id>/notices/<rule_id>/dismiss`); the dismissal is stored in
+  `expense_notice_dismissal` (expense, rule, time), logged as
+  `expense_notice_dismissed`, and deleted with the expense. New seed
+  categories: Meals (10 % VAT) and Vehicle (21 % VAT, 50 % deductible).
 
 ### Tax Management (`tax_management`)
 

@@ -8,3 +8,17 @@
     <textarea name="expense_category_defaults" rows="12"
               style="width: 100%; font-family: monospace; font-size: 12px;">{{ current }}</textarea>
 </div>
+
+<h3>Deduction checks</h3>
+<div class="form-group">
+    <label for="expense_home_office_area_pct">Share of your home used for the activity (% of floor area)</label>
+    <input type="number" step="0.1" min="0" max="100" id="expense_home_office_area_pct"
+           name="expense_home_office_area_pct" value="{{ home_office_area_pct }}"
+           aria-describedby="home-office-help">
+    <small class="helper-text" id="home-office-help">
+        Home supplies are deductible at 30 % of this share (LIRPF art. 30.2.5ª b).
+        Leave empty if you do not work from home; expenses are then only checked
+        against the 30 % maximum. The checks only show notices — they never change
+        an expense.
+    </small>
+</div>
