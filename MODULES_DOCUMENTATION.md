@@ -1031,8 +1031,8 @@ new ones; nothing in the core has to change.
 
   A `Function` has a name (`area.verb_object`), a summary written for people
   and AI tools, parameters (`Param`: kind `str` / `int` / `date` / `bytes`,
-  required, choices, limits), what it returns (plain JSON values, never
-  database objects), flags — `read_only`, `external` (sends data out of the
+  required, choices, limits), what it returns (plain values — JSON types and
+  `date` — never database objects), flags — `read_only`, `external` (sends data out of the
   app), `assistant` (the ledger assistant may call it; needs `read_only`, not
   `external`, plus `record_kind` and the `assistant_fields` it may send) — the
   callable, which must accept every parameter by name, and an optional browser
