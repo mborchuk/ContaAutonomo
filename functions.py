@@ -155,10 +155,7 @@ class FunctionRegistry:
     takes effect at once."""
 
     def __init__(self, module_manager=None, contracts=None):
-        if contracts is None:
-            from contracts import CONTRACTS
-            contracts = CONTRACTS
-        self.contracts = dict(contracts)
+        self.contracts = dict(contracts or {})
         self._mm = module_manager
         self._core = {}
         self._reported = set()
