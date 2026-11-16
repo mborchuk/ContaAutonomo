@@ -1068,11 +1068,19 @@ Functions today:
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter` |
+| `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
+| `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
+| `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
 | `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with the selected provider — OpenAI, Anthropic, Claude Code CLI or Kiro CLI (not Google Document AI); the key stays in the module |
 | `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever provides it |
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
-`/api/v1` invoice, customer and expense lists, and the expense form.
+`/api/v1` invoice, customer and expense lists, the expense form, the dashboard,
+Tax Provision, Tax Obligations and the Modelo 347 draft. A calendar entry is a
+dict: `form`, `period`, `period_label`, `year`, `quarter` (1-4 or None),
+`window_start`, `window_end` (`date`), `verified`. Without a calendar provider
+the dashboard and the obligations page say to enable the Fiscal Calendar, and
+the drafts show no filing date.
 
 ### Dependencies
 
@@ -1130,7 +1138,6 @@ Interfaces declared today:
 | `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
 | `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
 | `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
-| `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 
@@ -1141,8 +1148,8 @@ write its records there with these columns filled: `expense_date`, `amount`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-Code imports between modules (`fiscal_calendar.calendar_data`,
-`pdf_verify.extract_signatures`, `tax_es_forms.calculator`) are not covered:
+Code imports between modules (`pdf_verify.extract_signatures`,
+`tax_es_forms.calculator`) are not covered:
 replacing those modules means keeping those import paths. `ApiError` is in the
 core (`from api_errors import ApiError`); `modules.api.index.ApiError` is the
 same class.

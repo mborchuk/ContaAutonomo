@@ -69,11 +69,16 @@ class TaxProvisionModule(BaseModule):
         mm = getattr(self.core, 'module_manager', None)
         return mm.provider_of(module_id) if mm else None
 
-    def _deadline(self, calendar, form, year, quarter=None):
-        if calendar is None:
+    def _calendar_available(self):
+        functions = getattr(self.core, 'functions', None)
+        return functions is not None and functions.available('calendar.deadline_for')
+
+    def _deadline(self, form, year, quarter=None):
+        if not self._calendar_available():
             return None
         try:
-            return calendar.deadline_for(form, year, quarter)
+            return self.core.functions.call('calendar.deadline_for',
+                                            form=form, year=year, quarter=quarter)
         except Exception:  # pragma: no cover - defensive
             self.logger.exception('Fiscal calendar lookup failed')
             return None
@@ -90,11 +95,11 @@ class TaxProvisionModule(BaseModule):
                     reason='could not be calculated — open its page for details')
         return part
 
-    def _iva_part(self, year, quarter, calendar):
+    def _iva_part(self, year, quarter):
         part = {'id': 'iva', 'label': f'IVA {quarter}T {year}', 'form': '303',
                 'endpoint': 'tax_es_forms.draft_303',
                 'args': {'year': year, 'quarter': quarter},
-                'deadline': self._deadline(calendar, '303', year, quarter)}
+                'deadline': self._deadline('303', year, quarter)}
         forms = self._provider('tax_es_forms')
         if forms is None:
             return self._missing(part, 'Spanish Tax Forms (Modelo 303)')
@@ -107,11 +112,11 @@ class TaxProvisionModule(BaseModule):
                     direction=direction(amount, 'refund' if quarter == 4 else 'compensate'))
         return part
 
-    def _m130_part(self, year, quarter, calendar):
+    def _m130_part(self, year, quarter):
         part = {'id': 'm130', 'label': f'IRPF Modelo 130 {quarter}T {year}', 'form': '130',
                 'endpoint': 'tax_es_irpf.modelo130',
                 'args': {'year': year, 'quarter': quarter},
-                'deadline': self._deadline(calendar, '130', year, quarter)}
+                'deadline': self._deadline('130', year, quarter)}
         irpf = self._provider('tax_es_irpf')
         if irpf is None:
             return self._missing(part, 'IRPF Estimator')
@@ -123,10 +128,10 @@ class TaxProvisionModule(BaseModule):
         part.update(amount=amount, direction=direction(amount))
         return part
 
-    def _renta_part(self, year, calendar):
+    def _renta_part(self, year):
         part = {'id': 'renta', 'label': f'Renta {year} (Modelo 100, year to date)',
                 'form': '100', 'endpoint': 'tax_es_irpf.modelo100', 'args': {'year': year},
-                'deadline': self._deadline(calendar, '100', year)}
+                'deadline': self._deadline('100', year)}
         irpf = self._provider('tax_es_irpf')
         if irpf is None:
             return self._missing(part, 'IRPF Estimator')
@@ -160,16 +165,15 @@ class TaxProvisionModule(BaseModule):
         """The panel data for `today` (default: now)."""
         today = today or date.today()
         year, quarter = today.year, _quarter_of(today)
-        calendar = self._provider('fiscal_calendar')
         parts = [
-            self._iva_part(year, quarter, calendar),
-            self._m130_part(year, quarter, calendar),
-            self._renta_part(year, calendar),
+            self._iva_part(year, quarter),
+            self._m130_part(year, quarter),
+            self._renta_part(year),
             self._reta_part(today),
         ]
         summary = summarise(parts)
         summary.update(year=year, quarter=quarter, today=today,
-                       calendar_enabled=calendar is not None)
+                       calendar_enabled=self._calendar_available())
         return summary
 
     # --- Dashboard ---------------------------------------------------------- #

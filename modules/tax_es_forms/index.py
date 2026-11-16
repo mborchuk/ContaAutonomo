@@ -301,6 +301,17 @@ class TaxEsFormsModule(BaseModule):
         })
         return result
 
+    def _deadline(self, form, year, quarter=None):
+        """The filing window from `calendar.deadline_for`, or None without a provider."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('calendar.deadline_for'):
+            return None
+        try:
+            return functions.call('calendar.deadline_for', form=form, year=year, quarter=quarter)
+        except Exception:  # pragma: no cover - defensive
+            self.logger.exception('Fiscal calendar lookup failed')
+            return None
+
     def _draft_347(self, year):
         """Annual operations with third parties above the threshold."""
         from year_tables import fallback_note
@@ -309,8 +320,7 @@ class TaxEsFormsModule(BaseModule):
         result = compute_modelo_347(
             self._invoices_in(year), self._expenses_in(year), vat_rate,
             rules['threshold'], convert_expense=self._convert_to_eur)
-        from modules.fiscal_calendar.calendar_data import deadlines_for_year
-        deadline = next((e for e in deadlines_for_year(year) if e['form'] == '347'), None)
+        deadline = self._deadline('347', year)
         from .aeat_files import residence
         file_warnings = [w for w in (residence(line)[2] for line in result['lines']) if w]
         result.update({

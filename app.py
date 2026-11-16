@@ -983,13 +983,13 @@ def dashboard():
     except Exception:
         logger.exception("Failed to fetch public holidays from Nager.Date API")
 
-    # Tax deadlines: one source, the Fiscal Calendar module. None = module
-    # disabled (the dashboard then shows a hint to enable it).
+    # Tax deadlines: whatever provides calendar.upcoming_deadlines. None = no
+    # provider (the dashboard then shows a hint to enable the Fiscal Calendar).
     tax_deadlines = None
-    fiscal_calendar = module_manager.provider_of('fiscal_calendar') if module_manager else None
-    if fiscal_calendar is not None:
+    functions = module_manager.functions if module_manager else None
+    if functions is not None and functions.available('calendar.upcoming_deadlines'):
         try:
-            tax_deadlines = fiscal_calendar.upcoming_deadlines(limit=4)
+            tax_deadlines = functions.call('calendar.upcoming_deadlines', limit=4)
         except Exception:
             logger.exception('Fiscal Calendar deadlines unavailable')
             tax_deadlines = []

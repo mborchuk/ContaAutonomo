@@ -54,6 +54,16 @@ This dataset is a convenience, not an authoritative source.
 
 ## Integration with the filing workflow
 
+Other code reads the calendar through registry functions, so another calendar
+module can replace this one by declaring the same names:
+
+| Function | Returns | Called by |
+|---|---|---|
+| `calendar.upcoming_deadlines(limit?, today?)` | Open and upcoming windows of the selected forms | Dashboard |
+| `calendar.deadline_for(form, year, quarter?)` | One window, or None | Tax Provision, Modelo 347 draft |
+| `calendar.deadlines_for_year(year)` | Every window of the year, all forms | Tax Obligations |
+| `calendar.selected_forms()` | The forms ticked in Settings → Fiscal Calendar | Tax Obligations |
+
 Each deadline entry carries `form`, `year` and `quarter`, which is exactly the
 key the Tax Management obligations view uses to match recorded filings — a
 recorded filing resolves the corresponding calendar obligation.

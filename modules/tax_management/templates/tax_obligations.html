@@ -88,6 +88,11 @@
 </div>
 {% endif %}
 
+{% elif not calendar_enabled %}
+<p class="empty-state">
+    Enable the <a href="{{ url_for('settings') }}#modules">Fiscal Calendar</a> module
+    to list the filing obligations.
+</p>
 {% else %}
 <p class="empty-state">
     No obligations for {{ year }} — either the fiscal calendar has no data for this
