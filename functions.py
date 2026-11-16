@@ -286,8 +286,9 @@ class FunctionRegistry:
         owners, conflicts, problems = self._resolve()
         return {
             'provides': sorted(fn.signature for p, fn in owners.values() if p == module_id),
-            'conflicts': [{'function': name, 'owner': owner}
-                          for p, name, owner in conflicts if p == module_id],
+            'conflicts': sorted(({'function': name, 'owner': owner}
+                                 for p, name, owner in conflicts if p == module_id),
+                                key=lambda c: c['function']),
             'problems': [{'function': name, 'problem': problem}
                          for p, name, problem in problems if p == module_id],
         }
