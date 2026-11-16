@@ -391,3 +391,176 @@ def compute_modelo_390(quarterly_303):
     b["97"] = _round2(max(0.0, -last.get("71", 0.0)))
     b["108"] = _round2(b["99"] + b["103"] + b["110"])
     return {"form": "390", "boxes": b}
+
+
+# --- Modelo 347 (declaración anual de operaciones con terceras personas) --- #
+
+# Why an operation is left out; each reason names its rule (see boxes.py,
+# MODELO_347_EXCLUSIONS, for the wording shown on the page).
+EXCLUDED_CANCELLED = "cancelled"
+EXCLUDED_INTRA_EU = "intra_eu"
+EXCLUDED_RETENTION = "retention"
+EXCLUDED_INSURANCE = "insurance"
+EXCLUDED_SOCIAL_SECURITY = "social_security"
+EXCLUDED_NO_SUPPLIER = "no_supplier"
+
+_INSURANCE_CATEGORIES = {"insurance", "seguros", "seguro"}
+_SOCIAL_SECURITY_CATEGORIES = {"social security", "seguridad social", "reta"}
+
+
+def _invoice_total_eur(invoice, vat_rate):
+    """Invoice amount VAT included (Modelo 347 declares totals with IVA)."""
+    base, cuota = _invoice_output_vat(invoice, vat_rate)
+    if not base:
+        base = _invoice_base_eur(invoice)
+    return base + (cuota or 0.0)
+
+
+def _has_retention(invoice):
+    return bool(getattr(invoice, "irpf_retention_amount", None)
+                or getattr(invoice, "irpf_retention_pct", None))
+
+
+def _customer_identity(invoice):
+    """(key, name, nif, country) of the customer of an invoice, preferring
+    the snapshot frozen at issue."""
+    import json
+    snap = {}
+    raw = getattr(invoice, "snap_customer", None)
+    if raw:
+        try:
+            snap = json.loads(raw) or {}
+        except (ValueError, TypeError):
+            snap = {}
+    customer = getattr(invoice, "customer", None)
+    name = (snap.get("name") or getattr(customer, "name", None)
+            or getattr(invoice, "client_name", "") or "")
+    nif = snap.get("vat_number") or getattr(customer, "vat_number", None) or ""
+    country = snap.get("country") or getattr(customer, "country", None) or ""
+    nif_clean = "".join(ch for ch in nif if ch.isalnum()).upper()
+    key = ("customer", getattr(invoice, "customer_id", None) or nif_clean or name.strip().lower())
+    return key, name, nif_clean, country
+
+
+def compute_modelo_347(invoices, expenses, vat_rate, threshold,
+                       convert_expense=None):
+    """Modelo 347 for one natural year: counterparties above `threshold`.
+
+    Sales (key B) are grouped by customer, purchases (key A) by supplier
+    (the expense's contractor), each VAT included and split by calendar
+    quarter. Sales and purchases are counted separately against the
+    threshold (RD 1065/2007, art. 33.1). A counterparty is listed only when
+    its total is strictly above the threshold (3,005.06 EUR: 3,005.07 is
+    listed, 3,005.06 is not).
+
+    Left out, with the reason recorded in `excluded`:
+      - cancelled invoices;
+      - sales to EU business customers and purchases with EU reverse charge:
+        declared on Modelo 349 (art. 33.2.i);
+      - invoices with an IRPF retention: the customer reports them on
+        Modelo 190 (art. 33.2.i; DGT V0766-23);
+      - insurance premiums: declared by the insurer (art. 33.1);
+      - Social Security contributions: not a supply of goods or services;
+      - expenses without a supplier: they cannot be attributed (a check).
+
+    Purchases from suppliers outside the EU with reverse charge are listed
+    and flagged `reverse_charge` (the form's "inversión del sujeto pasivo").
+
+    Args:
+        invoices, expenses: invoice-/expense-like objects of the year.
+        vat_rate: output VAT rate as a fraction (for invoices without a
+            snapshot).
+        threshold: the amount in EUR to exceed (year table in boxes.py).
+        convert_expense: optional fn(amount, currency, when) -> EUR.
+    """
+    groups = {}
+    excluded = {}
+
+    def exclude(reason, name, amount):
+        key = (reason, name)
+        row = excluded.setdefault(key, {"reason": reason, "name": name,
+                                        "amount": 0.0, "count": 0})
+        row["amount"] += amount
+        row["count"] += 1
+
+    def add(kind, key, name, nif, country, quarter, amount, reverse_charge=False,
+            postal_code=""):
+        group = groups.setdefault((kind, key), {
+            "key": "B" if kind == "sale" else "A", "name": name, "nif": nif,
+            "country": country, "postal_code": postal_code or "",
+            "quarters": [0.0, 0.0, 0.0, 0.0],
+            "reverse_charge": False, "operations": 0})
+        group["quarters"][quarter - 1] += amount
+        group["operations"] += 1
+        group["reverse_charge"] = group["reverse_charge"] or reverse_charge
+        if nif and not group["nif"]:
+            group["nif"] = nif
+
+    for inv in invoices:
+        d = getattr(inv, "invoice_date", None)
+        if d is None:
+            continue
+        key, name, nif, country = _customer_identity(inv)
+        amount = _invoice_total_eur(inv, vat_rate)
+        if not _active(inv):
+            exclude(EXCLUDED_CANCELLED, name, amount)
+        elif _customer_tax_type(inv) == "eu_b2b":
+            exclude(EXCLUDED_INTRA_EU, name, amount)
+        elif _has_retention(inv):
+            exclude(EXCLUDED_RETENTION, name, amount)
+        else:
+            add("sale", key, name, nif, country, quarter_of(d), amount,
+                postal_code=getattr(getattr(inv, "customer", None), "postal_code", None))
+
+    for exp in expenses:
+        d = getattr(exp, "expense_date", None)
+        if d is None:
+            continue
+        gross = getattr(exp, "amount", None) or 0.0
+        if convert_expense is not None:
+            gross = convert_expense(gross, getattr(exp, "currency", "EUR"), d)
+        contractor = getattr(exp, "contractor", None)
+        name = getattr(contractor, "name", None) or ""
+        category = (getattr(exp, "category", None) or "").strip().lower()
+        reverse_charge = getattr(exp, "reverse_charge", None) or ""
+        if category in _SOCIAL_SECURITY_CATEGORIES:
+            exclude(EXCLUDED_SOCIAL_SECURITY, name or "Seguridad Social", gross)
+        elif category in _INSURANCE_CATEGORIES:
+            exclude(EXCLUDED_INSURANCE, name or "(insurer)", gross)
+        elif reverse_charge == "eu":
+            exclude(EXCLUDED_INTRA_EU, name or "(EU supplier)", gross)
+        elif contractor is None:
+            desc = (getattr(exp, "description", None) or "").splitlines()
+            exclude(EXCLUDED_NO_SUPPLIER, (desc[0][:40] if desc else "") or "(no description)",
+                    gross)
+        else:
+            nif = "".join(ch for ch in (getattr(contractor, "vat_number", None) or "")
+                          if ch.isalnum()).upper()
+            add("purchase", ("contractor", getattr(contractor, "id", None) or name),
+                name, nif, getattr(contractor, "country", None) or "",
+                quarter_of(d), gross, reverse_charge=reverse_charge == "non_eu",
+                postal_code=getattr(contractor, "postal_code", None))
+
+    lines, below = [], []
+    for group in groups.values():
+        group["quarters"] = [_round2(q) for q in group["quarters"]]
+        group["total"] = _round2(sum(group["quarters"]))
+        (lines if group["total"] > threshold else below).append(group)
+    lines.sort(key=lambda g: (g["key"], g["name"].lower()))
+    below.sort(key=lambda g: (g["key"], -g["total"]))
+
+    warnings = [f'{g["name"]}: no NIF recorded — the line cannot be filed without it'
+                for g in lines if not g["nif"]]
+    excluded_rows = [dict(row, amount=_round2(row["amount"]))
+                     for row in sorted(excluded.values(),
+                                       key=lambda r: (r["reason"], r["name"].lower()))]
+    return {
+        "form": "347",
+        "threshold": threshold,
+        "lines": lines,
+        "below_threshold": below,
+        "excluded": excluded_rows,
+        "boxes": {"count": len(lines),
+                  "total": _round2(sum(g["total"] for g in lines))},
+        "meta": {"warnings": warnings},
+    }

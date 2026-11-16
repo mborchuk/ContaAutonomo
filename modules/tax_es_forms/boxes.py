@@ -147,3 +147,52 @@ def modelo_390_boxes_for_year(year):
     """Return (table_year, labels, is_fallback) for the 390 casillas."""
     from year_tables import resolve
     return resolve(MODELO_390_TABLES, year)
+
+
+# --- Modelo 347 (declaración anual de operaciones con terceras personas) ---
+# Threshold and exclusions checked on 16 November 2026 against:
+#   - Real Decreto 1065/2007 (RGAT), arts. 31–33: counterparties above
+#     3,005.06 EUR in the natural year, sales and purchases counted
+#     separately, split by quarter; exclusions in art. 33.2.
+#   - AEAT, "Manual de actividades económicas", 8.2 Modelo 347 (IVA included,
+#     filed in February for the previous year), and the Modelo 347
+#     instructions (Orden EHA/3012/2008, amended by Orden HAC/1431/2025).
+#   - DGT V0766-23 / V0923-23: invoices with an IRPF retention are not
+#     declared (the payer declares them on Modelo 190).
+MODELO_347_TABLES = {
+    2025: {
+        "threshold": 3005.06,
+        "source": ("RD 1065/2007, art. 33; AEAT Modelo 347 instructions "
+                   "(Orden EHA/3012/2008, amended by Orden HAC/1431/2025)"),
+    },
+}
+
+# Wording of each exclusion on the 347 page: (title, rule).
+MODELO_347_EXCLUSIONS = {
+    "cancelled": ("Cancelled invoices", "not an operation"),
+    "intra_eu": ("Intra-EU operations (EU business customers, EU reverse charge)",
+                 "declared on Modelo 349 — RD 1065/2007 art. 33.2.i"),
+    "retention": ("Invoices with an IRPF retention",
+                  "the customer declares them on Modelo 190 — art. 33.2.i, DGT V0766-23"),
+    "insurance": ("Insurance premiums",
+                  "the insurer declares insurance operations — art. 33.1"),
+    "social_security": ("Social Security contributions",
+                        "not a supply of goods or services"),
+    "no_supplier": ("Expenses without a supplier",
+                    "cannot be attributed — assign a contractor to include them"),
+}
+
+# Not covered by the 347 check (listed on the page).
+MODELO_347_OUT_OF_SCOPE = [
+    "Cash received above 6,000 EUR per counterparty (importe percibido en metálico)",
+    "Rent of business premises (arrendamiento de local de negocio) and property transfers",
+    "Purchases with an IRPF retention (the app does not record retentions on expenses)",
+    "Criterio de caja, cobros por cuenta de terceros, subsidies",
+    "Taxpayers in the SII do not file Modelo 347",
+]
+
+
+def modelo_347_rules_for_year(year):
+    """Return (table_year, {'threshold', 'source'}, is_fallback)."""
+    from year_tables import resolve
+    return resolve(MODELO_347_TABLES, year)

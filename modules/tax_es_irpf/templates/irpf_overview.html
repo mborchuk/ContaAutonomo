@@ -45,4 +45,6 @@
   <p style="color: #888;"><em>{{ note }}</em></p>
 {% endfor %}
 {% endif %}
+<p><a href="{{ url_for('tax_es_irpf.simulator') }}" class="btn btn-secondary">🔮 What-if simulator</a>
+  <span class="fine-print">Try a change in income, expenses, comunidad or RETA base — nothing is saved.</span></p>
 {% endblock %}

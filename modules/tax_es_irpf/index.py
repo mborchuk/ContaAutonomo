@@ -51,8 +51,9 @@ class TaxEsIrpfModule(BaseModule):
 
     @property
     def interface(self):
-        # Used by Spanish Tax Forms (Modelo 303 equipment, Modelo 130 draft).
-        return ['is_equipment', 'modelo130_boxes']
+        # Spanish Tax Forms: Modelo 303 equipment, Modelo 130 draft.
+        # Tax Provision: the Modelo 130 payment and the Modelo 100 result.
+        return ['is_equipment', 'modelo130_boxes', 'modelo100_result']
 
     @property
     def name(self):
@@ -459,6 +460,165 @@ class TaxEsIrpfModule(BaseModule):
             '07': result.summary['modelo130_due'],
         }, rate
 
+    def modelo100_result(self, year):
+        """Modelo 100 estimate for `year` with the profile's comunidad, over
+        the year's data recorded so far (`IrpfResult.as_dict()`). The result
+        to pay (> 0) or refund (< 0) is `summary['modelo100_diferencial']`;
+        it already credits retenciones and the year's Modelo 130 payments.
+        Raises ValueError for a foral region."""
+        profile = self._get_profile()
+        region = profile.region or self._params(year).get('default_region', 'valenciana')
+        return self._engine(year).compute_modelo100(
+            self._build_modelo100_input(year, profile), region).as_dict()
+
+    # ── What-if simulator (G-3) — reads only, saves nothing ─────────────
+
+    def _read_profile(self):
+        """The saved profile, or an unsaved default one: unlike _get_profile
+        this never writes, so the simulator leaves the database untouched."""
+        return self.IrpfProfile.query.first() or self.IrpfProfile(
+            region='valenciana', regime='eds', is_professional=True, age=0,
+            descendientes=0, descendientes_menor3=0, ascendientes65=0,
+            ascendientes75=0, uses_mutualidad=False, low_income_deduction=False,
+            apply_dificil_justif_m130=False, eds_eligible=True,
+            inicio_reduction_eligible=False, regional_deduction_inputs_json='{}',
+            declaration_mode='individual', family_unit='biparental',
+            spouse_income=0.0, spouse_deductible_expenses=0.0,
+            spouse_retenciones=0.0, spouse_pagos_fraccionados=0.0,
+            equipment_method='depreciate', depreciation_rate=25.0,
+            equipment_threshold=300.0, equipment_categories='Equipment')
+
+    def _reta_advisor(self):
+        mm = getattr(self.core, 'module_manager', None)
+        return mm.provider_of('reta_advisor') if mm else None
+
+    # Comunidades of the common regime. Those without a scale in the year's
+    # params are computed with the state supletoria scale, and the engine says
+    # so in a note; foral regions are not offered (not modelled).
+    COMMON_REGIME_REGIONS = (
+        'andalucia', 'aragon', 'asturias', 'baleares', 'canarias', 'cantabria',
+        'castilla_la_mancha', 'castilla_y_leon', 'cataluna', 'ceuta', 'extremadura',
+        'galicia', 'la_rioja', 'madrid', 'melilla', 'murcia', 'valenciana')
+
+    def simulator_regions(self, year):
+        params = self._params(year)
+        loaded = {r for r in params.get('regional_scales', {}) if r != 'supletoria'}
+        foral = set(params.get('foral_regions', []))
+        return sorted((loaded | set(self.COMMON_REGIME_REGIONS)) - foral)
+
+    def simulator_baseline(self, today=None):
+        """The real figures of today's year for the simulator, and the RETA
+        hook (None when the RETA advisor is not enabled)."""
+        from .simulator import Baseline
+        today = today or date.today()
+        year = today.year
+        profile = self._read_profile()
+        params = self._params(year)
+        m100_input = self._build_modelo100_input(year, profile)
+        quarter = self._current_quarter(today)
+        closed = self._build_modelo130_input(year, quarter, profile).prior_payments
+
+        settings = self.core.get_settings()
+        quota = (getattr(settings, 'social_security_monthly', 0.0) or 0.0) if settings else 0.0
+        reta = self._reta_advisor()
+        rate = None
+        reta_fn = None
+        if reta is not None:
+            rate = reta.projection(today)['contribution_rate_pct']
+
+            def reta_fn(income_delta, expense_delta, monthly_quota):
+                return reta.projection(today, income_delta, expense_delta, monthly_quota)
+
+        cap = None
+        if profile.uses_mutualidad:
+            cap = params['reta'].get('mutualidad_deduction_cap')
+        base = Baseline(
+            year=year, m100_input=m100_input,
+            region=profile.region or params.get('default_region', 'valenciana'),
+            reta_in_irpf=self._sum_reta(year, profile, date(year, 12, 31)),
+            paid_130_closed=closed, months_remaining=12 - today.month,
+            monthly_quota=quota, contribution_rate_pct=rate, reta_cap=cap,
+            eds_eligible=bool(profile.eds_eligible),
+            apply_dificil_justif_m130=bool(profile.apply_dificil_justif_m130),
+            low_income_deduction=bool(profile.low_income_deduction))
+        return base, reta_fn
+
+    def simulate(self, scenario=None, today=None):
+        """Real and scenario results plus their difference. `scenario` None
+        means no changes. Raises ValueError for a foral comunidad."""
+        from dataclasses import replace as dc_replace
+        from .simulator import compare, run, unchanged
+        base, reta_fn = self.simulator_baseline(today)
+        profile = self._read_profile()
+        params = self._params(base.year)
+        engine = self._engine(base.year)
+
+        def minimo_fn(region):
+            return minimo_for_region(self._profile_dict(profile), params, region)
+
+        def regional_deductions_fn(region):
+            # A transient copy: the saved profile is never changed.
+            other = self.IrpfProfile(
+                region=region,
+                regional_deduction_inputs_json=profile.regional_deduction_inputs_json)
+            return self._regional_deductions_amount(base.year, other)
+
+        real = run(engine, base, unchanged(base), minimo_fn, regional_deductions_fn, reta_fn)
+        scen = scenario or unchanged(base)
+        result = run(engine, base, scen, minimo_fn, regional_deductions_fn, reta_fn)
+        return {
+            'base': base, 'scenario': dc_replace(scen), 'real': real,
+            'simulated': result, 'difference': compare(real, result),
+        }
+
+    def _render_simulator(self, args):
+        from .simulator import Scenario, quota_from_base, unchanged
+        today = date.today()
+        year = today.year
+        regions = self.simulator_regions(year)
+        errors = []
+        try:
+            base, _reta_fn = self.simulator_baseline(today)
+        except ValueError as e:  # foral comunidad in the profile
+            return render_template('irpf_simulator.html', year=year, error=str(e),
+                                   regions=regions)
+        scenario = unchanged(base)
+
+        def number(name, current):
+            raw = (args.get(name) or '').strip().replace(',', '.')
+            if raw == '':
+                return current
+            try:
+                value = float(raw)
+            except ValueError:
+                errors.append(f'{name.replace("_", " ").capitalize()} must be a number.')
+                return current
+            if value < 0 or value > 100_000_000:
+                errors.append(f'{name.replace("_", " ").capitalize()} must be between 0 '
+                              'and 100,000,000.')
+                return current
+            return value
+
+        scenario.income = number('income', base.income)
+        scenario.expenses = number('expenses', base.expenses)
+        region = (args.get('region') or base.region).strip()
+        if region not in regions and region != base.region:
+            errors.append('Unknown comunidad autónoma.')
+            region = base.region
+        scenario.region = region
+        if base.contribution_rate_pct:
+            reta_base = number('reta_base', base.reta_base)
+            if reta_base != base.reta_base:
+                scenario.monthly_quota = quota_from_base(reta_base, base.contribution_rate_pct)
+        try:
+            outcome = self.simulate(Scenario(**vars(scenario)), today)
+            error = None
+        except ValueError as e:
+            outcome, error = None, str(e)
+        return render_template('irpf_simulator.html', year=year, regions=regions,
+                               base=base, scenario=scenario, outcome=outcome,
+                               errors=errors, error=error, today=today)
+
     def _current_quarter(self, today=None):
         today = today or date.today()
         return (today.month - 1) // 3 + 1
@@ -486,6 +646,12 @@ class TaxEsIrpfModule(BaseModule):
         @login_required
         def modelo100(year):
             return module._render_modelo100(year)
+
+        @bp.route('/simulator')
+        @login_required
+        def simulator():
+            # GET only: a scenario is never saved.
+            return module._render_simulator(request.args)
 
         app.register_blueprint(bp)
 

@@ -19,6 +19,7 @@ from module_manager import BaseModule
 from .calendar_data import (
     CALENDAR_VERSION,
     all_deadlines,
+    deadlines_for_year,
     upcoming,
     available_forms,
 )
@@ -38,8 +39,9 @@ class FiscalCalendarModule(BaseModule):
 
     @property
     def interface(self):
-        # Used by Tax Forms for its payment projection.
-        return ['_selected_forms']
+        # _selected_forms: Tax Forms (payment projection); upcoming_deadlines:
+        # the dashboard; deadline_for: Tax Provision.
+        return ['_selected_forms', 'upcoming_deadlines', 'deadline_for']
 
     @property
     def name(self):
@@ -47,7 +49,7 @@ class FiscalCalendarModule(BaseModule):
 
     @property
     def description(self):
-        return ('Spanish AEAT filing deadlines (Modelo 303/130/349/111/390/100) '
+        return ('Spanish AEAT filing deadlines (Modelo 303/130/349/111/390/347/100) '
                 'as a dashboard panel with reminders. Local data, no external API.')
 
     @property
@@ -127,6 +129,15 @@ class FiscalCalendarModule(BaseModule):
         compact "Tax Deadlines" column on the dashboard."""
         items = upcoming(366, today=today, selected_forms=self._selected_forms())
         return items[:limit]
+
+    def deadline_for(self, form, year, quarter=None):
+        """The filing window of one return: `form` for fiscal `year` and
+        `quarter` (None for an annual form). None when the calendar has no
+        such entry. Independent of the forms selected for reminders."""
+        for entry in deadlines_for_year(year):
+            if entry['form'] == form and entry['quarter'] == quarter:
+                return entry
+        return None
 
     def get_dashboard_panels(self):
         items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())

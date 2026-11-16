@@ -12,13 +12,16 @@ nothing and provides no tax advice — every page carries a non-dismissible
 2. [Box mapping](#box-mapping)
 3. [How the figures are computed](#how-the-figures-are-computed)
 4. [Modelo 390 (annual summary)](#modelo-390-annual-summary)
-5. [Scope exclusions](#scope-exclusions)
+5. [Modelo 347 (operations with third parties)](#modelo-347-operations-with-third-parties)
+6. [AEAT import files](#aeat-import-files)
+7. [Scope exclusions](#scope-exclusions)
 
 ## Features
 
 - Draft pages per quarter: `/tax-forms-draft/303/<year>/<q>` and
   `/tax-forms-draft/130/<year>/<q>`, with an index at `/tax-forms-draft/`
 - Annual VAT summary: `/tax-forms-draft/390/<year>` (Modelo 390)
+- Operations with third parties: `/tax-forms-draft/347/<year>` (Modelo 347 check)
 - Copy-to-clipboard per box; print / save-as-PDF via a print stylesheet
 - Dashboard Tax Obligations panel: current-quarter running 303/130 position
   (display-only — it never changes the panel's grand total)
@@ -114,6 +117,48 @@ fiscal year uses that table and shows a "verify" banner until it is reviewed.
 The page lists what is out of scope (other VAT rates, intra-EU goods,
 imports, special regimes, exempt operations, SII taxpayers) and flags invoices
 at rates other than 21 %.
+
+## Modelo 347 (operations with third parties)
+
+`compute_modelo_347()` lists, for one natural year, every customer (key B)
+and supplier (key A) with whom the operations, **IVA included**, add up to
+**more than 3,005.06 EUR**, with the quarterly split the form asks for. Sales
+and purchases are counted separately. Page `/tax-forms-draft/347/<year>`; API
+`GET /api/v1/m/tax_es_forms/draft/347/<year>`. Filing window: February of the
+next year (Fiscal Calendar, form `347`).
+
+Sources, checked on 16 November 2026: RD 1065/2007 (RGAT) arts. 31–33; AEAT
+*Manual de actividades económicas* 8.2 and the Modelo 347 instructions (Orden
+EHA/3012/2008, amended by Orden HAC/1431/2025); DGT V0766-23 and V0923-23.
+The threshold is year-keyed (`MODELO_347_TABLES` in `boxes.py`).
+
+| Operation | Treatment | Rule |
+|-----------|-----------|------|
+| Invoice to a Spanish (`standard`) customer | Counted: base + IVA from the issue snapshot | art. 33.1 |
+| Invoice to a customer outside the EU (`non_eu`) | Counted (no Spanish VAT); country shown | art. 33.1 (non-subject operations are included) |
+| Invoice to an EU business customer (`eu_b2b`) | Excluded | Modelo 349, art. 33.2.i |
+| Invoice with an IRPF retention | Excluded | the customer declares it on Modelo 190 — art. 33.2.i, DGT V0766-23 |
+| Cancelled invoice | Excluded | not an operation |
+| Expense with a contractor | Counted: gross amount in EUR, grouped by contractor | art. 33.1 |
+| Expense with EU reverse charge | Excluded | Modelo 349, art. 33.2.i |
+| Expense with non-EU reverse charge | Counted and flagged ISP | the form's "inversión del sujeto pasivo" mark |
+| Category Insurance | Excluded | the insurer declares insurance operations — art. 33.1 |
+| Category Social Security | Excluded | not a supply of goods or services |
+| Expense without a contractor | Excluded and listed | cannot be attributed: assign a contractor |
+
+A listed counterparty without a NIF gets a warning. The page shows every
+exclusion with its rule, the counterparties below the threshold, and what the
+check does not cover (cash above 6,000 EUR, rent of business premises,
+purchases with retention, criterio de caja).
+
+## AEAT import files
+
+Each draft page (303, 130, 349, 390, 347) downloads the draft as the file the
+AEAT Sede imports, following the official record layout of the exercise
+(`aeat_files.py`, layouts in `aeat_layouts/`). The files are **not
+validated**: the Sede validates them on import, with the taxpayer's
+certificate. Supported models, the field mapping, what to complete in the
+form and the out-of-scope models: [AEAT_FILES.md](AEAT_FILES.md).
 
 ## Scope exclusions
 

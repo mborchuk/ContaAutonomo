@@ -20,7 +20,7 @@ orden de cotización. Years without a table use the latest earlier one and the
 advisor shows a "verify" note.
 """
 
-BRACKET_TABLE_VERSION = "2026.1"
+BRACKET_TABLE_VERSION = "2026.2"
 
 # Generic deduction applied to net yield before bracket lookup (7% general,
 # 3% for corporate autónomos — setting on the module page).
@@ -50,6 +50,22 @@ BRACKETS = [
 BRACKET_TABLES = {
     2026: BRACKETS,
 }
+
+# Total RETA contribution rate on the chosen base (quota = base × rate).
+# 2026: 31.50 % = contingencias comunes 28.30 + profesionales 1.30 + cese de
+# actividad 0.90 + formación profesional 0.10 + MEI 0.90, per the 2026
+# cotización order (Orden PJC/297/2026, BOE 31 March 2026). VERIFY each year
+# against the Seguridad Social; used by the IRPF what-if simulator to turn a
+# base into a monthly quota.
+CONTRIBUTION_RATES = {
+    2026: 31.50,
+}
+
+
+def contribution_rate_for_year(year):
+    """Return (table_year, rate_pct, is_fallback)."""
+    from year_tables import resolve
+    return resolve(CONTRIBUTION_RATES, year)
 
 
 def brackets_for_year(year):

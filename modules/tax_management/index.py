@@ -300,6 +300,7 @@ class TaxManagementModule(BaseModule):
             '303': {'name': 'Modelo 303', 'quarterly': True},
             '130': {'name': 'Modelo 130', 'quarterly': True},
             '390': {'name': 'Modelo 390', 'quarterly': False},
+            '347': {'name': 'Modelo 347', 'quarterly': False},
             '100': {'name': 'Modelo 100', 'quarterly': False},
         }
 
