@@ -10,9 +10,10 @@ be written, the transition is rolled back.
 
 1. [How the chain works](#how-the-chain-works)
 2. [What is implemented](#what-is-implemented)
-3. [Signing key](#signing-key)
-4. [Official specifications](#official-specifications)
-5. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
+3. [When the obligation starts](#when-the-obligation-starts)
+4. [Signing key](#signing-key)
+5. [Official specifications](#official-specifications)
+6. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
 
 ## How the chain works
 
@@ -41,9 +42,27 @@ alarm when the chain is broken.
 |------|---------|
 | Record chain | `chain.py` — pure functions; SHA-256 linkage, HMAC-SHA256 signature with a dedicated key (see [Signing key](#signing-key)), full-chain verification |
 | Lifecycle hooks | `on_invoice_issued` → *alta*, `on_invoice_annulled` → *anulación*; rectificative linkage is embedded in the alta payload; hooks are issue-blocking |
-| Status page | `/verifactu/` — chain health, record count, latest records |
+| Status page | `/verifactu/` — chain health, record count, latest records, obligation dates |
 | Export | `/verifactu/export` — NDJSON of the full record log; records live in the normal database and are therefore covered by the backup module |
 | QR code | AEAT-style payload (`nif`, `numserie`, `fecha`, `importe`) rendered as SVG with ReportLab (no extra dependency); shown on the invoice view panel |
+
+## When the obligation starts
+
+Checked on 16 November 2026. The same table, with its sources, is in
+`obligations.py` and on the status page.
+
+| Who | From | Status | Source |
+|-----|------|--------|--------|
+| Taxpayers of the Impuesto sobre Sociedades | 1 January 2027 | In force | Real Decreto-ley 15/2025, de 2 de diciembre (BOE-A-2025-24446), amending RD 1007/2023 |
+| Autónomos and every other obligated taxpayer | 1 July 2027 | In force | Real Decreto-ley 15/2025 |
+| All obligated taxpayers | October 2028 | **Announced, not yet in force** | Ministerio de Hacienda, nota informativa of 5 October 2026; no norm in the BOE yet |
+
+Until a norm carrying out the October 2028 announcement is published, the
+2027 dates apply. When it is published, follow the update procedure in the
+docstring of `obligations.py`.
+
+B2B e-invoicing has its own dates (6 October 2027 and 6 October 2028); see
+[`modules/einvoice/README.md`](../einvoice/README.md).
 
 ## Signing key
 
