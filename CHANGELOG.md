@@ -165,6 +165,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
+- **Ledger Assistant with a CLI agent**: with Claude Code CLI or Kiro CLI
+  selected in the AI Parser, the assistant said the provider "cannot answer
+  questions". The AI Parser now answers `ai.complete_text` with the selected
+  CLI agent too — no tools, an empty temporary directory, the message on
+  stdin. Only Google Document AI cannot answer text.
 - **AI Parser PDF support** (#144): PDFs are sent as documents (Anthropic `document`
   block, OpenAI `file` part) instead of as images, which the providers
   rejected; the file type comes from its bytes, and GIF and WebP are accepted.

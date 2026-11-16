@@ -1068,7 +1068,7 @@ Functions today:
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter` |
-| `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with OpenAI or Anthropic; the key stays in the module |
+| `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with the selected provider — OpenAI, Anthropic, Claude Code CLI or Kiro CLI (not Google Document AI); the key stays in the module |
 | `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever provides it |
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the

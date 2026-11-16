@@ -447,8 +447,6 @@ TEXT_SETTINGS = {'provider': 'openai', 'display_name': 'OpenAI (GPT)',
 @pytest.mark.parametrize('settings,fragment', [
     ({'provider': 'google_docai', 'display_name': 'Google Document AI', 'api_key': ''},
      'cannot answer questions'),
-    ({'provider': 'kiro_cli', 'display_name': 'Kiro CLI', 'api_key': ''},
-     'cannot answer questions'),
     ({'provider': 'anthropic', 'display_name': 'Anthropic (Claude)', 'api_key': ''},
      'No API key'),
 ])

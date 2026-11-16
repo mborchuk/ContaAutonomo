@@ -1,8 +1,9 @@
 """
-Text completion with the configured provider — the `ai.complete_text` and
-`ai.text_status` registry functions. Only OpenAI and Anthropic answer text;
-Google Document AI and the CLI agents read documents only. The API key stays
-in this module: callers get the reply text, never the key.
+Text completion with an API provider for the `ai.complete_text` and
+`ai.text_status` registry functions: OpenAI and Anthropic. The CLI agents
+answer text through `cli_agents.CLIAgentProvider.complete_text`; Google
+Document AI reads documents only. The API key stays in this module: callers
+get the reply text, never the key.
 """
 from .catalog import DEFAULT_MODELS
 
@@ -16,7 +17,8 @@ def missing_reason(settings):
     name = settings.get('display_name') or provider
     if provider not in TEXT_PROVIDERS:
         return (f'The AI Parser uses {name}, which reads documents but cannot answer '
-                'questions. Choose OpenAI or Anthropic in Settings → AI Parser.')
+                'questions. Choose OpenAI, Anthropic, Claude Code CLI or Kiro CLI in '
+                'Settings → AI Parser.')
     if not settings.get('api_key'):
         return f'No API key is stored for {name}. Add one in Settings → AI Parser.'
     return None

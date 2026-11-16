@@ -7,7 +7,8 @@ the module is off until enabled in Settings → Modules.
 It names no other module. It reads with the registry functions whose
 declaration allows the assistant (`functions.Function`, `assistant=True`),
 and asks with `ai.complete_text` and `ai.text_status` — today provided by the
-AI Parser with OpenAI or Anthropic. A module that declares the same functions,
+AI Parser with whichever provider is selected there (OpenAI, Anthropic, Claude
+Code CLI or Kiro CLI). A module that declares the same functions,
 also one from outside this repository, replaces either side without a change
 here: with the AI Parser disabled it is used; with both enabled the first to
 register owns the names, and the other's card in Settings → Modules says so.

@@ -33,6 +33,7 @@ TIMEOUT_ENV = 'AI_PARSER_CLI_TIMEOUT'
 DEFAULT_TIMEOUT = 180
 _MAX_PDF_TEXT = 100_000  # bytes
 KIRO_AGENT = 'contaautonomo-ai-parser'
+KIRO_TEXT_AGENT = 'contaautonomo-ai-text'
 
 _MODEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,99}$')
 _ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
@@ -132,20 +133,45 @@ class CLIAgentProvider(BaseAIProvider):
                 fh.write(file_data)
             self.prepare(workdir)
             args, stdin = self.command(self.binary_path(), self.prompt(doc_type, name, mime, file_data), model)
-            feed = {'input': stdin} if stdin is not None else {'stdin': subprocess.DEVNULL}
-            try:
-                proc = subprocess.run(args, cwd=workdir, capture_output=True, text=True,
-                                      timeout=_timeout(), check=False, **feed)
-            except subprocess.TimeoutExpired:
-                raise CLIError(f'{self.display_name} did not answer within {_timeout()} s') from None
-            except OSError as e:
-                raise CLIError(f'{self.display_name} could not start: {e.strerror}') from None
-            except ValueError as e:  # e.g. a NUL byte in an argument
-                raise CLIError(f'{self.display_name} could not start: {e}') from None
+            proc = self._run(args, workdir, stdin)
         return parse_reply(self.reply_text(proc))
+
+    def complete_text(self, system, user, max_tokens=1500):
+        """The CLI's reply to `user` under the `system` instruction, as text.
+        The run has no tools at all and an empty working directory; the
+        message goes in on stdin, so its size is not limited by argv.
+        `max_tokens` is not passed: neither CLI takes a reply limit."""
+        reason = self.unavailable_reason()
+        if reason:
+            raise CLIError(reason)
+        model = valid_model(self.model)
+        with tempfile.TemporaryDirectory(prefix='ai-parser-text-') as workdir:
+            self.prepare_text(workdir)
+            args, stdin = self.text_command(self.binary_path(), system, user, model)
+            proc = self._run(args, workdir, stdin)
+        return self.reply_text(proc).strip()
+
+    def _run(self, args, workdir, stdin):
+        feed = {'input': stdin} if stdin is not None else {'stdin': subprocess.DEVNULL}
+        try:
+            return subprocess.run(args, cwd=workdir, capture_output=True, text=True,
+                                  timeout=_timeout(), check=False, **feed)
+        except subprocess.TimeoutExpired:
+            raise CLIError(f'{self.display_name} did not answer within {_timeout()} s') from None
+        except OSError as e:
+            raise CLIError(f'{self.display_name} could not start: {e.strerror}') from None
+        except ValueError as e:  # e.g. a NUL byte in an argument
+            raise CLIError(f'{self.display_name} could not start: {e}') from None
 
     def prepare(self, workdir):
         """Write any per-run configuration into the working directory."""
+
+    def prepare_text(self, workdir):
+        """Per-run configuration for a text question (no tools)."""
+
+    def text_command(self, binary, system, user, model):
+        """(argv, stdin text) for one text question."""
+        raise NotImplementedError
 
     def prompt(self, doc_type, name, mime, file_data):
         return (f'{prompt_for(doc_type)}\n\nThe document is the file {name} in the current '
@@ -179,6 +205,16 @@ class ClaudeCLIProvider(CLIAgentProvider):
         if model:
             args += ['--model', model]
         return args, prompt
+
+    def text_command(self, binary, system, user, model):
+        # No tool at all (--tools ""); the instruction replaces Claude Code's
+        # own system prompt; the message goes in on stdin.
+        args = [binary, '-p', '--output-format', 'json', '--safe-mode', '--restricted',
+                '--tools', '', '--permission-prompts', 'none', '--no-session-persistence',
+                '--system-prompt', system]
+        if model:
+            args += ['--model', model]
+        return args, user
 
     def reply_text(self, proc):
         try:
@@ -227,6 +263,24 @@ class KiroCLIProvider(CLIAgentProvider):
         if model:
             args += ['--model', model]
         return args + [prompt], None
+
+    def prepare_text(self, workdir):
+        # A workspace agent with no tools: it can only answer.
+        agents = os.path.join(workdir, '.kiro', 'agents')
+        os.makedirs(agents)
+        with open(os.path.join(agents, f'{KIRO_TEXT_AGENT}.json'), 'w') as fh:
+            json.dump({'name': KIRO_TEXT_AGENT, 'description': 'Answers one text question',
+                       'prompt': None, 'tools': [], 'allowedTools': [],
+                       'mcpServers': {}, 'includeMcpJson': False, 'resources': []}, fh)
+
+    def text_command(self, binary, system, user, model):
+        # Kiro takes no separate system prompt; the instruction comes first.
+        # The v2 engine reads the prompt from stdin when it is piped.
+        args = [binary, 'chat', '--v2', '--agent', KIRO_TEXT_AGENT, '--no-interactive',
+                '--wrap', 'never']
+        if model:
+            args += ['--model', model]
+        return args, f'{system}\n\n---\n\n{user}'
 
     def reply_text(self, proc):
         if proc.returncode != 0:

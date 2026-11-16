@@ -26,7 +26,7 @@ that declares the same names replaces this one for them:
 | Function | Method | Notes |
 |---|---|---|
 | `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `parse` for browser forms (the expense form posts there) |
-| `ai.complete_text` | `complete_text(system, user, max_tokens)` | OpenAI or Anthropic; returns the reply text only — the API key stays here |
+| `ai.complete_text` | `complete_text(system, user, max_tokens)` | The selected provider: OpenAI, Anthropic, Claude Code CLI or Kiro CLI (Google Document AI cannot answer text); returns the reply text only — the API key stays here |
 | `ai.text_status` | `text_status()` | `{'available', 'provider', 'reason'}`; the reason says what to configure |
 
 A function that cannot run (no provider configured, a document-only
@@ -87,6 +87,16 @@ agent to treat the document as data.
   The v3 engine is not used: in a test on 2026-11-16 it ran a shell command
   although only `fs_read` was trusted. "Refresh list" runs
   `kiro-cli chat --list-models -f json`.
+
+Text questions (`ai.complete_text`) with a CLI agent run without any tool,
+in an empty temporary directory, with the message on stdin:
+
+- Claude Code: `claude -p --output-format json --safe-mode --restricted
+  --tools "" --permission-prompts none --no-session-persistence
+  --system-prompt <instruction> [--model M]`.
+- Kiro CLI: `kiro-cli chat --v2 --agent contaautonomo-ai-text --no-interactive
+  --wrap never [--model M]`, with a workspace agent that has no tools; the
+  instruction and the message go in on stdin, instruction first.
 
 A run blocks one web worker for up to the timeout.
 
