@@ -7,6 +7,7 @@
     <h1>Modelo 390 (IVA, resumen anual) — {{ draft.year }}</h1>
     <div class="page-actions">
         <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <a href="{{ url_for('tax_es_forms.aeat_file_annual', form='390', year=draft.year) }}" class="btn btn-secondary" title="Import file for the AEAT Sede. Not validated by the AEAT: check the form after importing.">⬇ AEAT file (not validated)</a>
         <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
     </div>
 </div>

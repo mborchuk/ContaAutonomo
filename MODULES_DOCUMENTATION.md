@@ -602,6 +602,17 @@ carries a non-dismissible "not tax advice" banner.
   suppliers (key A) above 3,005.06 EUR IVA included, quarterly split,
   exclusions with their rule (349 operations, IRPF retention, insurance,
   Social Security, expenses without a supplier)
+- **AEAT import files** (`aeat_files.py`, pure): every draft page has
+  "⬇ AEAT file (not validated)" —
+  `/tax-forms-draft/<303|130|349>/<year>/<q>/aeat-file` and
+  `/tax-forms-draft/<390|347>/<year>/aeat-file` (ISO-8859-1 text). 303, 130
+  and 390 follow the official page layouts kept as data in
+  `aeat_layouts/*.json` (DR303e26v101, DR130e15v12, dr390e2026) for the Sede
+  form's *Importar*; 349 and 347 are the 500-character records of
+  *Presentación mediante fichero*. No file has passed the AEAT validation
+  from the app (it needs the taxpayer's certificate); supported models, what
+  to complete in the form and what is out of scope are in
+  `modules/tax_es_forms/AEAT_FILES.md`
 - Engine (`calculator.py`, pure functions): IVA repercutido prefers the frozen
   fiscal snapshot on issued invoices; IVA soportado uses the expense VAT
   breakdown (`vat_amount` × `deductible_pct`); Modelo 130 is cumulative
