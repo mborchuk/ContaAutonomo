@@ -135,7 +135,6 @@ def test_pure_run_with_stub_engine_inputs():
             return type('R', (), {'summary': {'cuota_liquida': inp.income * 0.2,
                                               'modelo100_diferencial': 1.0},
                                   'region': region, 'notes': []})()
-    m100 = type('I', (), {})()
     from modules.tax_es_irpf.engine import Modelo100Input
     m100 = Modelo100Input(year=2034, income=100.0, deductible_expenses=30.0,
                           minimo_estatal=0, minimo_autonomico=0)
