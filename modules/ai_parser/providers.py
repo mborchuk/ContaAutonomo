@@ -58,7 +58,7 @@ def _first_object(text):
             if isinstance(data, dict):
                 return data
         except ValueError:
-            pass
+            pass  # not JSON from this brace; try the next one
         start = text.find('{', start + 1)
     raise ValueError('The provider reply contains no JSON object')
 

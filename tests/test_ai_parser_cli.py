@@ -39,7 +39,10 @@ def cli_env(monkeypatch):
 
 def _read_agent(workdir):
     path = os.path.join(workdir or '', '.kiro', 'agents', f'{cli_agents.KIRO_AGENT}.json')
-    return json.load(open(path)) if workdir and os.path.exists(path) else None
+    if not (workdir and os.path.exists(path)):
+        return None
+    with open(path) as fh:
+        return json.load(fh)
 
 
 def _claude_out(result, **extra):
