@@ -51,8 +51,9 @@ class TaxEsIrpfModule(BaseModule):
 
     @property
     def interface(self):
-        # Used by Spanish Tax Forms (Modelo 303 equipment, Modelo 130 draft).
-        return ['is_equipment', 'modelo130_boxes']
+        # Spanish Tax Forms: Modelo 303 equipment, Modelo 130 draft.
+        # Tax Provision: the Modelo 130 payment and the Modelo 100 result.
+        return ['is_equipment', 'modelo130_boxes', 'modelo100_result']
 
     @property
     def name(self):
@@ -458,6 +459,17 @@ class TaxEsIrpfModule(BaseModule):
             '06': round(inp.ytd_retenciones, 2),
             '07': result.summary['modelo130_due'],
         }, rate
+
+    def modelo100_result(self, year):
+        """Modelo 100 estimate for `year` with the profile's comunidad, over
+        the year's data recorded so far (`IrpfResult.as_dict()`). The result
+        to pay (> 0) or refund (< 0) is `summary['modelo100_diferencial']`;
+        it already credits retenciones and the year's Modelo 130 payments.
+        Raises ValueError for a foral region."""
+        profile = self._get_profile()
+        region = profile.region or self._params(year).get('default_region', 'valenciana')
+        return self._engine(year).compute_modelo100(
+            self._build_modelo100_input(year, profile), region).as_dict()
 
     def _current_quarter(self, today=None):
         today = today or date.today()

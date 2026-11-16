@@ -51,6 +51,11 @@ class RetaAdvisorModule(BaseModule):
         return ['tax_management']
 
     @property
+    def interface(self):
+        # Used by Tax Provision (dashboard total).
+        return ['projection']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'RETA Advisor', 'endpoint': 'reta_advisor.reta_index',
@@ -139,6 +144,11 @@ class RetaAdvisorModule(BaseModule):
         except Exception as e:  # pragma: no cover - defensive
             self.logger.warning('Reading SS payments failed: %s', e)
             return None
+
+    def projection(self, today=None):
+        """The RETA projection for the year of `today` (see engine.project);
+        `regularization_delta` > 0 is owed, < 0 is a refund."""
+        return self._projection(today)
 
     def _projection(self, today=None):
         today = today or date.today()

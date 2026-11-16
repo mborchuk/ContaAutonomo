@@ -622,6 +622,24 @@ the year-end regularization. Estimate only.
   keeps owning the Social Security amount, so nothing is double-counted
 - Not modeled: tarifa plana, pluriactividad
 
+### Tax Provision (`tax_provision`)
+
+Dashboard panel with the tax owed so far: one total and its parts, each read
+from the module that calculates it — IVA of the open quarter
+(`tax_es_forms.draft_303`, box 71), Modelo 130 of the open quarter
+(`tax_es_irpf.modelo130_boxes`, box 07), the renta result for the year to
+date (`tax_es_irpf.modelo100_result`, cuota diferencial, which already
+credits the year's 130 payments) and the RETA regularización
+(`reta_advisor.projection`). No tax rules of its own.
+
+- Pure sum and sign labels in `provision.py`; negative parts (refunds, VAT
+  credits) reduce the total
+- A part whose module is disabled or fails is left out and named as missing
+- Each part links to its page and shows its next filing date from
+  `fiscal_calendar.deadline_for`
+- No tables, settings, routes or dependencies; "estimate, not tax advice" on
+  the panel. Details: `modules/tax_provision/README.md`
+
 ### Recurring Invoices (`recurring_invoices`)
 
 Invoice templates with a monthly/quarterly cadence that generate **drafts** on
@@ -914,8 +932,10 @@ Interfaces declared today:
 | Module | `interface` | Used by |
 |---|---|---|
 | `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
-| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)` | Spanish Tax Forms |
-| `fiscal_calendar` | `_selected_forms()` | Tax Forms |
+| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
+| `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
+| `reta_advisor` | `projection(today)` | Tax Provision |
+| `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 
