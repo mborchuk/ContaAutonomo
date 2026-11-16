@@ -12,19 +12,19 @@ urllib3>=2.8.0
 python-dateutil>=2.8.2
 reportlab>=5.1.0
 cryptography>=41.0.0
-boto3>=1.43.126
+boto3>=1.44.3
 google-cloud-storage>=2.14.0
-google-api-python-client>=2.100.0
-google-auth>=2.62.1
-openai>=3.46.0
-anthropic>=2.6.0
+google-api-python-client>=2.202.0
+google-auth>=2.62.2
+openai>=3.51.0
+anthropic>=2.8.0
 google-cloud-documentai>=3.17.0
 pyhanko
 # XAdES-EPES signature of Facturae e-invoices (einvoice module).
 signxml>=4.0.0
 Pillow
-pypdf>=7.0.0
+pypdf>=7.1.0
 asn1crypto>=1.5.0
 gunicorn>=26.2.0
 # Error tracking, enabled only when SENTRY_DSN is set.
-sentry-sdk[flask]>=2.74.0
+sentry-sdk[flask]>=2.75.0
