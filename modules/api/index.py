@@ -230,19 +230,6 @@ class ApiModule(BaseModule):
     # /api/v1 and the registry functions return the same records.
     _serialize_invoice = staticmethod(serialize_invoice)
 
-    @staticmethod
-    def _serialize_expense(exp):
-        return {
-            'id': exp.id,
-            'contractor_id': exp.contractor_id,
-            'amount': exp.amount,
-            'currency': exp.currency,
-            'category': exp.category,
-            'description': exp.description,
-            'expense_date': exp.expense_date.isoformat() if exp.expense_date else None,
-            'invoice_number': exp.invoice_number,
-        }
-
     _serialize_customer = staticmethod(serialize_customer)
 
     def _gen_invoice_number(self, Invoice, year):
@@ -731,33 +718,12 @@ class ApiModule(BaseModule):
         return self._call('ledger.list_customers'), 200
 
     def _list_expenses(self):
-        mm = self.core.module_manager
-        if not mm or 'expenses' not in mm.modules:
+        # Implemented by whichever module owns expenses (bundled: expenses).
+        if not self.core.functions.available('ledger.list_expenses'):
             raise ApiError(404, 'not_found', 'Expenses module is not enabled')
-        from app import Expense
-        try:
-            page = max(1, int(request.args.get('page', 1)))
-            per_page = min(100, max(1, int(request.args.get('per_page', 20))))
-        except ValueError:
-            raise ApiError(400, 'bad_request', 'page/per_page must be integers')
-        query = Expense.query
-        # Optional read-only filters (used by the ledger assistant, G-7).
-        if request.args.get('date_from'):
-            query = query.filter(Expense.expense_date >= self._parse_date(
-                request.args['date_from'], 'date_from'))
-        if request.args.get('date_to'):
-            query = query.filter(Expense.expense_date <= self._parse_date(
-                request.args['date_to'], 'date_to'))
-        category = (request.args.get('category') or '').strip()
-        if category:
-            query = query.filter(Expense.category.ilike(category))
-        query = query.order_by(Expense.expense_date.desc(), Expense.id.desc())
-        total = query.count()
-        rows = query.offset((page - 1) * per_page).limit(per_page).all()
-        return {
-            'data': [self._serialize_expense(e) for e in rows],
-            'page': page, 'per_page': per_page, 'total': total,
-        }, 200
+        page, per_page = self._paging()
+        filters = {k: request.args.get(k) for k in ('date_from', 'date_to', 'category')}
+        return self._call('ledger.list_expenses', page=page, per_page=per_page, **filters), 200
 
     def _dashboard_summary(self):
         from app import Invoice

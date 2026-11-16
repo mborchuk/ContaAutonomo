@@ -14,7 +14,23 @@ user reviews the form and saves it.
 | `media.py` | File type from the leading bytes; what each provider is sent |
 | `catalog.py` | Default, fallback and retired models; live listing via `GET /v1/models` |
 | `cli_agents.py` | Claude Code and Kiro CLI providers, run as local programs |
+| `text.py` | Text completion for `ai.complete_text` (OpenAI, Anthropic) |
 | `templates/` | Parse page and settings tab |
+
+## Registry functions
+
+The module declares three functions in `get_functions()`; other code calls
+them by name through `core.functions`, never this module directly, so a module
+that declares the same names replaces this one for them:
+
+| Function | Method | Notes |
+|---|---|---|
+| `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `ai.parse_docum| `parse` for browser forms (the expense form posts there) |
+| `ai.complete_text` | `complete_text(system, user, max_tokens)` | OpenAI or Anthropic; returns the reply text only — the API key stays here |
+| `ai.text_status` | `text_status()` | `{'available', 'provider', 'reason'}`; the reason says what to configure |
+
+A function that cannot run (no provider configured, a document-only
+provider for text) raises `FunctionUnavailable` with a message for the user.
 
 ## Flow
 

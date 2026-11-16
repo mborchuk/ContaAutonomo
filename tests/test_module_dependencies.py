@@ -183,10 +183,40 @@ def test_bundled_modules_declare_valid_capabilities(loaded_modules):
 
 
 def test_modules_look_each_other_up_through_provider_of():
-    """A direct modules.get('x') would bypass a replacement module."""
+    """A direct modules.get('x') would bypass a replacement module — in code
+    and in templates."""
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
-    offenders = [str(p.relative_to(root)) for p in [root / 'app.py', *root.glob('modules/*/*.py')]
+    files = [root / 'app.py', *root.glob('modules/*/*.py'), *root.glob('templates/*.html'),
+             *root.glob('modules/*/templates/*.html')]
+    offenders = [str(p.relative_to(root)) for p in files
                  if re.search(r"\.modules\.get\(\s*['\"]", p.read_text())]
     assert not offenders, offenders
+
+
+# Imports of another module's code that remain; each one ties the caller to
+# that module. Remove an entry when its import goes; never add one — add a
+# registry function (functions.py) instead.
+KNOWN_CROSS_MODULE_IMPORTS = {
+    ('tax_es_forms', 'fiscal_calendar'),
+    ('tax_management', 'fiscal_calendar'),
+    ('pdf_signature', 'pdf_verify'),
+    ('reports', 'tax_es_forms'),
+}
+
+
+def test_no_new_imports_between_modules():
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent.parent
+    found = set()
+    for path in root.glob('modules/*/*.py'):
+        own = path.parent.name
+        for other in re.findall(r'^\s*(?:from|import) modules\.(\w+)', path.read_text(), re.M):
+            if other != own:
+                found.add((own, other))
+    assert found <= KNOWN_CROSS_MODULE_IMPORTS, sorted(found - KNOWN_CROSS_MODULE_IMPORTS)
+    assert found == KNOWN_CROSS_MODULE_IMPORTS, (
+        'remove these from KNOWN_CROSS_MODULE_IMPORTS: '
+        f'{sorted(KNOWN_CROSS_MODULE_IMPORTS - found)}')

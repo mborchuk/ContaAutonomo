@@ -15,10 +15,10 @@
     <li>To answer: your question and <strong>only the records those calls
         return</strong>, with these fields and nothing else:
         <ul>
-            <li>Invoices: {{ sent_fields.invoice | join(', ') }}</li>
-            <li>Expenses: {{ sent_fields.expense | join(', ') }} (first 80 characters of the description)</li>
-            <li>Customers: {{ sent_fields.customer | join(', ') }}</li>
-            <li>Tax drafts: the form boxes</li>
+            {% if sent_fields.invoice %}<li>Invoices: {{ sent_fields.invoice | join(', ') }}</li>{% endif %}
+            {% if sent_fields.expense %}<li>Expenses: {{ sent_fields.expense | join(', ') }} (first 80 characters of the description)</li>{% endif %}
+            {% if sent_fields.customer %}<li>Customers: {{ sent_fields.customer | join(', ') }}</li>{% endif %}
+            {% if sent_fields.draft %}<li>Tax drafts: the form boxes</li>{% endif %}
         </ul>
     </li>
     <li>Never sent: e-mail addresses, VAT numbers, addresses, notes, receipt

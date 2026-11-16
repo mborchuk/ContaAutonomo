@@ -463,6 +463,42 @@ class ExpensesModule(BaseModule):
             'page': page, 'per_page': per_page, 'total': pagination.total,
         }, 200
 
+    # --- Registry functions ------------------------------------------------ #
+
+    def get_functions(self):
+        from core_functions import DATE_FROM, DATE_TO, PAGE, PAGED, PER_PAGE
+        from functions import Function, Param
+        return [Function(
+            'ledger.list_expenses', self.list_expenses,
+            'Business expenses, newest first. Filters: date_from/date_to (expense date), '
+            'category (exact name, e.g. Software, Travel).',
+            params=(DATE_FROM, DATE_TO,
+                    Param('category', 'str', 'Expense category, exact name', max_length=100),
+                    PAGE, PER_PAGE),
+            returns=PAGED + '; record: id, contractor_id, amount, currency, category, '
+                    'description, expense_date, invoice_number, net_amount, vat_rate, '
+                    'vat_amount, deductible, deductible_pct, reverse_charge',
+            assistant=True, record_kind='expense',
+            assistant_fields=('id', 'expense_date', 'category', 'description', 'amount',
+                              'currency'))]
+
+    def list_expenses(self, date_from=None, date_to=None, category=None, page=1, per_page=20):
+        """Expenses newest first, with optional date range and category (exact,
+        case-insensitive). Arguments arrive checked by the registry."""
+        E = self.Expense
+        query = E.query
+        if date_from:
+            query = query.filter(E.expense_date >= date_from)
+        if date_to:
+            query = query.filter(E.expense_date <= date_to)
+        if category:
+            query = query.filter(E.category.ilike(category))
+        query = query.order_by(E.expense_date.desc(), E.id.desc())
+        total = query.count()
+        rows = query.offset((page - 1) * per_page).limit(per_page).all()
+        return {'data': [self._api_serialize_expense(e) for e in rows],
+                'page': page, 'per_page': per_page, 'total': total}
+
     def _api_get_expense(self, request, exp_id=None):
         from api_errors import ApiError
         exp = db_get(self.Expense, exp_id)

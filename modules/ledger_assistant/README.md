@@ -2,8 +2,15 @@
 
 Ask questions about the books in plain language — "how much did I invoice
 ACME in Q3?" — and get an answer with the records it is based on. Opt-in:
-the module is off until enabled in Settings → Modules. It uses the provider
-configured in the AI Parser (OpenAI or Anthropic).
+the module is off until enabled in Settings → Modules.
+
+It names no other module. It reads with the registry functions whose
+declaration allows the assistant (`functions.Function`, `assistant=True`),
+and asks with `ai.complete_text` and `ai.text_status` — today provided by the
+AI Parser with OpenAI or Anthropic. A module that declares the same functions,
+also one from outside this repository, replaces either side without a change
+here: with the AI Parser disabled it is used; with both enabled the first to
+register owns the names, and the other's card in Settings → Modules says so.
 
 ## How a question is answered
 
@@ -11,60 +18,63 @@ configured in the AI Parser (OpenAI or Anthropic).
 sequenceDiagram
     participant U as Owner
     participant A as ledger_assistant
-    participant P as AI provider
-    participant API as /api/v1 GET handlers
+    participant R as Function registry
+    participant T as ai.complete_text (AI Parser)
+    participant D as Data functions (core, expenses, tax_es_forms)
     U->>A: question
-    A->>P: question + catalogue of read-only calls (no records)
-    P-->>A: plan: calls with filters
-    A->>A: validate_plan (catalogue only, allowed parameters)
-    A->>API: GET calls, every SQL write refused, rolled back after
-    API-->>A: records
-    A->>A: minimise (only SENT_FIELDS)
-    A->>P: question + minimised records
-    P-->>A: answer + cited record ids
+    A->>R: find(assistant=True)
+    R-->>A: catalogue: functions the core or an enabled module provides
+    A->>T: question + catalogue (no records)
+    T-->>A: plan: calls with parameters
+    A->>A: validate_plan (catalogue only, parameters checked by the declaration)
+    A->>D: calls through the registry, every SQL write refused, rolled back after
+    D-->>A: records
+    A->>A: minimise (the declared assistant_fields only)
+    A->>T: question + minimised records
+    T-->>A: answer + cited record ids
     A-->>U: answer, records used, totals, "not tax advice"
 ```
 
-1. **Plan.** The provider gets only the question and the catalogue in
-   `assistant.py` (invoices, expenses, customers, Modelo 303/130 drafts) and
-   returns the calls it needs.
-2. **Read.** Calls outside the catalogue, unknown parameters or malformed
-   values are dropped and shown under "Lookups". The rest run in-process
-   against the `api` module's GET handlers (`_list_invoices`,
-   `_list_expenses`, `_list_customers`, and module drafts through the GET
-   dispatcher), at most 5 calls and 500 records each.
-3. **Answer.** Only the fields in `SENT_FIELDS` go to the provider:
-   invoices — id, number, date, customer name, EUR amount, currency, status;
-   expenses — id, date, category, first line of the description (80
-   characters), amount, currency; customers — id, name, country, VAT
-   treatment; drafts — the boxes. E-mails, VAT numbers, addresses, notes,
-   files, settings and credentials are never sent.
+1. **Plan.** The text function gets only the question and the catalogue —
+   name, parameters and summary of each function the assistant may call:
+   `ledger.list_invoices`, `ledger.list_customers` (core),
+   `ledger.list_expenses` (expenses), `tax.draft_303`, `tax.draft_130`
+   (tax_es_forms), each only while something implements it.
+2. **Read.** Calls outside the catalogue, paging parameters, and parameters
+   the declaration refuses are dropped and shown under "Lookups". The rest run
+   through `core.functions.call`, at most 5 calls and 500 records each; the
+   assistant pages itself.
+3. **Answer.** Only the declared `assistant_fields` go out: invoices — id,
+   number, date, customer name, EUR amount, currency, status; expenses — id,
+   date, category, first line of the description (80 characters), amount,
+   currency; customers — id, name, country, VAT treatment; drafts — form,
+   year, quarter and boxes. E-mails, VAT numbers, addresses, notes, files,
+   settings and credentials are never sent.
 4. **Show.** The answer, the records it cites (all sent records when it
    cites none), a deterministic total of the listed amounts, and the
    disclaimer.
 
 ## Read-only
 
-- The catalogue contains GET calls only; a plan cannot name anything else.
+- The registry refuses a declaration that offers the assistant a function
+  that is not read-only or that sends data out; a plan cannot name anything else.
 - While the calls run, `read_only()` refuses every SQL statement other than
   `SELECT` (SQLAlchemy `before_cursor_execute`), and the session is rolled
-  back afterwards.
-- The module has no tables and writes no activity-log entry; the question is
-  not logged.
+  back afterwards — even an implementation with a side effect cannot write.
+- The module never sees an API key: `ai.complete_text` returns only the reply.
+- No tables, no activity-log entry; the question is not logged. A failed read
+  shows a fixed message; the details go to the server log.
 
 ## When it cannot answer
 
-The page and the settings panel say what is missing: the AI Parser module
-not enabled, Google Document AI selected (it cannot answer questions), or no
-API key stored. The API module is a dependency and is enabled with this one.
+The page and the settings panel say what is missing: no enabled module
+implements the text functions (enable the AI Parser), or `ai.text_status`
+gives the reason (Google Document AI or a CLI agent selected, no API key).
 
-## API filters
-
-`GET /api/v1/invoices` accepts `date_from`, `date_to` (`YYYY-MM-DD`) and
-`client` (part of the name), and returns `customer_id`; `GET /api/v1/expenses`
-accepts `date_from`, `date_to` and `category`. All optional; existing clients
-are unaffected.
+Dependency: `ledger.list_invoices`, which the core implements, so enabling
+the assistant enables nothing else.
 
 ## Tests
 
-`tests/test_ledger_assistant.py`.
+`tests/test_ledger_assistant.py` — with a stand-in text module instead of the
+AI Parser, which is the replacement path in practice.

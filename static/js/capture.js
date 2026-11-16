@@ -1,8 +1,8 @@
 /* Receipt capture page (G-8): take or pick a photo, or receive one shared
  * from the phone, then hand it to the expense form on the same page.
  *
- * With the AI parser enabled the photo goes into the form's "Parse receipt
- * with AI" input, whose handler sends it to /ai-parser/parse, prefills the
+ * When a module implements ai.parse_document the photo goes into the form's
+ * "Parse receipt with AI" input, whose handler posts it to that route, prefills the
  * fields and attaches the photo as the receipt. Without it, the photo is only
  * attached and the fields are filled by hand. Nothing is saved until the user
  * presses "Create Expense". External file, no inline code (CSP-ready).
