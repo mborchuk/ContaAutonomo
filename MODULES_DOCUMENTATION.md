@@ -627,6 +627,46 @@ the year-end regularization. Estimate only.
   keeps owning the Social Security amount, so nothing is double-counted
 - Not modeled: tarifa plana, pluriactividad
 
+### IRPF Estimator (`tax_es_irpf`)
+
+Modelo 130 (quarterly) and Modelo 100 (annual) estimates for estimación
+directa simplificada, from year-keyed parameters (`params/es_irpf_<year>.json`).
+Estimate only.
+
+- Routes: `/irpf-es/` (overview), `/irpf-es/modelo130/<year>/<q>`,
+  `/irpf-es/modelo100/<year>` (individual vs. joint), `/irpf-es/simulator`
+- **What-if simulator** (`simulator.py`, pure; `/irpf-es/simulator`, GET only):
+  starts from the year's real figures and lets the user change income,
+  deductible expenses (RETA excluded), comunidad autónoma and the RETA monthly
+  base. It shows real, scenario and difference for the IRPF of the year
+  (cuota líquida), the Modelo 100 result, the Modelo 130 still to pay this
+  year, the RETA regularización (from `reta_advisor.projection`, with the
+  changes) and net income. With no changes it gives exactly the real
+  figures. Nothing is saved: the page reads the profile without creating it
+  and writes no row (tested). A RETA base change applies to the months left
+  in the year; quota = base × the year's contribution rate
+  (`reta_advisor/brackets.py`, `CONTRIBUTION_RATES`, 31.50 % in 2026).
+  Comunidades without a scale in the params use the state supletoria scale,
+  with the engine's note. Not modelled: tarifa plana, pluriactividad.
+
+### Tax Provision (`tax_provision`)
+
+Dashboard panel with the tax owed so far: one total and its parts, each read
+from the module that calculates it — IVA of the open quarter
+(`tax_es_forms.draft_303`, box 71), Modelo 130 of the open quarter
+(`tax_es_irpf.modelo130_boxes`, box 07), the renta result for the year to
+date (`tax_es_irpf.modelo100_result`, cuota diferencial, which already
+credits the year's 130 payments) and the RETA regularización
+(`reta_advisor.projection`). No tax rules of its own.
+
+- Pure sum and sign labels in `provision.py`; negative parts (refunds, VAT
+  credits) reduce the total
+- A part whose module is disabled or fails is left out and named as missing
+- Each part links to its page and shows its next filing date from
+  `fiscal_calendar.deadline_for`
+- No tables, settings, routes or dependencies; "estimate, not tax advice" on
+  the panel. Details: `modules/tax_provision/README.md`
+
 ### Recurring Invoices (`recurring_invoices`)
 
 Invoice templates with a monthly/quarterly cadence that generate **drafts** on
@@ -687,6 +727,12 @@ sequenceDiagram
   (`CHAIN_SPEC_VERSION`) pending verification against the official AEAT
   technical annexes. VERI*FACTU real-time submission is scaffolded and gated
   on AEAT test-environment access. See `modules/verifactu/README.md`.
+- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 1 January
+  2027 for Impuesto sobre Sociedades taxpayers and 1 July 2027 for autónomos
+  and everyone else (Real Decreto-ley 15/2025, BOE-A-2025-24446). The move to
+  October 2028 announced on 5 October 2026 is labelled *announced, not yet in
+  force* until its norm is in the BOE. B2B e-invoicing: 6 October 2027 /
+  6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
 
 ### Bank Import (`bank_import`)
 
@@ -919,8 +965,10 @@ Interfaces declared today:
 | Module | `interface` | Used by |
 |---|---|---|
 | `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
-| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)` | Spanish Tax Forms |
-| `fiscal_calendar` | `_selected_forms()` | Tax Forms |
+| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
+| `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
+| `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
+| `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 

@@ -65,6 +65,11 @@ class TaxEsFormsModule(BaseModule):
         return ['expenses', 'tax_management', 'tax_es_irpf']
 
     @property
+    def interface(self):
+        # Used by Tax Provision (dashboard total).
+        return ['draft_303']
+
+    @property
     def nav_items(self):
         return [
             {'label': 'Tax Drafts', 'endpoint': 'tax_es_forms.drafts_index',
@@ -198,6 +203,11 @@ class TaxEsFormsModule(BaseModule):
         result['year'] = year
         result['quarter'] = quarter
         return result
+
+    def draft_303(self, year, quarter):
+        """Modelo 303 draft for one quarter, as shown on its page: box 71 is
+        the result (> 0 to pay, < 0 to compensate or refund)."""
+        return self._draft_303(year, quarter)
 
     def _draft_349(self, year, quarter):
         result = compute_modelo_349(self._invoices_in(year, quarter=quarter))
