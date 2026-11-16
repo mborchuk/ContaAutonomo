@@ -608,6 +608,26 @@ app data. Full reference: [`modules/api/README.md`](api/README.md).
 - New hook: `BaseModule.get_api_routes()` lets any module contribute endpoints.
 - Settings: API tab (view / rotate token).
 - `on_enable()`: adds the idempotent `settings.api_token` column and mints a token.
+- Read filters (all optional): `GET /invoices?date_from=&date_to=&client=`
+  (invoices also carry `customer_id`), `GET /expenses?date_from=&date_to=&category=`.
+
+### Ledger Assistant (`ledger_assistant`)
+
+Opt-in, read-only questions over the books (`/assistant/`), answered with the
+AI Parser's provider (OpenAI or Anthropic). Depends on `api`.
+
+- The provider plans read-only calls from the question alone; the module
+  runs only catalogue calls (invoices, expenses, customers, Modelo 303/130
+  drafts) on the `api` GET handlers, with every non-`SELECT` statement
+  refused and the session rolled back afterwards
+- Only the fields in `assistant.SENT_FIELDS` of the returned records go to the
+  provider (no e-mails, VAT numbers, addresses, notes, files); the settings
+  panel (Assistant tab) says so
+- Each answer lists the records it used, with a deterministic total, and says
+  "not tax advice"; without a usable provider the page explains what is
+  missing
+- No tables, no activity-log entries; rate limit 10 questions/minute.
+  Details: `modules/ledger_assistant/README.md`
 
 ### Fiscal Calendar (`fiscal_calendar`)
 
