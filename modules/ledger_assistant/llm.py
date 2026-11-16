@@ -37,19 +37,22 @@ def complete(settings, system, user, max_tokens=1500):
     reason = missing_reason(settings)
     if reason:
         raise ProviderUnavailable(reason)
+    from modules.ai_parser.catalog import DEFAULT_MODELS
     if settings['provider'] == 'openai':
         import openai
         client = openai.OpenAI(api_key=settings['api_key'])
+        # Current models reject max_tokens and a non-default temperature, and
+        # count reasoning tokens toward the limit, hence the headroom.
         response = client.chat.completions.create(
-            model=settings.get('model') or 'gpt-4o',
+            model=settings.get('model') or DEFAULT_MODELS['openai'],
             messages=[{'role': 'system', 'content': system},
                       {'role': 'user', 'content': user}],
-            max_tokens=max_tokens, temperature=0)
+            max_completion_tokens=max_tokens * 4)
         return response.choices[0].message.content or ''
     import anthropic
     client = anthropic.Anthropic(api_key=settings['api_key'])
     response = client.messages.create(
-        model=settings.get('model') or 'claude-sonnet-4-20250514',
+        model=settings.get('model') or DEFAULT_MODELS['anthropic'],
         max_tokens=max_tokens, system=system,
         messages=[{'role': 'user', 'content': user}])
     return response.content[0].text if response.content else ''

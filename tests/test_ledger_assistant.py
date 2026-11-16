@@ -285,7 +285,8 @@ def test_openai_and_anthropic_text_calls(monkeypatch):
     assert complete(SETTINGS, 'sys', 'question') == '{"calls": []}'
     kw = calls[-1][1]
     assert kw['messages'][0] == {'role': 'system', 'content': 'sys'}
-    assert kw['temperature'] == 0
+    assert 'temperature' not in kw and 'max_tokens' not in kw
+    assert kw['max_completion_tokens'] == 6000
     assert complete({'provider': 'anthropic', 'api_key': 'k', 'model': 'm'},
                     'sys', 'q') == 'hello'
     assert calls[-1][1]['system'] == 'sys'

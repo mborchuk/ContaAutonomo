@@ -531,10 +531,17 @@ Detect and display digital signature information in PDF files.
 
 Parse invoice and expense-receipt data from PDFs and images using AI providers.
 
-- Routes: `/ai-parser/parse` (GET/POST, accepts `doc_type=invoice|expense`),
-  `/ai-parser/settings` (POST)
-- Models: `AIParserConfig` (provider, API key, model)
-- Supported providers: OpenAI (GPT-4), Anthropic (Claude), Google Document AI
+- Routes: `/ai-parser/` (page), `POST /ai-parser/parse` (accepts
+  `doc_type=invoice|expense`), `POST /ai-parser/models/<openai|anthropic>/refresh`
+  (loads the model list; JSON body `api_key` optional, defaults to the stored key)
+- Models: `AIParserConfig` (provider, API keys, models, `models_cache` — the
+  last model list per provider as JSON)
+- Supported providers: OpenAI, Anthropic (Claude), Google Document AI
+- Models (`modules/ai_parser/catalog.py`): defaults `gpt-6.1-terra` and
+  `claude-sonnet-5-5`; "Refresh list" in the settings tab asks the vendor's
+  `GET /v1/models` which models the key can use. Before the first refresh the
+  tab shows a short fallback list. Stored settings on a model listed in
+  `RETIRED_MODELS` move to the default when the module loads
 - Expense parsing extracts the VAT breakdown (`net_amount`, `vat_rate`,
   `vat_amount`) alongside date, amount, contractor and category; providers are
   instructed to return `null` rather than guess missing VAT data
