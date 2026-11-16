@@ -68,7 +68,8 @@ def _loaded_modules_session():
     for module_id in ('expenses', 'tax_es_forms', 'fiscal_calendar',
                       'recurring_invoices', 'reta_advisor', 'invoice_email',
                       'verifactu', 'tax_management', 'bank_import', 'einvoice',
-                      'documents', 'reports', 'tax_es_irpf', 'api'):
+                      'documents', 'reports', 'tax_es_irpf', 'api',
+                      'ledger_assistant'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()

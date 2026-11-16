@@ -46,6 +46,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Verifactu** | Tamper-evident, hash-chained billing records on issue/annul (RD 1007/2023 compliance assist) |
 | **Bank Import** | Norma 43 / CSV statement import with match suggestions and one-click reconciliation |
 | **E-Invoice (Facturae)** | Facturae 3.2.2 XML export for issued invoices with a readiness checklist |
+| **Ledger Assistant** | Opt-in, read-only questions over invoices, expenses and tax drafts with the AI Parser's provider; sends only the records needed and lists them (not tax advice) |
 
 ## Quick Start
 

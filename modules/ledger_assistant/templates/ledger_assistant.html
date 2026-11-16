@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Assistant{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>💬 Ledger Assistant</h1>
+</div>
+<div class="note note-info">
+    Ask about your invoices, expenses and tax drafts, for example
+    <em>"How much did I invoice ACME in Q3?"</em>. The assistant only reads; it
+    cannot change anything. <strong>Not tax advice.</strong>
+    <a href="{{ url_for('settings') }}#ledger_assistant">What is sent to the AI provider</a>.
+</div>
+
+{% if missing %}
+<div class="note note-warning" role="alert">⚠ {{ missing }}</div>
+{% endif %}
+
+<form method="POST" action="{{ url_for('ledger_assistant.assistant_ask') }}" class="card">
+    <div class="card-body">
+        <div class="form-group">
+            <label for="question">Your question</label>
+            <textarea id="question" name="question" rows="3" maxlength="500" required
+                      {% if missing %}disabled{% endif %}>{{ result.question if result else '' }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-primary" {% if missing %}disabled{% endif %}>Ask</button>
+    </div>
+</form>
+
+{% if result %}
+    {% for e in result.errors %}<div class="note note-warning">⚠ {{ e }}</div>{% endfor %}
+    {% if result.answer %}
+    <section class="card" aria-labelledby="answer-title">
+        <div class="card-header" id="answer-title">Answer</div>
+        <div class="card-body">
+            {% for line in result.answer.splitlines() %}<p>{{ line }}</p>{% endfor %}
+            <p class="fine-print">{{ disclaimer }}</p>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if result.used %}
+    <h3>Records used</h3>
+    {% if result.truncated %}<p class="note note-warning">Only the first 500 records of a call were read.</p>{% endif %}
+    {% if result.used.invoice %}
+    <div class="table-wrap"><table class="data-table">
+        <caption class="sr-only">Invoices used</caption>
+        <thead><tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Status</th><th class="text-right">EUR</th></tr></thead>
+        <tbody>
+        {% for r in result.used.invoice %}
+        <tr><td><a href="{{ url_for('view_invoice', id=r.id) }}">{{ r.invoice_number }}</a></td>
+            <td>{{ r.invoice_date }}</td><td>{{ r.client_name }}</td><td>{{ r.status }}</td>
+            <td class="text-right num">{{ '%.2f'|format(r.amount_eur or 0) }}</td></tr>
+        {% endfor %}
+        </tbody>
+        {% if result.totals.invoices_eur is defined %}
+        <tfoot><tr class="row-total"><td colspan="4">Total of these invoices</td>
+            <td class="text-right num">{{ '%.2f'|format(result.totals.invoices_eur) }}</td></tr></tfoot>
+        {% endif %}
+    </table></div>
+    {% endif %}
+    {% if result.used.expense %}
+    <div class="table-wrap"><table class="data-table">
+        <caption class="sr-only">Expenses used</caption>
+        <thead><tr><th>#</th><th>Date</th><th>Category</th><th>Description</th><th class="text-right">Amount</th></tr></thead>
+        <tbody>
+        {% for r in result.used.expense %}
+        <tr><td><a href="{{ url_for('expenses.expenses_edit', id=r.id) }}">{{ r.id }}</a></td>
+            <td>{{ r.expense_date }}</td><td>{{ r.category }}</td><td>{{ r.description }}</td>
+            <td class="text-right num">{{ '%.2f'|format(r.amount or 0) }} {{ r.currency }}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table></div>
+    {% endif %}
+    {% if result.used.customer %}
+    <p>Customers: {% for r in result.used.customer %}{{ r.name }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% if result.used.draft %}
+    <p>Tax drafts: {% for r in result.used.draft %}Modelo {{ r.form }} {{ r.quarter }}T {{ r.year }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+    {% endif %}
+
+    {% if result.calls or result.rejected %}
+    <details class="fine-print">
+        <summary>Lookups</summary>
+        <ul>
+            {% for c in result.calls %}<li>GET /api/v1{{ c.path }} {{ c.params | tojson }}</li>{% endfor %}
+            {% for r in result.rejected %}<li>Not run: {{ r }}</li>{% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+{% endif %}
+{% endblock %}
