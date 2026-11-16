@@ -5,6 +5,7 @@
     <h1>Modelo 347 (operaciones con terceras personas) — {{ draft.year }}</h1>
     <div class="page-actions">
         <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <a href="{{ url_for('tax_es_forms.aeat_file_annual', form='347', year=draft.year) }}" class="btn btn-secondary" title="Import file for the AEAT Sede. Not validated by the AEAT: check the form after importing.">⬇ AEAT file (not validated)</a>
         <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
     </div>
 </div>
@@ -21,6 +22,9 @@
 {% endif %}
 {% for warning in draft.meta.warnings %}
 <div class="note note-warning">⚠ {{ warning }}</div>
+{% endfor %}
+{% for warning in draft.file_warnings %}
+<div class="note note-warning">⚠ AEAT file: {{ warning }}</div>
 {% endfor %}
 
 <h3>To declare</h3>

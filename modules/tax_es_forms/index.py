@@ -301,8 +301,10 @@ class TaxEsFormsModule(BaseModule):
             rules['threshold'], convert_expense=self._convert_to_eur)
         from modules.fiscal_calendar.calendar_data import deadlines_for_year
         deadline = next((e for e in deadlines_for_year(year) if e['form'] == '347'), None)
+        from .aeat_files import residence
+        file_warnings = [w for w in (residence(line)[2] for line in result['lines']) if w]
         result.update({
-            'year': year, 'source': rules['source'],
+            'year': year, 'source': rules['source'], 'file_warnings': file_warnings,
             'exclusion_labels': MODELO_347_EXCLUSIONS,
             'out_of_scope': MODELO_347_OUT_OF_SCOPE,
             'deadline': deadline,
@@ -310,6 +312,50 @@ class TaxEsFormsModule(BaseModule):
             'table_note': fallback_note(table_year) if fallback else '',
         })
         return result
+
+    # --- AEAT import files (G-5) ------------------------------------------ #
+
+    def aeat_file(self, form, year, quarter=None):
+        """(text, filename, info) of the AEAT import file for one draft.
+        Raises aeat_files.UnsupportedYear when no official layout covers the
+        exercise."""
+        from . import aeat_files
+        settings = self.core.get_settings()
+        if form == '303':
+            content, info = aeat_files.modelo_303(self._draft_303(year, quarter), settings)
+        elif form == '130':
+            content, info = aeat_files.modelo_130(self._draft_130(year, quarter), settings)
+        elif form == '349':
+            content, info = aeat_files.modelo_349(self._draft_349(year, quarter), settings)
+        elif form == '390':
+            content, info = aeat_files.modelo_390(
+                self._draft_390(year), settings,
+                files_347=bool(self._draft_347(year)['lines']))
+        elif form == '347':
+            content, info = aeat_files.modelo_347(self._draft_347(year), settings)
+        else:
+            raise ValueError(f'no AEAT file for Modelo {form}')
+        period = f'_{quarter}T' if quarter else ''
+        return content, f'{form}_{year}{period}.txt', info
+
+    def _aeat_file_response(self, form, year, quarter):
+        from flask import Response, redirect, url_for
+        from .aeat_files import UnsupportedYear, encode
+        try:
+            content, filename, _info = self.aeat_file(form, year, quarter)
+        except UnsupportedYear as e:
+            self.core.flash(str(e), 'warning')
+            return redirect(url_for('tax_es_forms.drafts_index'))
+        except ValueError:
+            self.logger.exception('AEAT file for Modelo %s failed', form)
+            self.core.flash(f'The Modelo {form} file could not be generated. Check the '
+                            'draft (a negative amount in a field that cannot be negative).',
+                            'danger')
+            return redirect(url_for('tax_es_forms.drafts_index'))
+        self.core.log_activity('aeat_file_downloaded', 'tax',
+                               {'form': form, 'year': year, 'quarter': quarter})
+        return Response(encode(content), mimetype='text/plain; charset=iso-8859-1',
+                        headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 
     @staticmethod
     def _box_labels(year, form):
@@ -370,6 +416,21 @@ class TaxEsFormsModule(BaseModule):
         def draft_390(year):
             return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
 
+        # G-5 — AEAT import files (not validated; see AEAT_FILES.md).
+        @bp.route('/<form>/<int:year>/<int:quarter>/aeat-file')
+        @login_required
+        def aeat_file_quarterly(form, year, quarter):
+            if form not in ('303', '130', '349') or quarter not in (1, 2, 3, 4):
+                abort(404)
+            return module._aeat_file_response(form, year, quarter)
+
+        @bp.route('/<form>/<int:year>/aeat-file')
+        @login_required
+        def aeat_file_annual(form, year):
+            if form not in ('390', '347'):
+                abort(404)
+            return module._aeat_file_response(form, year, None)
+
         @bp.route('/347/<int:year>')
         @login_required
         def draft_347(year):
@@ -406,6 +467,7 @@ class TaxEsFormsModule(BaseModule):
     def _api_draft_347(self, request, year=None):
         draft = self._draft_347(year)
         draft.pop('exclusion_labels', None)
+        draft.pop('file_warnings', None)
         if draft.get('deadline'):
             draft['deadline'] = {k: (v.isoformat() if hasattr(v, 'isoformat') else v)
                                  for k, v in draft['deadline'].items()}

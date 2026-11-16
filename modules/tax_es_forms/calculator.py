@@ -483,10 +483,12 @@ def compute_modelo_347(invoices, expenses, vat_rate, threshold,
         row["amount"] += amount
         row["count"] += 1
 
-    def add(kind, key, name, nif, country, quarter, amount, reverse_charge=False):
+    def add(kind, key, name, nif, country, quarter, amount, reverse_charge=False,
+            postal_code=""):
         group = groups.setdefault((kind, key), {
             "key": "B" if kind == "sale" else "A", "name": name, "nif": nif,
-            "country": country, "quarters": [0.0, 0.0, 0.0, 0.0],
+            "country": country, "postal_code": postal_code or "",
+            "quarters": [0.0, 0.0, 0.0, 0.0],
             "reverse_charge": False, "operations": 0})
         group["quarters"][quarter - 1] += amount
         group["operations"] += 1
@@ -507,7 +509,8 @@ def compute_modelo_347(invoices, expenses, vat_rate, threshold,
         elif _has_retention(inv):
             exclude(EXCLUDED_RETENTION, name, amount)
         else:
-            add("sale", key, name, nif, country, quarter_of(d), amount)
+            add("sale", key, name, nif, country, quarter_of(d), amount,
+                postal_code=getattr(getattr(inv, "customer", None), "postal_code", None))
 
     for exp in expenses:
         d = getattr(exp, "expense_date", None)
@@ -535,7 +538,8 @@ def compute_modelo_347(invoices, expenses, vat_rate, threshold,
                           if ch.isalnum()).upper()
             add("purchase", ("contractor", getattr(contractor, "id", None) or name),
                 name, nif, getattr(contractor, "country", None) or "",
-                quarter_of(d), gross, reverse_charge=reverse_charge == "non_eu")
+                quarter_of(d), gross, reverse_charge=reverse_charge == "non_eu",
+                postal_code=getattr(contractor, "postal_code", None))
 
     lines, below = [], []
     for group in groups.values():

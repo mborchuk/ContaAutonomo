@@ -13,7 +13,8 @@ nothing and provides no tax advice — every page carries a non-dismissible
 3. [How the figures are computed](#how-the-figures-are-computed)
 4. [Modelo 390 (annual summary)](#modelo-390-annual-summary)
 5. [Modelo 347 (operations with third parties)](#modelo-347-operations-with-third-parties)
-6. [Scope exclusions](#scope-exclusions)
+6. [AEAT import files](#aeat-import-files)
+7. [Scope exclusions](#scope-exclusions)
 
 ## Features
 
@@ -149,6 +150,15 @@ A listed counterparty without a NIF gets a warning. The page shows every
 exclusion with its rule, the counterparties below the threshold, and what the
 check does not cover (cash above 6,000 EUR, rent of business premises,
 purchases with retention, criterio de caja).
+
+## AEAT import files
+
+Each draft page (303, 130, 349, 390, 347) downloads the draft as the file the
+AEAT Sede imports, following the official record layout of the exercise
+(`aeat_files.py`, layouts in `aeat_layouts/`). The files are **not
+validated**: the Sede validates them on import, with the taxpayer's
+certificate. Supported models, the field mapping, what to complete in the
+form and the out-of-scope models: [AEAT_FILES.md](AEAT_FILES.md).
 
 ## Scope exclusions
 
