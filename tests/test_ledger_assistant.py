@@ -42,15 +42,12 @@ def ledger(loaded_modules, app):
 
 
 def _stub(monkeypatch, la, plan, answer, seen):
-    import modules.ledger_assistant.index as mod
-
     def fake_complete(settings, system, user, max_tokens=1500):
         seen.append({'system': system, 'user': user})
         return json.dumps(plan) if len(seen) == 1 else json.dumps(answer)
     monkeypatch.setattr(la, 'provider_settings', lambda: SETTINGS)
     # The module imported `complete` by name; patch the name it calls.
     monkeypatch.setitem(type(la).ask.__globals__, 'complete', fake_complete)
-    assert mod  # imported for clarity
 
 
 def _snapshot(db):
