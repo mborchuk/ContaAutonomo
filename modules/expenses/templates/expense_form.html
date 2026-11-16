@@ -58,7 +58,7 @@
 <div class="note" id="ai-parse-block">
     <label class="check-row" style="cursor: pointer;">
         📷 <strong>Parse receipt with AI</strong> — photo or PDF prefills the form
-        <input type="file" id="ai-parse-file" accept="image/*,.pdf" capture="environment"
+        <input type="file" id="ai-parse-file" accept="image/*,.pdf,application/pdf"
                style="display: none;">
         <button type="button" class="btn btn-secondary" id="ai-parse-btn"
                 onclick="document.getElementById('ai-parse-file').click()">Choose file / take photo</button>
@@ -298,8 +298,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!matched) {
                 document.getElementById('notes').value =
                     (document.getElementById('notes').value || '') +
-                    'Contractor: ' + data.contractor_name;
+                    'Contractor: ' + data.contractor_name +
+                    (data.contractor_vat ? ' (' + data.contractor_vat + ')' : '');
             }
+        }
+        // Only set when the document says the buyer accounts for the VAT.
+        const rcEl = document.getElementById('reverse_charge');
+        if (rcEl && (data.reverse_charge === 'eu' || data.reverse_charge === 'non_eu')) {
+            rcEl.value = data.reverse_charge;
         }
     }
 

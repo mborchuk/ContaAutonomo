@@ -139,6 +139,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
+- **AI Parser PDF support** (#144): PDFs are sent as documents (Anthropic `document`
+  block, OpenAI `file` part) instead of as images, which the providers
+  rejected; the file type comes from its bytes, and GIF and WebP are accepted.
+  Prompts now cover the Meals, Vehicle and Social Security categories, the
+  supplier's VAT number and country, and reverse charge; a file that is not
+  an invoice or receipt returns 422. The module is split into `catalog.py`,
+  `media.py`, `prompts.py` and `providers.py`.
 - **AI Parser models** (#143): parsing with Anthropic failed with 404 because the
   default `claude-sonnet-4-20250514` is retired. Defaults are now
   `claude-sonnet-5-5` and `gpt-6.1-terra`; stored settings on a retired Claude

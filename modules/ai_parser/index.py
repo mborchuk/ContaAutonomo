@@ -8,299 +8,26 @@ Supports multiple backends: OpenAI, Anthropic Claude, Google Document AI.
 from module_manager import BaseModule
 from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
-import json
-import base64
-from datetime import datetime
 from secret_box import EncryptedString, encrypt_existing
 
 from . import catalog
 from .catalog import DEFAULT_MODELS
+from .media import UNSUPPORTED_MESSAGE, UnsupportedFile
+from .providers import (
+    NOT_A_DOCUMENT_MESSAGE,
+    PROVIDERS,
+    NotADocument,
+    OpenAIProvider,
+    describe_error,
+)
 
 
-def describe_error(exc):
-    """A message the user can act on for a provider HTTP error, else None."""
-    status = getattr(exc, 'status_code', None)
-    if status == 404:
-        return ('The selected model is not available for this API key. Choose another '
-                'model in Settings → AI Parser ("Refresh list" shows the current ones).')
-    if status in (401, 403):
-        return 'The provider rejected the API key. Check it in Settings → AI Parser.'
-    if status == 429:
-        return 'The provider rate limit or quota was reached. Try again later.'
-    return None
-
-
-# ---------------------------------------------------------------------------
-# AI Provider backends
-# ---------------------------------------------------------------------------
-
-class BaseAIProvider:
-    """Base class for AI parsing providers."""
-    name = 'base'
-    display_name = 'Base Provider'
-
-    def __init__(self, config):
-        self.config = config
-
-    def parse_document(self, file_data, filename, doc_type='invoice'):
-        """Parse a document and return structured data.
-        Args:
-            file_data: file bytes
-            filename: original filename
-            doc_type: 'invoice' or 'expense'
-        Returns:
-            dict with parsed fields
-        """
-        raise NotImplementedError
-
-    def is_configured(self):
-        """Check if provider has required configuration."""
-        raise NotImplementedError
-
-
-class OpenAIProvider(BaseAIProvider):
-    name = 'openai'
-    display_name = 'OpenAI (GPT)'
-
-    INVOICE_PROMPT = """Analyze this invoice document and extract the following fields as JSON:
-{
-  "invoice_number": "string",
-  "invoice_date": "YYYY-MM-DD",
-  "due_date": "YYYY-MM-DD or null",
-  "client_name": "string",
-  "client_vat": "string or null",
-  "client_address": "string or null",
-  "currency": "3-letter code (EUR, USD, etc.)",
-  "items": [
-    {"description": "string", "quantity": number, "unit_price": number}
-  ],
-  "total": number,
-  "notes": "string or null"
-}
-Return ONLY valid JSON, no markdown fences."""
-
-    EXPENSE_PROMPT = """Analyze this receipt/invoice document and extract the following fields as JSON:
-{
-  "invoice_number": "string or null",
-  "expense_date": "YYYY-MM-DD",
-  "contractor_name": "string (vendor/supplier name)",
-  "amount": number,
-  "currency": "3-letter code (EUR, USD, etc.)",
-  "category": "one of: Office Supplies, Software, Travel, Equipment, Services, Utilities, Insurance, Professional Services, Telecommunications, Other",
-  "description": "brief description of what was purchased",
-  "net_amount": "number or null (taxable base, amount excluding VAT/IVA)",
-  "vat_rate": "number or null (VAT/IVA percentage, e.g. 21)",
-  "vat_amount": "number or null (VAT/IVA amount)"
-}
-"amount" is the gross total (VAT included). If the receipt shows no VAT
-breakdown, set net_amount/vat_rate/vat_amount to null — never guess VAT data.
-Return ONLY valid JSON, no markdown fences."""
-
-    def is_configured(self):
-        return bool(self.config.get('openai_api_key'))
-
-    def parse_document(self, file_data, filename, doc_type='invoice'):
-        import openai
-        client = openai.OpenAI(api_key=self.config['openai_api_key'])
-        model = self.config.get('openai_model') or DEFAULT_MODELS['openai']
-
-        b64 = base64.b64encode(file_data).decode('utf-8')
-        mime = 'application/pdf' if filename.lower().endswith('.pdf') else 'image/jpeg'
-        if filename.lower().endswith('.png'):
-            mime = 'image/png'
-
-        prompt = self.INVOICE_PROMPT if doc_type == 'invoice' else self.EXPENSE_PROMPT
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{
-                'role': 'user',
-                'content': [
-                    {'type': 'text', 'text': prompt},
-                    {'type': 'image_url', 'image_url': {
-                        'url': f'data:{mime};base64,{b64}'
-                    }}
-                ]
-            }],
-            # Current models reject max_tokens and a non-default temperature;
-            # reasoning tokens count toward this limit.
-            max_completion_tokens=8000,
-        )
-
-        text = response.choices[0].message.content.strip()
-        # Strip markdown fences if present
-        if text.startswith('```'):
-            text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-            if text.endswith('```'):
-                text = text[:-3]
-            text = text.strip()
-
-        return json.loads(text)
-
-
-class AnthropicProvider(BaseAIProvider):
-    name = 'anthropic'
-    display_name = 'Anthropic (Claude)'
-
-    INVOICE_PROMPT = OpenAIProvider.INVOICE_PROMPT
-    EXPENSE_PROMPT = OpenAIProvider.EXPENSE_PROMPT
-
-    def is_configured(self):
-        return bool(self.config.get('anthropic_api_key'))
-
-    def parse_document(self, file_data, filename, doc_type='invoice'):
-        import anthropic
-        client = anthropic.Anthropic(api_key=self.config['anthropic_api_key'])
-        model = self.config.get('anthropic_model') or DEFAULT_MODELS['anthropic']
-
-        b64 = base64.b64encode(file_data).decode('utf-8')
-        mime = 'application/pdf' if filename.lower().endswith('.pdf') else 'image/jpeg'
-        if filename.lower().endswith('.png'):
-            mime = 'image/png'
-
-        prompt = self.INVOICE_PROMPT if doc_type == 'invoice' else self.EXPENSE_PROMPT
-
-        response = client.messages.create(
-            model=model,
-            max_tokens=4096,
-            messages=[{
-                'role': 'user',
-                'content': [
-                    {'type': 'image', 'source': {
-                        'type': 'base64',
-                        'media_type': mime,
-                        'data': b64
-                    }},
-                    {'type': 'text', 'text': prompt}
-                ]
-            }]
-        )
-
-        text = response.content[0].text.strip()
-        if text.startswith('```'):
-            text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-            if text.endswith('```'):
-                text = text[:-3]
-            text = text.strip()
-
-        return json.loads(text)
-
-
-class GoogleDocAIProvider(BaseAIProvider):
-    name = 'google_docai'
-    display_name = 'Google Document AI'
-
-    def is_configured(self):
-        return bool(self.config.get('google_project_id') and
-                     self.config.get('google_processor_id'))
-
-    def parse_document(self, file_data, filename, doc_type='invoice'):
-        from google.cloud import documentai_v1 as documentai
-
-        project_id = self.config['google_project_id']
-        location = self.config.get('google_location', 'eu')
-        processor_id = self.config['google_processor_id']
-
-        client = documentai.DocumentProcessorServiceClient()
-        resource_name = client.processor_path(project_id, location, processor_id)
-
-        mime = 'application/pdf' if filename.lower().endswith('.pdf') else 'image/jpeg'
-        if filename.lower().endswith('.png'):
-            mime = 'image/png'
-
-        raw_document = documentai.RawDocument(content=file_data, mime_type=mime)
-        req = documentai.ProcessRequest(name=resource_name, raw_document=raw_document)
-        result = client.process_document(request=req)
-        document = result.document
-
-        # Extract entities from Document AI response
-        parsed = {}
-        for entity in document.entities:
-            key = entity.type_
-            val = entity.mention_text
-            parsed[key] = val
-
-        # Map Document AI entity types to our schema
-        if doc_type == 'invoice':
-            items = []
-            for entity in document.entities:
-                if entity.type_ == 'line_item':
-                    item = {}
-                    for prop in entity.properties:
-                        if prop.type_ == 'line_item/description':
-                            item['description'] = prop.mention_text
-                        elif prop.type_ == 'line_item/quantity':
-                            try:
-                                item['quantity'] = float(prop.mention_text.replace(',', '.'))
-                            except ValueError:
-                                item['quantity'] = 1
-                        elif prop.type_ in ('line_item/unit_price', 'line_item/amount'):
-                            try:
-                                item['unit_price'] = float(
-                                    prop.mention_text.replace(',', '.').replace('€', '').replace('$', '').strip())
-                            except ValueError:
-                                pass  # non-numeric price, skip
-                    if item.get('description'):
-                        items.append(item)
-
-            return {
-                'invoice_number': parsed.get('invoice_id', ''),
-                'invoice_date': self._parse_date(parsed.get('invoice_date')),
-                'due_date': self._parse_date(parsed.get('due_date')),
-                'client_name': parsed.get('receiver_name') or parsed.get('supplier_name', ''),
-                'client_vat': parsed.get('receiver_tax_id', ''),
-                'client_address': parsed.get('receiver_address', ''),
-                'currency': parsed.get('currency', 'EUR'),
-                'items': items,
-                'total': self._parse_amount(parsed.get('total_amount', '0')),
-                'notes': None
-            }
-        else:
-            total = self._parse_amount(parsed.get('total_amount', '0'))
-            vat = self._parse_amount(parsed.get('total_tax_amount', '0'))
-            return {
-                'invoice_number': parsed.get('invoice_id', ''),
-                'expense_date': self._parse_date(parsed.get('invoice_date')),
-                'contractor_name': parsed.get('supplier_name', ''),
-                'amount': total,
-                'currency': parsed.get('currency', 'EUR'),
-                'category': 'Other',
-                'description': parsed.get('supplier_name', ''),
-                # F11-D2 — VAT split parity with the prompt-based providers.
-                'vat_amount': vat or None,
-                'net_amount': round(total - vat, 2) if total and vat else None,
-                'vat_rate': None,  # Document AI gives amounts, not the rate
-            }
-
-    def _parse_date(self, val):
-        if not val:
-            return None
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d.%m.%Y', '%m/%d/%Y'):
-            try:
-                return datetime.strptime(val.strip(), fmt).strftime('%Y-%m-%d')
-            except ValueError:
-                continue
-        return val
-
-    def _parse_amount(self, val):
-        if not val:
-            return 0
-        try:
-            cleaned = val.replace(',', '.').replace('€', '').replace('$', '').replace('£', '').strip()
-            return float(cleaned)
-        except ValueError:
-            return 0
-
-
-# ---------------------------------------------------------------------------
-# Provider registry
-# ---------------------------------------------------------------------------
-
-PROVIDERS = {
-    'openai': OpenAIProvider,
-    'anthropic': AnthropicProvider,
-    'google_docai': GoogleDocAIProvider,
-}
+def rejection_message(exc):
+    """The user message for a file the parser refuses (422). Fixed strings,
+    so no exception text reaches the response."""
+    if isinstance(exc, NotADocument):
+        return NOT_A_DOCUMENT_MESSAGE
+    return UNSUPPORTED_MESSAGE
 
 
 # ---------------------------------------------------------------------------
@@ -448,6 +175,8 @@ class AIParserModule(BaseModule):
                     f'Parsed {doc_type}: {file.filename} via {provider.display_name}')
                 module.logger.info('Parsed %s: %s via %s', doc_type, file.filename, provider.name)
                 return jsonify(result)
+            except (UnsupportedFile, NotADocument) as e:
+                return jsonify({'error': rejection_message(e)}), 422
             except Exception as e:
                 module.logger.error('AI parse failed: %s — %s', file.filename, e)
                 module.core.log_activity(
@@ -521,6 +250,8 @@ class AIParserModule(BaseModule):
                            'AI provider not configured (Settings → AI Parser)')
         try:
             result = provider.parse_document(file.read(), file.filename, doc_type)
+        except (UnsupportedFile, NotADocument) as e:
+            raise ApiError(422, 'unprocessable', rejection_message(e))
         except Exception as e:
             self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
             raise ApiError(502, 'parse_failed',
@@ -601,7 +332,7 @@ class AIParserModule(BaseModule):
         <label style="font-weight: bold; color: var(--color-primary);">🤖 AI Document Parser</label>
         <div style="display: flex; gap: 10px; align-items: end; margin-top: 8px;">
             <div style="flex: 1;">
-                <input type="file" id="ai_parse_file" accept=".pdf,.jpg,.jpeg,.png"
+                <input type="file" id="ai_parse_file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
                        style="padding: 8px; border: 1px dashed var(--color-primary); border-radius: 5px; background: var(--color-surface); width: 100%;">
             </div>
             <button type="button" onclick="aiParseDocument('invoice')" class="btn btn-primary"
