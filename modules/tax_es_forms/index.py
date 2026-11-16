@@ -21,12 +21,16 @@ from .boxes import (
     BOX_TABLE_VERSION,
     MODELO_390_ORDER,
     MODELO_390_OUT_OF_SCOPE,
+    MODELO_347_EXCLUSIONS,
+    MODELO_347_OUT_OF_SCOPE,
     boxes_for_year,
     modelo_390_boxes_for_year,
+    modelo_347_rules_for_year,
 )
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
+    compute_modelo_347,
     compute_modelo_349,
     compute_modelo_390,
     quarter_of,
@@ -287,6 +291,26 @@ class TaxEsFormsModule(BaseModule):
         })
         return result
 
+    def _draft_347(self, year):
+        """Annual operations with third parties above the threshold."""
+        from year_tables import fallback_note
+        vat_rate, _ = self._rates()
+        table_year, rules, fallback = modelo_347_rules_for_year(year)
+        result = compute_modelo_347(
+            self._invoices_in(year), self._expenses_in(year), vat_rate,
+            rules['threshold'], convert_expense=self._convert_to_eur)
+        from modules.fiscal_calendar.calendar_data import deadlines_for_year
+        deadline = next((e for e in deadlines_for_year(year) if e['form'] == '347'), None)
+        result.update({
+            'year': year, 'source': rules['source'],
+            'exclusion_labels': MODELO_347_EXCLUSIONS,
+            'out_of_scope': MODELO_347_OUT_OF_SCOPE,
+            'deadline': deadline,
+            'table_year': table_year, 'table_fallback': fallback,
+            'table_note': fallback_note(table_year) if fallback else '',
+        })
+        return result
+
     @staticmethod
     def _box_labels(year, form):
         _table_year, tables, _fallback = boxes_for_year(year)
@@ -346,6 +370,11 @@ class TaxEsFormsModule(BaseModule):
         def draft_390(year):
             return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
 
+        @bp.route('/347/<int:year>')
+        @login_required
+        def draft_347(year):
+            return render_template('tax_forms_draft_347.html', draft=module._draft_347(year))
+
         @bp.route('/349/<int:year>/<int:quarter>')
         @login_required
         def draft_349(year, quarter):
@@ -369,7 +398,18 @@ class TaxEsFormsModule(BaseModule):
             {'path': 'draft/130/<int:year>/<int:quarter>', 'methods': ['GET'],
              'handler': self._api_draft_130,
              'summary': 'Modelo 130 (IRPF) draft boxes for a quarter'},
+            {'path': 'draft/347/<int:year>', 'methods': ['GET'],
+             'handler': self._api_draft_347,
+             'summary': 'Modelo 347 (operations with third parties) check for a year'},
         ]
+
+    def _api_draft_347(self, request, year=None):
+        draft = self._draft_347(year)
+        draft.pop('exclusion_labels', None)
+        if draft.get('deadline'):
+            draft['deadline'] = {k: (v.isoformat() if hasattr(v, 'isoformat') else v)
+                                 for k, v in draft['deadline'].items()}
+        return draft, 200
 
     def _api_validate_quarter(self, quarter):
         from modules.api.index import ApiError

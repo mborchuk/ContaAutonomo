@@ -597,7 +597,11 @@ carries a non-dismissible "not tax advice" banner.
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
   `/tax-forms-draft/390/<year>` — Modelo 390 annual summary, each casilla the
   sum of the four quarterly 303 drafts (casillas per the AEAT 2025
-  instructions; out-of-scope items listed on the page)
+  instructions; out-of-scope items listed on the page);
+  `/tax-forms-draft/347/<year>` — Modelo 347 check: customers (key B) and
+  suppliers (key A) above 3,005.06 EUR IVA included, quarterly split,
+  exclusions with their rule (349 operations, IRPF retention, insurance,
+  Social Security, expenses without a supplier)
 - Engine (`calculator.py`, pure functions): IVA repercutido prefers the frozen
   fiscal snapshot on issued invoices; IVA soportado uses the expense VAT
   breakdown (`vat_amount` × `deductible_pct`); Modelo 130 is cumulative
@@ -605,7 +609,8 @@ carries a non-dismissible "not tax advice" banner.
 - Box mapping lives in `boxes.py`, versioned (`BOX_TABLE_VERSION`) — verify
   against the current official AEAT models before each fiscal year
 - Integrations: dashboard tax panel (display-only) and REST endpoints
-  (`/api/v1/m/tax_es_forms/draft/303|130/<year>/<q>`)
+  (`/api/v1/m/tax_es_forms/draft/303|130|349/<year>/<q>`,
+  `/api/v1/m/tax_es_forms/draft/347/<year>`)
 
 ### RETA Advisor (`reta_advisor`)
 

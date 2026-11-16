@@ -97,9 +97,10 @@ table — verify"*.
 
 | File | What to check | Official source | When done |
 |------|---------------|-----------------|-----------|
-| `modules/fiscal_calendar/calendar_data.py` | Generated filing windows for the new year (quarterly forms, 390, Renta); add `WINDOW_OVERRIDES` for dates AEAT moves (national holidays) | AEAT *Calendario del contribuyente* | Add the year to `VERIFIED_YEARS`, bump `CALENDAR_VERSION` |
+| `modules/fiscal_calendar/calendar_data.py` | Generated filing windows for the new year (quarterly forms, 390, 347, Renta); add `WINDOW_OVERRIDES` for dates AEAT moves (national holidays) | AEAT *Calendario del contribuyente* | Add the year to `VERIFIED_YEARS`, bump `CALENDAR_VERSION` |
 | `modules/tax_es_forms/boxes.py` | Modelo 303 and 130 box numbers and labels | AEAT Sede, current Modelo 303 / 130 | Add the year to `BOX_TABLES` (same dicts if unchanged), bump `BOX_TABLE_VERSION` |
 | `modules/tax_es_forms/boxes.py` (390) | Modelo 390 casillas in `MODELO_390_BOXES` | AEAT Sede, *Instrucciones modelo 390* of the year | Add the year to `MODELO_390_TABLES` |
+| `modules/tax_es_forms/boxes.py` (347) | Modelo 347 threshold and exclusions (`MODELO_347_TABLES`, `MODELO_347_EXCLUSIONS`) | RD 1065/2007 arts. 31–33, AEAT Modelo 347 instructions of the year | Add the year to `MODELO_347_TABLES` |
 | `modules/reta_advisor/brackets.py` | RETA brackets and quotas, generic deduction % | Seguridad Social (cotización por ingresos reales), BOE *orden de cotización* | Add the year to `BRACKET_TABLES`, bump `BRACKET_TABLE_VERSION` |
 | `modules/tax_es_irpf/params/es_irpf_<year>.json` | IRPF scales, minimums, regional deductions | AEAT *Manual práctico de Renta*, regional laws | Add the year's file |
 

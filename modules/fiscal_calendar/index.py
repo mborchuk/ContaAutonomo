@@ -47,7 +47,7 @@ class FiscalCalendarModule(BaseModule):
 
     @property
     def description(self):
-        return ('Spanish AEAT filing deadlines (Modelo 303/130/349/111/390/100) '
+        return ('Spanish AEAT filing deadlines (Modelo 303/130/349/111/390/347/100) '
                 'as a dashboard panel with reminders. Local data, no external API.')
 
     @property
