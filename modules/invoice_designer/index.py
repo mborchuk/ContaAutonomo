@@ -286,19 +286,37 @@ class InvoiceDesignerModule(BaseModule):
         app.register_blueprint(bp)
 
     def get_invoice_templates(self):
-        """Register custom templates so they appear in Settings dropdown."""
+        """Register custom templates so they appear in Settings dropdown; the
+        core renders each through its `render` callable."""
+        from functools import partial
         templates = []
         try:
             for tpl in self.InvoiceTemplate.query.all():
                 templates.append({
                     'id': f'designer_{tpl.id}',
                     'name': f'🎨 {tpl.name}',
-                    'path': '__designer__',
-                    '_designer_id': tpl.id,
+                    'render': partial(self.render_invoice_pdf, tpl.id),
                 })
         except Exception:  # DB query may fail if the table is missing
             pass
         return templates
+
+    def render_invoice_pdf(self, template_id, invoice, customer, settings):
+        """PDF bytes of `invoice` in designer template `template_id`, or None
+        when the template no longer exists."""
+        tpl = self._db.session.get(self.InvoiceTemplate, template_id)
+        if tpl is None:
+            return None
+        cfg = json.loads(tpl.config_json)
+        merged = dict(DEFAULT_CONFIG)
+        merged.update(cfg)
+        if 'labels' in cfg:
+            merged['labels'] = dict(DEFAULT_CONFIG['labels'])
+            merged['labels'].update(cfg['labels'])
+        mm = self.core.module_manager
+        return generate_pdf_from_config(invoice, customer, settings, merged,
+                                        storage=self.core.storage,
+                                        blocks=mm.get_invoice_blocks() if mm else [])
 
     # ---- CRUD ----
 

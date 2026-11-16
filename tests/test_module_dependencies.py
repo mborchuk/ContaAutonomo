@@ -218,6 +218,9 @@ def test_no_new_imports_between_modules():
         for other in re.findall(r'^\s*(?:from|import) modules\.(\w+)', path.read_text(), re.M):
             if other != own:
                 found.add((own, other))
+    core = sorted(p.name for p in root.glob('*.py')
+                  if re.search(r'^\s*(?:from|import) modules\.', p.read_text(), re.M))
+    assert not core, f'core files import a module: {core}'
     assert found <= KNOWN_CROSS_MODULE_IMPORTS, sorted(found - KNOWN_CROSS_MODULE_IMPORTS)
     assert found == KNOWN_CROSS_MODULE_IMPORTS, (
         'remove these from KNOWN_CROSS_MODULE_IMPORTS: '
