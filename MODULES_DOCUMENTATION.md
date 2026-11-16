@@ -222,6 +222,7 @@ Every module receives `self.core` — a `CoreServices` instance.
 | `core.activity_logger` | `ActivityLogger` | Active logger instance |
 | `core.scheduler` | `TaskScheduler` | Task scheduler |
 | `core.module_manager` | `ModuleManager` | Module manager (access other modules' data via contracts) |
+| `core.functions` | `FunctionRegistry` | Named functions of the core and the modules — see [Functions](#functions) |
 | `core.invoice_service` | `InvoiceService` | Safe API for reading/writing invoices (PAID = read-only) |
 | `core.currency_service` | `CurrencyService` | Exchange rate API — get rates, convert amounts, register custom providers |
 
@@ -982,6 +983,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
 | `get_auth_providers()` | Return `AuthProvider` instances for pluggable auth |
 | `get_capabilities()` | Declare capabilities for cross-module discovery |
+| `get_functions()` | Registry functions this module implements, by contract name — see [Functions](#functions) |
 | `on_user_authenticated(identity)` | Called after successful login (any provider) |
 | `on_user_logout()` | Called when user logs out |
 
@@ -994,14 +996,56 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 
 ### Cross-Module Communication
 
-Modules can access other enabled modules via `self.core.module_manager.modules`:
+In order of preference: call a registry function ([Functions](#functions)),
+use a capability, or look a module up with `provider_of` and use its
+`interface` ([Replacing a module](#replacing-a-module)). Never reach into
+`module_manager.modules` or call another module's private methods.
 
-```python
-# Direct access by module_id (simple but tightly coupled)
-pdf_sig = self.core.module_manager.modules.get('pdf_signature')
-if pdf_sig:
-    signed_bytes = pdf_sig._apply_visual_signature(pdf_bytes)
-```
+### Functions
+
+A **function** is a named operation with a contract, implemented by the core
+or by a module and called by name, so the caller does not know or care which
+one runs. A module that implements the same names replaces the one that did.
+
+- **Contracts** live in the core, in `contracts.py`: name (`area.verb_object`),
+  version, parameters (`functions.Param`: kind `str` / `int` / `date` /
+  `bytes`, required, choices, limits), what it returns, and flags —
+  `read_only`, `external` (sends data out of the app), `assistant` (the ledger
+  assistant may call it; needs `read_only` and not `external`), with the
+  `record_kind` and `assistant_fields` it may send. Results are plain JSON
+  values, never database objects.
+- **Implementations**: the core registers its own in `core_functions.py`; a
+  module returns its own from `get_functions()`:
+
+  ```python
+  def get_functions(self):
+      return {'ledger.list_expenses': self.list_expenses,
+              'ai.parse_document': {'call': self.parse, 'route': '/ai-parser/parse'}}
+  ```
+
+  The implementation must accept every parameter of the contract by name
+  (defaults for the optional ones). One that does not, or names an unknown
+  contract, is ignored and logged once; a test fails if a bundled module has one.
+- **Calling**: `self.core.functions.call('ledger.list_invoices', client='acme')`
+  checks the arguments first (`InvalidArguments`, a message that names the
+  parameter, never its value) and raises `FunctionUnavailable` when nothing
+  implements it. `available(name)`, `provider(name)`, `route(name)` (the URL a
+  browser form posts to) and `find(assistant=True)` answer the other questions;
+  `problem_with(name, arguments)` returns the problem as text for a response.
+- **Which implementation runs**: the core's when it has one, else the first
+  enabled module in id order. Choosing another one in Settings is not built yet.
+- **Dependencies** may name a function: `dependencies = ['ai.complete_text']`
+  is met by the core or by any enabled module that implements it, and enabling
+  the module enables the first module that does.
+- The Modules tab lists each module's functions.
+
+Functions today:
+
+| Function | Implemented by | Notes |
+|---|---|---|
+| `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
+| `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
+| `ledger.list_expenses`, `tax.draft_303`, `tax.draft_130`, `ai.text_status`, `ai.complete_text`, `ai.parse_document` | — | Contracts defined; implementations follow |
 
 ### Dependencies
 
@@ -1070,9 +1114,11 @@ write its records there with these columns filled: `expense_date`, `amount`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-Code imports between modules (`from modules.api.index import ApiError`,
-`fiscal_calendar.calendar_data`, `pdf_verify.extract_signatures`) are not
-covered: replacing those modules means keeping those import paths.
+Code imports between modules (`fiscal_calendar.calendar_data`,
+`pdf_verify.extract_signatures`, `tax_es_forms.calculator`) are not covered:
+replacing those modules means keeping those import paths. `ApiError` is in the
+core (`from api_errors import ApiError`); `modules.api.index.ApiError` is the
+same class.
 
 ### Capabilities System
 

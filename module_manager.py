@@ -25,6 +25,8 @@ from db_helpers import db_get
 from timeutil import utcnow
 
 from constants import invoice_locked
+import core_functions
+from functions import FunctionRegistry
 
 
 def valid_capability(cap):
@@ -88,6 +90,16 @@ class BaseModule(ABC):
         alternative expenses module. Every module fills its own id already.
         Returns a list of module ids (default: none)."""
         return []
+
+    def get_functions(self):
+        """Registry functions this module implements (contracts.py), by name:
+        {'ledger.list_expenses': self.list_expenses}, or with a browser route,
+        {'ai.parse_document': {'call': self.parse, 'route': '/ai-parser/parse'}}.
+        Other code calls them through `core.functions.call(name, ...)`, so a
+        module implementing the same names can replace this one. Read on every
+        lookup; return the same names whatever the state, and raise inside a
+        function when it cannot run."""
+        return {}
 
     @property
     def interface(self):
@@ -1152,6 +1164,12 @@ class CoreServices:
         return self._module_manager
 
     @property
+    def functions(self):
+        """The function registry (functions.py): `call(name, ...)`,
+        `available(name)`, `find(...)`."""
+        return self._module_manager.functions if self._module_manager else None
+
+    @property
     def app_path(self):
         """Application root path"""
         return self.app.root_path
@@ -1839,6 +1857,8 @@ class ModuleManager:
         self.db = db
         self.core = CoreServices(app, db)
         self.core._module_manager = self
+        self.functions = FunctionRegistry(self)
+        core_functions.register(self.functions, self.core)
         self.modules = {}           # module_id -> module instance
         self.discovered = {}        # module_id -> module class
         self.failed_modules = {}    # module_id -> error message (load failures)
@@ -1938,6 +1958,7 @@ class ModuleManager:
                                      and not load_error),
                 'dependencies': self.declared_dependencies(mod_id),
                 'provides': self._instance_attr(mod_id, 'provides'),
+                'functions': self.declared_functions(mod_id),
                 'required_by': self.required_by(mod_id),
                 'missing_dependencies': (self.missing_dependencies(mod_id)
                                          if self.is_enabled(mod_id) else []),
@@ -1954,12 +1975,31 @@ class ModuleManager:
             return []
 
     def declared_dependencies(self, module_id):
-        """Module ids or roles a module declares in `dependencies`."""
+        """Module ids, roles or function names a module declares in `dependencies`."""
         return self._instance_attr(module_id, 'dependencies')
+
+    def declared_functions(self, module_id):
+        """Names of the registry functions a discovered module implements."""
+        cls = self.discovered.get(module_id)
+        if not cls:
+            return []
+        try:
+            return sorted(cls(self.core).get_functions() or {})
+        except Exception:
+            return []
+
+    @staticmethod
+    def is_function_name(name):
+        """Function names have a dot ('ledger.list_invoices'); module ids do not."""
+        return '.' in name
 
     def providers(self, role):
         """Discovered modules that fill `role`: the module named like the role
-        first (the native one), then the others in id order."""
+        first (the native one), then the others in id order. For a function
+        name: the modules that implement it, in id order (the core, when it
+        implements it too, is not listed — see `_satisfied`)."""
+        if self.is_function_name(role):
+            return [m for m in sorted(self.discovered) if role in self.declared_functions(m)]
         found = sorted(m for m in self.discovered
                        if m != role and role in self._instance_attr(m, 'provides'))
         return ([role] if role in self.discovered else []) + found
@@ -1984,6 +2024,8 @@ class ModuleManager:
         return None
 
     def _satisfied(self, dep, without=None):
+        if self.is_function_name(dep) and self.functions.core_provides(dep):
+            return True
         return any(self.is_enabled(p) for p in self.providers(dep) if p != without)
 
     def missing_dependencies(self, module_id):
@@ -2021,10 +2063,14 @@ class ModuleManager:
         enabled = []
         for dep in self.declared_dependencies(module_id):
             candidates = self.providers(dep)
+            if self._satisfied(dep):
+                continue
             if not candidates:
-                logger.warning("Module '%s' depends on unknown module '%s'",
-                               _sanitize_log(module_id), _sanitize_log(dep))
-            elif not self._satisfied(dep):
+                logger.warning("Module '%s' depends on unknown %s '%s'",
+                               _sanitize_log(module_id),
+                               'function' if self.is_function_name(dep) else 'module',
+                               _sanitize_log(dep))
+            else:
                 enabled += self.enable_module(candidates[0], _chain + (module_id,))
         self._set_enabled(module_id, True)
         enabled.append(module_id)
@@ -2087,6 +2133,7 @@ class ModuleManager:
         for mod_id in self.discovered:
             if self.is_enabled(mod_id):
                 self._load_module(mod_id)
+        self.functions.check_all()  # log invalid function registrations once
 
     def _load_module(self, module_id):
         """Load and initialize a single module"""

@@ -154,7 +154,7 @@ class EInvoiceModule(BaseModule):
         ]
 
     def _api_facturae(self, request, invoice_id=None):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         invoice = self.core.invoice_service.get(invoice_id)
         if not invoice:
             raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')

@@ -267,7 +267,7 @@ class AIParserModule(BaseModule):
         ]
 
     def _api_parse(self, request):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         file = request.files.get('file')
         if not file or not file.filename:
             raise ApiError(400, 'bad_request',

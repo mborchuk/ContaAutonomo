@@ -6,6 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Function registry**: named functions with contracts in the core
+  (`contracts.py`), implemented by the core (`core_functions.py`) or by a
+  module (`get_functions()`) and called by name through `core.functions`, so
+  an implementation can be replaced without changing its callers. Arguments
+  are checked against the contract; dependencies may name a function. The core
+  implements `ledger.list_invoices` and `ledger.list_customers`, which
+  `GET /api/v1/invoices` and `/customers` now call. `ApiError` moved to the
+  core (`api_errors.py`).
 - **AI Parser CLI agents** (#145): Claude Code CLI and Kiro CLI as parse providers,
   using the CLI installed and logged in on the server. Off unless the server
   sets `AI_PARSER_ALLOW_CLI=1`; each run is read-only in a temporary

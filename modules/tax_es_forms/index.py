@@ -486,7 +486,7 @@ class TaxEsFormsModule(BaseModule):
         return draft, 200
 
     def _api_validate_quarter(self, quarter):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         if quarter not in (1, 2, 3, 4):
             raise ApiError(400, 'bad_request', 'quarter must be 1-4')
 
