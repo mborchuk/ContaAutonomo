@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}What-if simulator {{ year }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>🔮 What-if simulator — {{ year }}</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('tax_es_irpf.index') }}" class="btn btn-secondary">← IRPF Estimator</a>
+    </div>
+</div>
+<div class="note note-info">
+    <strong>Estimate, not tax advice.</strong> Change the year's figures and compare
+    the results with the real ones. <strong>Nothing is saved</strong>: scenarios never
+    change invoices, expenses or settings. The engines are the ones behind the
+    Modelo 130, Modelo 100 and RETA pages.
+</div>
+{% if error %}
+<div class="note note-danger">{{ error }}</div>
+{% endif %}
+{% for e in errors or [] %}
+<div class="note note-warning">⚠ {{ e }} The real value is used instead.</div>
+{% endfor %}
+
+{% if base %}
+<form method="get" action="{{ url_for('tax_es_irpf.simulator') }}" class="card">
+    <div class="card-header">Scenario</div>
+    <div class="card-body">
+        <div class="form-grid-4">
+            <div class="form-group">
+                <label for="income">Income {{ year }} (EUR)</label>
+                <input type="number" step="0.01" min="0" id="income" name="income"
+                       value="{{ '%.2f'|format(scenario.income) }}">
+                <small class="helper-text">Real: {{ '%.2f'|format(base.income) }}</small>
+            </div>
+            <div class="form-group">
+                <label for="expenses">Deductible expenses (EUR, RETA excluded)</label>
+                <input type="number" step="0.01" min="0" id="expenses" name="expenses"
+                       value="{{ '%.2f'|format(scenario.expenses) }}">
+                <small class="helper-text">Real: {{ '%.2f'|format(base.expenses) }}</small>
+            </div>
+            <div class="form-group">
+                <label for="region">Comunidad autónoma</label>
+                <select id="region" name="region">
+                    {% for r in regions %}
+                    <option value="{{ r }}" {% if r == scenario.region %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+                <small class="helper-text">Real: {{ base.region }}</small>
+            </div>
+            <div class="form-group">
+                <label for="reta_base">RETA monthly base (EUR)</label>
+                {% if base.contribution_rate_pct %}
+                <input type="number" step="0.01" min="0" id="reta_base" name="reta_base"
+                       value="{{ '%.2f'|format(scenario.monthly_quota / (base.contribution_rate_pct / 100)) }}">
+                <small class="helper-text">Real: {{ '%.2f'|format(base.reta_base) }} ·
+                    quota = base × {{ '%.2f'|format(base.contribution_rate_pct) }} %;
+                    applies to the {{ base.months_remaining }} month(s) left</small>
+                {% else %}
+                <input type="number" id="reta_base" disabled aria-describedby="reta-off">
+                <small class="helper-text" id="reta-off">Enable the RETA Quota Advisor to change the base.</small>
+                {% endif %}
+            </div>
+        </div>
+        <div class="action-row">
+            <button type="submit" class="btn btn-primary">Simulate</button>
+            <a href="{{ url_for('tax_es_irpf.simulator') }}" class="btn btn-secondary">Reset to real figures</a>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% if outcome %}
+{% set rows = [
+    ('irpf_year', 'IRPF for the year (Modelo 100 cuota líquida)'),
+    ('m100_result', 'Modelo 100 result after retenciones and 130 payments'),
+    ('m130_remaining', 'Modelo 130 still to pay this year (open quarter included)'),
+    ('regularization', 'RETA regularización (+ to pay, − refund)'),
+    ('net_income', 'Net income after expenses, RETA and IRPF'),
+] %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Result</th><th class="text-right">Real</th><th class="text-right">Scenario</th><th class="text-right">Difference</th></tr></thead>
+    <tbody>
+    {% for key, label in rows %}
+        <tr>
+            <td>{{ label }}</td>
+            {% if outcome.real[key] is none %}
+            <td colspan="3" class="text-right"><span class="status-badge status-missing">missing</span>
+                <span class="fine-print">Enable the RETA Quota Advisor</span></td>
+            {% else %}
+            <td class="text-right num">{{ '%.2f'|format(outcome.real[key]) }}</td>
+            <td class="text-right num">{{ '%.2f'|format(outcome.simulated[key]) }}</td>
+            <td class="text-right num"><strong>{{ '%+.2f'|format(outcome.difference[key]) }}</strong></td>
+            {% endif %}
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% for note in outcome.simulated.notes %}
+<p class="fine-print"><em>{{ note }}</em></p>
+{% endfor %}
+<p class="fine-print">
+    Figures are for {{ year }} with the data recorded up to {{ today.strftime('%d/%m/%Y') }};
+    income and expenses are year-to-date totals you can raise to a full-year forecast.
+    The 130 still to pay is the cumulative fourth-quarter payment over these figures
+    minus the payments of the closed quarters ({{ '%.2f'|format(base.paid_130_closed) }}).
+    Net income subtracts the RETA deducted in IRPF ({{ '%.2f'|format(outcome.simulated.reta_in_irpf) }}),
+    the regularización and the IRPF of the year.
+    Not modelled: tarifa plana and pluriactividad.
+</p>
+{% endif %}
+{% endblock %}
