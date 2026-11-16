@@ -397,7 +397,7 @@ class ExpensesModule(BaseModule):
         }
 
     def _api_expenses(self, request):
-        from modules.api.index import ApiError  # lazy: only when API calls in
+        from api_errors import ApiError  # lazy: only when API calls in
         repo = self._get_repo()
 
         if request.method == 'POST':
@@ -464,7 +464,7 @@ class ExpensesModule(BaseModule):
         }, 200
 
     def _api_get_expense(self, request, exp_id=None):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         exp = db_get(self.Expense, exp_id)
         if not exp:
             raise ApiError(404, 'not_found', f'Expense #{exp_id} not found')

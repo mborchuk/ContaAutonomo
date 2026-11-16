@@ -336,7 +336,7 @@ class DocumentsModule(BaseModule):
         }
 
     def _api_documents(self, request):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         try:
             page = max(1, int(request.args.get('page', 1)))
             per_page = min(100, max(1, int(request.args.get('per_page', 20))))
@@ -359,7 +359,7 @@ class DocumentsModule(BaseModule):
         }, 200
 
     def _api_get_document(self, request, doc_id=None):
-        from modules.api.index import ApiError
+        from api_errors import ApiError
         doc = db_get(self.Document, doc_id)
         if not doc:
             raise ApiError(404, 'not_found', f'Document #{doc_id} not found')

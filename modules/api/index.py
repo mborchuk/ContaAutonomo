@@ -28,6 +28,8 @@ from flask import Blueprint, jsonify, request
 from werkzeug.wrappers import Response as WerkzeugResponse
 from sqlalchemy import inspect as sa_inspect, text
 
+from api_errors import ApiError
+from core_functions import serialize_customer, serialize_invoice
 from module_manager import BaseModule
 import secret_box
 
@@ -47,16 +49,6 @@ PATCHABLE_FIELDS = {
     'client_name', 'due_date', 'invoice_date',
     'notes', 'payment_method', 'currency', 'description',
 }
-
-
-class ApiError(Exception):
-    """Raised inside handlers to short-circuit with a JSON error response."""
-
-    def __init__(self, status, code, message):
-        super().__init__(message)
-        self.status = status
-        self.code = code
-        self.message = message
 
 
 # ISO 4217 alphabetic code, as the rate providers expect.
@@ -234,22 +226,9 @@ class ApiModule(BaseModule):
             raise ApiError(400, 'bad_request',
                            f'Invalid date for "{field}" (expected YYYY-MM-DD)')
 
-    @staticmethod
-    def _serialize_invoice(inv, svc):
-        return {
-            'id': inv.id,
-            'invoice_number': inv.invoice_number,
-            'client_name': inv.client_name,
-            'customer_id': inv.customer_id,
-            'amount_usd': inv.amount_usd,
-            'amount_eur': inv.amount_eur,
-            'currency': inv.currency,
-            'exchange_rate': inv.exchange_rate,
-            'invoice_date': inv.invoice_date.isoformat() if inv.invoice_date else None,
-            'due_date': inv.due_date.isoformat() if inv.due_date else None,
-            'status': inv.status,
-            'has_pdf': svc.has_pdf(inv),
-        }
+    # The invoice and customer shapes are the core's (core_functions.py), so
+    # /api/v1 and the registry functions return the same records.
+    _serialize_invoice = staticmethod(serialize_invoice)
 
     @staticmethod
     def _serialize_expense(exp):
@@ -264,17 +243,7 @@ class ApiModule(BaseModule):
             'invoice_number': exp.invoice_number,
         }
 
-    @staticmethod
-    def _serialize_customer(c):
-        return {
-            'id': c.id,
-            'name': c.name,
-            'vat_number': c.vat_number,
-            'country': c.country,
-            'email': c.email,
-            'tax_type': c.tax_type,
-            'is_default': bool(c.is_default),
-        }
+    _serialize_customer = staticmethod(serialize_customer)
 
     def _gen_invoice_number(self, Invoice, year):
         """Generate a unique `YYYY-NNN` invoice number for the given year."""
@@ -508,40 +477,28 @@ class ApiModule(BaseModule):
     # Handlers
     # ------------------------------------------------------------------ #
 
-    def _list_invoices(self):
-        from app import Invoice
-        svc = self.core.invoice_service
-
-        status = request.args.get('status')
+    @staticmethod
+    def _paging():
+        """(page, per_page) from the query string, clamped to 1.. and 1..100."""
         try:
             page = max(1, int(request.args.get('page', 1)))
             per_page = min(100, max(1, int(request.args.get('per_page', 20))))
         except ValueError:
             raise ApiError(400, 'bad_request', 'page/per_page must be integers')
+        return page, per_page
 
-        query = Invoice.query
-        if status:
-            query = query.filter_by(status=status)
-        # Optional read-only filters (used by the ledger assistant, G-7).
-        if request.args.get('date_from'):
-            query = query.filter(Invoice.invoice_date >= self._parse_date(
-                request.args['date_from'], 'date_from'))
-        if request.args.get('date_to'):
-            query = query.filter(Invoice.invoice_date <= self._parse_date(
-                request.args['date_to'], 'date_to'))
-        client = (request.args.get('client') or '').strip()
-        if client:
-            query = query.filter(Invoice.client_name.ilike(f'%{client}%'))
-        total = query.count()
-        rows = (query.order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
-                .offset((page - 1) * per_page).limit(per_page).all())
+    def _call(self, name, **arguments):
+        """A registry function behind an endpoint; bad arguments answer 400."""
+        problem = self.core.functions.problem_with(name, arguments)
+        if problem:
+            raise ApiError(400, 'bad_request', f'Invalid query: {problem}')
+        return self.core.functions.call(name, **arguments)
 
-        return {
-            'data': [self._serialize_invoice(inv, svc) for inv in rows],
-            'page': page,
-            'per_page': per_page,
-            'total': total,
-        }, 200
+    def _list_invoices(self):
+        page, per_page = self._paging()
+        return self._call('ledger.list_invoices', page=page, per_page=per_page,
+                          **{k: request.args.get(k)
+                             for k in ('date_from', 'date_to', 'client', 'status')}), 200
 
     def _create_invoice(self):
         from app import Invoice, InvoiceItem, Customer, db
@@ -771,9 +728,7 @@ class ApiModule(BaseModule):
         return svc.send_pdf(inv)  # Flask response, passed through by _handle
 
     def _list_customers(self):
-        from app import Customer
-        rows = Customer.query.order_by(Customer.name).all()
-        return {'data': [self._serialize_customer(c) for c in rows]}, 200
+        return self._call('ledger.list_customers'), 200
 
     def _list_expenses(self):
         mm = self.core.module_manager

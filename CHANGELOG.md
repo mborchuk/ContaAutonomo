@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Function registry** (#146): named functions that the core and modules
+  declare — description and code together, in the module's own folder
+  (`get_functions()` returns `functions.Function`) — and that other code calls
+  by name through `core.functions`, with the arguments checked against the
+  declaration. A module, also one from outside this repository, replaces
+  another by declaring the same names. The first provider of a name owns it
+  (core, then modules in load order); a later claim is not used and shows as a
+  warning on that module's card in Settings → Modules. Dependencies may name a
+  function. The core provides `ledger.list_invoices` and
+  `ledger.list_customers`, which `GET /api/v1/invoices` and `/customers` now
+  call. `ApiError` moved to the core (`api_errors.py`).
 - **AI Parser CLI agents** (#145): Claude Code CLI and Kiro CLI as parse providers,
   using the CLI installed and logged in on the server. Off unless the server
   sets `AI_PARSER_ALLOW_CLI=1`; each run is read-only in a temporary

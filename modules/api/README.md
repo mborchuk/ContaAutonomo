@@ -271,8 +271,8 @@ The handler returns a `(json_data, status)` tuple or a Flask `Response`. Path
 params are supported: a route `path` of `things/<int:id>` matches
 `/api/v1/m/my_module/things/5` and the handler is called as
 `handler(request, id=5)`. To signal an error, raise
-`ApiError(status, code, message)` (import it lazily inside the handler:
-`from modules.api.index import ApiError`).
+`ApiError(status, code, message)` from the core: `from api_errors import ApiError`
+(`modules.api.index.ApiError` is the same class, kept for older modules).
 
 ### Module endpoints that ship today
 
