@@ -39,7 +39,7 @@ from . import assistant as core_steps
 MAX_QUESTION = 500
 NO_TEXT_PROVIDER = ('No enabled module answers text questions. Enable the AI Parser '
                     'module in Settings → Modules and choose OpenAI or Anthropic with an '
-                    'API key in Settings → AI Parser.')
+                    'API key, or Claude Code CLI or Kiro CLI, in Settings → AI Parser.')
 NOTHING_TO_READ = 'No enabled module provides data the assistant can read.'
 TEXT_STATUS_FAILED = ('The module that answers text questions could not report its status. '
                       'Check the server log.')

@@ -132,14 +132,29 @@ class AIParserModule(BaseModule):
             raise FunctionUnavailable(self._not_configured_message())
         return provider.parse_document(file_data, filename, doc_type)
 
+    def _cli_agent(self):
+        """The selected CLI agent provider, or None for an API provider."""
+        cfg = self.AIParserConfig.query.first()
+        cls = CLI_PROVIDERS.get(cfg.provider) if cfg else None
+        return cls(self._provider_config(cfg)) if cls else None
+
     def text_status(self):
+        """Whether the selected provider answers text: OpenAI and Anthropic
+        with a key, a CLI agent when it can run; not Google Document AI."""
         settings = self.provider_settings()
-        reason = text.missing_reason(settings)
+        agent = self._cli_agent()
+        reason = agent.unavailable_reason() if agent else text.missing_reason(settings)
         return {'available': reason is None, 'provider': settings['display_name'],
                 'reason': reason}
 
     def complete_text(self, system, user, max_tokens=1500):
         """The reply text; the API key never leaves this module."""
+        agent = self._cli_agent()
+        if agent is not None:
+            reason = agent.unavailable_reason()
+            if reason:
+                raise FunctionUnavailable(reason)
+            return agent.complete_text(system, user, max_tokens)
         settings = self.provider_settings()
         reason = text.missing_reason(settings)
         if reason:
