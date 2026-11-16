@@ -18,11 +18,10 @@ expenses with zero Spanish VAT are left out of the deductible base.
 from datetime import date
 
 from constants import counts_as_income
-from invoice_vat import (  # noqa: F401 - invoice_vat_line re-exported
+from invoice_vat import (
     customer_tax_type as _customer_tax_type,
     invoice_base_eur as _invoice_base_eur,
     invoice_output_vat as _invoice_output_vat,
-    invoice_vat_line,
 )
 
 
