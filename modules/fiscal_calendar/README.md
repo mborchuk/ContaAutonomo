@@ -32,6 +32,7 @@ rules, stamped with `CALENDAR_VERSION`:
 | 303, 130, 349, 111 | Q1–Q3 | Days 1–20 of the month after the quarter ends |
 | 303, 130, 349, 111 | Q4 | 1–30 January of the following year |
 | 390 | Annual | 1–30 January of the following year |
+| 347 | Annual | 1 February – last day of February of the following year |
 | 100 (Renta) | Annual | 1 April – 30 June of the following year |
 
 - A window that ends on a Saturday or Sunday moves to the following Monday.

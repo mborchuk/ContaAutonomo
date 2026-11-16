@@ -25,6 +25,14 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tokens.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    {# Installable app (G-8): manifest, icons, service worker registration. #}
+    <link rel="manifest" href="{{ url_for('web_manifest') }}">
+    <meta name="theme-color" content="#4f46e5">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="ContaAutónomo">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <script src="{{ url_for('static', filename='js/pwa.js') }}" defer></script>
     {% block head %}{% endblock %}
 </head>
 <body>

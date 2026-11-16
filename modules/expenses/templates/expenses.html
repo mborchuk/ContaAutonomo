@@ -5,7 +5,10 @@
 {% block content %}
 <div class="page-header">
     <h1>Expenses</h1>
-    <a href="{{ url_for('expenses.expenses_create') }}" class="btn btn-success">+ Add Expense</a>
+    <div class="page-actions">
+        <a href="{{ url_for('expenses.expenses_capture') }}" class="btn btn-secondary">📷 Capture receipt</a>
+        <a href="{{ url_for('expenses.expenses_create') }}" class="btn btn-success">+ Add Expense</a>
+    </div>
 </div>
 
 <!-- Filters -->
@@ -93,6 +96,11 @@
                         {% else %}
                         <span class="status-badge status-missing" title="No VAT breakdown — excluded from Modelo 303 deductions">no VAT data</span>
                         {% endif %}
+                        {% for n in (notices or {}).get(expense.id, []) %}
+                        <a href="{{ url_for('expenses.expenses_edit', id=expense.id) }}#deduction-notices"
+                           class="status-badge status-warning deduction-notice"
+                           title="{{ n.severity_label }}: {{ n.message }} ({{ n.source }})">{{ n.title }}</a>
+                        {% endfor %}
                     </td>
                     <td>
                         {% if expense.file_path %}

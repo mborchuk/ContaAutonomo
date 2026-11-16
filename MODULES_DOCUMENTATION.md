@@ -121,6 +121,8 @@ Key rules:
 | `/scheduler` | Scheduled tasks overview |
 | `/customers/*` | Customer CRUD |
 | `/contractors/*` | Contractor CRUD |
+| `/manifest.webmanifest` | Web app manifest (public): name, icons, `start_url`; with Expenses loaded also the "Capture a receipt" shortcut and the share target `/expenses/capture/share` |
+| `/sw.js` | Service worker (public, `static/js/sw.js`, scope `/`, `Cache-Control: no-cache`). It caches nothing; it only receives shared photos and hands them to the capture page |
 
 ### Security
 
@@ -326,7 +328,9 @@ Track business expenses with file uploads, categories, contractor linking, and
 a full VAT breakdown.
 
 - Routes: `/expenses/`, `/expenses/create`, `/expenses/edit/<id>`, `/expenses/delete/<id>`, download/preview per expense
-- Models: `Expense` (extends the core model), `ExpensesConfig` (category defaults)
+- Models: `Expense` (extends the core model), `ExpensesConfig` (category
+  defaults, home-office share), `ExpenseNoticeDismissal` (dismissed deduction
+  notices)
 - VAT breakdown: `net_amount`, `vat_rate`, `vat_amount`, `deductible`,
   `deductible_pct`. The form auto-splits gross + rate into net + VAT; category
   defaults apply on selection without overwriting user input. Legacy rows keep
@@ -334,11 +338,46 @@ a full VAT breakdown.
 - AI parsing: "Parse receipt with AI" on the create form — one upload prefills
   the form (including VAT fields) and becomes the attached receipt (requires
   the `ai_parser` module)
+- **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
+  shortcut of the installed app): Take photo / Choose photo above the expense
+  form. The photo goes through the AI parse above, so the form below is
+  prefilled and the photo attached; without `ai_parser` it is only attached.
+  Nothing is saved until "Create Expense". A photo shared from the phone's
+  share menu arrives through the service worker (POST
+  `/expenses/capture/share` → redirect → `postMessage`, held in memory only).
+  Without an active service worker that POST only redirects back with a
+  message (CSRF-exempt because it changes nothing; login required).
+  Scripts are external files (`static/js/pwa.js`, `capture.js`, `sw.js`) so
+  they keep working under an enforced Content Security Policy (task C-5).
+  Installing needs HTTPS (or `localhost`): Chrome on Android installs from the
+  menu and gets the share target; Safari on iOS adds it with "Add to Home
+  Screen" but does not support share targets.
 - Nav: Expenses (with group support)
 - Reports: expense data including the VAT split; receipt files can be attached
   to report ZIPs
-- Settings: category VAT/deductibility defaults (Expenses tab)
+- Settings: category VAT/deductibility defaults and the home-office share
+  (Expenses tab)
 - API: expenses CRUD including the VAT fields
+- **Deduction checks** (`deduction_rules.py`, pure, `RULES_VERSION`): a rule
+  table, each rule with its legal citation, checked on 2026-11-16:
+  - *Home-office supplies* (category Utilities and supply names): deductible
+    at 30 % of the share of the home used for the activity (LIRPF art.
+    30.2.5ª b). The share is a setting; without it only claims above 30 % are
+    flagged.
+  - *Dietas* (category Meals, Dietas…): daily total against 26.67 / 53.34 EUR
+    in Spain and 48.08 / 91.35 EUR abroad, without / with an overnight stay
+    (LIRPF 30.2.5ª c, RIRPF 9.A.3.a). A non-EUR expense counts as abroad.
+  - *Vehicle costs* (category Vehicle, Fuel…): above 50 % needs proof of
+    exclusive use; below 50 % looks under-claimed (RIRPF 22.4, LIVA
+    95.Tres.2ª).
+
+  Notices ("Breaks a rule", "Check", "Looks under-claimed") show as badges in
+  the list and as notes on the edit form. They never change the expense. A
+  notice can be dismissed for one expense (POST
+  `/expenses/<id>/notices/<rule_id>/dismiss`); the dismissal is stored in
+  `expense_notice_dismissal` (expense, rule, time), logged as
+  `expense_notice_dismissed`, and deleted with the expense. New seed
+  categories: Meals (10 % VAT) and Vehicle (21 % VAT, 50 % deductible).
 
 ### Tax Management (`tax_management`)
 
@@ -617,7 +656,22 @@ carries a non-dismissible "not tax advice" banner.
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
   `/tax-forms-draft/390/<year>` — Modelo 390 annual summary, each casilla the
   sum of the four quarterly 303 drafts (casillas per the AEAT 2025
-  instructions; out-of-scope items listed on the page)
+  instructions; out-of-scope items listed on the page);
+  `/tax-forms-draft/347/<year>` — Modelo 347 check: customers (key B) and
+  suppliers (key A) above 3,005.06 EUR IVA included, quarterly split,
+  exclusions with their rule (349 operations, IRPF retention, insurance,
+  Social Security, expenses without a supplier)
+- **AEAT import files** (`aeat_files.py`, pure): every draft page has
+  "⬇ AEAT file (not validated)" —
+  `/tax-forms-draft/<303|130|349>/<year>/<q>/aeat-file` and
+  `/tax-forms-draft/<390|347>/<year>/aeat-file` (ISO-8859-1 text). 303, 130
+  and 390 follow the official page layouts kept as data in
+  `aeat_layouts/*.json` (DR303e26v101, DR130e15v12, dr390e2026) for the Sede
+  form's *Importar*; 349 and 347 are the 500-character records of
+  *Presentación mediante fichero*. No file has passed the AEAT validation
+  from the app (it needs the taxpayer's certificate); supported models, what
+  to complete in the form and what is out of scope are in
+  `modules/tax_es_forms/AEAT_FILES.md`
 - Engine (`calculator.py`, pure functions): IVA repercutido prefers the frozen
   fiscal snapshot on issued invoices; IVA soportado uses the expense VAT
   breakdown (`vat_amount` × `deductible_pct`); Modelo 130 is cumulative
@@ -625,7 +679,8 @@ carries a non-dismissible "not tax advice" banner.
 - Box mapping lives in `boxes.py`, versioned (`BOX_TABLE_VERSION`) — verify
   against the current official AEAT models before each fiscal year
 - Integrations: dashboard tax panel (display-only) and REST endpoints
-  (`/api/v1/m/tax_es_forms/draft/303|130/<year>/<q>`)
+  (`/api/v1/m/tax_es_forms/draft/303|130|349/<year>/<q>`,
+  `/api/v1/m/tax_es_forms/draft/347/<year>`)
 
 ### RETA Advisor (`reta_advisor`)
 
@@ -641,6 +696,46 @@ the year-end regularization. Estimate only.
 - Tax panel contribution is display-only (`tax_total = 0`) — `tax_management`
   keeps owning the Social Security amount, so nothing is double-counted
 - Not modeled: tarifa plana, pluriactividad
+
+### IRPF Estimator (`tax_es_irpf`)
+
+Modelo 130 (quarterly) and Modelo 100 (annual) estimates for estimación
+directa simplificada, from year-keyed parameters (`params/es_irpf_<year>.json`).
+Estimate only.
+
+- Routes: `/irpf-es/` (overview), `/irpf-es/modelo130/<year>/<q>`,
+  `/irpf-es/modelo100/<year>` (individual vs. joint), `/irpf-es/simulator`
+- **What-if simulator** (`simulator.py`, pure; `/irpf-es/simulator`, GET only):
+  starts from the year's real figures and lets the user change income,
+  deductible expenses (RETA excluded), comunidad autónoma and the RETA monthly
+  base. It shows real, scenario and difference for the IRPF of the year
+  (cuota líquida), the Modelo 100 result, the Modelo 130 still to pay this
+  year, the RETA regularización (from `reta_advisor.projection`, with the
+  changes) and net income. With no changes it gives exactly the real
+  figures. Nothing is saved: the page reads the profile without creating it
+  and writes no row (tested). A RETA base change applies to the months left
+  in the year; quota = base × the year's contribution rate
+  (`reta_advisor/brackets.py`, `CONTRIBUTION_RATES`, 31.50 % in 2026).
+  Comunidades without a scale in the params use the state supletoria scale,
+  with the engine's note. Not modelled: tarifa plana, pluriactividad.
+
+### Tax Provision (`tax_provision`)
+
+Dashboard panel with the tax owed so far: one total and its parts, each read
+from the module that calculates it — IVA of the open quarter
+(`tax_es_forms.draft_303`, box 71), Modelo 130 of the open quarter
+(`tax_es_irpf.modelo130_boxes`, box 07), the renta result for the year to
+date (`tax_es_irpf.modelo100_result`, cuota diferencial, which already
+credits the year's 130 payments) and the RETA regularización
+(`reta_advisor.projection`). No tax rules of its own.
+
+- Pure sum and sign labels in `provision.py`; negative parts (refunds, VAT
+  credits) reduce the total
+- A part whose module is disabled or fails is left out and named as missing
+- Each part links to its page and shows its next filing date from
+  `fiscal_calendar.deadline_for`
+- No tables, settings, routes or dependencies; "estimate, not tax advice" on
+  the panel. Details: `modules/tax_provision/README.md`
 
 ### Recurring Invoices (`recurring_invoices`)
 
@@ -702,6 +797,12 @@ sequenceDiagram
   (`CHAIN_SPEC_VERSION`) pending verification against the official AEAT
   technical annexes. VERI*FACTU real-time submission is scaffolded and gated
   on AEAT test-environment access. See `modules/verifactu/README.md`.
+- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 1 January
+  2027 for Impuesto sobre Sociedades taxpayers and 1 July 2027 for autónomos
+  and everyone else (Real Decreto-ley 15/2025, BOE-A-2025-24446). The move to
+  October 2028 announced on 5 October 2026 is labelled *announced, not yet in
+  force* until its norm is in the BOE. B2B e-invoicing: 6 October 2027 /
+  6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
 
 ### Bank Import (`bank_import`)
 
@@ -934,8 +1035,10 @@ Interfaces declared today:
 | Module | `interface` | Used by |
 |---|---|---|
 | `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
-| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)` | Spanish Tax Forms |
-| `fiscal_calendar` | `_selected_forms()` | Tax Forms |
+| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
+| `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
+| `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
+| `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 
