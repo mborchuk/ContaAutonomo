@@ -12,16 +12,22 @@ from secret_box import EncryptedString, encrypt_existing
 
 from . import catalog
 from .catalog import DEFAULT_MODELS
-from .media import UnsupportedFile
-from .providers import (  # noqa: F401  (re-exported for callers and tests)
+from .media import UNSUPPORTED_MESSAGE, UnsupportedFile
+from .providers import (
+    NOT_A_DOCUMENT_MESSAGE,
     PROVIDERS,
-    AnthropicProvider,
-    BaseAIProvider,
-    GoogleDocAIProvider,
     NotADocument,
     OpenAIProvider,
     describe_error,
 )
+
+
+def rejection_message(exc):
+    """The user message for a file the parser refuses (422). Fixed strings,
+    so no exception text reaches the response."""
+    if isinstance(exc, NotADocument):
+        return NOT_A_DOCUMENT_MESSAGE
+    return UNSUPPORTED_MESSAGE
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +176,7 @@ class AIParserModule(BaseModule):
                 module.logger.info('Parsed %s: %s via %s', doc_type, file.filename, provider.name)
                 return jsonify(result)
             except (UnsupportedFile, NotADocument) as e:
-                return jsonify({'error': str(e)}), 422
+                return jsonify({'error': rejection_message(e)}), 422
             except Exception as e:
                 module.logger.error('AI parse failed: %s — %s', file.filename, e)
                 module.core.log_activity(
@@ -245,7 +251,7 @@ class AIParserModule(BaseModule):
         try:
             result = provider.parse_document(file.read(), file.filename, doc_type)
         except (UnsupportedFile, NotADocument) as e:
-            raise ApiError(422, 'unprocessable', str(e))
+            raise ApiError(422, 'unprocessable', rejection_message(e))
         except Exception as e:
             self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
             raise ApiError(502, 'parse_failed',

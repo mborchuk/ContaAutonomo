@@ -10,6 +10,7 @@ from file_validation import sniff_kind
 PDF = 'application/pdf'
 IMAGE_TYPES = ('image/jpeg', 'image/png', 'image/gif', 'image/webp')
 SUPPORTED = 'PDF, JPEG, PNG, GIF or WebP'
+UNSUPPORTED_MESSAGE = f'Unsupported file type. Upload a {SUPPORTED} file.'
 
 
 class UnsupportedFile(ValueError):
@@ -27,7 +28,7 @@ def detect_mime(data):
         return 'image/gif'
     if head[:4] == b'RIFF' and head[8:12] == b'WEBP':
         return 'image/webp'
-    raise UnsupportedFile(f'Unsupported file type. Upload a {SUPPORTED} file.')
+    raise UnsupportedFile(UNSUPPORTED_MESSAGE)
 
 
 def is_pdf(mime):

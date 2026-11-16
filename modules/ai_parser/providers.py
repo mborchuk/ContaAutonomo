@@ -11,6 +11,9 @@ from .catalog import DEFAULT_MODELS
 from .prompts import NOT_A_DOCUMENT, prompt_for
 
 
+NOT_A_DOCUMENT_MESSAGE = 'The file does not look like an invoice or receipt.'
+
+
 class NotADocument(ValueError):
     """The provider says the file is not an invoice or receipt."""
 
@@ -49,7 +52,7 @@ def parse_reply(text):
     if not isinstance(data, dict):
         raise ValueError('The provider reply is not a JSON object')
     if data.get('error') == NOT_A_DOCUMENT:
-        raise NotADocument('The file does not look like an invoice or receipt.')
+        raise NotADocument(NOT_A_DOCUMENT_MESSAGE)
     return data
 
 
