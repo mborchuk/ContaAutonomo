@@ -3,7 +3,54 @@
 {% block title %}{{ 'Edit' if expense else 'Create' }} Expense{% endblock %}
 
 {% block content %}
-<h1>{{ 'Edit' if expense else 'Create' }} Expense</h1>
+<h1>{{ 'Capture a receipt' if capture_mode else ('Edit' if expense else 'Create') ~ ' Expense' }}</h1>
+
+{# G-8 — one-screen capture: a photo goes to the AI parser and prefills the
+   form below. Behaviour in static/js/capture.js (no inline code). #}
+{% if capture_mode %}
+<section class="card" id="capture-card" aria-labelledby="capture-title">
+    <div class="card-header" id="capture-title">📷 Receipt photo</div>
+    <div class="card-body">
+        <div class="action-row">
+            <button type="button" class="btn btn-primary" data-capture-for="capture-camera">Take photo</button>
+            <button type="button" class="btn btn-secondary" data-capture-for="capture-gallery">Choose photo</button>
+        </div>
+        <input type="file" id="capture-camera" accept="image/*" capture="environment"
+               class="sr-only" tabindex="-1" aria-label="Take a photo of the receipt">
+        <input type="file" id="capture-gallery" accept="image/*,.pdf"
+               class="sr-only" tabindex="-1" aria-label="Choose a photo of the receipt">
+        <p class="fine-print" id="capture-status" role="status" aria-live="polite">
+            {% if module_manager and module_manager.modules.get('ai_parser') %}
+            The photo is sent to the AI parser and the form below is prefilled. Review it, then save.
+            {% else %}
+            The AI parser is not enabled: the photo is attached and you fill in the fields.
+            {% endif %}
+        </p>
+    </div>
+</section>
+<script src="{{ url_for('static', filename='js/capture.js') }}" defer></script>
+{% endif %}
+
+{# G-6 — deduction checks: notices only, the expense is never changed. #}
+{% if notices or dismissed_notices %}
+<section id="deduction-notices" aria-labelledby="deduction-notices-title">
+    <h2 id="deduction-notices-title" class="sr-only">Deduction checks</h2>
+    {% for n in notices %}
+    <div class="note {{ 'note-danger' if n.severity == 'exceeds' else 'note-warning' }}">
+        <strong>{{ n.severity_label }} — {{ n.title }}.</strong> {{ n.message }}
+        <span class="fine-print">Rule: {{ n.source }}. Estimate, not tax advice.</span>
+        <form method="POST" class="inline-panel"
+              action="{{ url_for('expenses.expenses_dismiss_notice', id=expense.id, rule_id=n.rule_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm">Dismiss for this expense</button>
+        </form>
+    </div>
+    {% endfor %}
+    {% for n in dismissed_notices %}
+    <p class="fine-print">Dismissed: {{ n.title }} — {{ n.message }}</p>
+    {% endfor %}
+</section>
+{% endif %}
 
 {# F11 — in-form AI receipt parse: one upload both prefills the form and
    becomes the attached receipt. Only shown when ai_parser is enabled. #}
@@ -20,7 +67,7 @@
 </div>
 {% endif %}
 
-<form method="POST" enctype="multipart/form-data">
+<form method="POST" enctype="multipart/form-data" id="expense-form">
     <div class="form-grid">
         <!-- Left Column -->
         <div>
@@ -57,6 +104,8 @@
                     <option value="Office Supplies">
                     <option value="Software">
                     <option value="Travel">
+                    <option value="Meals">
+                    <option value="Vehicle">
                     <option value="Equipment">
                     <option value="Services">
                     <option value="Utilities">

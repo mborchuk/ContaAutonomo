@@ -336,6 +336,29 @@ class AIParserModule(BaseModule):
             self._db.session.commit()
         return cfg
 
+    @property
+    def interface(self):
+        # Used by the ledger assistant (G-7) to reuse the configured provider.
+        return ['provider_settings']
+
+    def provider_settings(self):
+        """The active provider and its credentials, read only (no default row
+        is created): {'provider', 'display_name', 'api_key', 'model',
+        'configured'}. `api_key` is the decrypted key; never log it."""
+        cfg = self.AIParserConfig.query.first()
+        provider = (cfg.provider if cfg else None) or 'openai'
+        key = model = ''
+        if cfg is not None and provider == 'openai':
+            key, model = cfg.openai_api_key or '', cfg.openai_model or 'gpt-4o'
+        elif cfg is not None and provider == 'anthropic':
+            key, model = cfg.anthropic_api_key or '', cfg.anthropic_model or 'claude-sonnet-4-20250514'
+        cls = PROVIDERS.get(provider)
+        configured = bool(key) if provider in ('openai', 'anthropic') else bool(
+            cfg and cfg.google_project_id and cfg.google_processor_id)
+        return {'provider': provider,
+                'display_name': cls.display_name if cls else provider,
+                'api_key': key, 'model': model, 'configured': configured}
+
     def _get_provider(self):
         """Get configured AI provider instance."""
         cfg = self._get_config()

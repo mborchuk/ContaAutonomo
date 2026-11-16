@@ -1,0 +1,1395 @@
+{
+  "model": "303",
+  "layout": "DR303e26v101",
+  "version": "1.01",
+  "valid_from": 2026,
+  "source": "https://sede.agenciatributaria.gob.es/static_files/Sede/Disenyo_registro/DR_300_399/archivos_26/DR303e26v101.xlsx",
+  "checked_on": "2026-11-16",
+  "pages": {
+    "00": [
+      [
+        1,
+        1,
+        2,
+        "An",
+        null,
+        "<T",
+        "Constante."
+      ],
+      [
+        2,
+        3,
+        3,
+        "An",
+        null,
+        "303",
+        "Modelo"
+      ],
+      [
+        3,
+        6,
+        1,
+        "An",
+        null,
+        "0",
+        "Discriminante"
+      ],
+      [
+        4,
+        7,
+        4,
+        "An",
+        null,
+        null,
+        "Ejercicio de devengo (EEEE)"
+      ],
+      [
+        5,
+        11,
+        2,
+        "An",
+        null,
+        null,
+        "Período. (PP)"
+      ],
+      [
+        6,
+        13,
+        5,
+        "An",
+        null,
+        "0000>",
+        "Tipo y cierre"
+      ],
+      [
+        7,
+        18,
+        5,
+        "An",
+        null,
+        "<AUX>",
+        "Constante"
+      ],
+      [
+        8,
+        23,
+        70,
+        "An",
+        null,
+        null,
+        "Reservado para la Administración. Rellenar con blancos"
+      ],
+      [
+        9,
+        93,
+        4,
+        "An",
+        null,
+        null,
+        "Versión del Programa (Nota 1)"
+      ],
+      [
+        10,
+        97,
+        4,
+        "An",
+        null,
+        null,
+        "Reservado para la Administración. Rellenar con blancos"
+      ],
+      [
+        11,
+        101,
+        9,
+        "An",
+        null,
+        null,
+        "NIF Empresa Desarrollo (Nota 1)"
+      ],
+      [
+        12,
+        110,
+        213,
+        "An",
+        null,
+        null,
+        "Reservado para la Administración. Rellenar con blancos"
+      ],
+      [
+        13,
+        323,
+        6,
+        "An",
+        null,
+        "</AUX>",
+        "Constante"
+      ]
+    ],
+    "01": [
+      [
+        1,
+        1,
+        2,
+        "An",
+        null,
+        "<T",
+        "Inicio del identificador de modelo y página."
+      ],
+      [
+        2,
+        3,
+        3,
+        "Num",
+        null,
+        "303",
+        "Modelo."
+      ],
+      [
+        3,
+        6,
+        5,
+        "Num",
+        null,
+        "01000",
+        "Página."
+      ],
+      [
+        4,
+        11,
+        1,
+        "An",
+        null,
+        ">",
+        "Fin de identificador de modelo."
+      ],
+      [
+        5,
+        12,
+        1,
+        "A",
+        null,
+        null,
+        "Indicador de página complementaria."
+      ],
+      [
+        6,
+        13,
+        1,
+        "A",
+        null,
+        null,
+        "Tipo Declaración"
+      ],
+      [
+        7,
+        14,
+        9,
+        "An",
+        null,
+        null,
+        "Identificación (1) - NIF"
+      ],
+      [
+        8,
+        23,
+        80,
+        "An",
+        null,
+        null,
+        "Identificación (1) - Apellidos y nombre o Razón social"
+      ],
+      [
+        9,
+        103,
+        4,
+        "Num",
+        null,
+        null,
+        "Devengo (2) - Ejercicio"
+      ],
+      [
+        10,
+        107,
+        2,
+        "An",
+        null,
+        null,
+        "Devengo (2) - Período"
+      ],
+      [
+        11,
+        109,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Tributación exclusivamente foral. Sujeto pasivo que tributa exclusiva"
+      ],
+      [
+        12,
+        110,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo inscrito en el Registro de devolución mensual (art. 30 "
+      ],
+      [
+        13,
+        111,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo que tributa exclusivamente en régimen simplificado"
+      ],
+      [
+        14,
+        112,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Autoliquidación conjunta"
+      ],
+      [
+        15,
+        113,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo acogido al régimen especial del criterio de Caja (art. "
+      ],
+      [
+        16,
+        114,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo destinatario de operaciones acogidas al régimen especia"
+      ],
+      [
+        17,
+        115,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Opción por la aplicación de la prorrata especial (art. 103.Dos.1º LIV"
+      ],
+      [
+        18,
+        116,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Revocación de la opción por la aplicación de la prorrata especial"
+      ],
+      [
+        19,
+        117,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo declarado en concurso de acreedores en el presente perí"
+      ],
+      [
+        20,
+        118,
+        8,
+        "An",
+        null,
+        null,
+        "Identificación (1) - Fecha en que se dictó el auto de declaración de concurso"
+      ],
+      [
+        21,
+        126,
+        1,
+        "An",
+        null,
+        null,
+        "Identificación (1) - Tipo de autoliquidación si se ha dictado auto de declaración de concu"
+      ],
+      [
+        22,
+        127,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo acogido voluntariamente al SII"
+      ],
+      [
+        23,
+        128,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo exonerado de la Declaración-resumen anual del IVA, mode"
+      ],
+      [
+        24,
+        129,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo con volumen anual de operaciones distinto de cero (art."
+      ],
+      [
+        25,
+        130,
+        1,
+        "Num",
+        null,
+        null,
+        "Identificación (1) - Sujeto pasivo con derecho a deducir pago a cuenta de entregas de gaso"
+      ],
+      [
+        26,
+        131,
+        17,
+        "Num",
+        "150",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [150]"
+      ],
+      [
+        27,
+        148,
+        5,
+        "Num",
+        "151",
+        "00000",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [151]"
+      ],
+      [
+        28,
+        153,
+        17,
+        "Num",
+        "152",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [152]"
+      ],
+      [
+        29,
+        170,
+        17,
+        "Num",
+        "165",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [165]"
+      ],
+      [
+        30,
+        187,
+        5,
+        "Num",
+        "166",
+        "00000",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [166]"
+      ],
+      [
+        31,
+        192,
+        17,
+        "Num",
+        "167",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [167]"
+      ],
+      [
+        32,
+        209,
+        17,
+        "Num",
+        "01",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [01]"
+      ],
+      [
+        33,
+        226,
+        5,
+        "Num",
+        "02",
+        "00400",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [02]"
+      ],
+      [
+        34,
+        231,
+        17,
+        "Num",
+        "03",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [03]"
+      ],
+      [
+        35,
+        248,
+        17,
+        "Num",
+        "153",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [153]"
+      ],
+      [
+        36,
+        265,
+        5,
+        "Num",
+        "154",
+        "00000",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [154]"
+      ],
+      [
+        37,
+        270,
+        17,
+        "Num",
+        "155",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [155]"
+      ],
+      [
+        38,
+        287,
+        17,
+        "Num",
+        "04",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [04]"
+      ],
+      [
+        39,
+        304,
+        5,
+        "Num",
+        "05",
+        "01000",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [05]"
+      ],
+      [
+        40,
+        309,
+        17,
+        "Num",
+        "06",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [06]"
+      ],
+      [
+        41,
+        326,
+        17,
+        "Num",
+        "07",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Base imponible [07]"
+      ],
+      [
+        42,
+        343,
+        5,
+        "Num",
+        "08",
+        "02100",
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Tipo % [08]"
+      ],
+      [
+        43,
+        348,
+        17,
+        "Num",
+        "09",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Régimen general - Cuota [09]"
+      ],
+      [
+        44,
+        365,
+        17,
+        "Num",
+        "10",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Adquisiciones intracomunitarias de bie"
+      ],
+      [
+        45,
+        382,
+        17,
+        "Num",
+        "11",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Adquisiciones intracomunitarias de bie"
+      ],
+      [
+        46,
+        399,
+        17,
+        "Num",
+        "12",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Otras operaciones con inversión del su"
+      ],
+      [
+        47,
+        416,
+        17,
+        "Num",
+        "13",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Otras operaciones con inversión del su"
+      ],
+      [
+        48,
+        433,
+        17,
+        "N",
+        "14",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Modificación bases y cuotas- Base impo"
+      ],
+      [
+        49,
+        450,
+        17,
+        "N",
+        "15",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Modificación bases y cuotas - Cuota [1"
+      ],
+      [
+        50,
+        467,
+        17,
+        "Num",
+        "156",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Base imponible "
+      ],
+      [
+        51,
+        484,
+        5,
+        "Num",
+        "157",
+        "00175",
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Tipo % [157]"
+      ],
+      [
+        52,
+        489,
+        17,
+        "Num",
+        "158",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Cuota [158]"
+      ],
+      [
+        53,
+        506,
+        17,
+        "Num",
+        "168",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Base imponible "
+      ],
+      [
+        54,
+        523,
+        5,
+        "Num",
+        "169",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Tipo % [169]"
+      ],
+      [
+        55,
+        528,
+        17,
+        "Num",
+        "170",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Cuota [170]"
+      ],
+      [
+        56,
+        545,
+        17,
+        "Num",
+        "16",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Base imponible "
+      ],
+      [
+        57,
+        562,
+        5,
+        "Num",
+        "17",
+        "00000",
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Tipo % [17]"
+      ],
+      [
+        58,
+        567,
+        17,
+        "Num",
+        "18",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Cuota [18]"
+      ],
+      [
+        59,
+        584,
+        17,
+        "Num",
+        "19",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Base imponible "
+      ],
+      [
+        60,
+        601,
+        5,
+        "Num",
+        "20",
+        "00140",
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Tipo % [20]"
+      ],
+      [
+        61,
+        606,
+        17,
+        "Num",
+        "21",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Cuota [21]"
+      ],
+      [
+        62,
+        623,
+        17,
+        "Num",
+        "22",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Base imponible "
+      ],
+      [
+        63,
+        640,
+        5,
+        "Num",
+        "23",
+        "00520",
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Tipo % [23]"
+      ],
+      [
+        64,
+        645,
+        17,
+        "Num",
+        "24",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Recargo equivalencia - Cuota [24]"
+      ],
+      [
+        65,
+        662,
+        17,
+        "N",
+        "25",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Modificaciones bases y cuotas del reca"
+      ],
+      [
+        66,
+        679,
+        17,
+        "N",
+        "26",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Modificaciones bases y cuotas del reca"
+      ],
+      [
+        67,
+        696,
+        17,
+        "N",
+        "27",
+        null,
+        "Liquidación (3) - Regimen General - IVA Devengado - Total cuota devengada ( [152] + [167] "
+      ],
+      [
+        68,
+        713,
+        17,
+        "Num",
+        "28",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en operaciones i"
+      ],
+      [
+        69,
+        730,
+        17,
+        "Num",
+        "29",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en operaciones i"
+      ],
+      [
+        70,
+        747,
+        17,
+        "Num",
+        "30",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en operaciones i"
+      ],
+      [
+        71,
+        764,
+        17,
+        "Num",
+        "31",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en operaciones i"
+      ],
+      [
+        72,
+        781,
+        17,
+        "Num",
+        "32",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en las importaci"
+      ],
+      [
+        73,
+        798,
+        17,
+        "Num",
+        "33",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en las importaci"
+      ],
+      [
+        74,
+        815,
+        17,
+        "Num",
+        "34",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en las importaci"
+      ],
+      [
+        75,
+        832,
+        17,
+        "Num",
+        "35",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Por cuotas soportadas en las importaci"
+      ],
+      [
+        76,
+        849,
+        17,
+        "Num",
+        "36",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - En adquisiciones intracomunitarias de "
+      ],
+      [
+        77,
+        866,
+        17,
+        "Num",
+        "37",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - En adquisiciones intracomunitarias de "
+      ],
+      [
+        78,
+        883,
+        17,
+        "Num",
+        "38",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - En adquisiciones intracomunitarias de "
+      ],
+      [
+        79,
+        900,
+        17,
+        "Num",
+        "39",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - En adquisiciones intracomunitarias de "
+      ],
+      [
+        80,
+        917,
+        17,
+        "N",
+        "40",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Rectificación de deducciones - Base [4"
+      ],
+      [
+        81,
+        934,
+        17,
+        "N",
+        "41",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Rectificación de deducciones - Cuota ["
+      ],
+      [
+        82,
+        951,
+        17,
+        "N",
+        "42",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Compensaciones Régimen Especial A.G. y"
+      ],
+      [
+        83,
+        968,
+        17,
+        "N",
+        "43",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Regularización inversiones - Cuota [43"
+      ],
+      [
+        84,
+        985,
+        17,
+        "N",
+        "44",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Regularización por aplicación del porc"
+      ],
+      [
+        85,
+        1002,
+        17,
+        "N",
+        "45",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Total a deducir ( [29] + [31] + [33] +"
+      ],
+      [
+        86,
+        1019,
+        17,
+        "N",
+        "46",
+        null,
+        "Liquidación (3) - Regimen General - IVA Deducible - Resultado régimen general ( [27] - [45"
+      ],
+      [
+        87,
+        1036,
+        521,
+        "An",
+        null,
+        null,
+        "Reservado para la AEAT"
+      ],
+      [
+        88,
+        1557,
+        13,
+        "An",
+        null,
+        null,
+        "Reservado para la AEAT - Sello electrónico reservado para la AEAT"
+      ],
+      [
+        89,
+        1570,
+        12,
+        "An",
+        null,
+        "</T30301000>",
+        "Indicador de fin de registro"
+      ]
+    ],
+    "03": [
+      [
+        1,
+        1,
+        2,
+        "An",
+        null,
+        "<T",
+        "Inicio del identificador de modelo y página."
+      ],
+      [
+        2,
+        3,
+        3,
+        "Num",
+        null,
+        "303",
+        "Modelo."
+      ],
+      [
+        3,
+        6,
+        5,
+        "Num",
+        null,
+        "03000",
+        "Página."
+      ],
+      [
+        4,
+        11,
+        1,
+        "An",
+        null,
+        ">",
+        "Fin de identificador de modelo."
+      ],
+      [
+        5,
+        12,
+        17,
+        "N",
+        "59",
+        null,
+        "Información adicional - Entregas intracomunitarias de bienes y servicios [59]"
+      ],
+      [
+        6,
+        29,
+        17,
+        "N",
+        "60",
+        null,
+        "Información adicional - Exportaciones y operaciones asimiladas [60]"
+      ],
+      [
+        7,
+        46,
+        17,
+        "N",
+        "120",
+        null,
+        "Información adicional - Operaciones no sujetas por reglas de localización (excepto las inc"
+      ],
+      [
+        8,
+        63,
+        17,
+        "N",
+        "122",
+        null,
+        "Información adicional - Operaciones sujetas con inversión del sujeto pasivo [122]"
+      ],
+      [
+        9,
+        80,
+        17,
+        "N",
+        "123",
+        null,
+        "Información adicional - Operaciones no sujetas por reglas de localización acogidas a los r"
+      ],
+      [
+        10,
+        97,
+        17,
+        "N",
+        "124",
+        null,
+        "Información adicional - Operaciones sujetas y acogidas a los regímenes especiales de venta"
+      ],
+      [
+        11,
+        114,
+        17,
+        "N",
+        "62",
+        null,
+        "Información adicional - Importes de las entregas de bienes y prestaciones de servicios a l"
+      ],
+      [
+        12,
+        131,
+        17,
+        "N",
+        "63",
+        null,
+        "Información adicional - Importes de las entregas de bienes y prestaciones de servicios a l"
+      ],
+      [
+        13,
+        148,
+        17,
+        "N",
+        "74",
+        null,
+        "Información adicional - Importes de las adquisiciones de bienes y servicios a las que sea "
+      ],
+      [
+        14,
+        165,
+        17,
+        "N",
+        "75",
+        null,
+        "Información adicional - Importes de las adquisiciones de bienes y servicios a las que sea "
+      ],
+      [
+        15,
+        182,
+        17,
+        "N",
+        "76",
+        null,
+        "Resultado - Regularización cuotas art. 80.cinco.5ª LIVA [76]"
+      ],
+      [
+        16,
+        199,
+        17,
+        "N",
+        "64",
+        null,
+        "Resultado - Suma de resultados ( [46] + [58] + [76] ) [64]"
+      ],
+      [
+        17,
+        216,
+        5,
+        "Num",
+        "65",
+        null,
+        "Resultado - % Atribuible a la Administración del Estado [65]"
+      ],
+      [
+        18,
+        221,
+        17,
+        "N",
+        "66",
+        null,
+        "Resultado - Atribuible a la Administración del Estado [66]"
+      ],
+      [
+        19,
+        238,
+        17,
+        "Num",
+        "77",
+        null,
+        "Resultado - IVA a la importación liquidado por la Aduana pendiente de ingreso [77]"
+      ],
+      [
+        20,
+        255,
+        17,
+        "Num",
+        "110",
+        null,
+        "Resultado - Cuotas a compensar pendientes de periodos anteriores [110]"
+      ],
+      [
+        21,
+        272,
+        17,
+        "Num",
+        "78",
+        null,
+        "Resultado - Cuotas a compensar de periodos anteriores aplicadas en este periodo [78]"
+      ],
+      [
+        22,
+        289,
+        17,
+        "Num",
+        "87",
+        null,
+        "Resultado - Cuotas a compensar de periodos previos pendientes para periodos posteriores (["
+      ],
+      [
+        23,
+        306,
+        17,
+        "N",
+        "68",
+        null,
+        "Resultado - Exclusivamente para sujetos pasivos que tributan conjuntamente a la Administra"
+      ],
+      [
+        24,
+        323,
+        17,
+        "N",
+        "108",
+        null,
+        "Rectificativa - Exclusivamente para determinados supuestos de autoliquidación rectificativ"
+      ],
+      [
+        25,
+        340,
+        17,
+        "N",
+        "69",
+        null,
+        "Resultado - Resultado de la autoliquidación ( [66] + [77] - [78] + [68] + [108] ) [69]"
+      ],
+      [
+        26,
+        357,
+        17,
+        "Num",
+        "70",
+        null,
+        "Resultado - Resultados a ingresar de anteriores autoliquidaciones o liquidaciones administ"
+      ],
+      [
+        27,
+        374,
+        17,
+        "Num",
+        "109",
+        null,
+        "Resultado - Devoluciones acordadas por la Agencia Tributaria como consecuencia de la trami"
+      ],
+      [
+        28,
+        391,
+        17,
+        "Num",
+        "112",
+        null,
+        "Resultado - Pago a cuenta de entregas de gasolinas, gasóleos y biocarburantes posteriores "
+      ],
+      [
+        29,
+        408,
+        17,
+        "N",
+        "71",
+        null,
+        "Resultado - Resultado ( [69] - [70] + [109] - [112] ) [71]"
+      ],
+      [
+        30,
+        425,
+        1,
+        "An",
+        null,
+        null,
+        "Declaración Sin actividad"
+      ],
+      [
+        31,
+        426,
+        1,
+        "An",
+        null,
+        null,
+        "Rectificativa - Autoliquidación rectificativa"
+      ],
+      [
+        32,
+        427,
+        13,
+        "An",
+        null,
+        null,
+        "Rectificativa - Número justificante identificativo de la autoliquidación anterior"
+      ],
+      [
+        33,
+        440,
+        1,
+        "An",
+        null,
+        null,
+        "Rectificativa - Como consecuencia de la presentación de la autoliquidación rectificativa s"
+      ],
+      [
+        34,
+        441,
+        17,
+        "Num",
+        "111",
+        null,
+        "Rectificativa - Rectificación - Importe [111]"
+      ],
+      [
+        35,
+        458,
+        1,
+        "An",
+        null,
+        null,
+        "Rectificativa - Motivo de la rectificación: Rectificaciones (excepto incluidas en el motiv"
+      ],
+      [
+        36,
+        459,
+        1,
+        "An",
+        null,
+        null,
+        "Rectificativa - Motivo de la rectificación: Discrepancia criterio administrativo"
+      ],
+      [
+        37,
+        460,
+        546,
+        "An",
+        null,
+        null,
+        "Reservado para la AEAT"
+      ],
+      [
+        38,
+        1006,
+        12,
+        "An",
+        null,
+        "</T30303000>",
+        "Indicador de fin de registro"
+      ]
+    ],
+    "DID": [
+      [
+        1,
+        1,
+        2,
+        "An",
+        null,
+        "<T",
+        "Inicio del identificador de modelo y página."
+      ],
+      [
+        2,
+        3,
+        3,
+        "Num",
+        null,
+        "303",
+        "Modelo."
+      ],
+      [
+        3,
+        6,
+        5,
+        "An",
+        null,
+        "DID00",
+        "Página."
+      ],
+      [
+        4,
+        11,
+        1,
+        "An",
+        null,
+        ">",
+        "Fin de identificador de modelo."
+      ],
+      [
+        5,
+        12,
+        11,
+        "An",
+        null,
+        null,
+        "Devolución. SWIFT-BIC"
+      ],
+      [
+        6,
+        23,
+        34,
+        "An",
+        null,
+        null,
+        "Domiciliación/Devolución - IBAN"
+      ],
+      [
+        7,
+        57,
+        70,
+        "An",
+        null,
+        null,
+        "Devolución - Banco/Bank name"
+      ],
+      [
+        8,
+        127,
+        35,
+        "An",
+        null,
+        null,
+        "Devolución - Dirección del Banco/ Bank address"
+      ],
+      [
+        9,
+        162,
+        30,
+        "An",
+        null,
+        null,
+        "Devolución - Ciudad/City"
+      ],
+      [
+        10,
+        192,
+        2,
+        "An",
+        null,
+        null,
+        "Devolución - Código País/Country code"
+      ],
+      [
+        11,
+        194,
+        1,
+        "Num",
+        null,
+        null,
+        "Devolución - Marca SEPA"
+      ],
+      [
+        12,
+        195,
+        617,
+        "An",
+        null,
+        null,
+        "Reservado para la AEAT"
+      ],
+      [
+        13,
+        812,
+        12,
+        "An",
+        null,
+        "</T303DID00>",
+        "Indicador de fin de registro"
+      ]
+    ]
+  }
+}

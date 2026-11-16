@@ -294,6 +294,58 @@ def health_check():
     return jsonify(checks), (200 if all(checks.values()) else 503)
 
 
+# --- Installable app (G-8): manifest and service worker, no login needed ---
+# Both are public and contain no user data. The share target and the capture
+# shortcut are offered only while the Expenses module is loaded.
+@app.route('/manifest.webmanifest')
+def web_manifest():
+    from flask import jsonify
+    manifest = {
+        'id': '/',
+        'name': 'ContaAutónomo',
+        'short_name': 'ContaAutónomo',
+        'description': 'Invoices, expenses and Spanish tax estimates for an autónomo.',
+        'start_url': '/',
+        'scope': '/',
+        'display': 'standalone',
+        'background_color': '#f1f5f9',
+        'theme_color': '#4f46e5',
+        'icons': [
+            {'src': url_for('static', filename='icons/icon-192.png'),
+             'sizes': '192x192', 'type': 'image/png'},
+            {'src': url_for('static', filename='icons/icon-512.png'),
+             'sizes': '512x512', 'type': 'image/png'},
+            {'src': url_for('static', filename='icons/icon-maskable-512.png'),
+             'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
+        ],
+    }
+    if module_manager is not None and module_manager.provider_of('expenses') is not None:
+        manifest['shortcuts'] = [{'name': 'Capture a receipt', 'url': '/expenses/capture',
+                                  'icons': [manifest['icons'][0]]}]
+        manifest['share_target'] = {
+            'action': '/expenses/capture/share',
+            'method': 'POST',
+            'enctype': 'multipart/form-data',
+            'params': {'files': [{'name': 'receipt',
+                                  'accept': ['image/*', '.jpg', '.jpeg', '.png']}]},
+        }
+    response = jsonify(manifest)
+    response.mimetype = 'application/manifest+json'
+    return response
+
+
+@app.route('/sw.js')
+def service_worker():
+    # Served from the site root so its scope is the whole app; never cached by
+    # the browser's HTTP cache, so an update reaches clients on the next load.
+    from flask import send_from_directory
+    response = send_from_directory(os.path.join(app.root_path, 'static', 'js'), 'sw.js',
+                                   mimetype='text/javascript', max_age=0)
+    response.headers['Service-Worker-Allowed'] = '/'
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+
 def log_activity(action, category='system', details=None):
     """Log user/system activity via core logger (safe to call before init)"""
     if module_manager:

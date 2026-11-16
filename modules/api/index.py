@@ -240,6 +240,7 @@ class ApiModule(BaseModule):
             'id': inv.id,
             'invoice_number': inv.invoice_number,
             'client_name': inv.client_name,
+            'customer_id': inv.customer_id,
             'amount_usd': inv.amount_usd,
             'amount_eur': inv.amount_eur,
             'currency': inv.currency,
@@ -521,6 +522,16 @@ class ApiModule(BaseModule):
         query = Invoice.query
         if status:
             query = query.filter_by(status=status)
+        # Optional read-only filters (used by the ledger assistant, G-7).
+        if request.args.get('date_from'):
+            query = query.filter(Invoice.invoice_date >= self._parse_date(
+                request.args['date_from'], 'date_from'))
+        if request.args.get('date_to'):
+            query = query.filter(Invoice.invoice_date <= self._parse_date(
+                request.args['date_to'], 'date_to'))
+        client = (request.args.get('client') or '').strip()
+        if client:
+            query = query.filter(Invoice.client_name.ilike(f'%{client}%'))
         total = query.count()
         rows = (query.order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
                 .offset((page - 1) * per_page).limit(per_page).all())
@@ -774,7 +785,18 @@ class ApiModule(BaseModule):
             per_page = min(100, max(1, int(request.args.get('per_page', 20))))
         except ValueError:
             raise ApiError(400, 'bad_request', 'page/per_page must be integers')
-        query = Expense.query.order_by(Expense.expense_date.desc(), Expense.id.desc())
+        query = Expense.query
+        # Optional read-only filters (used by the ledger assistant, G-7).
+        if request.args.get('date_from'):
+            query = query.filter(Expense.expense_date >= self._parse_date(
+                request.args['date_from'], 'date_from'))
+        if request.args.get('date_to'):
+            query = query.filter(Expense.expense_date <= self._parse_date(
+                request.args['date_to'], 'date_to'))
+        category = (request.args.get('category') or '').strip()
+        if category:
+            query = query.filter(Expense.category.ilike(category))
+        query = query.order_by(Expense.expense_date.desc(), Expense.id.desc())
         total = query.count()
         rows = query.offset((page - 1) * per_page).limit(per_page).all()
         return {
@@ -911,7 +933,8 @@ class ApiModule(BaseModule):
             '/health': op('get', 'DB/storage health probe'),
         }
         paths['/invoices'] = {
-            'get': {'summary': 'List invoices (status, page, per_page)',
+            'get': {'summary': 'List invoices (status, date_from, date_to, client, '
+                               'page, per_page)',
                     'responses': {'200': {'description': 'OK'}}},
             'post': {'summary': 'Create invoice',
                      'requestBody': {'required': True,
@@ -949,7 +972,8 @@ class ApiModule(BaseModule):
 
         # Module-aware: only advertise expenses when its module is enabled.
         if mm and 'expenses' in mm.modules:
-            paths['/expenses'] = op('get', 'List expenses')
+            paths['/expenses'] = op('get', 'List expenses (date_from, date_to, category, '
+                                           'page, per_page)')
 
         # Reports' heavy generate route lives on its own blueprint (dedicated
         # rate limit), so advertise it explicitly when reports is enabled.

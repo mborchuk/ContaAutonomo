@@ -70,10 +70,29 @@ signature are accepted. Repeat after changing the certificate.
 - **Validation of content**: run generated files through the official
   Facturae XSD and the EU EN 16931 reference validator before real B2B use.
 
+## When the obligation starts
+
+The ministerial order that regulates the public e-invoicing solution,
+Orden HAC/1028/2026, de 2 de octubre, was published in the BOE on 5 October
+2026 (BOE núm. 247) and is in force since 6 October 2026. Under the
+disposición final cuarta of Real Decreto 238/2026 (BOE-A-2026-7295) that
+starts the deferred periods:
+
+| From | Who | Obligation |
+|------|-----|------------|
+| 6 October 2027 | Volume of operations above 8 million EUR | Issue, send and receive e-invoices; report invoice and payment status |
+| 6 October 2028 | Every other business and professional, autónomos included | Issue, send and receive e-invoices (legal persons up to 8 million EUR also report status) |
+| 6 October 2029 | Individuals and entities under attribution of income | Report invoice and payment status |
+
+Checked on 16 November 2026 (AEAT *Calendario de implantación*). The dates
+are also in `modules/verifactu/obligations.py` and on the Verifactu status
+page.
+
 ## Phase 2 design notes
 
-Deferred until the RD 238/2026 ministerial order defines the technical
-requirements (expected to specify the public exchange solution and API):
+The ministerial order is published (see above); exchange and status messages
+are not built yet. The design follows the public exchange solution it
+regulates:
 
 - **Exchange**: default route via the AEAT public solution; private platforms
   through an adapter interface mirroring the pluggable auth-provider pattern.

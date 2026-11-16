@@ -41,11 +41,13 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Fiscal Calendar** | Spanish AEAT filing deadlines as a dashboard panel with configurable reminders |
 | **Modelo 303/130 Drafts** | Box-level quarterly IVA/IRPF draft calculator (estimate, not tax advice) |
 | **RETA Advisor** | Contribution-bracket projection and year-end regularization forecast |
+| **Tax Provision** | Dashboard total of the tax owed so far (IVA, Modelo 130, renta, RETA), each part from its own module (estimate, not tax advice) |
 | **Recurring Invoices** | Invoice templates on a monthly/quarterly cadence that generate drafts automatically |
 | **Invoice Email** | Send invoice PDFs via SMTP with send history and opt-in overdue reminders |
 | **Verifactu** | Tamper-evident, hash-chained billing records on issue/annul (RD 1007/2023 compliance assist) |
 | **Bank Import** | Norma 43 / CSV statement import with match suggestions and one-click reconciliation |
 | **E-Invoice (Facturae)** | Facturae 3.2.2 XML export for issued invoices with a readiness checklist |
+| **Ledger Assistant** | Opt-in, read-only questions over invoices, expenses and tax drafts with the AI Parser's provider; sends only the records needed and lists them (not tax advice) |
 
 ## Quick Start
 
@@ -96,6 +98,13 @@ Data is persisted in Docker volumes (`app_data`, `app_backups`, etc.).
 | `DATABASE_URL` | `sqlite:///invoices.db` | SQLAlchemy database URI |
 | `FLASK_DEBUG` | `0` | Set to `1` for debug mode |
 | `FORCE_HTTPS` | `0` | Set to `1` to enable HSTS and secure cookies |
+
+**Install on a phone.** Served over HTTPS (for example behind a reverse proxy),
+the app can be installed: Chrome on Android → menu → *Install app*; Safari on
+iOS → Share → *Add to Home Screen*. The installed app opens a receipt capture
+page from its shortcut (`/expenses/capture`), and on Android it appears in the
+share menu so a photo can be sent straight to a new expense. The service worker
+caches nothing.
 
 ## Configuration
 

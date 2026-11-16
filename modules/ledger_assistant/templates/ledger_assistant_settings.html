@@ -1,0 +1,30 @@
+<h3>💬 Ledger Assistant</h3>
+<p>
+    Answers questions about your invoices, expenses and tax drafts. It only reads:
+    it cannot create, change or delete anything.
+</p>
+{% if missing %}
+<div class="note note-warning">⚠ {{ missing }}</div>
+{% else %}
+<p>Provider: <strong>{{ provider }}</strong> (configured in Settings → AI Parser).</p>
+{% endif %}
+<h4>What is sent to the provider</h4>
+<ul>
+    <li>To plan the lookups: <strong>your question only</strong>, with the list of
+        read-only calls the assistant may use. No records.</li>
+    <li>To answer: your question and <strong>only the records those calls
+        return</strong>, with these fields and nothing else:
+        <ul>
+            <li>Invoices: {{ sent_fields.invoice | join(', ') }}</li>
+            <li>Expenses: {{ sent_fields.expense | join(', ') }} (first 80 characters of the description)</li>
+            <li>Customers: {{ sent_fields.customer | join(', ') }}</li>
+            <li>Tax drafts: the form boxes</li>
+        </ul>
+    </li>
+    <li>Never sent: e-mail addresses, VAT numbers, addresses, notes, receipt
+        files, settings or credentials.</li>
+</ul>
+<p class="fine-print">
+    The provider's own terms apply to what it receives. The assistant is off until
+    you enable the module in Settings → Modules. Answers are not tax advice.
+</p>

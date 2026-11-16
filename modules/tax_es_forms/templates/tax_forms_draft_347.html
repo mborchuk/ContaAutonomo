@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Modelo 347 · {{ draft.year }}{% endblock %}
+{% block content %}
+<div class="page-header">
+    <h1>Modelo 347 (operaciones con terceras personas) — {{ draft.year }}</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <a href="{{ url_for('tax_es_forms.aeat_file_annual', form='347', year=draft.year) }}" class="btn btn-secondary" title="Import file for the AEAT Sede. Not validated by the AEAT: check the form after importing.">⬇ AEAT file (not validated)</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+</div>
+<div class="note note-info">
+    <strong>Estimate, not tax advice.</strong> Customers and suppliers with whom the
+    operations of {{ draft.year }}, IVA included, add up to more than
+    <strong>{{ "%.2f"|format(draft.threshold) }} EUR</strong> — sales and purchases
+    counted separately, split by quarter, after the exclusions below. Rules:
+    {{ draft.source }}. Verify against the current AEAT instructions before filing.
+    {% if draft.deadline %}Filing window: {{ draft.deadline.window_start.strftime('%d/%m/%Y') }}–{{ draft.deadline.window_end.strftime('%d/%m/%Y') }}.{% endif %}
+</div>
+{% if draft.table_fallback %}
+<div class="note note-warning">⚠ {{ draft.table_note }}</div>
+{% endif %}
+{% for warning in draft.meta.warnings %}
+<div class="note note-warning">⚠ {{ warning }}</div>
+{% endfor %}
+{% for warning in draft.file_warnings %}
+<div class="note note-warning">⚠ AEAT file: {{ warning }}</div>
+{% endfor %}
+
+<h3>To declare</h3>
+<div class="table-wrap">
+<table class="data-table">
+    <thead>
+        <tr><th>Key</th><th>NIF</th><th>Name</th><th>Country</th>
+            <th class="text-right">1T</th><th class="text-right">2T</th>
+            <th class="text-right">3T</th><th class="text-right">4T</th>
+            <th class="text-right">Annual total</th></tr>
+    </thead>
+    <tbody>
+        {% for line in draft.lines %}
+        <tr>
+            <td title="{{ 'B — ventas (sales)' if line.key == 'B' else 'A — compras (purchases)' }}">
+                {{ line.key }}{% if line.reverse_charge %} <span class="fine-print">ISP</span>{% endif %}</td>
+            <td class="mono">{{ line.nif or '—' }}</td>
+            <td>{{ line.name }}</td>
+            <td>{{ line.country }}</td>
+            {% for q in line.quarters %}<td class="text-right num">{{ "%.2f"|format(q) }}</td>{% endfor %}
+            <td class="text-right num"><strong>{{ "%.2f"|format(line.total) }}</strong></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty-state">No customer or supplier is above the threshold in {{ draft.year }}.</td></tr>
+        {% endfor %}
+    </tbody>
+    {% if draft.lines %}
+    <tfoot>
+        <tr class="row-total"><td colspan="8">{{ draft.boxes.count }} counterparty line(s)</td>
+            <td class="text-right num">{{ "%.2f"|format(draft.boxes.total) }}</td></tr>
+    </tfoot>
+    {% endif %}
+</table>
+</div>
+<p class="fine-print">Key B: sales (entregas y prestaciones). Key A: purchases (adquisiciones).
+    ISP: purchase from a supplier outside the EU with reverse charge (inversión del sujeto pasivo).</p>
+
+<h3>Not counted, and why</h3>
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Reason</th><th>Rule</th><th>Counterparty</th><th class="text-right">Operations</th><th class="text-right">Amount</th></tr></thead>
+    <tbody>
+        {% for row in draft.excluded %}
+        {% set label = draft.exclusion_labels[row.reason] %}
+        <tr>
+            <td>{{ label[0] }}</td>
+            <td class="fine-print">{{ label[1] }}</td>
+            <td>{{ row.name }}</td>
+            <td class="text-right">{{ row.count }}</td>
+            <td class="text-right num">{{ "%.2f"|format(row.amount) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty-state">Nothing was excluded.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+{% if draft.below_threshold %}
+<h3>Below the threshold</h3>
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Key</th><th>Name</th><th class="text-right">Annual total</th></tr></thead>
+    <tbody>
+        {% for line in draft.below_threshold %}
+        <tr><td>{{ line.key }}</td><td>{{ line.name }}</td>
+            <td class="text-right num">{{ "%.2f"|format(line.total) }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endif %}
+
+<h3>Not covered by this check</h3>
+<ul class="fine-print">
+    {% for item in draft.out_of_scope %}<li>{{ item }}</li>{% endfor %}
+</ul>
+{% endblock %}

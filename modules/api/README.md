@@ -106,7 +106,7 @@ sequenceDiagram
 | `GET` | `/api/v1/` | Index + discovery |
 | `GET` | `/api/v1/openapi.json` | OpenAPI 3.1 manifest (module-aware) |
 | `GET` | `/api/v1/health` | DB + storage probe |
-| `GET` | `/api/v1/invoices` | List invoices (`status`, `page`, `per_page`) |
+| `GET` | `/api/v1/invoices` | List invoices (`status`, `date_from`, `date_to`, `client`, `page`, `per_page`); each row has `customer_id` |
 | `POST` | `/api/v1/invoices` | Create invoice |
 | `GET` | `/api/v1/invoices/{id}` | One invoice + line items |
 | `PATCH` | `/api/v1/invoices/{id}` | Update fields; `status` is not patchable (blocked once issued → `409`) |
@@ -115,7 +115,7 @@ sequenceDiagram
 | `POST` | `/api/v1/invoices/{id}/mark-paid` | Mark an issued (or legacy `pending`) invoice paid (otherwise `409`) |
 | `GET` | `/api/v1/invoices/{id}/pdf` | Download PDF bytes |
 | `GET` | `/api/v1/customers` | List customers |
-| `GET` | `/api/v1/expenses` | List expenses (only if `expenses` enabled) |
+| `GET` | `/api/v1/expenses` | List expenses (`date_from`, `date_to`, `category`, `page`, `per_page`; only if `expenses` enabled) |
 | `GET` | `/api/v1/dashboard/summary` | Money summary + tax totals |
 | `GET` | `/api/v1/rates` | Exchange rate (`from`, `to`: three-letter currency codes, else 400; `date`) |
 | `*` | `/api/v1/m/{module_id}/{path}` | Module-contributed endpoints |
