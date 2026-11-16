@@ -207,7 +207,6 @@ def test_modules_look_each_other_up_through_provider_of():
 # that module. Remove an entry when its import goes; never add one — add a
 # registry function (functions.py) instead.
 KNOWN_CROSS_MODULE_IMPORTS = {
-    ('pdf_signature', 'pdf_verify'),
     ('reports', 'tax_es_forms'),
 }
 

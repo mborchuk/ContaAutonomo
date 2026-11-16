@@ -134,7 +134,7 @@
             </div>
 
             {% set pdf_signers = module_manager.find_capabilities('pdf_sign') if module_manager else [] %}
-            {% set has_sign_module = module_manager and 'pdf_signature' in module_manager.modules %}
+            {% set has_sign_module = module_manager and module_manager.functions.available('pdf.sign_invoice') %}
             {% if pdf_signers %}
             <div style="background: var(--color-primary-tint); padding: 12px 15px; border-radius: 6px; border: 1px solid var(--color-primary-tint); margin-top: 10px;">
                 <div style="font-weight: bold; color: var(--color-primary); margin-bottom: 8px;">✍️ Sign PDF after upload</div>

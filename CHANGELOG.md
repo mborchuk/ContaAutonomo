@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **PDF signing on the function registry**: PDF Signature declares
+  `pdf.sign_invoice` and `pdf.signing_certificate`, PDF Verify
+  `pdf.extract_signatures`. The core invoice route, E-invoice, the document
+  form and PDF Signature's badge call them instead of reading another module's
+  model or configuration, or importing its code.
 - **Tax data on the function registry**: Tax Management declares
   `tax.filed_boxes` and `ss.payments_total`, the IRPF Estimator
   `tax.modelo130_boxes`, `tax.modelo100_result` and `tax.equipment_rule`, the
