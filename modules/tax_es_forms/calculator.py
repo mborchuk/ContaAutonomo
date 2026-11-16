@@ -18,6 +18,12 @@ expenses with zero Spanish VAT are left out of the deductible base.
 from datetime import date
 
 from constants import counts_as_income
+from invoice_vat import (  # noqa: F401 - invoice_vat_line re-exported
+    customer_tax_type as _customer_tax_type,
+    invoice_base_eur as _invoice_base_eur,
+    invoice_output_vat as _invoice_output_vat,
+    invoice_vat_line,
+)
 
 
 def quarter_of(d):
@@ -46,81 +52,9 @@ def _round2(value):
     return float(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def _invoice_base_eur(invoice):
-    """Taxable base of an invoice in EUR.
-
-    In this app the stored invoice amount IS the taxable base (VAT is derived,
-    never added to the total), and amount_eur is always populated.
-    """
-    return invoice.amount_eur or 0.0
-
-
-def _customer_tax_type(invoice):
-    """VAT treatment of the invoice's customer: the snapshot frozen at issue,
-    else the customer's current setting."""
-    snap = getattr(invoice, "snap_customer", None)
-    if snap:
-        import json
-        try:
-            tax_type = json.loads(snap).get("tax_type")
-            if tax_type:
-                return tax_type
-        except (ValueError, AttributeError):
-            pass  # malformed snapshot: fall back to the customer
-    customer = getattr(invoice, "customer", None)
-    return getattr(customer, "tax_type", None) if customer else None
-
-
 def _active(invoice):
     """Devengo basis: everything except cancelled counts."""
     return counts_as_income(invoice)
-
-
-def _invoice_output_vat(invoice, vat_rate):
-    """Return (standard_base_eur, output_cuota_eur) for one invoice.
-
-    F5-D2: prefer the F2-D4 fiscal snapshot frozen at issue (snap_taxable_base /
-    snap_vat_amount / snap_vat_rate); fall back to deriving from the customer's
-    tax_type + the current rate for legacy/draft invoices without a snapshot.
-    Only standard-rated operations feed the general-regime base (box 01);
-    eu_b2b / non_eu carry no output VAT.
-    """
-    snap_rate = getattr(invoice, 'snap_vat_rate', None)
-    if snap_rate is not None:
-        # Issued invoice with a frozen snapshot.
-        if snap_rate and snap_rate > 0:
-            base = getattr(invoice, 'snap_taxable_base', None)
-            if base is None:
-                base = _invoice_base_eur(invoice)
-            return base, (getattr(invoice, 'snap_vat_amount', None) or 0.0)
-        return 0.0, 0.0
-    # Legacy / draft: derive from tax_type.
-    if _customer_tax_type(invoice) == 'standard':
-        base = _invoice_base_eur(invoice)
-        return base, base * vat_rate
-    return 0.0, 0.0
-
-
-def invoice_vat_line(invoice, vat_rate):
-    """IVA figures for one invoice row in a report.
-
-    Returns {'vat_rate_pct', 'vat_eur', 'reverse_charge'}. Issued invoices use
-    the snapshot frozen at issue; legacy and draft invoices derive the value
-    from the customer's tax type and `vat_rate` (a fraction, e.g. 0.21).
-    `reverse_charge` is True for intra-EU B2B customers (the customer accounts
-    for the VAT).
-    """
-    _base, cuota = _invoice_output_vat(invoice, vat_rate)
-    snap_rate = getattr(invoice, 'snap_vat_rate', None)
-    if snap_rate is not None:
-        rate_pct = snap_rate or 0.0
-    else:
-        rate_pct = vat_rate * 100.0 if cuota else 0.0
-    return {
-        'vat_rate_pct': rate_pct,
-        'vat_eur': cuota or 0.0,
-        'reverse_charge': _customer_tax_type(invoice) == 'eu_b2b',
-    }
 
 
 def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,

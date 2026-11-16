@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **No module imports another module**: the API declares `api.check_token`,
+  which Reports' API route uses instead of the module's `verify_token`; the
+  invoice output-VAT rule Reports shares with Spanish Tax Forms moved to the
+  core (`invoice_vat.py`). The OpenAPI document lists `/expenses` while
+  something provides `ledger.list_expenses`.
 - **PDF signing on the function registry**: PDF Signature declares
   `pdf.sign_invoice` and `pdf.signing_certificate`, PDF Verify
   `pdf.extract_signatures`. The core invoice route, E-invoice, the document
