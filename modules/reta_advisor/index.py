@@ -20,7 +20,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from constants import counts_as_income
 from module_manager import BaseModule
 
-from .brackets import BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year
+from .brackets import (BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year,
+                       contribution_rate_for_year)
 from .engine import project
 from year_tables import fallback_note
 
@@ -145,24 +146,39 @@ class RetaAdvisorModule(BaseModule):
             self.logger.warning('Reading SS payments failed: %s', e)
             return None
 
-    def projection(self, today=None):
+    def projection(self, today=None, income_delta=0.0, expense_delta=0.0,
+                   monthly_quota=None):
         """The RETA projection for the year of `today` (see engine.project);
-        `regularization_delta` > 0 is owed, < 0 is a refund."""
-        return self._projection(today)
+        `regularization_delta` > 0 is owed, < 0 is a refund.
 
-    def _projection(self, today=None):
+        The what-if simulator passes changes: `income_delta` / `expense_delta`
+        are added to the year-to-date figures and `monthly_quota` replaces the
+        current quota for the rest of the year. Without them the result is the
+        advisor's own. Reads only; nothing is saved. The result also carries
+        `contribution_rate_pct` (base × rate = quota) and its table year.
+        """
+        return self._projection(today, income_delta, expense_delta, monthly_quota)
+
+    def _projection(self, today=None, income_delta=0.0, expense_delta=0.0,
+                    monthly_quota=None):
         today = today or date.today()
         income, expenses, months = self._ytd_figures(today)
         settings = self.core.get_settings()
         current_quota = (settings.social_security_monthly
                          if settings and settings.social_security_monthly else 0.0)
+        if monthly_quota is not None:
+            current_quota = monthly_quota
         cfg = self._get_config()
-        return project(
-            income, expenses, months,
+        result = project(
+            income + income_delta, expenses + expense_delta, months,
             current_monthly_quota=current_quota,
             paid_ytd=self._paid_ytd(today.year),
             deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)),
             year=today.year)
+        rate_year, rate_pct, rate_fallback = contribution_rate_for_year(today.year)
+        result.update(contribution_rate_pct=rate_pct, contribution_rate_year=rate_year,
+                      contribution_rate_fallback=rate_fallback)
+        return result
 
     # --- Routes ------------------------------------------------------------- #
 

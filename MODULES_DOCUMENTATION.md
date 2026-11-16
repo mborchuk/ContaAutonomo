@@ -622,6 +622,28 @@ the year-end regularization. Estimate only.
   keeps owning the Social Security amount, so nothing is double-counted
 - Not modeled: tarifa plana, pluriactividad
 
+### IRPF Estimator (`tax_es_irpf`)
+
+Modelo 130 (quarterly) and Modelo 100 (annual) estimates for estimación
+directa simplificada, from year-keyed parameters (`params/es_irpf_<year>.json`).
+Estimate only.
+
+- Routes: `/irpf-es/` (overview), `/irpf-es/modelo130/<year>/<q>`,
+  `/irpf-es/modelo100/<year>` (individual vs. joint), `/irpf-es/simulator`
+- **What-if simulator** (`simulator.py`, pure; `/irpf-es/simulator`, GET only):
+  starts from the year's real figures and lets the user change income,
+  deductible expenses (RETA excluded), comunidad autónoma and the RETA monthly
+  base. It shows real, scenario and difference for the IRPF of the year
+  (cuota líquida), the Modelo 100 result, the Modelo 130 still to pay this
+  year, the RETA regularización (from `reta_advisor.projection`, with the
+  changes) and net income. With no changes it gives exactly the real
+  figures. Nothing is saved: the page reads the profile without creating it
+  and writes no row (tested). A RETA base change applies to the months left
+  in the year; quota = base × the year's contribution rate
+  (`reta_advisor/brackets.py`, `CONTRIBUTION_RATES`, 31.50 % in 2026).
+  Comunidades without a scale in the params use the state supletoria scale,
+  with the engine's note. Not modelled: tarifa plana, pluriactividad.
+
 ### Tax Provision (`tax_provision`)
 
 Dashboard panel with the tax owed so far: one total and its parts, each read
@@ -934,7 +956,7 @@ Interfaces declared today:
 | `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
 | `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
 | `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
-| `reta_advisor` | `projection(today)` | Tax Provision |
+| `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
 | `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
