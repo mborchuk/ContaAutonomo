@@ -36,6 +36,7 @@ KIRO_AGENT = 'contaautonomo-ai-parser'
 
 _MODEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._:/\[\]-]{0,99}$')
 _ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
+_CONTROL_RE = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
 _EXT = {'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png',
         'image/gif': '.gif', 'image/webp': '.webp'}
 
@@ -72,14 +73,19 @@ def valid_model(model):
 
 
 def pdf_text(data):
-    """The PDF's text layer, '' for a scan without one."""
+    """The PDF's text layer, '' for a scan without one. Control characters are
+    dropped: fonts without a Unicode map extract as NUL bytes, which cannot go
+    into a command-line argument."""
     import io
     from pypdf import PdfReader
     try:
         reader = PdfReader(io.BytesIO(data))
-        return '\n'.join((page.extract_text() or '') for page in reader.pages).strip()
+        text = '\n'.join((page.extract_text() or '') for page in reader.pages)
     except Exception:
         return ''
+    if len(_CONTROL_RE.findall(text)) > sum(c.isalnum() for c in text):
+        return ''  # mostly unmapped glyphs: no usable text
+    return _CONTROL_RE.sub('', text).strip()
 
 
 class CLIAgentProvider(BaseAIProvider):
@@ -125,6 +131,8 @@ class CLIAgentProvider(BaseAIProvider):
                 raise CLIError(f'{self.display_name} did not answer within {_timeout()} s') from None
             except OSError as e:
                 raise CLIError(f'{self.display_name} could not start: {e.strerror}') from None
+            except ValueError as e:  # e.g. a NUL byte in an argument
+                raise CLIError(f'{self.display_name} could not start: {e}') from None
         return parse_reply(self.reply_text(proc))
 
     def prepare(self, workdir):
@@ -188,7 +196,8 @@ class KiroCLIProvider(CLIAgentProvider):
         text = pdf_text(file_data)
         if not text:
             raise media.UnsupportedFile(
-                'This PDF has no text layer (a scan). Kiro CLI cannot read it: '
+                'This PDF has no readable text layer (a scan, or fonts without a text '
+                'map). Kiro CLI cannot read it: '
                 'upload a photo of the document or use another provider.')
         # The prompt is one argv entry; Linux caps a single argument at 128 KiB.
         text = text.encode('utf-8')[:_MAX_PDF_TEXT].decode('utf-8', 'ignore')

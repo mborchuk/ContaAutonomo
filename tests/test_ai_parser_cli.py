@@ -131,7 +131,7 @@ def test_kiro_pdf_text_goes_in_the_prompt(cli_env, monkeypatch):
 def test_kiro_refuses_a_scanned_pdf(cli_env, monkeypatch):
     monkeypatch.setattr(cli_agents, 'pdf_text', lambda data: '')
     runs = cli_env(stdout='{}')
-    with pytest.raises(media.UnsupportedFile, match='no text layer'):
+    with pytest.raises(media.UnsupportedFile, match='no readable text layer'):
         KiroCLIProvider({}).parse_document(b'%PDF-1.7 ...', 'r.pdf')
     assert runs == []
 
@@ -154,6 +154,32 @@ def test_pdf_text_extracts_a_real_pdf():
     assert cli_agents.pdf_text(b'%PDF-broken') == ''
 
 
+def _fake_pdf_pages(monkeypatch, *texts):
+    import pypdf
+    pages = [SimpleNamespace(extract_text=lambda t=t: t) for t in texts]
+    monkeypatch.setattr(pypdf, 'PdfReader', lambda stream: SimpleNamespace(pages=pages))
+
+
+def test_pdf_text_drops_nul_bytes(monkeypatch):
+    # Fonts without a Unicode map extract as NUL; NUL cannot go into argv.
+    _fake_pdf_pages(monkeypatch, 'Invoice\x00 0006\nTotal\x00 121,00 EUR\x07', 'Page 2\t\x00')
+    text = cli_agents.pdf_text(b'%PDF')
+    assert text == 'Invoice 0006\nTotal 121,00 EUR\nPage 2'
+
+
+def test_pdf_text_mostly_unmapped_is_empty(monkeypatch):
+    _fake_pdf_pages(monkeypatch, '\x00\x01\x02\x03 12 \x00\x00\x00')
+    assert cli_agents.pdf_text(b'%PDF') == ''
+
+
+def test_kiro_pdf_with_nul_reaches_the_cli_clean(cli_env, monkeypatch):
+    _fake_pdf_pages(monkeypatch, 'TOTAL\x00 24,20 EUR')
+    runs = cli_env(stdout=json.dumps(REPLY))
+    KiroCLIProvider({}).parse_document(b'%PDF-1.7 ...', 'r.pdf', 'expense')
+    assert all('\x00' not in arg for arg in runs[0]['args'])
+    assert 'TOTAL 24,20 EUR' in runs[0]['args'][-1]
+
+
 def test_kiro_failure_and_timeout(cli_env):
     cli_env(returncode=1, stderr='\x1b[31mnot logged in\x1b[0m')
     with pytest.raises(CLIError, match='not logged in'):
@@ -163,6 +189,9 @@ def test_kiro_failure_and_timeout(cli_env):
         KiroCLIProvider({}).parse_document(PNG, 'a.png')
     cli_env(raises=FileNotFoundError(2, 'No such file'))
     with pytest.raises(CLIError, match='could not start'):
+        KiroCLIProvider({}).parse_document(PNG, 'a.png')
+    cli_env(raises=ValueError('embedded null byte'))
+    with pytest.raises(CLIError, match='could not start: embedded null byte'):
         KiroCLIProvider({}).parse_document(PNG, 'a.png')
 
 
