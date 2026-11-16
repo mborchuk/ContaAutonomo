@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **Modules on the function registry**: Expenses implements
+- **Modules on the function registry** (#147): Expenses implements
   `ledger.list_expenses`, Spanish Tax Forms `tax.draft_303` and
   `tax.draft_130`, the AI Parser `ai.parse_document`, `ai.complete_text` and
   `ai.text_status`. The Ledger Assistant names no module any more: it builds
