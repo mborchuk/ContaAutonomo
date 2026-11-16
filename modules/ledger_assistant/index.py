@@ -41,6 +41,8 @@ NO_TEXT_PROVIDER = ('No enabled module answers text questions. Enable the AI Par
                     'module in Settings → Modules and choose OpenAI or Anthropic with an '
                     'API key in Settings → AI Parser.')
 NOTHING_TO_READ = 'No enabled module provides data the assistant can read.'
+TEXT_STATUS_FAILED = ('The module that answers text questions could not report its status. '
+                      'Check the server log.')
 
 _read_only = contextvars.ContextVar('ledger_assistant_read_only', default=False)
 _guarded_engines = set()
@@ -118,10 +120,19 @@ class LedgerAssistantModule(BaseModule):
         return self.core.functions
 
     def text_status(self):
-        """ai.text_status, or None when no module implements text questions."""
+        """ai.text_status, or None when no module implements text questions.
+        A provider that fails or answers nonsense makes the assistant
+        unavailable instead of breaking its page."""
         if not self._functions.available('ai.text_status'):
             return None
-        return self._functions.call('ai.text_status')
+        try:
+            status = self._functions.call('ai.text_status')
+        except Exception as e:
+            self.logger.warning('ai.text_status failed: %s', type(e).__name__)
+            status = None
+        if not isinstance(status, dict):
+            return {'available': False, 'provider': None, 'reason': TEXT_STATUS_FAILED}
+        return status
 
     def missing(self):
         """What has to be configured before a question can be answered, or None."""

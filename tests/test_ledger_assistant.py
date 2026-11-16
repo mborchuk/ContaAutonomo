@@ -128,6 +128,26 @@ def test_a_second_text_module_is_not_used_and_says_who_owns_it(la, text_ai, load
     assert len(second.seen) == 1                                     # the next one takes over
 
 
+def test_a_failing_text_module_does_not_break_the_page(la, text_ai, client, monkeypatch):
+    fake = text_ai()
+
+    def broken():
+        raise RuntimeError('third-party bug')
+    monkeypatch.setattr(fake, 'status', None)
+    monkeypatch.setattr(type(fake), 'get_functions', lambda self: [
+        Function('ai.text_status', broken, 'Broken status.'),
+        Function('ai.complete_text', self.complete, 'Reply.',
+                 params=(Param('system', 'str', required=True, max_length=20_000),
+                         Param('user', 'str', required=True, max_length=400_000),
+                         Param('max_tokens', 'int', minimum=1, maximum=16_000)),
+                 external=True)])
+    assert 'could not report its status' in la.missing()
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    resp = client.get('/assistant/')
+    assert resp.status_code == 200 and 'could not report its status' in resp.get_data(as_text=True)
+
+
 def test_the_text_module_reason_is_shown(la, text_ai):
     text_ai(status={'available': False, 'provider': 'Google Document AI',
                     'reason': 'The AI Parser uses Google Document AI, which cannot answer.'})
