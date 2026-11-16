@@ -542,11 +542,20 @@ Parse invoice and expense-receipt data from PDFs and images using AI providers.
   `GET /v1/models` which models the key can use. Before the first refresh the
   tab shows a short fallback list. Stored settings on a model listed in
   `RETIRED_MODELS` move to the default when the module loads
-- Expense parsing extracts the VAT breakdown (`net_amount`, `vat_rate`,
-  `vat_amount`) alongside date, amount, contractor and category; providers are
-  instructed to return `null` rather than guess missing VAT data
+- Files: PDF, JPEG, PNG, GIF, WebP, detected from the file's bytes, not its
+  name (`media.py`). PDFs go to Anthropic as a `document` block and to OpenAI
+  as a `file` part; images as image parts. Any other type is rejected with
+  422 before a provider is called
+- Prompts (`prompts.py`, shared by the prompt-based providers): expense
+  parsing extracts the VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`),
+  the supplier's `contractor_vat` and `contractor_country`, and
+  `reverse_charge` (`eu` / `non_eu`, only when the document says so) alongside
+  date, amount, contractor and a category from the expenses module's list;
+  missing data is `null`, VAT is never guessed. A file that is not an invoice
+  or receipt returns 422
 - The expense create form embeds a parse button (see Expenses) — one upload
-  prefills the form and doubles as the attached receipt
+  prefills the form (including the reverse-charge select) and doubles as the
+  attached receipt
 - Settings: dedicated "AI Parser" tab with provider selection, API key, model config
 
 ### Invoice Designer (`invoice_designer`)

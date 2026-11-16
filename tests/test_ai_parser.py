@@ -9,17 +9,23 @@ import pytest
 
 from modules.ai_parser import catalog
 from modules.ai_parser.catalog import DEFAULT_MODELS
-from modules.ai_parser.index import (
+from modules.ai_parser import media, prompts
+from modules.ai_parser.providers import (
+    PROVIDERS,
     AnthropicProvider,
     GoogleDocAIProvider,
+    NotADocument,
     OpenAIProvider,
-    PROVIDERS,
     describe_error,
+    parse_reply,
 )
 
 INVOICE = {'invoice_number': 'A-1', 'invoice_date': '2026-03-02', 'client_name': 'ACME SL',
            'currency': 'EUR', 'items': [{'description': 'Work', 'quantity': 2,
                                          'unit_price': 50}], 'total': 100}
+PDF = b'%PDF-1.7\n...'
+PNG = b'\x89PNG\r\n\x1a\n...'
+JPEG = b'\xff\xd8\xff\xe0...'
 EXPENSE = {'expense_date': '2026-03-03', 'contractor_name': 'Shop', 'amount': 121,
            'currency': 'EUR', 'net_amount': 100, 'vat_rate': 21, 'vat_amount': 21}
 
@@ -68,7 +74,8 @@ def test_openai_maps_fenced_json_and_picks_prompt(monkeypatch, doc_type, payload
     content = request['messages'][0]['content']
     prompt = content[0]['text']
     assert ('client_name' in prompt) == (doc_type == 'invoice')
-    assert content[1]['image_url']['url'].startswith('data:application/pdf;base64,')
+    assert content[1]['type'] == 'file' and content[1]['file']['filename'] == 'doc.pdf'
+    assert content[1]['file']['file_data'].startswith('data:application/pdf;base64,')
     assert request['model'] == 'm'
     assert 'max_tokens' not in request and 'temperature' not in request
     assert request['max_completion_tokens'] > 0
@@ -78,8 +85,9 @@ def test_anthropic_maps_json_and_mime(monkeypatch):
     calls = []
     _fake_anthropic(monkeypatch, json.dumps(EXPENSE), calls)
     provider = AnthropicProvider({'anthropic_api_key': 'k'})
-    assert provider.parse_document(b'\x89PNG', 'r.png', 'expense') == EXPENSE
-    assert calls[0]['messages'][0]['content'][0]['source']['media_type'] == 'image/png'
+    assert provider.parse_document(PNG, 'receipt.pdf', 'expense') == EXPENSE
+    block = calls[0]['messages'][0]['content'][0]
+    assert block['type'] == 'image' and block['source']['media_type'] == 'image/png'
     assert calls[0]['model'] == DEFAULT_MODELS['anthropic']
 
 
@@ -327,3 +335,99 @@ def test_settings_panel_lists_models(ai_module, app):
     for provider in catalog.LISTABLE:
         assert f'value="{DEFAULT_MODELS[provider]}"' in html
     assert 'claude-sonnet-4-20250514' not in html
+
+
+# --- media type, PDF handling, replies, prompts --------------------------------
+
+@pytest.mark.parametrize('data,mime', [
+    (PDF, 'application/pdf'), (PNG, 'image/png'), (JPEG, 'image/jpeg'),
+    (b'GIF89a...', 'image/gif'), (b'RIFF\x00\x00\x00\x00WEBPVP8 ', 'image/webp')])
+def test_detect_mime_by_content(data, mime):
+    assert media.detect_mime(data) == mime
+
+
+@pytest.mark.parametrize('data', [b'', b'PK\x03\x04docx', b'plain text', b'\x00\x00\x00 ftypheic'])
+def test_detect_mime_rejects_other_files(data):
+    with pytest.raises(media.UnsupportedFile):
+        media.detect_mime(data)
+
+
+def test_type_comes_from_content_not_name(monkeypatch):
+    calls = []
+    _fake_openai(monkeypatch, json.dumps(EXPENSE), calls)
+    OpenAIProvider({'openai_api_key': 'k'}).parse_document(JPEG, 'scan.pdf', 'expense')
+    request = next(c[1] for c in calls if c[0] == 'request')
+    part = request['messages'][0]['content'][1]
+    assert part['type'] == 'image_url'
+    assert part['image_url']['url'].startswith('data:image/jpeg;base64,')
+
+
+def test_anthropic_sends_pdf_as_document_block(monkeypatch):
+    calls = []
+    _fake_anthropic(monkeypatch, json.dumps(INVOICE), calls)
+    AnthropicProvider({'anthropic_api_key': 'k'}).parse_document(PDF, 'f.pdf', 'invoice')
+    content = calls[0]['messages'][0]['content']
+    assert content[0]['type'] == 'document'
+    assert content[0]['source'] == {'type': 'base64', 'media_type': 'application/pdf',
+                                    'data': media.b64(PDF)}
+    assert content[1]['text'] == prompts.INVOICE_PROMPT
+
+
+def test_unsupported_file_never_reaches_the_provider(monkeypatch):
+    calls = []
+    _fake_anthropic(monkeypatch, '{}', calls)
+    with pytest.raises(media.UnsupportedFile):
+        AnthropicProvider({'anthropic_api_key': 'k'}).parse_document(b'hello', 'a.png')
+    assert calls == []
+
+
+@pytest.mark.parametrize('reply', [
+    '{"a": 1}', '```json\n{"a": 1}\n```', '```\n{"a": 1}```',
+    'Here is the data:\n{"a": 1}\nDone.'])
+def test_parse_reply_tolerates_wrappers(reply):
+    assert parse_reply(reply) == {'a': 1}
+
+
+@pytest.mark.parametrize('reply', ['', 'no json here', '[1, 2]'])
+def test_parse_reply_rejects_non_objects(reply):
+    with pytest.raises(ValueError):
+        parse_reply(reply)
+
+
+def test_parse_reply_not_a_document():
+    with pytest.raises(NotADocument):
+        parse_reply('{"error": "%s"}' % prompts.NOT_A_DOCUMENT)
+
+
+def test_expense_prompt_matches_expense_categories():
+    from modules.expenses.index import ExpensesModule
+    assert set(ExpensesModule.SEED_CATEGORY_DEFAULTS) <= set(prompts.EXPENSE_CATEGORIES)
+    for field in ('contractor_vat', 'contractor_country', 'reverse_charge', 'net_amount',
+                  'vat_rate', 'vat_amount', 'Meals', 'Vehicle', 'Social Security'):
+        assert field in prompts.EXPENSE_PROMPT
+    assert 'never guess VAT' in prompts.EXPENSE_PROMPT
+    assert prompts.prompt_for('invoice') == prompts.INVOICE_PROMPT
+    assert prompts.prompt_for('expense') == prompts.EXPENSE_PROMPT
+
+
+def test_google_docai_sends_detected_mime(monkeypatch):
+    seen = {}
+    _fake_docai(monkeypatch, [_ent('total_amount', '10')])
+    mod = sys.modules['google.cloud.documentai_v1']
+    mod.RawDocument = lambda **kw: seen.update(kw) or kw
+    GoogleDocAIProvider({'google_project_id': 'p', 'google_processor_id': 'x'}).parse_document(
+        PNG, 'photo.pdf', 'expense')
+    assert seen['mime_type'] == 'image/png'
+
+
+@pytest.mark.parametrize('exc', [media.UnsupportedFile('bad type'), NotADocument('not one')])
+def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc):
+    from modules.api.index import ApiError
+
+    def reject(*_a):
+        raise exc
+    monkeypatch.setattr(ai_module, '_get_provider',
+                        lambda: SimpleNamespace(name='s', display_name='S', parse_document=reject))
+    with app.test_request_context(), pytest.raises(ApiError) as err:
+        ai_module._api_parse(_request('a.pdf', b'1'))
+    assert err.value.status == 422 and err.value.message == str(exc)
