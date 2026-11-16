@@ -6,24 +6,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **Modules on the function registry** (#147): Expenses implements
+- **Modules on the function registry** (#147): Expenses declares
   `ledger.list_expenses`, Spanish Tax Forms `tax.draft_303` and
   `tax.draft_130`, the AI Parser `ai.parse_document`, `ai.complete_text` and
   `ai.text_status`. The Ledger Assistant names no module any more: it builds
   its catalogue from the functions offered to the assistant, reads through the
   registry, asks through `ai.complete_text` (it no longer handles API keys),
   and depends on `ledger.list_invoices` instead of the `api` module. The
-  expense form shows AI parsing when something implements
+  expense form shows AI parsing when something provides
   `ai.parse_document` and posts to its route. `GET /api/v1/expenses` returns
   the VAT fields too. A test refuses new imports between modules.
-- **Function registry** (#146): named functions with contracts in the core
-  (`contracts.py`), implemented by the core (`core_functions.py`) or by a
-  module (`get_functions()`) and called by name through `core.functions`, so
-  an implementation can be replaced without changing its callers. Arguments
-  are checked against the contract; dependencies may name a function. The core
-  implements `ledger.list_invoices` and `ledger.list_customers`, which
-  `GET /api/v1/invoices` and `/customers` now call. `ApiError` moved to the
-  core (`api_errors.py`).
+- **Function registry** (#146): named functions that the core and modules
+  declare — description and code together, in the module's own folder
+  (`get_functions()` returns `functions.Function`) — and that other code calls
+  by name through `core.functions`, with the arguments checked against the
+  declaration. A module, also one from outside this repository, replaces
+  another by declaring the same names. The first provider of a name owns it
+  (core, then modules in load order); a later claim is not used and shows as a
+  warning on that module's card in Settings → Modules. Dependencies may name a
+  function. The core provides `ledger.list_invoices` and
+  `ledger.list_customers`, which `GET /api/v1/invoices` and `/customers` now
+  call. `ApiError` moved to the core (`api_errors.py`).
 - **AI Parser CLI agents** (#145): Claude Code CLI and Kiro CLI as parse providers,
   using the CLI installed and logged in on the server. Off unless the server
   sets `AI_PARSER_ALLOW_CLI=1`; each run is read-only in a temporary

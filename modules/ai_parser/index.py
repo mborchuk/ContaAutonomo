@@ -10,7 +10,7 @@ from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
 from secret_box import EncryptedString, encrypt_existing
 
-from functions import FunctionUnavailable
+from functions import Function, FunctionUnavailable, Param
 
 from . import catalog, text
 from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
@@ -94,14 +94,36 @@ class AIParserModule(BaseModule):
             self._db.session.commit()
         return cfg
 
-    # --- Registry functions (contracts.py) ---------------------------------- #
+    # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        return {
-            'ai.parse_document': {'call': self.parse_file, 'route': '/ai-parser/parse'},
-            'ai.complete_text': self.complete_text,
-            'ai.text_status': self.text_status,
-        }
+        # A module that declares these names replaces this one for them (the
+        # Ledger Assistant calls ai.text_status and ai.complete_text).
+        return [
+            Function(
+                'ai.parse_document', self.parse_file,
+                'The fields of an invoice or receipt read from a PDF or an image.',
+                params=(Param('file_data', 'bytes', 'The file', required=True),
+                        Param('filename', 'str', 'Original file name', required=True,
+                              max_length=255),
+                        Param('doc_type', 'str', 'What the file is',
+                              choices=('invoice', 'expense'))),
+                returns='{field: value}; fields per doc_type in modules/ai_parser/README.md',
+                external=True, route='/ai-parser/parse'),
+            Function(
+                'ai.complete_text', self.complete_text,
+                "The AI provider's reply to `user` under the `system` instruction.",
+                params=(Param('system', 'str', 'Instruction', required=True, max_length=20_000),
+                        Param('user', 'str', 'Message', required=True, max_length=400_000),
+                        Param('max_tokens', 'int', 'Reply length limit', minimum=1,
+                              maximum=16_000)),
+                returns='str', external=True),
+            Function(
+                'ai.text_status', self.text_status,
+                'Whether text questions can be answered, by which provider, and what to '
+                'configure if not.',
+                returns='{"available": bool, "provider": str or null, "reason": str or null}'),
+        ]
 
     def parse_file(self, file_data, filename, doc_type='invoice'):
         """The fields of an invoice or receipt, with the configured provider."""

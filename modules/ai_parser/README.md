@@ -19,8 +19,9 @@ user reviews the form and saves it.
 
 ## Registry functions
 
-The module implements three functions of `contracts.py`; other code calls
-them by name through `core.functions`, never this module directly:
+The module declares three functions in `get_functions()`; other code calls
+them by name through `core.functions`, never this module directly, so a module
+that declares the same names replaces this one for them:
 
 | Function | Method | Notes |
 |---|---|---|

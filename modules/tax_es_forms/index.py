@@ -458,10 +458,24 @@ class TaxEsFormsModule(BaseModule):
 
         app.register_blueprint(bp)
 
-    # --- Registry functions (contracts.py) ------------------------------- #
+    # --- Registry functions ---------------------------------------------- #
 
     def get_functions(self):
-        return {'tax.draft_303': self.draft_303, 'tax.draft_130': self.draft_130}
+        from functions import Function, Param
+        quarter = (Param('year', 'int', 'Tax year', required=True, minimum=2000, maximum=2100),
+                   Param('quarter', 'int', 'Quarter, 1-4', required=True, minimum=1, maximum=4))
+        draft = dict(params=quarter, assistant=True, record_kind='draft',
+                     assistant_fields=('form', 'year', 'quarter', 'boxes'))
+        return [
+            Function('tax.draft_303', self.draft_303,
+                     'Modelo 303 (IVA) draft boxes for one quarter. Needs year and quarter (1-4).',
+                     returns='{"form": "303", "year": int, "quarter": int, '
+                             '"boxes": {box: amount}, ...}', **draft),
+            Function('tax.draft_130', self.draft_130,
+                     'Modelo 130 (IRPF) draft boxes for one quarter. Needs year and quarter (1-4).',
+                     returns='{"form": "130", "year": int, "quarter": int, '
+                             '"boxes": {box: amount}, ...}', **draft),
+        ]
 
     def draft_130(self, year, quarter):
         """Modelo 130 draft for one quarter, as shown on its page."""

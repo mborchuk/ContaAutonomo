@@ -1,9 +1,17 @@
 """
-The core's own implementations of registry functions (contracts.py): the
-data the core owns — invoices and customers. The app passes its models in
+The core's own registry functions (functions.py): the data the core owns —
+invoices and customers — declared and implemented here, like a module does in
+`get_functions()`. The app passes its models in
 (`ModuleManager.register_core_functions`), so this file imports nothing from
 app.py.
 """
+from functions import Function, Param
+
+DATE_FROM = Param('date_from', 'date', 'Earliest date, YYYY-MM-DD')
+DATE_TO = Param('date_to', 'date', 'Latest date, YYYY-MM-DD')
+PAGE = Param('page', 'int', 'Page number, from 1', minimum=1, maximum=100_000)
+PER_PAGE = Param('per_page', 'int', 'Rows per page', minimum=1, maximum=100)
+PAGED = '{"data": [record], "page": int, "per_page": int, "total": int}'
 
 
 def serialize_invoice(inv, invoice_service):
@@ -61,5 +69,25 @@ def register(registry, core, Invoice, Customer):
         return {'data': [serialize_customer(c)
                          for c in Customer.query.order_by(Customer.name).all()]}
 
-    registry.register_core('ledger.list_invoices', list_invoices)
-    registry.register_core('ledger.list_customers', list_customers)
+    registry.register_core(Function(
+        'ledger.list_invoices', list_invoices,
+        'Invoices issued to customers, newest first. Filters: date_from/date_to '
+        '(invoice date), client (part of the customer name), status (draft, '
+        'pending, issued, paid, cancelled).',
+        params=(DATE_FROM, DATE_TO,
+                Param('client', 'str', 'Part of the customer name', max_length=100),
+                Param('status', 'str', 'Invoice status', max_length=20),
+                PAGE, PER_PAGE),
+        returns=PAGED + '; record: id, invoice_number, client_name, customer_id, '
+                'amount_usd, amount_eur, currency, exchange_rate, invoice_date, due_date, '
+                'status, has_pdf',
+        assistant=True, record_kind='invoice',
+        assistant_fields=('id', 'invoice_number', 'invoice_date', 'client_name',
+                          'amount_eur', 'currency', 'status')))
+    registry.register_core(Function(
+        'ledger.list_customers', list_customers,
+        'Customer list (name, country, VAT treatment).',
+        returns='{"data": [record]}; record: id, name, vat_number, country, email, '
+                'tax_type, is_default',
+        assistant=True, record_kind='customer',
+        assistant_fields=('id', 'name', 'country', 'tax_type')))

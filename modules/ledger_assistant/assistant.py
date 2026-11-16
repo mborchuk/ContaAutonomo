@@ -5,22 +5,22 @@ shown. No Flask, no database, no network.
 
 How a question is answered (index.py runs the steps):
   1. PLAN.   The provider receives the question and the catalogue — the
-             registry functions whose contract allows the assistant
-             (read-only, nothing sent out) and that an enabled module or the
-             core implements. No records.
+             registry functions whose declaration allows the assistant
+             (read-only, nothing sent out) that the core or an enabled
+             module provides. No records.
   2. READ.   `validate_plan` keeps only catalogue calls whose parameters
-             pass the contract. The module runs them through the registry,
+             pass the declaration. The module runs them through the registry,
              with every database write blocked.
-  3. ANSWER. `minimise` keeps only the contract's `assistant_fields`; those
+  3. ANSWER. `minimise` keeps only the declared `assistant_fields`; those
              records and the question go to the provider, which answers and
              cites the record ids it used.
   4. SHOW.   `records_used` lists the cited records (all sent records when it
              cites none), with a deterministic total, and the page adds the
              "not tax advice" wording.
 
-The catalogue has no function that writes or sends data out (contracts.py
-refuses to offer one), so a plan cannot ask for one; anything not in it is
-dropped and reported.
+The catalogue has no function that writes or sends data out (the registry
+refuses such a declaration for the assistant), so a plan cannot ask for one;
+anything not in it is dropped and reported.
 """
 
 import json
@@ -38,9 +38,9 @@ PAGING = ('page', 'per_page')
 DESCRIPTION_MAX = 80
 
 
-def catalogue_from(contracts):
-    """{name: contract} for the contracts the assistant may call."""
-    return {c.name: c for c in contracts if c.assistant and c.read_only and not c.external}
+def catalogue_from(functions):
+    """{name: Function} for the declared functions the assistant may call."""
+    return {f.name: f for f in functions if f.assistant and f.read_only and not f.external}
 
 
 def sent_fields(catalogue):

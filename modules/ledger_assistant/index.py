@@ -4,21 +4,21 @@ Ledger Assistant Module (G-7) — read-only questions over the books.
 
 Opt-in (off by default, like every module but Backup). Answers questions such
 as "how much did I invoice this customer in Q3" through registry functions
-(contracts.py): it reads with the functions whose contract allows the
+(functions.py): it reads with the functions whose declaration allows the
 assistant, and asks with `ai.complete_text`. It names no module, so any
-module implementing those functions works. The steps and the data sent are
+module declaring those functions works. The steps and the data sent are
 in assistant.py.
 
 Read-only by construction and by guard:
-  - the catalogue holds only functions whose contract is read-only and sends
-    nothing out, and a plan can name nothing else;
+  - the catalogue holds only functions declared read-only that send nothing
+    out, and a plan can name nothing else;
   - while the calls run, every SQL statement other than a SELECT is refused
     (`read_only()`), and the session is rolled back afterwards, so not even an
     implementation with a side effect can change the database;
   - the module has no tables and writes no activity-log entry;
   - it never sees an API key: `ai.complete_text` returns only the reply.
 
-Only the question goes into the planning request; only the contract's
+Only the question goes into the planning request; only the declared
 `assistant_fields` of the records those calls return go into the answering
 request. The settings panel says so. Every answer lists the records it used
 and carries the "not tax advice" wording.

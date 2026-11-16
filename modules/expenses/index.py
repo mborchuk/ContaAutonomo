@@ -463,10 +463,24 @@ class ExpensesModule(BaseModule):
             'page': page, 'per_page': per_page, 'total': pagination.total,
         }, 200
 
-    # --- Registry functions (contracts.py) ---------------------------------- #
+    # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        return {'ledger.list_expenses': self.list_expenses}
+        from core_functions import DATE_FROM, DATE_TO, PAGE, PAGED, PER_PAGE
+        from functions import Function, Param
+        return [Function(
+            'ledger.list_expenses', self.list_expenses,
+            'Business expenses, newest first. Filters: date_from/date_to (expense date), '
+            'category (exact name, e.g. Software, Travel).',
+            params=(DATE_FROM, DATE_TO,
+                    Param('category', 'str', 'Expense category, exact name', max_length=100),
+                    PAGE, PER_PAGE),
+            returns=PAGED + '; record: id, contractor_id, amount, currency, category, '
+                    'description, expense_date, invoice_number, net_amount, vat_rate, '
+                    'vat_amount, deductible, deductible_pct, reverse_charge',
+            assistant=True, record_kind='expense',
+            assistant_fields=('id', 'expense_date', 'category', 'description', 'amount',
+                              'currency'))]
 
     def list_expenses(self, date_from=None, date_to=None, category=None, page=1, per_page=20):
         """Expenses newest first, with optional date range and category (exact,

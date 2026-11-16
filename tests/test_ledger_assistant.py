@@ -1,12 +1,13 @@
 """G-7 — read-only ledger assistant: off by default, cannot write, sends only
 the records needed, lists them, and explains a missing provider. It reads and
 asks through registry functions, so the tests give it a stand-in text module
-instead of the AI Parser."""
+instead of the AI Parser — what a third-party module replacing it would do."""
 import json
 from datetime import date
 
 import pytest
 
+from functions import Function, Param
 from module_manager import BaseModule
 from modules.ledger_assistant import assistant as steps
 
@@ -14,7 +15,8 @@ TODAY = date(2035, 11, 10)
 
 
 class FakeTextModule(BaseModule):
-    """Any module implementing ai.text_status and ai.complete_text will do."""
+    """Any module declaring ai.text_status and ai.complete_text will do; it
+    declares them itself, as a module from outside the repository would."""
 
     module_id = 'fake_text_ai'
     name = 'Fake text AI'
@@ -26,8 +28,16 @@ class FakeTextModule(BaseModule):
         self.seen = []
 
     def get_functions(self):
-        return {'ai.text_status': lambda: self.status,
-                'ai.complete_text': self.complete}
+        return [
+            Function('ai.text_status', lambda: self.status, 'Whether text works.'),
+            Function('ai.complete_text', self.complete, 'Reply to the message.',
+                     params=(Param('system', 'str', required=True, max_length=20_000),
+                             Param('user', 'str', required=True, max_length=400_000),
+                             Param('max_tokens', 'int', minimum=1, maximum=16_000)),
+                     external=True),
+            Function('ai.summarise', lambda text: text[:10], 'An extra function of its own.',
+                     params=(Param('text', 'str', required=True),)),
+        ]
 
     def complete(self, system, user, max_tokens=1500):
         self.seen.append({'system': system, 'user': user, 'max_tokens': max_tokens})
@@ -101,6 +111,23 @@ def test_without_a_text_module_it_says_what_is_missing(la, ledger):
     assert out['answer'] is None and out['calls'] == []
 
 
+def test_a_second_text_module_is_not_used_and_says_who_owns_it(la, text_ai, loaded_modules,
+                                                                monkeypatch):
+    first = text_ai(plan={'calls': []})
+    second = FakeTextModule(loaded_modules.core, [json.dumps({'calls': []})])
+    monkeypatch.setitem(loaded_modules.modules, 'other_text_ai', second)
+    la.ask('Anything?', TODAY)
+    assert len(first.seen) == 1 and second.seen == []
+    assert loaded_modules.functions.status('other_text_ai')['conflicts'] == [
+        {'function': 'ai.complete_text', 'owner': 'fake_text_ai'},
+        {'function': 'ai.summarise', 'owner': 'fake_text_ai'},
+        {'function': 'ai.text_status', 'owner': 'fake_text_ai'}]
+    monkeypatch.delitem(loaded_modules.modules, 'fake_text_ai')   # owner disabled
+    second.replies = [json.dumps({'calls': []})]
+    la.ask('Anything?', TODAY)
+    assert len(second.seen) == 1                                     # the next one takes over
+
+
 def test_the_text_module_reason_is_shown(la, text_ai):
     text_ai(status={'available': False, 'provider': 'Google Document AI',
                     'reason': 'The AI Parser uses Google Document AI, which cannot answer.'})
@@ -139,15 +166,16 @@ def test_it_cannot_create_change_or_delete(la, ledger, text_ai, loaded_modules, 
         {'call': 'ledger.list_invoices', 'params': {'id': 1, 'status': 'paid'}},  # not allowed
     ]}, answer={'answer': 'Synthetic.', 'record_ids': {}})
     # An implementation with a side effect is stopped by the guard, too.
-    original = loaded_modules.functions._core['ledger.list_customers']['call']
+    import dataclasses
+    declared = loaded_modules.functions._core['ledger.list_customers']
 
     def writing_customers():
         from app import Customer
         db.session.add(Customer(name='Injected Synthetic'))
         db.session.commit()
-        return original()
+        return declared.call()
     monkeypatch.setitem(loaded_modules.functions._core, 'ledger.list_customers',
-                        {'call': writing_customers, 'route': None})
+                        dataclasses.replace(declared, call=writing_customers))
 
     before = _snapshot(db)
     out = la.ask('Show everything', TODAY)
@@ -171,7 +199,7 @@ def test_sends_only_the_records_and_fields_needed(la, ledger, text_ai, loaded_mo
     sent = json.loads(fake.seen[1]['user'])['records']
     numbers = sorted(r['invoice_number'] for r in sent['invoice'])
     assert numbers == ['LA-1', 'LA-2']                                     # Q3, ACME only
-    fields = loaded_modules.functions.contracts['ledger.list_invoices'].assistant_fields
+    fields = loaded_modules.functions.get('ledger.list_invoices').assistant_fields
     for row in sent['invoice']:
         assert set(row) == set(fields)
     payload = fake.seen[1]['user']

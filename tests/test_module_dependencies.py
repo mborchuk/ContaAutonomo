@@ -197,7 +197,7 @@ def test_modules_look_each_other_up_through_provider_of():
 
 # Imports of another module's code that remain; each one ties the caller to
 # that module. Remove an entry when its import goes; never add one — add a
-# registry function (contracts.py) instead.
+# registry function (functions.py) instead.
 KNOWN_CROSS_MODULE_IMPORTS = {
     ('tax_es_forms', 'fiscal_calendar'),
     ('tax_management', 'fiscal_calendar'),

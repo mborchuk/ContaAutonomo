@@ -494,10 +494,9 @@ def test_openai_and_anthropic_text_calls(monkeypatch):
 
 
 def test_ai_parser_implements_its_functions(ai_module, loaded_modules):
-    from contracts import CONTRACTS
     from functions import FunctionRegistry
-    registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}), CONTRACTS)
-    assert registry.check_all() == []
+    registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}))
+    assert registry.check_all() == ([], [])
     assert registry.route('ai.parse_document') == '/ai-parser/parse'
     assert {c.name for c in registry.find(external=True)} == {
         'ai.parse_document', 'ai.complete_text'}
@@ -548,9 +547,14 @@ def test_expense_form_uses_the_parse_function_route(loaded_modules, client, monk
         name = 'Other parser'
 
         def get_functions(self):
-            return {'ai.parse_document': {
-                'call': lambda file_data, filename, doc_type='invoice': {},
-                'route': '/other-parser/parse'}}
+            from functions import Function, Param
+            return [Function('ai.parse_document',
+                             lambda file_data, filename, doc_type='invoice': {},
+                             'Read a document.',
+                             params=(Param('file_data', 'bytes', required=True),
+                                     Param('filename', 'str', required=True),
+                                     Param('doc_type', 'str')),
+                             external=True, route='/other-parser/parse')]
 
     with client.session_transaction() as sess:
         sess['authenticated'] = True
