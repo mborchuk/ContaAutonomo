@@ -139,6 +139,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
+- **AI Parser models** (#143): parsing with Anthropic failed with 404 because the
+  default `claude-sonnet-4-20250514` is retired. Defaults are now
+  `claude-sonnet-5-5` and `gpt-6.1-terra`; stored settings on a retired Claude
+  model move to the default on start-up. Settings → AI Parser lists the models
+  the API key can use ("Refresh list", from the vendors' `/v1/models`). OpenAI
+  requests send `max_completion_tokens` and no `temperature`, which current
+  models require. Provider errors say what to fix (model, key, rate limit).
 - Invoices in currencies other than EUR/USD are converted with their own rate,
   not the USD rate; a missing rate stops the save instead of using 1:1 (#114).
 - The invoice view shows the invoice currency instead of "(USD)" (#113).

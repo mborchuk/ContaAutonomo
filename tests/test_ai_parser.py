@@ -7,11 +7,14 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+from modules.ai_parser import catalog
+from modules.ai_parser.catalog import DEFAULT_MODELS
 from modules.ai_parser.index import (
     AnthropicProvider,
     GoogleDocAIProvider,
     OpenAIProvider,
     PROVIDERS,
+    describe_error,
 )
 
 INVOICE = {'invoice_number': 'A-1', 'invoice_date': '2026-03-02', 'client_name': 'ACME SL',
@@ -66,6 +69,9 @@ def test_openai_maps_fenced_json_and_picks_prompt(monkeypatch, doc_type, payload
     prompt = content[0]['text']
     assert ('client_name' in prompt) == (doc_type == 'invoice')
     assert content[1]['image_url']['url'].startswith('data:application/pdf;base64,')
+    assert request['model'] == 'm'
+    assert 'max_tokens' not in request and 'temperature' not in request
+    assert request['max_completion_tokens'] > 0
 
 
 def test_anthropic_maps_json_and_mime(monkeypatch):
@@ -74,6 +80,7 @@ def test_anthropic_maps_json_and_mime(monkeypatch):
     provider = AnthropicProvider({'anthropic_api_key': 'k'})
     assert provider.parse_document(b'\x89PNG', 'r.png', 'expense') == EXPENSE
     assert calls[0]['messages'][0]['content'][0]['source']['media_type'] == 'image/png'
+    assert calls[0]['model'] == DEFAULT_MODELS['anthropic']
 
 
 def test_unconfigured_providers():
@@ -189,3 +196,134 @@ def test_get_provider_requires_configuration(ai_module):
     assert ai_module._get_provider().name == 'openai'
     cfg.openai_api_key = ''
     db.session.commit()
+
+
+# --- model catalog: live listing, cache, retired models ----------------------
+
+def _fake_model_lists(monkeypatch, anthropic_models=(), openai_models=(), error=None):
+    seen = {}
+    anth = ModuleType('anthropic')
+
+    class AnthropicClient:
+        def __init__(self, api_key):
+            seen['anthropic_key'] = api_key
+            self.models = SimpleNamespace(list=self._list)
+
+        def _list(self, limit):
+            if error:
+                raise error
+            return iter(SimpleNamespace(id=i, display_name=n) for i, n in anthropic_models)
+    anth.Anthropic = AnthropicClient
+    oai = ModuleType('openai')
+
+    class OpenAIClient:
+        def __init__(self, api_key):
+            seen['openai_key'] = api_key
+            self.models = SimpleNamespace(list=lambda: iter(
+                SimpleNamespace(id=i, created=c) for i, c in openai_models))
+    oai.OpenAI = OpenAIClient
+    monkeypatch.setitem(sys.modules, 'anthropic', anth)
+    monkeypatch.setitem(sys.modules, 'openai', oai)
+    return seen
+
+
+def test_list_models_anthropic(monkeypatch):
+    _fake_model_lists(monkeypatch, anthropic_models=[('claude-opus-5-5', 'Claude Opus 5.5')])
+    assert catalog.list_models('anthropic', 'k') == [
+        {'id': 'claude-opus-5-5', 'name': 'Claude Opus 5.5'}]
+
+
+def test_list_models_openai_keeps_chat_models_newest_first(monkeypatch):
+    _fake_model_lists(monkeypatch, openai_models=[
+        ('gpt-6-luna', 10), ('text-embedding-3-large', 30), ('gpt-6.1-terra', 20),
+        ('gpt-6-realtime', 40), ('whisper-1', 50), ('o5-mini', 15)])
+    ids = [m['id'] for m in catalog.list_models('openai', 'k')]
+    assert ids == ['gpt-6.1-terra', 'o5-mini', 'gpt-6-luna']
+
+
+def test_list_models_rejects_other_providers():
+    with pytest.raises(ValueError):
+        catalog.list_models('google_docai', 'k')
+
+
+def test_choices_fallback_live_and_unlisted_current():
+    fallback = catalog.choices('anthropic', '', DEFAULT_MODELS['anthropic'])
+    assert not fallback['live'] and fallback['models'] == catalog.FALLBACK_MODELS['anthropic']
+    custom = catalog.choices('openai', 'not json', 'gpt-custom')
+    assert custom['models'][0] == {'id': 'gpt-custom', 'name': 'gpt-custom'}
+    raw = catalog.store_cache('', 'anthropic', [{'id': 'claude-x', 'name': 'X'}])
+    live = catalog.choices('anthropic', raw, 'claude-gone')
+    assert live['live'] and live['fetched_at']
+    assert live['models'] == [{'id': 'claude-gone', 'name': 'claude-gone (not in the list)'},
+                              {'id': 'claude-x', 'name': 'X'}]
+
+
+def test_retired_models_are_not_defaults_or_fallbacks():
+    for provider, retired in catalog.RETIRED_MODELS.items():
+        assert DEFAULT_MODELS[provider] not in retired
+        assert not retired & {m['id'] for m in catalog.FALLBACK_MODELS[provider]}
+
+
+@pytest.mark.parametrize('status,needle', [(404, 'model is not available'),
+                                           (401, 'rejected the API key'),
+                                           (429, 'rate limit'), (500, None)])
+def test_describe_error(status, needle):
+    message = describe_error(SimpleNamespace(status_code=status))
+    assert (message is None) if needle is None else (needle in message)
+
+
+def test_refresh_models_caches_the_list(ai_module, monkeypatch):
+    from app import db
+    seen = _fake_model_lists(monkeypatch, anthropic_models=[('claude-new', 'New')])
+    cfg = ai_module._get_config()
+    cfg.anthropic_api_key = 'stored-key'
+    cfg.anthropic_model = 'claude-new'
+    db.session.commit()
+    payload, status = ai_module.refresh_models('anthropic')
+    assert status == 200 and seen['anthropic_key'] == 'stored-key'
+    assert payload['live'] and payload['models'] == [{'id': 'claude-new', 'name': 'New'}]
+    assert catalog.load_cache(cfg.models_cache)['anthropic']['models'][0]['id'] == 'claude-new'
+
+    ai_module.refresh_models('anthropic', api_key=' typed-key ')
+    assert seen['anthropic_key'] == 'typed-key'
+    cfg.anthropic_api_key = ''
+    cfg.models_cache = ''
+    db.session.commit()
+
+
+def test_refresh_models_errors(ai_module, monkeypatch):
+    from app import db
+    cfg = ai_module._get_config()
+    cfg.openai_api_key = ''
+    db.session.commit()
+    assert ai_module.refresh_models('google_docai')[1] == 404
+    assert ai_module.refresh_models('openai')[1] == 400
+    auth_error = type('AuthenticationError', (Exception,), {'status_code': 401})
+    _fake_model_lists(monkeypatch, error=auth_error())
+    payload, status = ai_module.refresh_models('anthropic', api_key='bad')
+    assert status == 502 and 'rejected the API key' in payload['error']
+
+
+def test_migrate_moves_retired_model_to_default(ai_module):
+    from app import db
+    cfg = ai_module._get_config()
+    cfg.anthropic_model = 'claude-sonnet-4-20250514'
+    cfg.openai_model = 'gpt-custom'
+    db.session.commit()
+    ai_module._migrate()
+    db.session.expire_all()
+    cfg = ai_module._get_config()
+    assert cfg.anthropic_model == DEFAULT_MODELS['anthropic']
+    assert cfg.openai_model == 'gpt-custom'
+    ai_module._migrate()  # idempotent
+    cfg.openai_model = DEFAULT_MODELS['openai']
+    db.session.commit()
+
+
+def test_settings_panel_lists_models(ai_module, app):
+    with app.test_request_context('/settings'):
+        html = ai_module.get_settings_html(None)
+    assert 'Refresh list' in html
+    for provider in catalog.LISTABLE:
+        assert f'value="{DEFAULT_MODELS[provider]}"' in html
+    assert 'claude-sonnet-4-20250514' not in html

@@ -2,7 +2,7 @@
 """
 AI Parser Module
 Pluggable AI-powered document parsing for invoices and expenses.
-Supports multiple backends: OpenAI (GPT-4o), Google Document AI, Anthropic Claude.
+Supports multiple backends: OpenAI, Anthropic Claude, Google Document AI.
 """
 
 from module_manager import BaseModule
@@ -12,6 +12,22 @@ import json
 import base64
 from datetime import datetime
 from secret_box import EncryptedString, encrypt_existing
+
+from . import catalog
+from .catalog import DEFAULT_MODELS
+
+
+def describe_error(exc):
+    """A message the user can act on for a provider HTTP error, else None."""
+    status = getattr(exc, 'status_code', None)
+    if status == 404:
+        return ('The selected model is not available for this API key. Choose another '
+                'model in Settings → AI Parser ("Refresh list" shows the current ones).')
+    if status in (401, 403):
+        return 'The provider rejected the API key. Check it in Settings → AI Parser.'
+    if status == 429:
+        return 'The provider rate limit or quota was reached. Try again later.'
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +60,7 @@ class BaseAIProvider:
 
 class OpenAIProvider(BaseAIProvider):
     name = 'openai'
-    display_name = 'OpenAI (GPT-4o)'
+    display_name = 'OpenAI (GPT)'
 
     INVOICE_PROMPT = """Analyze this invoice document and extract the following fields as JSON:
 {
@@ -86,7 +102,7 @@ Return ONLY valid JSON, no markdown fences."""
     def parse_document(self, file_data, filename, doc_type='invoice'):
         import openai
         client = openai.OpenAI(api_key=self.config['openai_api_key'])
-        model = self.config.get('openai_model', 'gpt-4o')
+        model = self.config.get('openai_model') or DEFAULT_MODELS['openai']
 
         b64 = base64.b64encode(file_data).decode('utf-8')
         mime = 'application/pdf' if filename.lower().endswith('.pdf') else 'image/jpeg'
@@ -106,8 +122,9 @@ Return ONLY valid JSON, no markdown fences."""
                     }}
                 ]
             }],
-            max_tokens=2000,
-            temperature=0
+            # Current models reject max_tokens and a non-default temperature;
+            # reasoning tokens count toward this limit.
+            max_completion_tokens=8000,
         )
 
         text = response.choices[0].message.content.strip()
@@ -134,7 +151,7 @@ class AnthropicProvider(BaseAIProvider):
     def parse_document(self, file_data, filename, doc_type='invoice'):
         import anthropic
         client = anthropic.Anthropic(api_key=self.config['anthropic_api_key'])
-        model = self.config.get('anthropic_model', 'claude-sonnet-4-20250514')
+        model = self.config.get('anthropic_model') or DEFAULT_MODELS['anthropic']
 
         b64 = base64.b64encode(file_data).decode('utf-8')
         mime = 'application/pdf' if filename.lower().endswith('.pdf') else 'image/jpeg'
@@ -145,7 +162,7 @@ class AnthropicProvider(BaseAIProvider):
 
         response = client.messages.create(
             model=model,
-            max_tokens=2000,
+            max_tokens=4096,
             messages=[{
                 'role': 'user',
                 'content': [
@@ -317,12 +334,14 @@ class AIParserModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             provider = db.Column(db.String(50), default='openai')
             openai_api_key = db.Column(EncryptedString(500), default='')
-            openai_model = db.Column(db.String(100), default='gpt-4o')
+            openai_model = db.Column(db.String(100), default=DEFAULT_MODELS['openai'])
             anthropic_api_key = db.Column(EncryptedString(500), default='')
-            anthropic_model = db.Column(db.String(100), default='claude-sonnet-4-20250514')
+            anthropic_model = db.Column(db.String(100), default=DEFAULT_MODELS['anthropic'])
             google_project_id = db.Column(db.String(200), default='')
             google_processor_id = db.Column(db.String(200), default='')
             google_location = db.Column(db.String(50), default='eu')
+            # JSON of the last live model listing per provider (catalog.store_cache).
+            models_cache = db.Column(db.Text, default='')
 
         self.AIParserConfig = AIParserConfig
         return {'ai_parser_config': AIParserConfig}
@@ -349,9 +368,10 @@ class AIParserModule(BaseModule):
         provider = (cfg.provider if cfg else None) or 'openai'
         key = model = ''
         if cfg is not None and provider == 'openai':
-            key, model = cfg.openai_api_key or '', cfg.openai_model or 'gpt-4o'
+            key, model = cfg.openai_api_key or '', cfg.openai_model or DEFAULT_MODELS['openai']
         elif cfg is not None and provider == 'anthropic':
-            key, model = cfg.anthropic_api_key or '', cfg.anthropic_model or 'claude-sonnet-4-20250514'
+            key, model = (cfg.anthropic_api_key or '',
+                          cfg.anthropic_model or DEFAULT_MODELS['anthropic'])
         cls = PROVIDERS.get(provider)
         configured = bool(key) if provider in ('openai', 'anthropic') else bool(
             cfg and cfg.google_project_id and cfg.google_processor_id)
@@ -433,9 +453,46 @@ class AIParserModule(BaseModule):
                 module.core.log_activity(
                     'ai_parse_failed', 'ai_parser',
                     f'Failed to parse {file.filename}: {e}')
-                return jsonify({'error': 'Parsing failed. Check server logs.'}), 500
+                return jsonify({'error': describe_error(e)
+                                or 'Parsing failed. Check server logs.'}), 500
+
+        @bp.route('/models/<provider>/refresh', methods=['POST'])
+        @_rl('10/minute')
+        @login_required
+        def refresh_models(provider):
+            """Fetch the provider's model list and cache it. The key typed in
+            the settings form (JSON `api_key`) is used when given, so the list
+            can be loaded before saving; it is not stored here."""
+            body = request.get_json(silent=True)
+            body = body if isinstance(body, dict) else {}
+            payload, status = module.refresh_models(
+                provider, str(body.get('api_key') or ''), str(body.get('current') or ''))
+            return jsonify(payload), status
 
         app.register_blueprint(bp)
+
+    def refresh_models(self, provider, api_key='', current=''):
+        """Load the provider's model list into the cache. Returns
+        (catalog.choices payload or {'error'}, HTTP status)."""
+        if provider not in catalog.LISTABLE:
+            return {'error': 'Unknown provider'}, 404
+        # Use the allowlisted constant from here on, not the URL value.
+        provider = next(p for p in catalog.LISTABLE if p == provider)
+        cfg = self._get_config()
+        api_key = api_key.strip() or getattr(cfg, f'{provider}_api_key')
+        if not api_key:
+            return {'error': 'Enter the API key first.'}, 400
+        try:
+            models = catalog.list_models(provider, api_key)
+        except Exception as e:
+            self.logger.warning('Model listing failed for %s: %s', provider, type(e).__name__)
+            return {'error': describe_error(e)
+                    or 'Could not load the model list. Check server logs.'}, 502
+        cfg.models_cache = catalog.store_cache(cfg.models_cache, provider, models)
+        self._db.session.commit()
+        self.logger.info('Model list refreshed for %s: %d models', provider, len(models))
+        current = current.strip() or getattr(cfg, f'{provider}_model')
+        return catalog.choices(provider, cfg.models_cache, current), 200
 
     # --- REST API (served under /api/v1/m/ai_parser/... ) ---
 
@@ -466,7 +523,8 @@ class AIParserModule(BaseModule):
             result = provider.parse_document(file.read(), file.filename, doc_type)
         except Exception as e:
             self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
-            raise ApiError(502, 'parse_failed', 'Parsing failed. Check server logs.')
+            raise ApiError(502, 'parse_failed',
+                           describe_error(e) or 'Parsing failed. Check server logs.')
         self.core.log_activity('ai_parse_success', 'ai_parser',
                                {'file': file.filename, 'doc_type': doc_type,
                                 'provider': provider.name, 'via': 'api'})
@@ -481,16 +539,42 @@ class AIParserModule(BaseModule):
     def on_enable(self):
         # C-2: encrypt API keys stored in plaintext by earlier versions.
         encrypt_existing(self._db, 'ai_parser_config', ['openai_api_key', 'anthropic_api_key'])
+        self._migrate()
+
+    def _migrate(self):
+        """Add columns introduced after the table shipped and move stored
+        settings off retired models. Idempotent."""
+        from sqlalchemy import inspect as sa_inspect, text
+        try:
+            cols = {c['name'] for c in sa_inspect(self._db.engine).get_columns('ai_parser_config')}
+            with self._db.engine.connect() as conn:
+                if 'models_cache' not in cols:
+                    conn.execute(text("ALTER TABLE ai_parser_config ADD COLUMN models_cache TEXT DEFAULT ''"))
+                for provider, retired in catalog.RETIRED_MODELS.items():
+                    column = f'{provider}_model'
+                    params = {f'm{i}': m for i, m in enumerate(sorted(retired))}
+                    marks = ', '.join(f':{k}' for k in params)
+                    moved = conn.execute(text(
+                        f'UPDATE ai_parser_config SET {column} = :new WHERE {column} IN ({marks})'),
+                        {'new': DEFAULT_MODELS[provider], **params}).rowcount
+                    if moved:
+                        self.logger.info('AI Parser: moved %s off a retired model to %s',
+                                         column, DEFAULT_MODELS[provider])
+                conn.commit()
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.error('AI Parser migration failed: %s', e)
 
     def get_settings_html(self, settings):
         cfg = self._get_config()
+        models = {p: catalog.choices(p, cfg.models_cache, getattr(cfg, f'{p}_model'))
+                  for p in catalog.LISTABLE}
         providers_info = [
-            {'id': 'openai', 'name': 'OpenAI (GPT-4o)', 'configured': bool(cfg.openai_api_key)},
+            {'id': 'openai', 'name': OpenAIProvider.display_name, 'configured': bool(cfg.openai_api_key)},
             {'id': 'anthropic', 'name': 'Anthropic (Claude)', 'configured': bool(cfg.anthropic_api_key)},
             {'id': 'google_docai', 'name': 'Google Document AI', 'configured': bool(cfg.google_project_id and cfg.google_processor_id)},
         ]
         return self.render_settings_template('ai_parser_settings.html',
-                               cfg=cfg, providers=providers_info)
+                               cfg=cfg, providers=providers_info, models=models)
 
     def save_settings(self, settings, form):
         if 'ai_provider' not in form:
@@ -498,9 +582,11 @@ class AIParserModule(BaseModule):
         cfg = self._get_config()
         cfg.provider = form.get('ai_provider', cfg.provider)
         cfg.openai_api_key = secret_from_form(form, 'ai_openai_api_key', cfg.openai_api_key)
-        cfg.openai_model = form.get('ai_openai_model', cfg.openai_model) or 'gpt-4o'
+        cfg.openai_model = (form.get('ai_openai_model', cfg.openai_model)
+                            or DEFAULT_MODELS['openai'])
         cfg.anthropic_api_key = secret_from_form(form, 'ai_anthropic_api_key', cfg.anthropic_api_key)
-        cfg.anthropic_model = form.get('ai_anthropic_model', cfg.anthropic_model) or 'claude-sonnet-4-20250514'
+        cfg.anthropic_model = (form.get('ai_anthropic_model', cfg.anthropic_model)
+                               or DEFAULT_MODELS['anthropic'])
         cfg.google_project_id = form.get('ai_google_project_id', cfg.google_project_id)
         cfg.google_processor_id = form.get('ai_google_processor_id', cfg.google_processor_id)
         cfg.google_location = form.get('ai_google_location', cfg.google_location) or 'eu'

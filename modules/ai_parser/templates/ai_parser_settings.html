@@ -1,4 +1,22 @@
 {% from "_secret_field.html" import secret_input %}
+{% macro model_select(provider, current) -%}
+{% set m = models[provider] %}
+<div class="form-group">
+    <label for="ai_{{ provider }}_model">Model</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="ai_{{ provider }}_model" name="ai_{{ provider }}_model" style="flex: 1;">
+            {% for opt in m.models %}
+            <option value="{{ opt.id }}" {% if opt.id == current %}selected{% endif %}>{{ opt.name }}{% if opt.name != opt.id %} — {{ opt.id }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick="refreshAIModels('{{ provider }}')">Refresh list</button>
+    </div>
+    <small id="ai_{{ provider }}_models_status" style="display: block; margin-top: 5px; color: var(--color-text-muted);">
+        {% if m.live %}Models available to the API key, loaded {{ m.fetched_at }}.{% else %}Default list. "Refresh list" loads the models available to the API key.{% endif %}
+    </small>
+</div>
+{%- endmacro %}
 <h3 style="margin-bottom: 15px; color: var(--color-text);">🤖 AI Document Parser</h3>
 <p style="color: var(--color-text-muted); margin-bottom: 20px;">Configure AI provider for automatic invoice and expense parsing.</p>
 
@@ -28,14 +46,7 @@
         <label for="ai_openai_api_key">API Key</label>
         {{ secret_input('ai_openai_api_key', cfg.openai_api_key, placeholder='sk-...', style='') }}
     </div>
-    <div class="form-group">
-        <label for="ai_openai_model">Model</label>
-        <select id="ai_openai_model" name="ai_openai_model">
-            <option value="gpt-4o" {% if cfg.openai_model == 'gpt-4o' %}selected{% endif %}>GPT-4o</option>
-            <option value="gpt-4o-mini" {% if cfg.openai_model == 'gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini (cheaper)</option>
-            <option value="gpt-4.1" {% if cfg.openai_model == 'gpt-4.1' %}selected{% endif %}>GPT-4.1</option>
-        </select>
-    </div>
+    {{ model_select('openai', cfg.openai_model) }}
 </div>
 
 <!-- Anthropic config -->
@@ -47,14 +58,7 @@
         <label for="ai_anthropic_api_key">API Key</label>
         {{ secret_input('ai_anthropic_api_key', cfg.anthropic_api_key, placeholder='sk-ant-...', style='') }}
     </div>
-    <div class="form-group">
-        <label for="ai_anthropic_model">Model</label>
-        <select id="ai_anthropic_model" name="ai_anthropic_model">
-            <option value="claude-sonnet-4-20250514" {% if cfg.anthropic_model == 'claude-sonnet-4-20250514' %}selected{% endif %}>Claude Sonnet 4</option>
-            <option value="claude-3-5-sonnet-20241022" {% if cfg.anthropic_model == 'claude-3-5-sonnet-20241022' %}selected{% endif %}>Claude 3.5 Sonnet</option>
-            <option value="claude-3-5-haiku-20241022" {% if cfg.anthropic_model == 'claude-3-5-haiku-20241022' %}selected{% endif %}>Claude 3.5 Haiku (cheaper)</option>
-        </select>
-    </div>
+    {{ model_select('anthropic', cfg.anthropic_model) }}
 </div>
 
 <!-- Google Document AI config -->
@@ -92,5 +96,29 @@ function showAIProviderConfig(provider) {
     document.querySelectorAll('.ai-provider-config').forEach(el => el.style.display = 'none');
     const panel = document.getElementById('ai_config_' + provider);
     if (panel) panel.style.display = 'block';
+}
+function refreshAIModels(provider) {
+    const url = '/ai-parser/models/' + provider + '/refresh';
+    const status = document.getElementById('ai_' + provider + '_models_status');
+    const select = document.getElementById('ai_' + provider + '_model');
+    const keyInput = document.getElementById('ai_' + provider + '_api_key');
+    status.textContent = 'Loading…';
+    fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({api_key: keyInput ? keyInput.value : '', current: select.value})})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { status.textContent = '✗ ' + data.error; return; }
+            const current = select.value;
+            select.replaceChildren();
+            data.models.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name === m.id ? m.id : m.name + ' — ' + m.id;
+                opt.selected = m.id === current;
+                select.appendChild(opt);
+            });
+            status.textContent = data.models.length + ' models available to the API key, loaded ' + data.fetched_at + '.';
+        })
+        .catch(err => { status.textContent = '✗ Request failed: ' + err; });
 }
 </script>
