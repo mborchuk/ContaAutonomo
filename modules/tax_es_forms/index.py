@@ -347,7 +347,9 @@ class TaxEsFormsModule(BaseModule):
             self.core.flash(str(e), 'warning')
             return redirect(url_for('tax_es_forms.drafts_index'))
         except ValueError:
-            self.logger.exception('AEAT file for Modelo %s failed', form)
+            # No request values in the log line (log injection); the traceback
+            # names the model.
+            self.logger.exception('AEAT file generation failed')
             self.core.flash(f'The Modelo {form} file could not be generated. Check the '
                             'draft (a negative amount in a field that cannot be negative).',
                             'danger')

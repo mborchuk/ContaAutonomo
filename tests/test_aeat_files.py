@@ -269,3 +269,18 @@ def test_347_page_warns_about_lines_the_file_cannot_complete(loaded_modules, app
     _auth(client)
     html = client.get('/tax-forms-draft/347/2032').get_data(as_text=True)
     assert 'AEAT file: Sin Codigo Postal SL: no Spanish postal code' in html
+
+
+def test_generation_error_redirects_and_logs_no_request_value(loaded_modules, client,
+                                                             monkeypatch, caplog):
+    forms = loaded_modules.modules['tax_es_forms']
+
+    def broken(form, year, quarter=None):
+        raise ValueError('negative amount in an unsigned field')
+    monkeypatch.setattr(forms, 'aeat_file', broken)
+    _auth(client)
+    with caplog.at_level('ERROR'):
+        resp = client.get('/tax-forms-draft/349/2031/2/aeat-file')
+    assert resp.status_code == 302 and resp.headers['Location'].endswith('/tax-forms-draft/')
+    messages = [r.getMessage() for r in caplog.records if 'AEAT file' in r.getMessage()]
+    assert messages == ['AEAT file generation failed']
