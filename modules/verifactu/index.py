@@ -23,6 +23,7 @@ from flask import Blueprint, render_template, Response, url_for
 from module_manager import BaseModule
 
 from .aeat import VERIFACTU_PHRASE, qr_url
+from .obligations import CHECKED_ON, OBLIGATIONS_VERSION, obligations
 from .pdf_qr import MAX_SIZE_MM, MIN_SIZE_MM, QR_SIZE_MM, has_qr, qr_flowables, stamp_qr
 from .chain import (
     CHAIN_SPEC_VERSION,
@@ -367,7 +368,10 @@ class VerifactuModule(BaseModule):
                                    record_count=len(records),
                                    chain_ok=ok, bad_index=bad_idx,
                                    bad_reason=reason,
-                                   spec_version=CHAIN_SPEC_VERSION)
+                                   spec_version=CHAIN_SPEC_VERSION,
+                                   obligations=obligations(),
+                                   obligations_version=OBLIGATIONS_VERSION,
+                                   obligations_checked_on=CHECKED_ON)
 
         @bp.route('/export')
         @login_required
