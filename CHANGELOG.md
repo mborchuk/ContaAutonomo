@@ -139,7 +139,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
-- **AI Parser models**: parsing with Anthropic failed with 404 because the
+- **AI Parser models** (#143): parsing with Anthropic failed with 404 because the
   default `claude-sonnet-4-20250514` is retired. Defaults are now
   `claude-sonnet-5-5` and `gpt-6.1-terra`; stored settings on a retired Claude
   model move to the default on start-up. Settings → AI Parser lists the models
