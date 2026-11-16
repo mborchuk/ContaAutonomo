@@ -536,7 +536,12 @@ Parse invoice and expense-receipt data from PDFs and images using AI providers.
   (loads the model list; JSON body `api_key` optional, defaults to the stored key)
 - Models: `AIParserConfig` (provider, API keys, models, `models_cache` — the
   last model list per provider as JSON)
-- Supported providers: OpenAI, Anthropic (Claude), Google Document AI
+- Supported providers: OpenAI, Anthropic (Claude), Google Document AI, and
+  the CLI agents Claude Code CLI and Kiro CLI (`cli_agents.py`). The CLI
+  agents run a CLI installed and logged in on the server, read-only, in a
+  temporary directory holding only the upload; they are off unless the
+  server sets `AI_PARSER_ALLOW_CLI=1`, and the Docker image includes neither
+  CLI. Details and the exact commands: `modules/ai_parser/README.md`
 - Models (`modules/ai_parser/catalog.py`): defaults `gpt-6.1-terra` and
   `claude-sonnet-5-5`; "Refresh list" in the settings tab asks the vendor's
   `GET /v1/models` which models the key can use. Before the first refresh the

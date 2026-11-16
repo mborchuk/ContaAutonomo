@@ -11,15 +11,20 @@ from flask import Blueprint, request, jsonify, render_template
 from secret_box import EncryptedString, encrypt_existing
 
 from . import catalog
-from .catalog import DEFAULT_MODELS
+from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
+from .cli_agents import (ALLOW_ENV, CLI_PROVIDERS, SCANNED_PDF_MESSAGE, CLIError,
+                         ScannedPDF, cli_allowed, valid_model)
 from .media import UNSUPPORTED_MESSAGE, UnsupportedFile
 from .providers import (
     NOT_A_DOCUMENT_MESSAGE,
     PROVIDERS,
     NotADocument,
-    OpenAIProvider,
     describe_error,
 )
+
+# API providers plus the CLI agents, in the order the settings tab shows them.
+ALL_PROVIDERS = {**PROVIDERS, **CLI_PROVIDERS}
+MODEL_PROVIDERS = ('openai', 'anthropic', *CLI_PROVIDERS)
 
 
 def rejection_message(exc):
@@ -27,6 +32,8 @@ def rejection_message(exc):
     so no exception text reaches the response."""
     if isinstance(exc, NotADocument):
         return NOT_A_DOCUMENT_MESSAGE
+    if isinstance(exc, ScannedPDF):
+        return SCANNED_PDF_MESSAGE
     return UNSUPPORTED_MESSAGE
 
 
@@ -46,7 +53,8 @@ class AIParserModule(BaseModule):
 
     @property
     def description(self):
-        return 'AI-powered parsing of invoices and expenses (OpenAI, Anthropic, Google Document AI)'
+        return ('AI-powered parsing of invoices and expenses (OpenAI, Anthropic, '
+                'Google Document AI, Claude Code CLI, Kiro CLI)')
 
     @property
     def version(self):
@@ -67,6 +75,8 @@ class AIParserModule(BaseModule):
             google_project_id = db.Column(db.String(200), default='')
             google_processor_id = db.Column(db.String(200), default='')
             google_location = db.Column(db.String(50), default='eu')
+            claude_cli_model = db.Column(db.String(100), default=CLI_DEFAULT_MODELS['claude_cli'])
+            kiro_cli_model = db.Column(db.String(100), default=CLI_DEFAULT_MODELS['kiro_cli'])
             # JSON of the last live model listing per provider (catalog.store_cache).
             models_cache = db.Column(db.Text, default='')
 
@@ -99,20 +109,16 @@ class AIParserModule(BaseModule):
         elif cfg is not None and provider == 'anthropic':
             key, model = (cfg.anthropic_api_key or '',
                           cfg.anthropic_model or DEFAULT_MODELS['anthropic'])
-        cls = PROVIDERS.get(provider)
+        cls = ALL_PROVIDERS.get(provider)
         configured = bool(key) if provider in ('openai', 'anthropic') else bool(
-            cfg and cfg.google_project_id and cfg.google_processor_id)
+            cfg is not None and cls is not None and cls(self._provider_config(cfg)).is_configured())
         return {'provider': provider,
                 'display_name': cls.display_name if cls else provider,
                 'api_key': key, 'model': model, 'configured': configured}
 
-    def _get_provider(self):
-        """Get configured AI provider instance."""
-        cfg = self._get_config()
-        provider_cls = PROVIDERS.get(cfg.provider)
-        if not provider_cls:
-            return None
-        config_dict = {
+    @staticmethod
+    def _provider_config(cfg):
+        return {
             'openai_api_key': cfg.openai_api_key,
             'openai_model': cfg.openai_model,
             'anthropic_api_key': cfg.anthropic_api_key,
@@ -120,11 +126,26 @@ class AIParserModule(BaseModule):
             'google_project_id': cfg.google_project_id,
             'google_processor_id': cfg.google_processor_id,
             'google_location': cfg.google_location,
+            'claude_cli_model': cfg.claude_cli_model,
+            'kiro_cli_model': cfg.kiro_cli_model,
         }
-        provider = provider_cls(config_dict)
+
+    def _get_provider(self):
+        """Get configured AI provider instance."""
+        cfg = self._get_config()
+        provider_cls = ALL_PROVIDERS.get(cfg.provider)
+        if not provider_cls:
+            return None
+        provider = provider_cls(self._provider_config(cfg))
         if not provider.is_configured():
             return None
         return provider
+
+    def _not_configured_message(self):
+        cfg = self._get_config()
+        cls = CLI_PROVIDERS.get(cfg.provider)
+        reason = cls(self._provider_config(cfg)).unavailable_reason() if cls else None
+        return reason or 'AI provider not configured. Go to Settings → AI Parser.'
 
     @property
     def nav_items(self):
@@ -165,7 +186,7 @@ class AIParserModule(BaseModule):
             doc_type = request.form.get('doc_type', 'invoice')
             provider = module._get_provider()
             if not provider:
-                return jsonify({'error': 'AI provider not configured. Go to Settings → AI Parser.'}), 400
+                return jsonify({'error': module._not_configured_message()}), 400
 
             try:
                 file_data = file.read()
@@ -208,13 +229,21 @@ class AIParserModule(BaseModule):
         # Use the allowlisted constant from here on, not the URL value.
         provider = next(p for p in catalog.LISTABLE if p == provider)
         cfg = self._get_config()
-        api_key = api_key.strip() or getattr(cfg, f'{provider}_api_key')
-        if not api_key:
-            return {'error': 'Enter the API key first.'}, 400
         try:
-            models = catalog.list_models(provider, api_key)
+            if provider in catalog.KEYED:
+                api_key = api_key.strip() or getattr(cfg, f'{provider}_api_key')
+                if not api_key:
+                    return {'error': 'Enter the API key first.'}, 400
+                models = catalog.list_models(provider, api_key)
+            else:
+                agent = CLI_PROVIDERS[provider](self._provider_config(cfg))
+                reason = agent.unavailable_reason()
+                if reason:
+                    return {'error': reason}, 400
+                models = agent.list_models()
         except Exception as e:
-            self.logger.warning('Model listing failed for %s: %s', provider, type(e).__name__)
+            self.logger.warning('Model listing failed for %s: %s', provider,
+                                e if isinstance(e, CLIError) else type(e).__name__)
             return {'error': describe_error(e)
                     or 'Could not load the model list. Check server logs.'}, 502
         cfg.models_cache = catalog.store_cache(cfg.models_cache, provider, models)
@@ -246,8 +275,7 @@ class AIParserModule(BaseModule):
         doc_type = request.form.get('doc_type', 'invoice')
         provider = self._get_provider()
         if not provider:
-            raise ApiError(400, 'bad_request',
-                           'AI provider not configured (Settings → AI Parser)')
+            raise ApiError(400, 'bad_request', self._not_configured_message())
         try:
             result = provider.parse_document(file.read(), file.filename, doc_type)
         except (UnsupportedFile, NotADocument) as e:
@@ -279,8 +307,11 @@ class AIParserModule(BaseModule):
         try:
             cols = {c['name'] for c in sa_inspect(self._db.engine).get_columns('ai_parser_config')}
             with self._db.engine.connect() as conn:
-                if 'models_cache' not in cols:
-                    conn.execute(text("ALTER TABLE ai_parser_config ADD COLUMN models_cache TEXT DEFAULT ''"))
+                added = [('models_cache', "TEXT DEFAULT ''")] + [
+                    (f'{p}_model', f"VARCHAR(100) DEFAULT '{m}'") for p, m in CLI_DEFAULT_MODELS.items()]
+                for col, typedef in added:
+                    if col not in cols:
+                        conn.execute(text(f'ALTER TABLE ai_parser_config ADD COLUMN {col} {typedef}'))
                 for provider, retired in catalog.RETIRED_MODELS.items():
                     column = f'{provider}_model'
                     params = {f'm{i}': m for i, m in enumerate(sorted(retired))}
@@ -298,20 +329,24 @@ class AIParserModule(BaseModule):
     def get_settings_html(self, settings):
         cfg = self._get_config()
         models = {p: catalog.choices(p, cfg.models_cache, getattr(cfg, f'{p}_model'))
-                  for p in catalog.LISTABLE}
-        providers_info = [
-            {'id': 'openai', 'name': OpenAIProvider.display_name, 'configured': bool(cfg.openai_api_key)},
-            {'id': 'anthropic', 'name': 'Anthropic (Claude)', 'configured': bool(cfg.anthropic_api_key)},
-            {'id': 'google_docai', 'name': 'Google Document AI', 'configured': bool(cfg.google_project_id and cfg.google_processor_id)},
-        ]
+                  for p in MODEL_PROVIDERS}
+        config = self._provider_config(cfg)
+        providers_info = [{'id': pid, 'name': cls.display_name,
+                           'configured': cls(config).is_configured()}
+                          for pid, cls in ALL_PROVIDERS.items()]
+        cli = {pid: {'reason': cls(config).unavailable_reason(), 'binary': cls.binary,
+                     'bin_env': cls.bin_env}
+               for pid, cls in CLI_PROVIDERS.items()}
         return self.render_settings_template('ai_parser_settings.html',
-                               cfg=cfg, providers=providers_info, models=models)
+                               cfg=cfg, providers=providers_info, models=models,
+                               cli=cli, cli_allowed=cli_allowed(), allow_env=ALLOW_ENV)
 
     def save_settings(self, settings, form):
         if 'ai_provider' not in form:
             return
         cfg = self._get_config()
-        cfg.provider = form.get('ai_provider', cfg.provider)
+        if form.get('ai_provider') in ALL_PROVIDERS:
+            cfg.provider = form.get('ai_provider')
         cfg.openai_api_key = secret_from_form(form, 'ai_openai_api_key', cfg.openai_api_key)
         cfg.openai_model = (form.get('ai_openai_model', cfg.openai_model)
                             or DEFAULT_MODELS['openai'])
@@ -321,6 +356,14 @@ class AIParserModule(BaseModule):
         cfg.google_project_id = form.get('ai_google_project_id', cfg.google_project_id)
         cfg.google_processor_id = form.get('ai_google_processor_id', cfg.google_processor_id)
         cfg.google_location = form.get('ai_google_location', cfg.google_location) or 'eu'
+        for pid in CLI_PROVIDERS:
+            column = f'{pid}_model'
+            try:
+                value = valid_model(form.get(f'ai_{column}', getattr(cfg, column)))
+            except ValueError:
+                self.logger.warning('AI Parser: ignored an invalid %s value', column)
+                continue
+            setattr(cfg, column, value or CLI_DEFAULT_MODELS[pid])
         self._db.session.commit()
         self.logger.info('AI Parser settings saved: provider=%s', cfg.provider)
 

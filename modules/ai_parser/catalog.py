@@ -14,6 +14,13 @@ DEFAULT_MODELS = {
     'anthropic': 'claude-sonnet-5-5',
 }
 
+# CLI agents (cli_agents.py). Claude Code takes aliases for the latest model
+# of a tier and has no list command; Kiro lists its models (`--list-models`).
+CLI_DEFAULT_MODELS = {
+    'claude_cli': 'sonnet',
+    'kiro_cli': 'auto',
+}
+
 FALLBACK_MODELS = {
     'openai': [
         {'id': 'gpt-6.1-terra', 'name': 'GPT-6.1 Terra'},
@@ -27,6 +34,15 @@ FALLBACK_MODELS = {
         {'id': 'claude-haiku-5-5', 'name': 'Claude Haiku 5.5 (cheaper)'},
         {'id': 'claude-fable-5-2', 'name': 'Claude Fable 5.2'},
     ],
+    'claude_cli': [
+        {'id': 'sonnet', 'name': 'Sonnet (latest)'},
+        {'id': 'opus', 'name': 'Opus (latest)'},
+        {'id': 'haiku', 'name': 'Haiku (latest)'},
+        {'id': 'fable', 'name': 'Fable (latest)'},
+    ],
+    'kiro_cli': [
+        {'id': 'auto', 'name': 'Auto (Kiro picks the model)'},
+    ],
 }
 
 # Models earlier versions offered that the vendor has retired (requests 404).
@@ -39,7 +55,9 @@ RETIRED_MODELS = {
     },
 }
 
-LISTABLE = tuple(DEFAULT_MODELS)
+# Providers whose model list can be refreshed, and which of them need a key.
+LISTABLE = ('openai', 'anthropic', 'kiro_cli')
+KEYED = ('openai', 'anthropic')
 
 # OpenAI lists every model of the account; keep the chat models that read images.
 _OPENAI_CHAT = re.compile(r'^(gpt-|chatgpt-|o\d)')

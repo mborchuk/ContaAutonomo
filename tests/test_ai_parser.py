@@ -332,7 +332,7 @@ def test_settings_panel_lists_models(ai_module, app):
     with app.test_request_context('/settings'):
         html = ai_module.get_settings_html(None)
     assert 'Refresh list' in html
-    for provider in catalog.LISTABLE:
+    for provider in catalog.KEYED:
         assert f'value="{DEFAULT_MODELS[provider]}"' in html
     assert 'claude-sonnet-4-20250514' not in html
 
