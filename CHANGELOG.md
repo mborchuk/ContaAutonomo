@@ -6,6 +6,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Tax provision panel** (#135): new Tax Provision module; dashboard total of
+  the tax owed so far — IVA and Modelo 130 of the open quarter, renta for the
+  year to date, RETA regularización — each from its own module, with links and
+  filing dates; missing parts are named.
+- **What-if simulator** (#137): `/irpf-es/simulator` changes income, expenses,
+  comunidad and RETA base and shows the effect on IRPF, the remaining 130
+  payments, the regularización and net income; nothing is saved.
+- **Modelo 347 check** (#136): customers and suppliers above 3,005.06 EUR with
+  the quarterly split and the exclusions explained; February window in the
+  fiscal calendar.
+- **AEAT import files** (#141): download the 303, 130, 349, 390 and 347 drafts
+  in the official record layouts for the Sede (not validated by the AEAT).
+- **Deduction checks on expenses** (#138): notices for home-office supplies,
+  dietas limits and vehicle costs, each with its legal source; dismissable per
+  expense; the expense is never changed.
+- **Ledger Assistant** (#140): opt-in, read-only questions over invoices,
+  expenses and drafts with the AI Parser's provider; only the records needed
+  are sent and every answer lists them. `GET /api/v1/invoices` and
+  `/expenses` accept date filters.
+- **Installable app and receipt capture** (#139): web app manifest, a service
+  worker that caches nothing, `/expenses/capture`, and an Android share target
+  for receipt photos.
+- **Verifactu and e-invoicing dates** (#134): obligation dates with their BOE
+  source on the Verifactu page; the October 2028 date is shown as announced,
+  not yet in force.
 - **Modelo 390 draft** (#125): annual VAT summary at `/tax-forms-draft/390/<year>`,
   each casilla the sum of the four quarterly 303 drafts; casillas checked
   against the AEAT 2025 instructions.
