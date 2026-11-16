@@ -494,8 +494,9 @@ def test_openai_and_anthropic_text_calls(monkeypatch):
 
 
 def test_ai_parser_implements_its_functions(ai_module, loaded_modules):
+    from contracts import CONTRACTS
     from functions import FunctionRegistry
-    registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}))
+    registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}), CONTRACTS)
     assert registry.check_all() == []
     assert registry.route('ai.parse_document') == '/ai-parser/parse'
     assert {c.name for c in registry.find(external=True)} == {
