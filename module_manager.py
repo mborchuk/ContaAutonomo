@@ -26,6 +26,7 @@ from timeutil import utcnow
 
 from constants import invoice_locked
 import core_functions
+from contracts import CONTRACTS
 from functions import FunctionRegistry
 
 
@@ -1857,12 +1858,16 @@ class ModuleManager:
         self.db = db
         self.core = CoreServices(app, db)
         self.core._module_manager = self
-        self.functions = FunctionRegistry(self)
-        core_functions.register(self.functions, self.core)
+        self.functions = FunctionRegistry(self, CONTRACTS)
         self.modules = {}           # module_id -> module instance
         self.discovered = {}        # module_id -> module class
         self.failed_modules = {}    # module_id -> error message (load failures)
         self._enabled_cache = None
+
+    def register_core_functions(self, Invoice, Customer):
+        """Register the core's functions (core_functions.py) with the app's
+        models; the app calls this right after creating the manager."""
+        core_functions.register(self.functions, self.core, Invoice=Invoice, Customer=Customer)
 
     def _get_module_enabled_model(self):
         """Get or create the ModuleEnabled model"""

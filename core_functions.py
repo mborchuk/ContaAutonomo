@@ -1,8 +1,8 @@
 """
 The core's own implementations of registry functions (contracts.py): the
-data the core owns — invoices and customers. Registered by the ModuleManager
-before any module loads. The app models are imported when a function runs,
-so this file does not import app.py.
+data the core owns — invoices and customers. The app passes its models in
+(`ModuleManager.register_core_functions`), so this file imports nothing from
+app.py.
 """
 
 
@@ -35,12 +35,12 @@ def serialize_customer(c):
     }
 
 
-def register(registry, core):
-    """Register the core functions on `registry`; `core` is CoreServices."""
+def register(registry, core, Invoice, Customer):
+    """Register the core functions on `registry`; `core` is CoreServices and
+    `Invoice`, `Customer` the app's models."""
 
     def list_invoices(date_from=None, date_to=None, client=None, status=None,
                       page=1, per_page=20):
-        from app import Invoice
         query = Invoice.query
         if status:
             query = query.filter_by(status=status)
@@ -58,7 +58,6 @@ def register(registry, core):
                 'page': page, 'per_page': per_page, 'total': total}
 
     def list_customers():
-        from app import Customer
         return {'data': [serialize_customer(c)
                          for c in Customer.query.order_by(Customer.name).all()]}
 

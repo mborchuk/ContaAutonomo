@@ -2558,6 +2558,7 @@ def init_module_manager():
 
     module_manager = ModuleManager(app, db)
     module_manager.core._settings_model = Settings
+    module_manager.register_core_functions(Invoice=Invoice, Customer=Customer)
     module_manager.init_db()
     module_manager.discover_modules()
     module_manager.load_enabled_modules()
