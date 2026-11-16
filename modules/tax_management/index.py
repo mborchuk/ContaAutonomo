@@ -47,11 +47,6 @@ class TaxManagementModule(BaseModule):
         return 'tax_management'
 
     @property
-    def interface(self):
-        # Used by IRPF Estimator, Spanish Tax Forms and RETA Advisor.
-        return ['filed_boxes', 'SSPayment']
-
-    @property
     def name(self):
         return 'Tax Management'
 
@@ -460,6 +455,34 @@ class TaxManagementModule(BaseModule):
         tax_form = self.TaxForm.query.filter_by(
             form_type=form_type, year=year, quarter=quarter).first()
         return tax_form.boxes if tax_form else {}
+
+    def ss_payments_total(self, date_from, date_to):
+        """Social Security payments recorded between two dates, inclusive."""
+        rows = self.SSPayment.query.filter(self.SSPayment.payment_date >= date_from,
+                                           self.SSPayment.payment_date <= date_to).all()
+        return {'total': sum(p.amount or 0.0 for p in rows), 'count': len(rows)}
+
+    # --- Registry functions ------------------------------------------------ #
+
+    def get_functions(self):
+        from functions import Function, Param
+        return [
+            Function('tax.filed_boxes', self.filed_boxes,
+                     'Boxes declared on the filed AEAT return of a period, read from its '
+                     'PDF in Tax Forms; {} when there is none.',
+                     params=(Param('form_type', 'str', "Form number, e.g. '303'",
+                                   required=True, max_length=10),
+                             Param('year', 'int', 'Tax year', required=True,
+                                   minimum=2000, maximum=2100),
+                             Param('quarter', 'int', 'Quarter 1-4; omit for an annual form',
+                                   minimum=1, maximum=4)),
+                     returns='{box: amount}'),
+            Function('ss.payments_total', self.ss_payments_total,
+                     'Social Security (RETA) payments recorded between two dates, inclusive.',
+                     params=(Param('date_from', 'date', 'First day', required=True),
+                             Param('date_to', 'date', 'Last day', required=True)),
+                     returns='{"total": amount, "count": int}'),
+        ]
 
     def _download_tax_form(self, id):
         """Download a tax form"""

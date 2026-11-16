@@ -62,9 +62,9 @@ def synthetic_year(loaded_modules, app):
 
 
 def _engines(mm):
-    forms = mm.provider_of('tax_es_forms')
-    irpf = mm.provider_of('tax_es_irpf')
-    reta = mm.provider_of('reta_advisor')
+    forms = mm.modules['tax_es_forms']
+    irpf = mm.modules['tax_es_irpf']
+    reta = mm.modules['reta_advisor']
     return (forms.draft_303(YEAR, 2)['boxes']['71'],
             irpf.modelo130_boxes(YEAR, 2)[0]['07'],
             irpf.modelo100_result(YEAR)['summary']['modelo100_diferencial'],
@@ -101,9 +101,7 @@ def test_vat_credit_reduces_the_total(synthetic_year):
 
 
 def test_disabled_module_is_named_as_missing(synthetic_year, monkeypatch):
-    real = synthetic_year.provider_of
-    monkeypatch.setattr(synthetic_year, 'provider_of',
-                        lambda role: None if role == 'reta_advisor' else real(role))
+    monkeypatch.delitem(synthetic_year.modules, 'reta_advisor')
     provision = synthetic_year.modules['tax_provision'].provision(TODAY)
     reta = next(p for p in provision['parts'] if p['id'] == 'reta')
     assert reta['amount'] is None and 'not enabled' in reta['reason']

@@ -117,9 +117,7 @@ def test_reta_base_change_applies_to_the_months_left(synthetic_year):
 
 
 def test_without_reta_advisor_regularization_is_missing(synthetic_year, monkeypatch):
-    real = synthetic_year.provider_of
-    monkeypatch.setattr(synthetic_year, 'provider_of',
-                        lambda role: None if role == 'reta_advisor' else real(role))
+    monkeypatch.delitem(synthetic_year.modules, 'reta_advisor')
     out = _irpf(synthetic_year).simulate(None, TODAY)
     assert out['real']['regularization'] is None
     assert out['difference']['regularization'] is None
