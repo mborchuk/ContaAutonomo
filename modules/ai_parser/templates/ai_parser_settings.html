@@ -1,5 +1,5 @@
 {% from "_secret_field.html" import secret_input %}
-{% macro model_select(provider, current) -%}
+{% macro model_select(provider, current, refresh=True) -%}
 {% set m = models[provider] %}
 <div class="form-group">
     <label for="ai_{{ provider }}_model">Model</label>
@@ -9,11 +9,13 @@
             <option value="{{ opt.id }}" {% if opt.id == current %}selected{% endif %}>{{ opt.name }}{% if opt.name != opt.id %} — {{ opt.id }}{% endif %}</option>
             {% endfor %}
         </select>
+        {% if refresh %}
         <button type="button" class="btn btn-secondary btn-sm"
                 onclick="refreshAIModels('{{ provider }}')">Refresh list</button>
+        {% endif %}
     </div>
     <small id="ai_{{ provider }}_models_status" style="display: block; margin-top: 5px; color: var(--color-text-muted);">
-        {% if m.live %}Models available to the API key, loaded {{ m.fetched_at }}.{% else %}Default list. "Refresh list" loads the models available to the API key.{% endif %}
+        {% if not refresh %}Aliases for the latest model of each tier.{% elif m.live %}Models available to the account, loaded {{ m.fetched_at }}.{% else %}Default list. "Refresh list" loads the models available to the account.{% endif %}
     </small>
 </div>
 {%- endmacro %}
@@ -91,6 +93,31 @@
     </small>
 </div>
 
+{% for pid, title in [('claude_cli', 'Claude Code CLI'), ('kiro_cli', 'Kiro CLI')] %}
+<!-- {{ title }} config -->
+<div id="ai_config_{{ pid }}" class="ai-provider-config"
+     style="{% if cfg.provider != pid %}display:none;{% endif %}
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">{{ title }} Settings</h4>
+    <p style="color: var(--color-text-muted); margin-bottom: 10px;">
+        Runs <code>{{ cli[pid].binary }}</code> on this server under the account it is logged in
+        with, for each parse. The agent gets a temporary folder with only the upload and may only
+        read files. The document is still sent to the CLI's AI service.
+    </p>
+    {% if cli[pid].reason %}
+    <p style="color: var(--color-danger-fg); margin-bottom: 10px;">Not available: {{ cli[pid].reason }}</p>
+    {% else %}
+    <p style="color: var(--color-success-fg); margin-bottom: 10px;">✓ Found on the server PATH.</p>
+    {% endif %}
+    {{ model_select(pid, cfg[pid ~ '_model'], refresh=(pid == 'kiro_cli')) }}
+    <small style="color: var(--color-text-muted);">
+        Server settings: <code>{{ allow_env }}=1</code> turns CLI agents on;
+        <code>{{ cli[pid].bin_env }}</code> sets another binary path;
+        <code>AI_PARSER_CLI_TIMEOUT</code> (seconds, default 180).
+    </small>
+</div>
+{% endfor %}
+
 <script>
 function showAIProviderConfig(provider) {
     document.querySelectorAll('.ai-provider-config').forEach(el => el.style.display = 'none');
@@ -117,7 +144,7 @@ function refreshAIModels(provider) {
                 opt.selected = m.id === current;
                 select.appendChild(opt);
             });
-            status.textContent = data.models.length + ' models available to the API key, loaded ' + data.fetched_at + '.';
+            status.textContent = data.models.length + ' models available to the account, loaded ' + data.fetched_at + '.';
         })
         .catch(err => { status.textContent = '✗ Request failed: ' + err; });
 }

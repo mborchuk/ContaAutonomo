@@ -34,23 +34,30 @@ def parse_reply(text):
     """The JSON object in a model reply. Tolerates markdown fences and text
     around the object; raises ValueError when there is no object."""
     text = (text or '').strip()
-    if text.startswith('```'):
-        text = text.split('\n', 1)[1] if '\n' in text else text[3:]
-        if text.rstrip().endswith('```'):
-            text = text.rstrip()[:-3]
-        text = text.strip()
     try:
         data = json.loads(text)
     except ValueError:
-        start, end = text.find('{'), text.rfind('}')
-        if start < 0 or end <= start:
-            raise ValueError('The provider reply contains no JSON object') from None
-        data = json.loads(text[start:end + 1])
+        data = _first_object(text)
     if not isinstance(data, dict):
         raise ValueError('The provider reply is not a JSON object')
     if data.get('error') == NOT_A_DOCUMENT:
         raise NotADocument('The file does not look like an invoice or receipt.')
     return data
+
+
+def _first_object(text):
+    """The first JSON object in `text` (fences, prose around it), else ValueError."""
+    decoder = json.JSONDecoder()
+    start = text.find('{')
+    while start >= 0:
+        try:
+            data, _ = decoder.raw_decode(text, start)
+            if isinstance(data, dict):
+                return data
+        except ValueError:
+            pass
+        start = text.find('{', start + 1)
+    raise ValueError('The provider reply contains no JSON object')
 
 
 class BaseAIProvider:

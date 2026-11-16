@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **AI Parser CLI agents**: Claude Code CLI and Kiro CLI as parse providers,
+  using the CLI installed and logged in on the server. Off unless the server
+  sets `AI_PARSER_ALLOW_CLI=1`; each run is read-only in a temporary
+  directory with only the upload. Kiro's model list comes from
+  `kiro-cli --list-models`.
 - **Tax provision panel** (#135): new Tax Provision module; dashboard total of
   the tax owed so far — IVA and Modelo 130 of the open quarter, renta for the
   year to date, RETA regularización — each from its own module, with links and
