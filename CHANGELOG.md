@@ -139,7 +139,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
-- **AI Parser PDF support**: PDFs are sent as documents (Anthropic `document`
+- **AI Parser PDF support** (#144): PDFs are sent as documents (Anthropic `document`
   block, OpenAI `file` part) instead of as images, which the providers
   rejected; the file type comes from its bytes, and GIF and WebP are accepted.
   Prompts now cover the Meals, Vehicle and Social Security categories, the
