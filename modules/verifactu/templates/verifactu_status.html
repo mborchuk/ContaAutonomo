@@ -29,6 +29,30 @@
     specifications (RD 1007/2023) before relying on this for compliance.</strong>
     Compliance assist, not legal advice.
 </p>
+<h3>When the obligations start</h3>
+<div class="table-wrap">
+<table class="data-table" aria-describedby="obligations-note">
+    <thead>
+        <tr><th>Obligation</th><th>Applies to</th><th>From</th><th>Status</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+        {% for o in obligations %}
+        <tr>
+            <td>{{ 'Verifactu' if o.topic == 'verifactu' else 'B2B e-invoicing' }}</td>
+            <td>{{ o.who }}</td>
+            <td>{{ o.date_text }}</td>
+            <td>{% if o.status == 'announced' %}<span class="status-badge status-missing">{{ o.status_label }}</span>{% else %}{{ o.status_label }}{% endif %}</td>
+            <td class="fine-print">{{ o.source }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="fine-print" id="obligations-note">
+    Dates checked on {{ obligations_checked_on.strftime('%d/%m/%Y') }} (table
+    {{ obligations_version }}). An announced date binds nobody until its norm is
+    published in the BOE; until then the dates in force apply.
+</p>
 
 <h3>Latest records</h3>
 {% if records %}

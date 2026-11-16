@@ -96,6 +96,11 @@
                         {% else %}
                         <span class="status-badge status-missing" title="No VAT breakdown — excluded from Modelo 303 deductions">no VAT data</span>
                         {% endif %}
+                        {% for n in (notices or {}).get(expense.id, []) %}
+                        <a href="{{ url_for('expenses.expenses_edit', id=expense.id) }}#deduction-notices"
+                           class="status-badge status-warning deduction-notice"
+                           title="{{ n.severity_label }}: {{ n.message }} ({{ n.source }})">{{ n.title }}</a>
+                        {% endfor %}
                     </td>
                     <td>
                         {% if expense.file_path %}

@@ -21,12 +21,16 @@ from .boxes import (
     BOX_TABLE_VERSION,
     MODELO_390_ORDER,
     MODELO_390_OUT_OF_SCOPE,
+    MODELO_347_EXCLUSIONS,
+    MODELO_347_OUT_OF_SCOPE,
     boxes_for_year,
     modelo_390_boxes_for_year,
+    modelo_347_rules_for_year,
 )
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
+    compute_modelo_347,
     compute_modelo_349,
     compute_modelo_390,
     quarter_of,
@@ -59,6 +63,11 @@ class TaxEsFormsModule(BaseModule):
         # Expenses feed 303; filed returns and Social Security come from Tax Forms;
         # Modelo 130 is calculated by the IRPF Estimator (owner decision 2026-10-03).
         return ['expenses', 'tax_management', 'tax_es_irpf']
+
+    @property
+    def interface(self):
+        # Used by Tax Provision (dashboard total).
+        return ['draft_303']
 
     @property
     def nav_items(self):
@@ -195,6 +204,11 @@ class TaxEsFormsModule(BaseModule):
         result['quarter'] = quarter
         return result
 
+    def draft_303(self, year, quarter):
+        """Modelo 303 draft for one quarter, as shown on its page: box 71 is
+        the result (> 0 to pay, < 0 to compensate or refund)."""
+        return self._draft_303(year, quarter)
+
     def _draft_349(self, year, quarter):
         result = compute_modelo_349(self._invoices_in(year, quarter=quarter))
         result['year'] = year
@@ -287,6 +301,74 @@ class TaxEsFormsModule(BaseModule):
         })
         return result
 
+    def _draft_347(self, year):
+        """Annual operations with third parties above the threshold."""
+        from year_tables import fallback_note
+        vat_rate, _ = self._rates()
+        table_year, rules, fallback = modelo_347_rules_for_year(year)
+        result = compute_modelo_347(
+            self._invoices_in(year), self._expenses_in(year), vat_rate,
+            rules['threshold'], convert_expense=self._convert_to_eur)
+        from modules.fiscal_calendar.calendar_data import deadlines_for_year
+        deadline = next((e for e in deadlines_for_year(year) if e['form'] == '347'), None)
+        from .aeat_files import residence
+        file_warnings = [w for w in (residence(line)[2] for line in result['lines']) if w]
+        result.update({
+            'year': year, 'source': rules['source'], 'file_warnings': file_warnings,
+            'exclusion_labels': MODELO_347_EXCLUSIONS,
+            'out_of_scope': MODELO_347_OUT_OF_SCOPE,
+            'deadline': deadline,
+            'table_year': table_year, 'table_fallback': fallback,
+            'table_note': fallback_note(table_year) if fallback else '',
+        })
+        return result
+
+    # --- AEAT import files (G-5) ------------------------------------------ #
+
+    def aeat_file(self, form, year, quarter=None):
+        """(text, filename, info) of the AEAT import file for one draft.
+        Raises aeat_files.UnsupportedYear when no official layout covers the
+        exercise."""
+        from . import aeat_files
+        settings = self.core.get_settings()
+        if form == '303':
+            content, info = aeat_files.modelo_303(self._draft_303(year, quarter), settings)
+        elif form == '130':
+            content, info = aeat_files.modelo_130(self._draft_130(year, quarter), settings)
+        elif form == '349':
+            content, info = aeat_files.modelo_349(self._draft_349(year, quarter), settings)
+        elif form == '390':
+            content, info = aeat_files.modelo_390(
+                self._draft_390(year), settings,
+                files_347=bool(self._draft_347(year)['lines']))
+        elif form == '347':
+            content, info = aeat_files.modelo_347(self._draft_347(year), settings)
+        else:
+            raise ValueError(f'no AEAT file for Modelo {form}')
+        period = f'_{quarter}T' if quarter else ''
+        return content, f'{form}_{year}{period}.txt', info
+
+    def _aeat_file_response(self, form, year, quarter):
+        from flask import Response, redirect, url_for
+        from .aeat_files import UnsupportedYear, encode
+        try:
+            content, filename, _info = self.aeat_file(form, year, quarter)
+        except UnsupportedYear as e:
+            self.core.flash(str(e), 'warning')
+            return redirect(url_for('tax_es_forms.drafts_index'))
+        except ValueError:
+            # No request values in the log line (log injection); the traceback
+            # names the model.
+            self.logger.exception('AEAT file generation failed')
+            self.core.flash(f'The Modelo {form} file could not be generated. Check the '
+                            'draft (a negative amount in a field that cannot be negative).',
+                            'danger')
+            return redirect(url_for('tax_es_forms.drafts_index'))
+        self.core.log_activity('aeat_file_downloaded', 'tax',
+                               {'form': form, 'year': year, 'quarter': quarter})
+        return Response(encode(content), mimetype='text/plain; charset=iso-8859-1',
+                        headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+
     @staticmethod
     def _box_labels(year, form):
         _table_year, tables, _fallback = boxes_for_year(year)
@@ -346,6 +428,26 @@ class TaxEsFormsModule(BaseModule):
         def draft_390(year):
             return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
 
+        # G-5 — AEAT import files (not validated; see AEAT_FILES.md).
+        @bp.route('/<form>/<int:year>/<int:quarter>/aeat-file')
+        @login_required
+        def aeat_file_quarterly(form, year, quarter):
+            if form not in ('303', '130', '349') or quarter not in (1, 2, 3, 4):
+                abort(404)
+            return module._aeat_file_response(form, year, quarter)
+
+        @bp.route('/<form>/<int:year>/aeat-file')
+        @login_required
+        def aeat_file_annual(form, year):
+            if form not in ('390', '347'):
+                abort(404)
+            return module._aeat_file_response(form, year, None)
+
+        @bp.route('/347/<int:year>')
+        @login_required
+        def draft_347(year):
+            return render_template('tax_forms_draft_347.html', draft=module._draft_347(year))
+
         @bp.route('/349/<int:year>/<int:quarter>')
         @login_required
         def draft_349(year, quarter):
@@ -369,7 +471,19 @@ class TaxEsFormsModule(BaseModule):
             {'path': 'draft/130/<int:year>/<int:quarter>', 'methods': ['GET'],
              'handler': self._api_draft_130,
              'summary': 'Modelo 130 (IRPF) draft boxes for a quarter'},
+            {'path': 'draft/347/<int:year>', 'methods': ['GET'],
+             'handler': self._api_draft_347,
+             'summary': 'Modelo 347 (operations with third parties) check for a year'},
         ]
+
+    def _api_draft_347(self, request, year=None):
+        draft = self._draft_347(year)
+        draft.pop('exclusion_labels', None)
+        draft.pop('file_warnings', None)
+        if draft.get('deadline'):
+            draft['deadline'] = {k: (v.isoformat() if hasattr(v, 'isoformat') else v)
+                                 for k, v in draft['deadline'].items()}
+        return draft, 200
 
     def _api_validate_quarter(self, quarter):
         from modules.api.index import ApiError

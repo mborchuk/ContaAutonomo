@@ -41,6 +41,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Fiscal Calendar** | Spanish AEAT filing deadlines as a dashboard panel with configurable reminders |
 | **Modelo 303/130 Drafts** | Box-level quarterly IVA/IRPF draft calculator (estimate, not tax advice) |
 | **RETA Advisor** | Contribution-bracket projection and year-end regularization forecast |
+| **Tax Provision** | Dashboard total of the tax owed so far (IVA, Modelo 130, renta, RETA), each part from its own module (estimate, not tax advice) |
 | **Recurring Invoices** | Invoice templates on a monthly/quarterly cadence that generate drafts automatically |
 | **Invoice Email** | Send invoice PDFs via SMTP with send history and opt-in overdue reminders |
 | **Verifactu** | Tamper-evident, hash-chained billing records on issue/annul (RD 1007/2023 compliance assist) |

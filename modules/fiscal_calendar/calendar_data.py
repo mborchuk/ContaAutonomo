@@ -22,7 +22,7 @@ The `year`/`quarter` are what Tax Management matches a TaxForm against
 from datetime import date, timedelta
 
 # Bump + verify against AEAT when editing.
-CALENDAR_VERSION = "2026.1"
+CALENDAR_VERSION = "2026.2"
 
 # Fiscal years whose generated dates were checked against the AEAT calendar.
 VERIFIED_YEARS = (2026, 2027)
@@ -77,6 +77,10 @@ def _annual_entries(year):
     return [
         _entry('390', 'annual', f'Annual VAT {year}', year, None,
                date(year + 1, 1, 1), date(year + 1, 1, 30)),
+        # Modelo 347: the whole of February of the next year (Orden
+        # EHA/3012/2008; AEAT Manual de actividades económicas, 8.2).
+        _entry('347', 'annual', f'Operations with third parties {year}', year, None,
+               date(year + 1, 2, 1), date(year + 1, 3, 1) - timedelta(days=1)),
         _entry('100', 'annual', f'Renta {year}', year, None,
                date(year + 1, 4, 1), date(year + 1, 6, 30)),
     ]
