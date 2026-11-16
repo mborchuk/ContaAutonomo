@@ -476,6 +476,8 @@ class AIParserModule(BaseModule):
         (catalog.choices payload or {'error'}, HTTP status)."""
         if provider not in catalog.LISTABLE:
             return {'error': 'Unknown provider'}, 404
+        # Use the allowlisted constant from here on, not the URL value.
+        provider = next(p for p in catalog.LISTABLE if p == provider)
         cfg = self._get_config()
         api_key = api_key.strip() or getattr(cfg, f'{provider}_api_key')
         if not api_key:
