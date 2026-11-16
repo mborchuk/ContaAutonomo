@@ -458,6 +458,15 @@ class TaxEsFormsModule(BaseModule):
 
         app.register_blueprint(bp)
 
+    # --- Registry functions (contracts.py) ------------------------------- #
+
+    def get_functions(self):
+        return {'tax.draft_303': self.draft_303, 'tax.draft_130': self.draft_130}
+
+    def draft_130(self, year, quarter):
+        """Modelo 130 draft for one quarter, as shown on its page."""
+        return self._draft_130(year, quarter)
+
     # --- REST API (F5-D4) ------------------------------------------------- #
 
     def get_api_routes(self):

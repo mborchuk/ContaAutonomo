@@ -54,7 +54,8 @@ _CONTRACTS = (
                 Param('category', 'str', 'Expense category, exact name', max_length=100),
                 _PAGE, _PER_PAGE),
         returns=_PAGED + '; record: id, contractor_id, amount, currency, category, '
-                'description, expense_date, invoice_number',
+                'description, expense_date, invoice_number, net_amount, vat_rate, '
+                'vat_amount, deductible, deductible_pct, reverse_charge',
         assistant=True, record_kind='expense',
         assistant_fields=('id', 'expense_date', 'category', 'description', 'amount',
                           'currency')),

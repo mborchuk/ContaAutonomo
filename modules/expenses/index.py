@@ -463,6 +463,28 @@ class ExpensesModule(BaseModule):
             'page': page, 'per_page': per_page, 'total': pagination.total,
         }, 200
 
+    # --- Registry functions (contracts.py) ---------------------------------- #
+
+    def get_functions(self):
+        return {'ledger.list_expenses': self.list_expenses}
+
+    def list_expenses(self, date_from=None, date_to=None, category=None, page=1, per_page=20):
+        """Expenses newest first, with optional date range and category (exact,
+        case-insensitive). Arguments arrive checked by the registry."""
+        E = self.Expense
+        query = E.query
+        if date_from:
+            query = query.filter(E.expense_date >= date_from)
+        if date_to:
+            query = query.filter(E.expense_date <= date_to)
+        if category:
+            query = query.filter(E.category.ilike(category))
+        query = query.order_by(E.expense_date.desc(), E.id.desc())
+        total = query.count()
+        rows = query.offset((page - 1) * per_page).limit(per_page).all()
+        return {'data': [self._api_serialize_expense(e) for e in rows],
+                'page': page, 'per_page': per_page, 'total': total}
+
     def _api_get_expense(self, request, exp_id=None):
         from api_errors import ApiError
         exp = db_get(self.Expense, exp_id)

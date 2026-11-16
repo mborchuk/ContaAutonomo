@@ -83,7 +83,7 @@
     <details class="fine-print">
         <summary>Lookups</summary>
         <ul>
-            {% for c in result.calls %}<li>GET /api/v1{{ c.path }} {{ c.params | tojson }}</li>{% endfor %}
+            {% for c in result.calls %}<li><code>{{ c.call }}</code> {{ c.params | tojson }}</li>{% endfor %}
             {% for r in result.rejected %}<li>Not run: {{ r }}</li>{% endfor %}
         </ul>
     </details>

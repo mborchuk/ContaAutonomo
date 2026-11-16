@@ -3,6 +3,9 @@
 {% block title %}{{ 'Edit' if expense else 'Create' }} Expense{% endblock %}
 
 {% block content %}
+{# AI receipt parsing comes from whichever module implements ai.parse_document. #}
+{% set ai_parse_url = module_manager.functions.route('ai.parse_document')
+   if module_manager and module_manager.functions.available('ai.parse_document') else none %}
 <h1>{{ 'Capture a receipt' if capture_mode else ('Edit' if expense else 'Create') ~ ' Expense' }}</h1>
 
 {# G-8 — one-screen capture: a photo goes to the AI parser and prefills the
@@ -20,7 +23,7 @@
         <input type="file" id="capture-gallery" accept="image/*,.pdf"
                class="sr-only" tabindex="-1" aria-label="Choose a photo of the receipt">
         <p class="fine-print" id="capture-status" role="status" aria-live="polite">
-            {% if module_manager and module_manager.modules.get('ai_parser') %}
+            {% if ai_parse_url %}
             The photo is sent to the AI parser and the form below is prefilled. Review it, then save.
             {% else %}
             The AI parser is not enabled: the photo is attached and you fill in the fields.
@@ -53,8 +56,8 @@
 {% endif %}
 
 {# F11 — in-form AI receipt parse: one upload both prefills the form and
-   becomes the attached receipt. Only shown when ai_parser is enabled. #}
-{% if module_manager and module_manager.modules.get('ai_parser') %}
+   becomes the attached receipt. Only shown when ai.parse_document is available. #}
+{% if ai_parse_url %}
 <div class="note" id="ai-parse-block">
     <label class="check-row" style="cursor: pointer;">
         📷 <strong>Parse receipt with AI</strong> — photo or PDF prefills the form
@@ -319,7 +322,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch(e) { console.warn('AI prefill failed:', e); }
     }
 
-    // F11 — in-form parse: POST to the ai_parser endpoint, prefill, and put
+    // F11 — in-form parse: POST to the ai.parse_document route, prefill, and put
     // the same file into the receipt input (one upload serves both).
     const parseInput = document.getElementById('ai-parse-file');
     if (parseInput) {
@@ -334,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const fd = new FormData();
                 fd.append('file', file);
                 fd.append('doc_type', 'expense');
-                const resp = await fetch('/ai-parser/parse', {method: 'POST', body: fd});
+                const resp = await fetch({{ ai_parse_url | tojson }}, {method: 'POST', body: fd});
                 const data = await resp.json();
                 if (!resp.ok || data.error) {
                     statusEl.textContent = '✗ ' + (data.error || 'Parse failed');

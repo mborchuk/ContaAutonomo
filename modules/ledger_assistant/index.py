@@ -3,21 +3,25 @@
 Ledger Assistant Module (G-7) — read-only questions over the books.
 
 Opt-in (off by default, like every module but Backup). Answers questions such
-as "how much did I invoice this customer in Q3" through read-only calls to
-the existing /api/v1 GET handlers, with the AI provider configured in the AI
-Parser. The steps and the data sent are in assistant.py.
+as "how much did I invoice this customer in Q3" through registry functions
+(contracts.py): it reads with the functions whose contract allows the
+assistant, and asks with `ai.complete_text`. It names no module, so any
+module implementing those functions works. The steps and the data sent are
+in assistant.py.
 
 Read-only by construction and by guard:
-  - the catalogue holds GET calls only, and a plan can name nothing else;
+  - the catalogue holds only functions whose contract is read-only and sends
+    nothing out, and a plan can name nothing else;
   - while the calls run, every SQL statement other than a SELECT is refused
-    (`read_only()`), and the session is rolled back afterwards, so not even a
-    handler with a side effect can change the database;
-  - the module has no tables and writes no activity-log entry.
+    (`read_only()`), and the session is rolled back afterwards, so not even an
+    implementation with a side effect can change the database;
+  - the module has no tables and writes no activity-log entry;
+  - it never sees an API key: `ai.complete_text` returns only the reply.
 
-Only the question goes into the planning request; only the fields in
-assistant.SENT_FIELDS of the records those calls return go into the
-answering request. The settings panel says so. Every answer lists the
-records it used and carries the "not tax advice" wording.
+Only the question goes into the planning request; only the contract's
+`assistant_fields` of the records those calls return go into the answering
+request. The settings panel says so. Every answer lists the records it used
+and carries the "not tax advice" wording.
 """
 
 import contextvars
@@ -27,20 +31,16 @@ from contextlib import contextmanager
 from flask import Blueprint, render_template, request
 from sqlalchemy import event
 
+from functions import FunctionUnavailable
 from module_manager import BaseModule
 
 from . import assistant as core_steps
-from .llm import ProviderUnavailable, complete, missing_reason
 
 MAX_QUESTION = 500
-
-# GET handlers of the api module the catalogue paths map to. Module routes
-# (/m/...) go through the api dispatcher with the GET method only.
-API_HANDLERS = {
-    '/invoices': '_list_invoices',
-    '/expenses': '_list_expenses',
-    '/customers': '_list_customers',
-}
+NO_TEXT_PROVIDER = ('No enabled module answers text questions. Enable the AI Parser '
+                    'module in Settings → Modules and choose OpenAI or Anthropic with an '
+                    'API key in Settings → AI Parser.')
+NOTHING_TO_READ = 'No enabled module provides data the assistant can read.'
 
 _read_only = contextvars.ContextVar('ledger_assistant_read_only', default=False)
 _guarded_engines = set()
@@ -56,10 +56,6 @@ def _block_writes(conn, cursor, statement, parameters, context, executemany):
     words = (statement or '').lstrip().split(None, 1)
     if not words or words[0].upper() != 'SELECT':
         raise ReadOnlyViolation('The ledger assistant can only read data')
-
-
-class CallFailed(Exception):
-    pass
 
 
 class LedgerAssistantModule(BaseModule):
@@ -85,9 +81,9 @@ class LedgerAssistantModule(BaseModule):
 
     @property
     def dependencies(self):
-        # The answers are read through the REST API handlers. The AI Parser is
-        # optional: without it the page explains what to enable.
-        return ['api']
+        # Functions, not modules: the core implements the invoice list. The
+        # text function is optional — without it the page explains what to enable.
+        return ['ledger.list_invoices']
 
     @property
     def nav_items(self):
@@ -115,62 +111,67 @@ class LedgerAssistantModule(BaseModule):
             _read_only.reset(token)
             self.core.db.session.rollback()
 
-    # --- Providers ---------------------------------------------------------- #
+    # --- Registry ------------------------------------------------------- #
 
-    def _provider(self, module_id):
-        mm = getattr(self.core, 'module_manager', None)
-        return mm.provider_of(module_id) if mm else None
+    @property
+    def _functions(self):
+        return self.core.functions
 
-    def provider_settings(self):
-        parser = self._provider('ai_parser')
-        return parser.provider_settings() if parser is not None else None
+    def text_status(self):
+        """ai.text_status, or None when no module implements text questions."""
+        if not self._functions.available('ai.text_status'):
+            return None
+        return self._functions.call('ai.text_status')
 
     def missing(self):
         """What has to be configured before a question can be answered, or None."""
-        if self._provider('api') is None:
-            return 'The API module is not enabled. Enable it in Settings → Modules.'
-        return missing_reason(self.provider_settings())
+        status = self.text_status()
+        if status is None or not self._functions.available('ai.complete_text'):
+            return NO_TEXT_PROVIDER
+        if not status.get('available'):
+            return status.get('reason') or NO_TEXT_PROVIDER
+        if not self._catalogue():
+            return NOTHING_TO_READ
+        return None
 
     def _catalogue(self):
-        mm = getattr(self.core, 'module_manager', None)
-        loaded = set(mm.modules) if mm else set()
-        return core_steps.catalogue_for(loaded)
+        return core_steps.catalogue_from(self._functions.find(assistant=True))
+
+    def _complete(self, system, user):
+        return self._functions.call('ai.complete_text', system=system, user=user,
+                                    max_tokens=1500)
 
     # --- Reading ------------------------------------------------------------ #
 
-    def _call_once(self, api, path, params):
-        with self.core.app.test_request_context('/api/v1' + path, method='GET',
-                                                query_string=params):
-            if path.startswith('/m/'):
-                parts = path.split('/')
-                result = api._handle(api._dispatch_module_route, parts[2], '/'.join(parts[3:]))
-            else:
-                result = api._handle(getattr(api, API_HANDLERS[path]))
-        response, status = result if isinstance(result, tuple) else (result, result.status_code)
-        body = response.get_json(silent=True) or {}
-        if status != 200:
-            raise CallFailed(body.get('message') or f'HTTP {status}')
-        return body
+    @staticmethod
+    def _call_problem(exc):
+        """A fixed message for a failed read; the details go to the log."""
+        if isinstance(exc, ReadOnlyViolation):
+            return 'refused: the assistant can only read data'
+        if isinstance(exc, FunctionUnavailable):
+            return 'not available: no enabled module provides it'
+        return 'the data could not be read'
 
-    def run_calls(self, calls):
+    def run_calls(self, calls, catalogue):
         """({kind: [minimised record]}, errors, truncated) for validated calls."""
-        api = self._provider('api')
         sent, errors, truncated = {}, [], False
         with self.read_only():
             for call in calls:
+                contract = catalogue[call['call']]
                 try:
                     if call['kind'] == 'draft':
-                        body = self._call_once(api, call['path'], call['params'])
-                        draft_id = call['path'].rsplit('/draft/', 1)[-1].replace('/', '-')
+                        body = self._functions.call(call['call'], **call['params'])
+                        draft_id = '-'.join(str(body.get(k, call['params'].get(k, '')))
+                                            for k in ('form', 'year', 'quarter'))
                         sent.setdefault('draft', []).append(
-                            core_steps.minimise('draft', body, draft_id))
+                            core_steps.minimise(contract, body, draft_id))
                         continue
                     rows, page = [], 1
                     while True:
                         params = dict(call['params'])
                         if call['paged']:
                             params.update(page=page, per_page=core_steps.PAGE_SIZE)
-                        body = self._call_once(api, call['path'], params)
+                        body = self._functions.call(call['call'], **params)
                         rows.extend(body.get('data') or [])
                         if not call['paged'] or len(rows) >= (body.get('total') or 0):
                             break
@@ -182,10 +183,12 @@ class LedgerAssistantModule(BaseModule):
                     seen = {r['id'] for r in bucket}
                     for row in rows[:core_steps.MAX_RECORDS]:
                         if row.get('id') not in seen:
-                            bucket.append(core_steps.minimise(call['kind'], row))
+                            bucket.append(core_steps.minimise(contract, row))
                             seen.add(row.get('id'))
-                except (CallFailed, ReadOnlyViolation) as e:
-                    errors.append(f'{call["call"]}: {e}')
+                except Exception as e:
+                    self.logger.warning('Assistant call %s failed: %s',
+                                        call['call'], type(e).__name__)
+                    errors.append(f'{call["call"]}: {self._call_problem(e)}')
         return sent, errors, truncated
 
     # --- Asking ------------------------------------------------------------- #
@@ -204,23 +207,22 @@ class LedgerAssistantModule(BaseModule):
         out['missing'] = self.missing()
         if out['missing']:
             return out
-        settings = self.provider_settings()
         catalogue = self._catalogue()
         try:
-            plan = core_steps.parse_json(complete(
-                settings, core_steps.plan_prompt(catalogue, today), question))
+            plan = core_steps.parse_json(self._complete(
+                core_steps.plan_prompt(catalogue, today), question))
             calls, rejected = core_steps.validate_plan(plan, catalogue)
             out['calls'], out['rejected'] = calls, rejected
             if not calls:
                 out['answer'] = ('This question cannot be answered from the invoices, '
                                  'expenses, customers and tax drafts the assistant can read.')
                 return out
-            sent, errors, truncated = self.run_calls(calls)
+            sent, errors, truncated = self.run_calls(calls, catalogue)
             out['errors'], out['truncated'] = errors, truncated
-            reply = complete(settings, core_steps.ANSWER_PROMPT, json.dumps(
+            reply = self._complete(core_steps.ANSWER_PROMPT, json.dumps(
                 {'question': question, 'records': sent}, default=str, ensure_ascii=False))
-        except ProviderUnavailable as e:
-            out['missing'] = str(e)
+        except FunctionUnavailable:
+            out['missing'] = self.missing() or NO_TEXT_PROVIDER
             return out
         except Exception as e:  # the provider failed; never echo its payload
             self.logger.error('Ledger assistant provider call failed: %s', type(e).__name__)
@@ -270,8 +272,9 @@ class LedgerAssistantModule(BaseModule):
     # --- Settings (information only) --------------------------------------- #
 
     def get_settings_html(self, settings):
-        provider = self.provider_settings()
+        status = self.text_status()
         return self.render_settings_template(
             'ledger_assistant_settings.html',
-            provider=(provider or {}).get('display_name'),
-            missing=self.missing(), sent_fields=core_steps.SENT_FIELDS)
+            provider=(status or {}).get('provider'),
+            missing=self.missing(),
+            sent_fields=core_steps.sent_fields(self._catalogue()))

@@ -10,7 +10,9 @@ from settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
 from secret_box import EncryptedString, encrypt_existing
 
-from . import catalog
+from functions import FunctionUnavailable
+
+from . import catalog, text
 from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
 from .cli_agents import (ALLOW_ENV, CLI_PROVIDERS, SCANNED_PDF_MESSAGE, CLIError,
                          ScannedPDF, cli_allowed, valid_model)
@@ -92,15 +94,41 @@ class AIParserModule(BaseModule):
             self._db.session.commit()
         return cfg
 
-    @property
-    def interface(self):
-        # Used by the ledger assistant (G-7) to reuse the configured provider.
-        return ['provider_settings']
+    # --- Registry functions (contracts.py) ---------------------------------- #
+
+    def get_functions(self):
+        return {
+            'ai.parse_document': {'call': self.parse_file, 'route': '/ai-parser/parse'},
+            'ai.complete_text': self.complete_text,
+            'ai.text_status': self.text_status,
+        }
+
+    def parse_file(self, file_data, filename, doc_type='invoice'):
+        """The fields of an invoice or receipt, with the configured provider."""
+        provider = self._get_provider()
+        if provider is None:
+            raise FunctionUnavailable(self._not_configured_message())
+        return provider.parse_document(file_data, filename, doc_type)
+
+    def text_status(self):
+        settings = self.provider_settings()
+        reason = text.missing_reason(settings)
+        return {'available': reason is None, 'provider': settings['display_name'],
+                'reason': reason}
+
+    def complete_text(self, system, user, max_tokens=1500):
+        """The reply text; the API key never leaves this module."""
+        settings = self.provider_settings()
+        reason = text.missing_reason(settings)
+        if reason:
+            raise FunctionUnavailable(reason)
+        return text.complete(settings, system, user, max_tokens)
 
     def provider_settings(self):
         """The active provider and its credentials, read only (no default row
         is created): {'provider', 'display_name', 'api_key', 'model',
-        'configured'}. `api_key` is the decrypted key; never log it."""
+        'configured'}. `api_key` is the decrypted key; never log it or return
+        it outside this module."""
         cfg = self.AIParserConfig.query.first()
         provider = (cfg.provider if cfg else None) or 'openai'
         key = model = ''

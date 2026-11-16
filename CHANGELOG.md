@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Modules on the function registry**: Expenses implements
+  `ledger.list_expenses`, Spanish Tax Forms `tax.draft_303` and
+  `tax.draft_130`, the AI Parser `ai.parse_document`, `ai.complete_text` and
+  `ai.text_status`. The Ledger Assistant names no module any more: it builds
+  its catalogue from the functions offered to the assistant, reads through the
+  registry, asks through `ai.complete_text` (it no longer handles API keys),
+  and depends on `ledger.list_invoices` instead of the `api` module. The
+  expense form shows AI parsing when something implements
+  `ai.parse_document` and posts to its route. `GET /api/v1/expenses` returns
+  the VAT fields too. A test refuses new imports between modules.
 - **Function registry** (#146): named functions with contracts in the core
   (`contracts.py`), implemented by the core (`core_functions.py`) or by a
   module (`get_functions()`) and called by name through `core.functions`, so

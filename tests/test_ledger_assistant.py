@@ -1,21 +1,52 @@
 """G-7 — read-only ledger assistant: off by default, cannot write, sends only
-the records needed, lists them, and explains a missing provider."""
+the records needed, lists them, and explains a missing provider. It reads and
+asks through registry functions, so the tests give it a stand-in text module
+instead of the AI Parser."""
 import json
 from datetime import date
 
 import pytest
 
+from module_manager import BaseModule
 from modules.ledger_assistant import assistant as steps
-from modules.ledger_assistant.llm import missing_reason
 
 TODAY = date(2035, 11, 10)
-SETTINGS = {'provider': 'openai', 'display_name': 'OpenAI (GPT-4o)',
-            'api_key': 'sk-synthetic', 'model': 'gpt-test', 'configured': True}
+
+
+class FakeTextModule(BaseModule):
+    """Any module implementing ai.text_status and ai.complete_text will do."""
+
+    module_id = 'fake_text_ai'
+    name = 'Fake text AI'
+
+    def __init__(self, core, replies=(), status=None):
+        super().__init__(core)
+        self.replies = list(replies)
+        self.status = status or {'available': True, 'provider': 'Synthetic AI', 'reason': None}
+        self.seen = []
+
+    def get_functions(self):
+        return {'ai.text_status': lambda: self.status,
+                'ai.complete_text': self.complete}
+
+    def complete(self, system, user, max_tokens=1500):
+        self.seen.append({'system': system, 'user': user, 'max_tokens': max_tokens})
+        return self.replies.pop(0) if self.replies else ''
 
 
 @pytest.fixture
 def la(loaded_modules):
     return loaded_modules.modules['ledger_assistant']
+
+
+@pytest.fixture
+def text_ai(loaded_modules, monkeypatch):
+    def install(plan=None, answer=None, status=None):
+        replies = [json.dumps(r) for r in (plan, answer) if r is not None]
+        fake = FakeTextModule(loaded_modules.core, replies, status)
+        monkeypatch.setitem(loaded_modules.modules, 'fake_text_ai', fake)
+        return fake
+    return install
 
 
 @pytest.fixture
@@ -41,15 +72,6 @@ def ledger(loaded_modules, app):
     return acme
 
 
-def _stub(monkeypatch, la, plan, answer, seen):
-    def fake_complete(settings, system, user, max_tokens=1500):
-        seen.append({'system': system, 'user': user})
-        return json.dumps(plan) if len(seen) == 1 else json.dumps(answer)
-    monkeypatch.setattr(la, 'provider_settings', lambda: SETTINGS)
-    # The module imported `complete` by name; patch the name it calls.
-    monkeypatch.setitem(type(la).ask.__globals__, 'complete', fake_complete)
-
-
 def _snapshot(db):
     from sqlalchemy import text
     out = {}
@@ -68,22 +90,21 @@ def test_module_is_off_by_default(loaded_modules):
     assert getattr(cls, 'enabled_by_default', False) is False
 
 
-@pytest.mark.parametrize('settings,fragment', [
-    (None, 'AI Parser module is not enabled'),
-    ({'provider': 'google_docai', 'display_name': 'Google Document AI', 'api_key': ''},
-     'cannot answer questions'),
-    ({'provider': 'anthropic', 'display_name': 'Anthropic (Claude)', 'api_key': ''},
-     'No API key'),
-])
-def test_missing_provider_is_explained(settings, fragment):
-    assert fragment in missing_reason(settings)
+def test_it_depends_on_functions_not_modules(la, loaded_modules):
+    assert la.dependencies == ['ledger.list_invoices']
+    assert loaded_modules.missing_dependencies('ledger_assistant') == []   # the core
 
 
-def test_ask_without_provider_says_what_is_missing(la, ledger, monkeypatch):
-    monkeypatch.setattr(la, 'provider_settings', lambda: None)
+def test_without_a_text_module_it_says_what_is_missing(la, ledger):
     out = la.ask('How much did I invoice ACME in Q3?', TODAY)
-    assert 'AI Parser module is not enabled' in out['missing']
+    assert 'Enable the AI Parser module' in out['missing']
     assert out['answer'] is None and out['calls'] == []
+
+
+def test_the_text_module_reason_is_shown(la, text_ai):
+    text_ai(status={'available': False, 'provider': 'Google Document AI',
+                    'reason': 'The AI Parser uses Google Document AI, which cannot answer.'})
+    assert la.missing() == 'The AI Parser uses Google Document AI, which cannot answer.'
 
 
 # --- read only -------------------------------------------------------------- #
@@ -99,101 +120,127 @@ def test_read_only_guard_refuses_writes(la, app):
     assert Customer.query.filter_by(name='Should Not Exist').count() == 0
 
 
-def test_only_get_list_handlers_are_reachable():
-    from modules.ledger_assistant.index import API_HANDLERS
-    assert set(API_HANDLERS.values()) == {'_list_invoices', '_list_expenses', '_list_customers'}
-    assert all(':' not in spec['path'] for spec in steps.CATALOGUE.values())
+def test_catalogue_holds_only_read_only_internal_functions(la, loaded_modules):
+    catalogue = la._catalogue()
+    assert {'ledger.list_invoices', 'ledger.list_customers', 'ledger.list_expenses',
+            'tax.draft_303', 'tax.draft_130'} <= set(catalogue)
+    for contract in catalogue.values():
+        assert contract.read_only and not contract.external and contract.assistant_fields
+    assert 'ai.complete_text' not in catalogue
 
 
-def test_it_cannot_create_change_or_delete(la, ledger, monkeypatch):
+def test_it_cannot_create_change_or_delete(la, ledger, text_ai, loaded_modules, monkeypatch):
     from app import db
-    plan = {'calls': [
-        {'call': 'invoices', 'params': {}},
-        {'call': 'expenses', 'params': {}},
-        {'call': 'customers'},
-        {'call': 'delete_invoice', 'params': {'id': 1}},           # not in the catalogue
-        {'call': 'invoices', 'params': {'id': 1, 'status': 'paid'}},  # parameter not allowed
-    ]}
-    answer = {'answer': 'Synthetic.', 'record_ids': {}}
-    _stub(monkeypatch, la, plan, answer, [])
-    # A handler with a side effect is stopped by the guard, too.
-    api = la._provider('api')
-    original = api._list_customers
+    text_ai(plan={'calls': [
+        {'call': 'ledger.list_invoices', 'params': {}},
+        {'call': 'ledger.list_expenses', 'params': {}},
+        {'call': 'ledger.list_customers'},
+        {'call': 'delete_invoice', 'params': {'id': 1}},                         # unknown
+        {'call': 'ledger.list_invoices', 'params': {'id': 1, 'status': 'paid'}},  # not allowed
+    ]}, answer={'answer': 'Synthetic.', 'record_ids': {}})
+    # An implementation with a side effect is stopped by the guard, too.
+    original = loaded_modules.functions._core['ledger.list_customers']['call']
 
-    def writing_handler():
+    def writing_customers():
         from app import Customer
         db.session.add(Customer(name='Injected Synthetic'))
         db.session.commit()
         return original()
-    monkeypatch.setattr(api, '_list_customers', writing_handler)
+    monkeypatch.setitem(loaded_modules.functions._core, 'ledger.list_customers',
+                        {'call': writing_customers, 'route': None})
 
     before = _snapshot(db)
     out = la.ask('Show everything', TODAY)
     assert _snapshot(db) == before
     assert any('delete_invoice' in r for r in out['rejected'])
     assert any("'id' is not allowed" in r for r in out['rejected'])
-    assert any(e.startswith('customers:') for e in out['errors'])
+    assert 'ledger.list_customers: refused: the assistant can only read data' in out['errors']
 
 
 # --- data minimisation and the answer -------------------------------------- #
 
-def test_sends_only_the_records_and_fields_needed(la, ledger, monkeypatch):
-    plan = {'calls': [{'call': 'invoices', 'params': {
-        'client': 'ACME', 'date_from': '2035-07-01', 'date_to': '2035-09-30'}}]}
-    seen = []
-    _stub(monkeypatch, la, plan, {'answer': 'You invoiced 1,500.00 EUR.',
-                                  'record_ids': {'invoice': []}}, seen)
+def test_sends_only_the_records_and_fields_needed(la, ledger, text_ai, loaded_modules):
+    fake = text_ai(plan={'calls': [{'call': 'ledger.list_invoices', 'params': {
+        'client': 'ACME', 'date_from': '2035-07-01', 'date_to': '2035-09-30'}}]},
+        answer={'answer': 'You invoiced 1,500.00 EUR.', 'record_ids': {'invoice': []}})
     out = la.ask('How much did I invoice ACME in Q3?', TODAY)
 
-    assert seen[0]['user'] == 'How much did I invoice ACME in Q3?'   # plan: question only
-    assert 'LA-' not in seen[0]['system'] + seen[0]['user']
-    sent = json.loads(seen[1]['user'])['records']
+    assert fake.seen[0]['user'] == 'How much did I invoice ACME in Q3?'   # plan: question only
+    assert 'LA-' not in fake.seen[0]['system'] + fake.seen[0]['user']
+    assert 'ledger.list_invoices(date_from?, date_to?, client?, status?)' in fake.seen[0]['system']
+    sent = json.loads(fake.seen[1]['user'])['records']
     numbers = sorted(r['invoice_number'] for r in sent['invoice'])
-    assert numbers == ['LA-1', 'LA-2']                                # Q3, ACME only
+    assert numbers == ['LA-1', 'LA-2']                                     # Q3, ACME only
+    fields = loaded_modules.functions.contracts['ledger.list_invoices'].assistant_fields
     for row in sent['invoice']:
-        assert set(row) == set(steps.SENT_FIELDS['invoice'])
-    payload = seen[1]['user']
+        assert set(row) == set(fields)
+    payload = fake.seen[1]['user']
     for secret in ('billing@example.invalid', 'B00000000', 'internal note'):
         assert secret not in payload
     assert out['totals']['invoices_eur'] == 1500.0
+    assert out['calls'][0]['params'] == {'date_from': '2035-07-01', 'date_to': '2035-09-30',
+                                         'client': 'ACME'}
 
 
-def test_answer_lists_the_records_it_used(la, ledger, monkeypatch):
-    seen = []
-    plan = {'calls': [{'call': 'invoices', 'params': {'client': 'ACME'}}]}
-    _stub(monkeypatch, la, plan, {'answer': 'x', 'record_ids': {'invoice': []}}, seen)
+def test_answer_lists_the_records_it_used(la, ledger, text_ai):
+    plan = {'calls': [{'call': 'ledger.list_invoices', 'params': {'client': 'ACME'}}]}
+    text_ai(plan=plan, answer={'answer': 'x', 'record_ids': {'invoice': []}})
     first = la.ask('ACME invoices', TODAY)
     target = next(r for r in first['used']['invoice'] if r['invoice_number'] == 'LA-3')
 
-    seen.clear()
-    _stub(monkeypatch, la, plan, {'answer': 'The October invoice is 900.00 EUR.',
-                                  'record_ids': {'invoice': [target['id']]}}, seen)
+    text_ai(plan=plan, answer={'answer': 'The October invoice is 900.00 EUR.',
+                               'record_ids': {'invoice': [target['id']]}})
     out = la.ask('Which ACME invoice is from October?', TODAY)
     assert [r['invoice_number'] for r in out['used']['invoice']] == ['LA-3']
     assert out['totals'] == {'invoices_eur': 900.0}
 
 
-def test_expense_descriptions_are_cut_to_one_line(la, ledger, monkeypatch):
-    seen = []
-    _stub(monkeypatch, la, {'calls': [{'call': 'expenses', 'params': {}}]},
-          {'answer': 'ok', 'record_ids': {}}, seen)
+def test_expense_descriptions_are_cut_to_one_line(la, ledger, text_ai):
+    fake = text_ai(plan={'calls': [{'call': 'ledger.list_expenses', 'params': {}}]},
+                   answer={'answer': 'ok', 'record_ids': {}})
     la.ask('My expenses', TODAY)
-    sent = json.loads(seen[1]['user'])['records']['expense']
+    sent = json.loads(fake.seen[1]['user'])['records']['expense']
     assert sent[0]['description'] == 'Synthetic tool'
     assert 'notes' not in sent[0]
 
 
-def test_plan_validation_rejects_bad_parameters():
-    cat = steps.catalogue_for({'tax_es_forms'})
+def test_tax_drafts_are_read_through_their_function(la, ledger, text_ai):
+    fake = text_ai(plan={'calls': [{'call': 'tax.draft_303', 'params': {'year': 2035,
+                                                                         'quarter': 3}}]},
+                   answer={'answer': 'ok', 'record_ids': {}})
+    out = la.ask('My Q3 VAT', TODAY)
+    draft = json.loads(fake.seen[1]['user'])['records']['draft'][0]
+    assert draft['id'] == '303-2035-3' and set(draft) == {'id', 'form', 'year', 'quarter', 'boxes'}
+    assert out['errors'] == []
+
+
+def test_plan_validation_rejects_bad_parameters(la):
+    catalogue = la._catalogue()
     calls, rejected = steps.validate_plan({'calls': [
-        {'call': 'modelo303', 'params': {'year': 2035, 'quarter': 3}},
-        {'call': 'modelo303', 'params': {'year': 2035, 'quarter': 7}},
-        {'call': 'invoices', 'params': {'date_from': 'yesterday'}},
-        {'call': 'modelo130', 'params': {'year': 'x', 'quarter': 1}},
-    ]}, cat)
-    assert [c['path'] for c in calls] == ['/m/tax_es_forms/draft/303/2035/3']
-    assert len(rejected) == 3
-    assert 'modelo303' not in steps.catalogue_for(set())
+        {'call': 'tax.draft_303', 'params': {'year': 2035, 'quarter': 3}},
+        {'call': 'tax.draft_303', 'params': {'year': 2035, 'quarter': 7}},
+        {'call': 'ledger.list_invoices', 'params': {'date_from': 'yesterday'}},
+        {'call': 'tax.draft_130', 'params': {'year': 'x', 'quarter': 1}},
+        {'call': 'ledger.list_invoices', 'params': {'page': 3}},
+    ]}, catalogue)
+    assert calls == [{'call': 'tax.draft_303', 'params': {'year': 2035, 'quarter': 3},
+                      'kind': 'draft', 'paged': False}]
+    assert rejected == [
+        'tax.draft_303: quarter must be between 1 and 4',
+        'ledger.list_invoices: date_from must be a date (YYYY-MM-DD)',
+        'tax.draft_130: year must be a whole number',
+        "ledger.list_invoices: parameter 'page' is not allowed",
+    ]
+    _, rejected = steps.validate_plan(
+        {'calls': [{'call': 'tax.draft_130', 'params': {'year': 2035}}] * 6}, catalogue)
+    assert rejected == ['tax.draft_130: quarter is required'] * 5 + [
+        'only the first 5 calls were run']
+
+
+def test_a_disabled_data_module_leaves_the_catalogue(la, loaded_modules, monkeypatch):
+    monkeypatch.delitem(loaded_modules.modules, 'tax_es_forms')
+    assert 'tax.draft_303' not in la._catalogue()
+    assert 'ledger.list_invoices' in la._catalogue()
 
 
 # --- page ------------------------------------------------------------------- #
@@ -208,28 +255,28 @@ def test_page_requires_login(loaded_modules, client):
     assert resp.status_code == 302 and '/login' in resp.headers['Location']
 
 
-def test_page_explains_a_missing_provider(la, client, monkeypatch):
-    monkeypatch.setattr(la, 'provider_settings', lambda: None)
+def test_page_explains_a_missing_provider(la, client):
     _auth(client)
     html = client.get('/assistant/').get_data(as_text=True)
-    assert 'AI Parser module is not enabled' in html and 'Not tax advice' in html
+    assert 'Enable the AI Parser module' in html and 'Not tax advice' in html
 
 
-def test_page_shows_answer_records_and_disclaimer(la, ledger, client, monkeypatch):
-    plan = {'calls': [{'call': 'invoices', 'params': {'client': 'ACME'}}]}
-    _stub(monkeypatch, la, plan, {'answer': 'Three invoices.', 'record_ids': {}}, [])
+def test_page_shows_answer_records_and_disclaimer(la, ledger, text_ai, client):
+    text_ai(plan={'calls': [{'call': 'ledger.list_invoices', 'params': {'client': 'ACME'}}]},
+            answer={'answer': 'Three invoices.', 'record_ids': {}})
     _auth(client)
     html = client.post('/assistant/', data={'question': 'ACME invoices?'}).get_data(as_text=True)
     assert 'Three invoices.' in html and 'Records used' in html and 'LA-3' in html
+    assert 'ledger.list_invoices' in html
     assert steps.DISCLAIMER.split(' — ')[0] in html
 
 
-def test_settings_panel_says_what_is_sent(la, app, monkeypatch):
-    monkeypatch.setattr(la, 'provider_settings', lambda: SETTINGS)
+def test_settings_panel_says_what_is_sent(la, app, text_ai):
+    text_ai()
     with app.test_request_context('/settings'):
         html = la.get_settings_html(None)
     assert 'your question only' in html and 'Never sent' in html
-    assert 'OpenAI' in html
+    assert 'Synthetic AI' in html and 'invoice_number' in html
 
 
 # --- API filters the assistant relies on ------------------------------------ #
@@ -245,48 +292,15 @@ def test_api_invoice_and_expense_filters(loaded_modules, ledger, app):
         body, _ = api._list_expenses()
     assert body['total'] == 1
     with app.test_request_context('/api/v1/invoices?date_from=13/2035'):
-        with pytest.raises(Exception) as err:   # ApiError, matched by name as _handle does
+        with pytest.raises(Exception) as err:   # ApiError
             api._list_invoices()
     assert type(err.value).__name__ == 'ApiError' and err.value.status == 400
 
 
-# --- provider clients (SDKs stubbed; no network) ---------------------------- #
-
-def test_openai_and_anthropic_text_calls(monkeypatch):
-    import sys
-    from types import ModuleType, SimpleNamespace
-    from modules.ledger_assistant.llm import complete
-    calls = []
-
-    openai = ModuleType('openai')
-
-    class OpenAIClient:
-        def __init__(self, api_key):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
-
-        def _create(self, **kw):
-            calls.append(('openai', kw))
-            return SimpleNamespace(choices=[SimpleNamespace(
-                message=SimpleNamespace(content='{"calls": []}'))])
-    openai.OpenAI = OpenAIClient
-    anthropic = ModuleType('anthropic')
-
-    class AnthropicClient:
-        def __init__(self, api_key):
-            self.messages = SimpleNamespace(create=self._create)
-
-        def _create(self, **kw):
-            calls.append(('anthropic', kw))
-            return SimpleNamespace(content=[SimpleNamespace(text='hello')])
-    anthropic.Anthropic = AnthropicClient
-    monkeypatch.setitem(sys.modules, 'openai', openai)
-    monkeypatch.setitem(sys.modules, 'anthropic', anthropic)
-
-    assert complete(SETTINGS, 'sys', 'question') == '{"calls": []}'
-    kw = calls[-1][1]
-    assert kw['messages'][0] == {'role': 'system', 'content': 'sys'}
-    assert 'temperature' not in kw and 'max_tokens' not in kw
-    assert kw['max_completion_tokens'] == 6000
-    assert complete({'provider': 'anthropic', 'api_key': 'k', 'model': 'm'},
-                    'sys', 'q') == 'hello'
-    assert calls[-1][1]['system'] == 'sys'
+def test_api_expenses_answer_404_without_an_expenses_module(loaded_modules, app, monkeypatch):
+    api = loaded_modules.modules['api']
+    monkeypatch.delitem(loaded_modules.modules, 'expenses')
+    with app.test_request_context('/api/v1/expenses'):
+        with pytest.raises(Exception) as err:
+            api._list_expenses()
+    assert err.value.status == 404

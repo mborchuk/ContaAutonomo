@@ -338,11 +338,11 @@ a full VAT breakdown.
   `NULL` VAT fields ("unknown") and are surfaced with a "no VAT data" hint.
 - AI parsing: "Parse receipt with AI" on the create form — one upload prefills
   the form (including VAT fields) and becomes the attached receipt (requires
-  the `ai_parser` module)
+  a module implementing `ai.parse_document`, the AI Parser)
 - **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
   shortcut of the installed app): Take photo / Choose photo above the expense
   form. The photo goes through the AI parse above, so the form below is
-  prefilled and the photo attached; without `ai_parser` it is only attached.
+  prefilled and the photo attached; without `ai.parse_document` it is only attached.
   Nothing is saved until "Create Expense". A photo shared from the phone's
   share menu arrives through the service worker (POST
   `/expenses/capture/share` → redirect → `postMessage`, held in memory only).
@@ -635,18 +635,20 @@ app data. Full reference: [`modules/api/README.md`](api/README.md).
 
 ### Ledger Assistant (`ledger_assistant`)
 
-Opt-in, read-only questions over the books (`/assistant/`), answered with the
-AI Parser's provider (OpenAI or Anthropic). Depends on `api`.
+Opt-in, read-only questions over the books (`/assistant/`). It names no
+module: it reads with the registry functions offered to the assistant and
+asks with `ai.complete_text` ([Functions](#functions)). Depends on
+`ledger.list_invoices` (the core).
 
-- The provider plans read-only calls from the question alone; the module
-  runs only catalogue calls (invoices, expenses, customers, Modelo 303/130
-  drafts) on the `api` GET handlers, with every non-`SELECT` statement
+- The text function plans read-only calls from the question alone; the
+  module runs only catalogue calls — the functions whose contract allows the
+  assistant and that something implements — with every non-`SELECT` statement
   refused and the session rolled back afterwards
-- Only the fields in `assistant.SENT_FIELDS` of the returned records go to the
+- Only each contract's `assistant_fields` of the returned records go to the
   provider (no e-mails, VAT numbers, addresses, notes, files); the settings
-  panel (Assistant tab) says so
+  panel (Assistant tab) says so. The module never sees an API key
 - Each answer lists the records it used, with a deterministic total, and says
-  "not tax advice"; without a usable provider the page explains what is
+  "not tax advice"; without a usable text function the page explains what is
   missing
 - No tables, no activity-log entries; rate limit 10 questions/minute.
   Details: `modules/ledger_assistant/README.md`
@@ -1045,7 +1047,13 @@ Functions today:
 |---|---|---|
 | `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
-| `ledger.list_expenses`, `tax.draft_303`, `tax.draft_130`, `ai.text_status`, `ai.complete_text`, `ai.parse_document` | — | Contracts defined; implementations follow |
+| `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
+| `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter` |
+| `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with OpenAI or Anthropic; the key stays in the module |
+| `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever implements it |
+
+Callers today: the Ledger Assistant (all but `ai.parse_document`), the
+`/api/v1` invoice, customer and expense lists, and the expense form.
 
 ### Dependencies
 

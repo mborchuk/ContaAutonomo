@@ -434,3 +434,127 @@ def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc, messag
         ai_module._api_parse(_request('a.pdf', b'1'))
     assert err.value.status == 422 and message in err.value.message
     assert 'internal detail' not in err.value.message
+
+
+# --- registry functions and text completion ----------------------------------- #
+
+from modules.ai_parser import text as ai_text  # noqa: E402
+
+TEXT_SETTINGS = {'provider': 'openai', 'display_name': 'OpenAI (GPT)',
+                 'api_key': 'sk-synthetic', 'model': 'gpt-test', 'configured': True}
+
+
+@pytest.mark.parametrize('settings,fragment', [
+    ({'provider': 'google_docai', 'display_name': 'Google Document AI', 'api_key': ''},
+     'cannot answer questions'),
+    ({'provider': 'kiro_cli', 'display_name': 'Kiro CLI', 'api_key': ''},
+     'cannot answer questions'),
+    ({'provider': 'anthropic', 'display_name': 'Anthropic (Claude)', 'api_key': ''},
+     'No API key'),
+])
+def test_text_missing_reason(settings, fragment):
+    assert fragment in ai_text.missing_reason(settings)
+    assert ai_text.missing_reason(TEXT_SETTINGS) is None
+
+
+def test_openai_and_anthropic_text_calls(monkeypatch):
+    calls = []
+    openai = ModuleType('openai')
+
+    class OpenAIClient:
+        def __init__(self, api_key):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+        def _create(self, **kw):
+            calls.append(('openai', kw))
+            return SimpleNamespace(choices=[SimpleNamespace(
+                message=SimpleNamespace(content='{"calls": []}'))])
+    openai.OpenAI = OpenAIClient
+    anthropic = ModuleType('anthropic')
+
+    class AnthropicClient:
+        def __init__(self, api_key):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, **kw):
+            calls.append(('anthropic', kw))
+            return SimpleNamespace(content=[SimpleNamespace(text='hello')])
+    anthropic.Anthropic = AnthropicClient
+    monkeypatch.setitem(sys.modules, 'openai', openai)
+    monkeypatch.setitem(sys.modules, 'anthropic', anthropic)
+
+    assert ai_text.complete(TEXT_SETTINGS, 'sys', 'question') == '{"calls": []}'
+    kw = calls[-1][1]
+    assert kw['messages'][0] == {'role': 'system', 'content': 'sys'}
+    assert 'temperature' not in kw and 'max_tokens' not in kw
+    assert kw['max_completion_tokens'] == 6000
+    assert ai_text.complete({'provider': 'anthropic', 'api_key': 'k', 'model': 'm'},
+                            'sys', 'q') == 'hello'
+    assert calls[-1][1]['system'] == 'sys'
+
+
+def test_ai_parser_implements_its_functions(ai_module, loaded_modules):
+    from functions import FunctionRegistry
+    registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}))
+    assert registry.check_all() == []
+    assert registry.route('ai.parse_document') == '/ai-parser/parse'
+    assert {c.name for c in registry.find(external=True)} == {
+        'ai.parse_document', 'ai.complete_text'}
+
+
+def test_text_functions_follow_the_stored_provider(ai_module, monkeypatch):
+    from app import db
+    from functions import FunctionUnavailable
+    cfg = ai_module._get_config()
+    cfg.provider, cfg.openai_api_key = 'openai', ''
+    db.session.commit()
+    status = ai_module.text_status()
+    assert status['available'] is False and 'No API key' in status['reason']
+    with pytest.raises(FunctionUnavailable):
+        ai_module.complete_text('sys', 'q')
+
+    cfg.openai_api_key = 'sk-test'
+    db.session.commit()
+    seen = []
+    monkeypatch.setattr(ai_text, 'complete',
+                        lambda settings, system, user, max_tokens: seen.append(
+                            (settings['api_key'], system, user, max_tokens)) or 'reply')
+    assert ai_module.text_status() == {'available': True, 'provider': 'OpenAI (GPT)',
+                                       'reason': None}
+    assert ai_module.complete_text('sys', 'q', 99) == 'reply'
+    assert seen == [('sk-test', 'sys', 'q', 99)]
+    cfg.openai_api_key = ''
+    db.session.commit()
+
+
+def test_parse_file_without_a_provider_is_unavailable(ai_module, monkeypatch):
+    from functions import FunctionUnavailable
+    monkeypatch.setattr(ai_module, '_get_provider', lambda: None)
+    with pytest.raises(FunctionUnavailable):
+        ai_module.parse_file(PNG, 'r.png', 'expense')
+    stub = SimpleNamespace(parse_document=lambda data, name, kind: {'kind': kind})
+    monkeypatch.setattr(ai_module, '_get_provider', lambda: stub)
+    assert ai_module.parse_file(PNG, 'r.png', 'expense') == {'kind': 'expense'}
+
+
+def test_expense_form_uses_the_parse_function_route(loaded_modules, client, monkeypatch):
+    """The expense form names no module: any module implementing
+    ai.parse_document gives it the route to post to."""
+    from module_manager import BaseModule
+
+    class OtherParser(BaseModule):
+        module_id = 'other_parser'
+        name = 'Other parser'
+
+        def get_functions(self):
+            return {'ai.parse_document': {
+                'call': lambda file_data, filename, doc_type='invoice': {},
+                'route': '/other-parser/parse'}}
+
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/expenses/create').get_data(as_text=True)
+    assert 'id="ai-parse-block"' not in html          # nothing implements it
+    monkeypatch.setitem(loaded_modules.modules, 'other_parser', OtherParser(loaded_modules.core))
+    html = client.get('/expenses/create').get_data(as_text=True)
+    assert 'id="ai-parse-block"' in html and '"/other-parser/parse"' in html

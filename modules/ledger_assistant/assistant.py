@@ -4,24 +4,26 @@ Ledger assistant — the pure parts: what may be read, what is sent, what is
 shown. No Flask, no database, no network.
 
 How a question is answered (index.py runs the steps):
-  1. PLAN.   The provider receives the question and the catalogue below —
-             no records — and returns the read-only calls it needs.
-  2. READ.   `validate_plan` keeps only catalogue calls with valid
-             parameters. The module runs them against the GET handlers of
-             /api/v1, with every database write blocked.
-  3. ANSWER. `minimise` keeps only the fields listed in SENT_FIELDS; those
+  1. PLAN.   The provider receives the question and the catalogue — the
+             registry functions whose contract allows the assistant
+             (read-only, nothing sent out) and that an enabled module or the
+             core implements. No records.
+  2. READ.   `validate_plan` keeps only catalogue calls whose parameters
+             pass the contract. The module runs them through the registry,
+             with every database write blocked.
+  3. ANSWER. `minimise` keeps only the contract's `assistant_fields`; those
              records and the question go to the provider, which answers and
              cites the record ids it used.
   4. SHOW.   `records_used` lists the cited records (all sent records when it
              cites none), with a deterministic total, and the page adds the
              "not tax advice" wording.
 
-The catalogue has no write endpoint, so a plan cannot ask for one; anything
-not in it is dropped and reported.
+The catalogue has no function that writes or sends data out (contracts.py
+refuses to offer one), so a plan cannot ask for one; anything not in it is
+dropped and reported.
 """
 
 import json
-import re
 from datetime import date
 
 MAX_CALLS = 5
@@ -31,65 +33,34 @@ PAGE_SIZE = 100
 DISCLAIMER = ('Answered from your records by an AI model — it can be wrong. '
               'Check the records listed below. Not tax advice.')
 
-# Read-only calls the assistant may plan. `path` is under /api/v1; `params`
-# lists the query parameters it may set (all optional).
-CATALOGUE = {
-    'invoices': {
-        'path': '/invoices', 'kind': 'invoice', 'paged': True,
-        'params': ('date_from', 'date_to', 'client', 'status'),
-        'description': 'Invoices issued to customers. Filters: date_from/date_to '
-                       '(YYYY-MM-DD, invoice date), client (part of the customer '
-                       'name), status (draft, issued, paid, cancelled).',
-    },
-    'expenses': {
-        'path': '/expenses', 'kind': 'expense', 'paged': True,
-        'params': ('date_from', 'date_to', 'category'),
-        'description': 'Business expenses. Filters: date_from/date_to (YYYY-MM-DD), '
-                       'category (exact name, e.g. Software, Travel).',
-    },
-    'customers': {
-        'path': '/customers', 'kind': 'customer', 'paged': False, 'params': (),
-        'description': 'Customer list (name, country, VAT treatment).',
-    },
-    'modelo303': {
-        'path': '/m/tax_es_forms/draft/303/{year}/{quarter}', 'kind': 'draft',
-        'paged': False, 'params': ('year', 'quarter'), 'module': 'tax_es_forms',
-        'description': 'Modelo 303 (IVA) draft boxes for one quarter. Needs year and '
-                       'quarter (1-4).',
-    },
-    'modelo130': {
-        'path': '/m/tax_es_forms/draft/130/{year}/{quarter}', 'kind': 'draft',
-        'paged': False, 'params': ('year', 'quarter'), 'module': 'tax_es_forms',
-        'description': 'Modelo 130 (IRPF) draft boxes for one quarter. Needs year and '
-                       'quarter (1-4).',
-    },
-}
-
-# The only fields that leave the app, per record kind. Emails, VAT numbers,
-# addresses, notes, files and amounts in other fields are never sent.
-SENT_FIELDS = {
-    'invoice': ('id', 'invoice_number', 'invoice_date', 'client_name', 'amount_eur',
-                'currency', 'status'),
-    'expense': ('id', 'expense_date', 'category', 'description', 'amount', 'currency'),
-    'customer': ('id', 'name', 'country', 'tax_type'),
-}
+# The assistant pages through results itself; a plan never sets these.
+PAGING = ('page', 'per_page')
 DESCRIPTION_MAX = 80
 
-_DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+def catalogue_from(contracts):
+    """{name: contract} for the contracts the assistant may call."""
+    return {c.name: c for c in contracts if c.assistant and c.read_only and not c.external}
 
 
-def catalogue_for(available_modules):
-    """Catalogue entries whose module is loaded."""
-    return {name: spec for name, spec in CATALOGUE.items()
-            if spec.get('module') is None or spec['module'] in available_modules}
+def sent_fields(catalogue):
+    """{record kind: fields that may be sent}, for the settings panel."""
+    return {c.record_kind: c.assistant_fields for c in catalogue.values()}
+
+
+def _signature(contract):
+    params = [p.name + ('' if p.required else '?') for p in contract.params
+              if p.name not in PAGING]
+    return f'{contract.name}({", ".join(params)})'
 
 
 def plan_prompt(catalogue, today):
-    lines = [f'- {name}: {spec["description"]}' for name, spec in catalogue.items()]
+    lines = [f'- {_signature(c)}: {c.summary}' for c in catalogue.values()]
     return (
         'You plan read-only lookups in a small business ledger (a Spanish '
         f'autónomo). Today is {today.isoformat()}. Quarters are calendar quarters '
-        '(Q1 = January-March). Available calls:\n' + '\n'.join(lines) + '\n'
+        '(Q1 = January-March). Dates are YYYY-MM-DD; "?" marks an optional '
+        'parameter. Available calls:\n' + '\n'.join(lines) + '\n'
         f'Return ONLY JSON: {{"calls": [{{"call": "<name>", "params": {{...}}}}]}} '
         f'with at most {MAX_CALLS} calls and the narrowest filters that answer the '
         'question. Use no call that is not listed. If the question cannot be '
@@ -122,8 +93,9 @@ def parse_json(text):
 def validate_plan(plan, catalogue):
     """(calls, rejected): the calls that may run, and why others were dropped.
 
-    A call runs only when it is in the catalogue and every parameter is
-    allowed and well formed. Each call is {'call', 'params', 'path'}.
+    A call runs only when it is in the catalogue and its parameters pass the
+    contract. Each call is {'call', 'params', 'kind', 'paged'}; params are the
+    checked values, dates as YYYY-MM-DD.
     """
     calls, rejected = [], []
     raw = plan.get('calls') if isinstance(plan, dict) else None
@@ -131,62 +103,38 @@ def validate_plan(plan, catalogue):
         return [], (['the plan was not understood'] if plan is not None else [])
     for item in raw[:MAX_CALLS]:
         name = item.get('call') if isinstance(item, dict) else None
-        spec = catalogue.get(name)
-        if spec is None:
+        contract = catalogue.get(name) if isinstance(name, str) else None
+        if contract is None:
             rejected.append(f'{name!r} is not a read-only call the assistant may use')
             continue
         params = item.get('params') or {}
         if not isinstance(params, dict):
             rejected.append(f'{name}: parameters were not understood')
             continue
-        clean, problem = {}, None
-        for key, value in params.items():
-            if key not in spec['params']:
-                problem = f'{name}: parameter {key!r} is not allowed'
-                break
-            if value in (None, ''):
-                continue
-            if key in ('date_from', 'date_to'):
-                if not (isinstance(value, str) and _DATE.match(value)):
-                    problem = f'{name}: {key} must be YYYY-MM-DD'
-                    break
-            elif key in ('year', 'quarter'):
-                try:
-                    value = int(value)
-                except (TypeError, ValueError):
-                    problem = f'{name}: {key} must be a number'
-                    break
-                if key == 'quarter' and value not in (1, 2, 3, 4):
-                    problem = f'{name}: quarter must be 1-4'
-                    break
-                if key == 'year' and not 2000 <= value <= 2100:
-                    problem = f'{name}: year out of range'
-                    break
-            else:
-                value = str(value)[:100]
-            clean[key] = value
-        if problem is None and '{year}' in spec['path'] and not (
-                'year' in clean and 'quarter' in clean):
-            problem = f'{name}: year and quarter are required'
-        if problem:
-            rejected.append(problem)
+        paging = sorted(set(params) & set(PAGING))
+        if paging:
+            rejected.append(f'{name}: parameter {paging[0]!r} is not allowed')
             continue
-        path = spec['path'].format(**clean) if '{' in spec['path'] else spec['path']
-        query = {k: v for k, v in clean.items() if k not in ('year', 'quarter')}
-        calls.append({'call': name, 'path': path, 'params': query, 'kind': spec['kind'],
-                      'paged': spec['paged']})
+        clean, problem = contract.validate(params)
+        if problem:
+            rejected.append(f'{name}: {problem}')
+            continue
+        calls.append({'call': name,
+                      'params': {k: v.isoformat() if hasattr(v, 'isoformat') else v
+                                 for k, v in clean.items()},
+                      'kind': contract.record_kind, 'paged': 'page' in contract.param_names})
     if len(raw) > MAX_CALLS:
         rejected.append(f'only the first {MAX_CALLS} calls were run')
     return calls, rejected
 
 
-def minimise(kind, row, draft_id=None):
-    """The fields of one record that may be sent to the provider."""
-    if kind == 'draft':
-        return {'id': draft_id, 'form': row.get('form'), 'year': row.get('year'),
-                'quarter': row.get('quarter'), 'boxes': row.get('boxes', {})}
-    out = {key: row.get(key) for key in SENT_FIELDS[kind]}
-    if kind == 'expense' and isinstance(out.get('description'), str):
+def minimise(contract, row, draft_id=None):
+    """The fields of one record that may be sent to the provider: the
+    contract's `assistant_fields`, and the record id."""
+    out = {key: row.get(key) for key in contract.assistant_fields}
+    if contract.record_kind == 'draft':
+        out = {'id': draft_id, **out}
+    if contract.record_kind == 'expense' and isinstance(out.get('description'), str):
         out['description'] = out['description'].splitlines()[0][:DESCRIPTION_MAX] \
             if out['description'] else ''
     return out
