@@ -199,6 +199,23 @@ class ExpensesModule(BaseModule):
         def expenses_edit(id):
             return module._edit_expense(id)
 
+        # G-8 — one-screen receipt capture (also the installed app's shortcut).
+        @bp.route('/capture', methods=['GET', 'POST'])
+        @login_required
+        def expenses_capture():
+            return module._create_expense(capture=True)
+
+        @bp.route('/capture/share', methods=['POST'])
+        @login_required
+        def expenses_capture_share():
+            # The service worker answers shared photos itself; this runs only
+            # when it is not active yet. It changes nothing (hence no CSRF
+            # token, which a share from another app cannot carry).
+            flash('The shared photo could not be received: open ContaAutónomo once '
+                  'from the installed app, then share again — or take the photo here.',
+                  'warning')
+            return redirect(url_for('expenses.expenses_capture'))
+
         @bp.route('/delete/<int:id>', methods=['POST'])
         @login_required
         def expenses_delete(id):
@@ -220,6 +237,10 @@ class ExpensesModule(BaseModule):
             return module._preview_expense(id)
 
         app.register_blueprint(bp)
+
+        from app import csrf
+        if csrf:
+            csrf.exempt(expenses_capture_share)
 
     # --- Business Logic ---
 
@@ -412,8 +433,9 @@ class ExpensesModule(BaseModule):
             'reverse_charge': reverse_charge if reverse_charge in ('eu', 'non_eu') else None,
         }
 
-    def _create_expense(self):
-        """Create a new expense"""
+    def _create_expense(self, capture=False):
+        """Create a new expense. `capture` shows the one-screen photo capture
+        above the form (G-8); saving works the same."""
         repo = self._get_repo()
         settings_repo = self._get_settings_repo()
 
@@ -447,7 +469,8 @@ class ExpensesModule(BaseModule):
         tracked_currencies = settings_repo.get_tracked_currencies()
         return render_template('expense_form.html', expense=None,
                              contractors=contractors, tracked_currencies=tracked_currencies,
-                             category_defaults=self.get_category_defaults())
+                             category_defaults=self.get_category_defaults(),
+                             capture_mode=capture)
 
     def _edit_expense(self, id):
         """Edit an existing expense"""

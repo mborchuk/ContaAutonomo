@@ -3,7 +3,33 @@
 {% block title %}{{ 'Edit' if expense else 'Create' }} Expense{% endblock %}
 
 {% block content %}
-<h1>{{ 'Edit' if expense else 'Create' }} Expense</h1>
+<h1>{{ 'Capture a receipt' if capture_mode else ('Edit' if expense else 'Create') ~ ' Expense' }}</h1>
+
+{# G-8 — one-screen capture: a photo goes to the AI parser and prefills the
+   form below. Behaviour in static/js/capture.js (no inline code). #}
+{% if capture_mode %}
+<section class="card" id="capture-card" aria-labelledby="capture-title">
+    <div class="card-header" id="capture-title">📷 Receipt photo</div>
+    <div class="card-body">
+        <div class="action-row">
+            <button type="button" class="btn btn-primary" data-capture-for="capture-camera">Take photo</button>
+            <button type="button" class="btn btn-secondary" data-capture-for="capture-gallery">Choose photo</button>
+        </div>
+        <input type="file" id="capture-camera" accept="image/*" capture="environment"
+               class="sr-only" tabindex="-1" aria-label="Take a photo of the receipt">
+        <input type="file" id="capture-gallery" accept="image/*,.pdf"
+               class="sr-only" tabindex="-1" aria-label="Choose a photo of the receipt">
+        <p class="fine-print" id="capture-status" role="status" aria-live="polite">
+            {% if module_manager and module_manager.modules.get('ai_parser') %}
+            The photo is sent to the AI parser and the form below is prefilled. Review it, then save.
+            {% else %}
+            The AI parser is not enabled: the photo is attached and you fill in the fields.
+            {% endif %}
+        </p>
+    </div>
+</section>
+<script src="{{ url_for('static', filename='js/capture.js') }}" defer></script>
+{% endif %}
 
 {# F11 — in-form AI receipt parse: one upload both prefills the form and
    becomes the attached receipt. Only shown when ai_parser is enabled. #}
@@ -20,7 +46,7 @@
 </div>
 {% endif %}
 
-<form method="POST" enctype="multipart/form-data">
+<form method="POST" enctype="multipart/form-data" id="expense-form">
     <div class="form-grid">
         <!-- Left Column -->
         <div>

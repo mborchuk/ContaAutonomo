@@ -121,6 +121,8 @@ Key rules:
 | `/scheduler` | Scheduled tasks overview |
 | `/customers/*` | Customer CRUD |
 | `/contractors/*` | Contractor CRUD |
+| `/manifest.webmanifest` | Web app manifest (public): name, icons, `start_url`; with Expenses loaded also the "Capture a receipt" shortcut and the share target `/expenses/capture/share` |
+| `/sw.js` | Service worker (public, `static/js/sw.js`, scope `/`, `Cache-Control: no-cache`). It caches nothing; it only receives shared photos and hands them to the capture page |
 
 ### Security
 
@@ -334,6 +336,20 @@ a full VAT breakdown.
 - AI parsing: "Parse receipt with AI" on the create form — one upload prefills
   the form (including VAT fields) and becomes the attached receipt (requires
   the `ai_parser` module)
+- **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
+  shortcut of the installed app): Take photo / Choose photo above the expense
+  form. The photo goes through the AI parse above, so the form below is
+  prefilled and the photo attached; without `ai_parser` it is only attached.
+  Nothing is saved until "Create Expense". A photo shared from the phone's
+  share menu arrives through the service worker (POST
+  `/expenses/capture/share` → redirect → `postMessage`, held in memory only).
+  Without an active service worker that POST only redirects back with a
+  message (CSRF-exempt because it changes nothing; login required).
+  Scripts are external files (`static/js/pwa.js`, `capture.js`, `sw.js`) so
+  they keep working under an enforced Content Security Policy (task C-5).
+  Installing needs HTTPS (or `localhost`): Chrome on Android installs from the
+  menu and gets the share target; Safari on iOS adds it with "Add to Home
+  Screen" but does not support share targets.
 - Nav: Expenses (with group support)
 - Reports: expense data including the VAT split; receipt files can be attached
   to report ZIPs

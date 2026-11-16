@@ -97,6 +97,13 @@ Data is persisted in Docker volumes (`app_data`, `app_backups`, etc.).
 | `FLASK_DEBUG` | `0` | Set to `1` for debug mode |
 | `FORCE_HTTPS` | `0` | Set to `1` to enable HSTS and secure cookies |
 
+**Install on a phone.** Served over HTTPS (for example behind a reverse proxy),
+the app can be installed: Chrome on Android → menu → *Install app*; Safari on
+iOS → Share → *Add to Home Screen*. The installed app opens a receipt capture
+page from its shortcut (`/expenses/capture`), and on Android it appears in the
+share menu so a photo can be sent straight to a new expense. The service worker
+caches nothing.
+
 ## Configuration
 
 ### Tax Rates
