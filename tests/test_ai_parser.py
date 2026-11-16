@@ -420,8 +420,10 @@ def test_google_docai_sends_detected_mime(monkeypatch):
     assert seen['mime_type'] == 'image/png'
 
 
-@pytest.mark.parametrize('exc', [media.UnsupportedFile('bad type'), NotADocument('not one')])
-def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc):
+@pytest.mark.parametrize('exc,message', [
+    (media.UnsupportedFile('internal detail'), media.UNSUPPORTED_MESSAGE),
+    (NotADocument('internal detail'), 'does not look like an invoice')])
+def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc, message):
     from modules.api.index import ApiError
 
     def reject(*_a):
@@ -430,4 +432,5 @@ def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc):
                         lambda: SimpleNamespace(name='s', display_name='S', parse_document=reject))
     with app.test_request_context(), pytest.raises(ApiError) as err:
         ai_module._api_parse(_request('a.pdf', b'1'))
-    assert err.value.status == 422 and err.value.message == str(exc)
+    assert err.value.status == 422 and message in err.value.message
+    assert 'internal detail' not in err.value.message

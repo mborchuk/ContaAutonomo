@@ -12,21 +12,29 @@ from secret_box import EncryptedString, encrypt_existing
 
 from . import catalog
 from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
-from .cli_agents import ALLOW_ENV, CLI_PROVIDERS, CLIError, cli_allowed, valid_model
-from .media import UnsupportedFile
-from .providers import (  # noqa: F401  (re-exported for callers and tests)
+from .cli_agents import (ALLOW_ENV, CLI_PROVIDERS, SCANNED_PDF_MESSAGE, CLIError,
+                         ScannedPDF, cli_allowed, valid_model)
+from .media import UNSUPPORTED_MESSAGE, UnsupportedFile
+from .providers import (
+    NOT_A_DOCUMENT_MESSAGE,
     PROVIDERS,
-    AnthropicProvider,
-    BaseAIProvider,
-    GoogleDocAIProvider,
     NotADocument,
-    OpenAIProvider,
     describe_error,
 )
 
 # API providers plus the CLI agents, in the order the settings tab shows them.
 ALL_PROVIDERS = {**PROVIDERS, **CLI_PROVIDERS}
 MODEL_PROVIDERS = ('openai', 'anthropic', *CLI_PROVIDERS)
+
+
+def rejection_message(exc):
+    """The user message for a file the parser refuses (422). Fixed strings,
+    so no exception text reaches the response."""
+    if isinstance(exc, NotADocument):
+        return NOT_A_DOCUMENT_MESSAGE
+    if isinstance(exc, ScannedPDF):
+        return SCANNED_PDF_MESSAGE
+    return UNSUPPORTED_MESSAGE
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +197,7 @@ class AIParserModule(BaseModule):
                 module.logger.info('Parsed %s: %s via %s', doc_type, file.filename, provider.name)
                 return jsonify(result)
             except (UnsupportedFile, NotADocument) as e:
-                return jsonify({'error': str(e)}), 422
+                return jsonify({'error': rejection_message(e)}), 422
             except Exception as e:
                 module.logger.error('AI parse failed: %s — %s', file.filename, e)
                 module.core.log_activity(
@@ -218,6 +226,8 @@ class AIParserModule(BaseModule):
         (catalog.choices payload or {'error'}, HTTP status)."""
         if provider not in catalog.LISTABLE:
             return {'error': 'Unknown provider'}, 404
+        # Use the allowlisted constant from here on, not the URL value.
+        provider = next(p for p in catalog.LISTABLE if p == provider)
         cfg = self._get_config()
         try:
             if provider in catalog.KEYED:
@@ -226,11 +236,14 @@ class AIParserModule(BaseModule):
                     return {'error': 'Enter the API key first.'}, 400
                 models = catalog.list_models(provider, api_key)
             else:
-                models = CLI_PROVIDERS[provider](self._provider_config(cfg)).list_models()
-        except CLIError as e:
-            return {'error': str(e)}, 502
+                agent = CLI_PROVIDERS[provider](self._provider_config(cfg))
+                reason = agent.unavailable_reason()
+                if reason:
+                    return {'error': reason}, 400
+                models = agent.list_models()
         except Exception as e:
-            self.logger.warning('Model listing failed for %s: %s', provider, type(e).__name__)
+            self.logger.warning('Model listing failed for %s: %s', provider,
+                                e if isinstance(e, CLIError) else type(e).__name__)
             return {'error': describe_error(e)
                     or 'Could not load the model list. Check server logs.'}, 502
         cfg.models_cache = catalog.store_cache(cfg.models_cache, provider, models)
@@ -266,7 +279,7 @@ class AIParserModule(BaseModule):
         try:
             result = provider.parse_document(file.read(), file.filename, doc_type)
         except (UnsupportedFile, NotADocument) as e:
-            raise ApiError(422, 'unprocessable', str(e))
+            raise ApiError(422, 'unprocessable', rejection_message(e))
         except Exception as e:
             self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
             raise ApiError(502, 'parse_failed',

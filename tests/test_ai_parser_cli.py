@@ -266,6 +266,18 @@ def test_refresh_kiro_models_needs_no_key(ai_module, cli_env):
     db.session.commit()
 
 
+def test_refresh_kiro_models_when_cli_is_off(ai_module, monkeypatch):
+    monkeypatch.delenv(cli_agents.ALLOW_ENV, raising=False)
+    payload, status = ai_module.refresh_models('kiro_cli')
+    assert status == 400 and cli_agents.ALLOW_ENV in payload['error']
+
+
+def test_scanned_pdf_gets_its_own_422_message():
+    from modules.ai_parser.index import rejection_message
+    assert rejection_message(cli_agents.ScannedPDF('x')) == cli_agents.SCANNED_PDF_MESSAGE
+    assert rejection_message(media.UnsupportedFile('x')) == media.UNSUPPORTED_MESSAGE
+
+
 def test_save_settings_validates_cli_models_and_provider(ai_module, app):
     cfg = ai_module._get_config()
     ai_module.save_settings(None, MultiDict({'ai_provider': 'claude_cli',
