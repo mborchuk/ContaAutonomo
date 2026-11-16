@@ -26,7 +26,6 @@ from timeutil import utcnow
 
 from constants import invoice_locked
 import core_functions
-from contracts import CONTRACTS
 from functions import FunctionRegistry
 
 
@@ -93,14 +92,18 @@ class BaseModule(ABC):
         return []
 
     def get_functions(self):
-        """Registry functions this module implements (contracts.py), by name:
-        {'ledger.list_expenses': self.list_expenses}, or with a browser route,
-        {'ai.parse_document': {'call': self.parse, 'route': '/ai-parser/parse'}}.
-        Other code calls them through `core.functions.call(name, ...)`, so a
-        module implementing the same names can replace this one. Read on every
-        lookup; return the same names whatever the state, and raise inside a
-        function when it cannot run."""
-        return {}
+        """Registry functions this module provides: a list of
+        `functions.Function` — name, summary, parameters (`functions.Param`),
+        what it returns, flags, the callable and an optional browser route.
+        Other code calls them by name through `core.functions.call(name, ...)`,
+        so a module that declares the same names can replace this one.
+
+        The first provider to register a name owns it (the core, then modules
+        in load order); a later declaration of the same name is not used and
+        shows as a warning on this module's card. Read on every lookup: return
+        the same declarations whatever the state, and raise inside a function
+        when it cannot run (`functions.FunctionUnavailable`)."""
+        return []
 
     @property
     def interface(self):
@@ -1858,7 +1861,7 @@ class ModuleManager:
         self.db = db
         self.core = CoreServices(app, db)
         self.core._module_manager = self
-        self.functions = FunctionRegistry(self, CONTRACTS)
+        self.functions = FunctionRegistry(self)
         self.modules = {}           # module_id -> module instance
         self.discovered = {}        # module_id -> module class
         self.failed_modules = {}    # module_id -> error message (load failures)
@@ -1894,7 +1897,7 @@ class ModuleManager:
             os.makedirs(modules_dir)
             return
 
-        for item in os.listdir(modules_dir):
+        for item in sorted(os.listdir(modules_dir)):  # load order decides function owners
             module_path = os.path.join(modules_dir, item)
             index_path = os.path.join(module_path, 'index.py')
 
@@ -1963,12 +1966,24 @@ class ModuleManager:
                                      and not load_error),
                 'dependencies': self.declared_dependencies(mod_id),
                 'provides': self._instance_attr(mod_id, 'provides'),
-                'functions': self.declared_functions(mod_id),
+                **self._function_state(mod_id),
                 'required_by': self.required_by(mod_id),
                 'missing_dependencies': (self.missing_dependencies(mod_id)
                                          if self.is_enabled(mod_id) else []),
             })
         return result
+
+    def _function_state(self, module_id):
+        """For the module card: functions it provides, ones another provider
+        owns ('conflicts'), and declarations that cannot be used ('problems')."""
+        if module_id in self.modules:
+            status = self.functions.status(module_id)
+        else:  # not loaded: what it would declare
+            status = {'provides': self.declared_functions(module_id),
+                      'conflicts': [], 'problems': []}
+        return {'functions': status['provides'],
+                'function_conflicts': status['conflicts'],
+                'function_problems': status['problems']}
 
     def _instance_attr(self, module_id, attr):
         cls = self.discovered.get(module_id)
@@ -1984,14 +1999,15 @@ class ModuleManager:
         return self._instance_attr(module_id, 'dependencies')
 
     def declared_functions(self, module_id):
-        """Names of the registry functions a discovered module implements."""
+        """Names of the registry functions a discovered module declares."""
         cls = self.discovered.get(module_id)
         if not cls:
             return []
         try:
-            return sorted(cls(self.core).get_functions() or {})
+            functions, _ = FunctionRegistry.declarations(cls(self.core))
         except Exception:
             return []
+        return sorted(fn.name for fn in functions)
 
     @staticmethod
     def is_function_name(name):

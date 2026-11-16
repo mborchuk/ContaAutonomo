@@ -645,6 +645,16 @@
                         {% if mod.functions %}
                         <div style="font-size: 12px; color: var(--color-text-muted);">Functions: {{ mod.functions|join(', ') }}</div>
                         {% endif %}
+                        {% for c in mod.function_conflicts %}
+                        <div class="note note-warning" style="font-size: 12px; margin-top: 4px;" role="status">
+                            ⚠ <code>{{ c.function }}</code> is already provided by <strong>{{ c.owner }}</strong>; this module's version is not used.
+                        </div>
+                        {% endfor %}
+                        {% for p in mod.function_problems %}
+                        <div class="note note-warning" style="font-size: 12px; margin-top: 4px;" role="status">
+                            ⚠ Function <code>{{ p.function }}</code> is ignored: it {{ p.problem }}.
+                        </div>
+                        {% endfor %}
                     </div>
                     <form method="POST" action="{{ url_for('toggle_module', module_id=mod.module_id) }}">
                         {% if mod.enabled %}

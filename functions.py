@@ -1,18 +1,22 @@
 """
-Function registry: named functions that the core and modules implement and
-other code calls by name, so an implementation can be replaced without the
-callers changing.
+Function registry: named functions that the core and modules declare,
+implement and call by name, so an implementation can be replaced without its
+callers changing — also by a module from outside this repository.
 
-A *contract* (contracts.py) defines a function once: name, version,
-parameters, what it returns, and flags (read only, sends data out of the
-app, offered to the ledger assistant). The core registers its own
-implementations (core_functions.py); a module returns its implementations
-from `BaseModule.get_functions()`. Callers use `registry.call(name, ...)`,
-which checks the arguments against the contract before the implementation
-runs.
+A module declares each function it provides in its own folder, description
+and code together, as a `Function` returned from `BaseModule.get_functions()`:
+name, parameters, what it returns, flags (read only, sends data out of the
+app, offered to the ledger assistant) and the callable. The core declares its
+own the same way (core_functions.py).
 
-Which implementation runs: the core's when it has one, otherwise the first
-enabled module in id order. Choosing another one in Settings is a later step.
+The first provider to register a name owns it: the core first, then the
+modules in the order they load. A later module declaring the same name is
+not used for it; the registry records a warning that the Modules tab shows on
+that module's card, with the owner's name. When the owner is disabled, the
+next declaration in load order takes over.
+
+Callers use `registry.call(name, ...)`, which checks the arguments against the
+owner's declaration before its code runs.
 """
 import inspect
 import logging
@@ -24,15 +28,16 @@ logger = logging.getLogger(__name__)
 
 CORE = 'core'
 _DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+_NAME = re.compile(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$')
 _KINDS = ('str', 'int', 'date', 'bytes')
 
 
 class FunctionUnavailable(LookupError):
-    """No enabled implementation of the function (or no such contract)."""
+    """No enabled provider of the function, or it cannot run now."""
 
 
 class InvalidArguments(ValueError):
-    """The arguments do not match the contract. The message names the
+    """The arguments do not match the declaration. The message names the
     parameter, never its value, so it can be shown to a user."""
 
 
@@ -89,29 +94,52 @@ class Param:
 
 
 @dataclass(frozen=True)
-class Contract:
+class Function:
+    """One function a provider declares: its description and its code."""
     name: str                      # 'area.verb_object', e.g. 'ledger.list_invoices'
-    version: int
+    call: object                   # the callable; takes every param by name
     summary: str                   # for people and for AI tool descriptions
     params: tuple = ()
     returns: str = ''
+    version: int = 1
     read_only: bool = True         # changes nothing in the app
     external: bool = False         # sends data outside the app
     assistant: bool = False        # the ledger assistant may call it
     record_kind: str | None = None  # how the assistant groups the results
     assistant_fields: tuple = field(default=())  # the only fields it may send out
-
-    def __post_init__(self):
-        if self.assistant and not self.read_only:
-            raise ValueError(f'{self.name}: only a read-only function may be offered '
-                             'to the assistant')
-        if self.assistant and self.external:
-            raise ValueError(f'{self.name}: the assistant may not call a function '
-                             'that sends data out')
+    route: str | None = None       # URL a browser form posts to, if any
 
     @property
     def param_names(self):
         return tuple(p.name for p in self.params)
+
+    @property
+    def signature(self):
+        """'ledger.list_invoices(date_from?, date_to?, …)' — '?' = optional."""
+        names = [p.name + ('' if p.required else '?') for p in self.params]
+        return f'{self.name}({", ".join(names)})'
+
+    def problem(self):
+        """Why this declaration cannot be used, or None."""
+        if not isinstance(self.name, str) or not _NAME.match(self.name):
+            return "has no valid name ('area.verb_object')"
+        if not callable(self.call):
+            return 'has no callable'
+        if not self.summary:
+            return 'has no summary'
+        if not all(isinstance(p, Param) for p in self.params):
+            return 'declares a parameter that is not a Param'
+        if self.assistant and (not self.read_only or self.external):
+            return 'is offered to the assistant but is not read-only or sends data out'
+        if self.assistant and not (self.record_kind and self.assistant_fields):
+            return 'is offered to the assistant without record_kind and assistant_fields'
+        try:
+            inspect.signature(self.call).bind(**{n: None for n in self.param_names})
+        except TypeError:
+            return 'has code that does not take its declared parameters'
+        except ValueError:
+            pass  # no signature available (C function): accept
+        return None
 
     def validate(self, arguments):
         """(clean arguments, None) or (None, problem): unknown names and
@@ -141,141 +169,143 @@ class Contract:
         return clean
 
 
-def _normalise(entry):
-    """{'call': callable, 'route': str|None} from a callable or a dict."""
-    if isinstance(entry, dict):
-        return {'call': entry.get('call'), 'route': entry.get('route')}
-    return {'call': entry, 'route': None}
-
-
 class FunctionRegistry:
-    """Contracts, the core's implementations, and lookup across the loaded
-    modules of a ModuleManager. Module implementations are read from
-    `get_functions()` on every lookup, so enabling or disabling a module
-    takes effect at once."""
+    """The core's functions plus those of the loaded modules of a
+    ModuleManager, in registration order. Module declarations are read from
+    `get_functions()` on every lookup, so enabling or disabling a module takes
+    effect at once."""
 
-    def __init__(self, module_manager=None, contracts=None):
-        self.contracts = dict(contracts or {})
+    def __init__(self, module_manager=None):
         self._mm = module_manager
         self._core = {}
         self._reported = set()
 
     # --- Registration ------------------------------------------------------ #
 
-    def problem(self, name, entry):
-        """Why `entry` cannot implement `name`, or None when it can."""
-        contract = self.contracts.get(name)
-        if contract is None:
-            return 'implements an unknown function'
-        fn = _normalise(entry)['call']
-        if not callable(fn):
-            return 'is not callable'
-        try:
-            inspect.signature(fn).bind(**{n: None for n in contract.param_names})
-        except TypeError:
-            return 'does not take the parameters of the contract'
-        except ValueError:
-            pass  # no signature available (C function): accept
-        return None
-
-    def register_core(self, name, entry):
-        """Register the core's implementation of `name`."""
-        problem = self.problem(name, entry)
+    def register_core(self, function):
+        """Register one of the core's functions; refuses a bad declaration."""
+        problem = function.problem() if isinstance(function, Function) else 'is not a Function'
         if problem:
-            raise ValueError(f'core {problem}: {name}')
-        self._core[name] = _normalise(entry)
+            raise ValueError(f'core function {getattr(function, "name", function)!r} {problem}')
+        if function.name in self._core:
+            raise ValueError(f'core function {function.name!r} is registered twice')
+        self._core[function.name] = function
 
-    def _report(self, provider, name, problem):
-        key = (provider, name, problem)
-        if key not in self._reported:
-            self._reported.add(key)
-            logger.warning("Function '%s' of '%s' ignored: it %s", name, provider, problem)
-
-    def _module_entries(self, module_id, module):
+    @staticmethod
+    def declarations(module):
+        """(functions, problems) a module declares: [Function], [(name, problem)]."""
         try:
-            raw = module.get_functions() or {}
+            raw = list(module.get_functions() or [])
         except Exception as e:
-            self._report(module_id, '*', f'failed to list its functions ({type(e).__name__})')
-            return {}
-        out = {}
-        for name, entry in raw.items():
-            problem = self.problem(name, entry)
+            return [], [('*', f'failed to list its functions ({type(e).__name__})')]
+        functions, problems = [], []
+        for entry in raw:
+            if not isinstance(entry, Function):
+                problems.append(('?', 'returned something that is not a Function'))
+                continue
+            problem = entry.problem()
             if problem:
-                self._report(module_id, name, problem)
+                problems.append((str(entry.name), problem))
             else:
-                out[name] = _normalise(entry)
-        return out
+                functions.append(entry)
+        return functions, problems
+
+    def _providers(self):
+        modules = list(self._mm.modules.items()) if self._mm is not None else []
+        return [(CORE, None)] + modules
+
+    def _resolve(self):
+        """(owners {name: (provider, Function)}, conflicts, problems): the first
+        provider in registration order owns a name; later ones conflict."""
+        owners, conflicts, problems = {}, [], []
+        for provider, module in self._providers():
+            if module is None:
+                declared = list(self._core.values())
+            else:
+                declared, bad = self.declarations(module)
+                problems += [(provider, name, p) for name, p in bad]
+            seen = set()
+            for fn in declared:
+                if fn.name in seen:
+                    problems.append((provider, fn.name, 'declares this name twice'))
+                    continue
+                seen.add(fn.name)
+                if fn.name in owners:
+                    conflicts.append((provider, fn.name, owners[fn.name][0]))
+                else:
+                    owners[fn.name] = (provider, fn)
+        return owners, conflicts, problems
 
     # --- Lookup ------------------------------------------------------------ #
 
-    def implementations(self, name):
-        """[(provider id, {'call', 'route'})] in the order they are used."""
-        found = []
-        if name in self._core:
-            found.append((CORE, self._core[name]))
-        modules = dict(self._mm.modules) if self._mm is not None else {}
-        for module_id in sorted(modules):
-            entry = self._module_entries(module_id, modules[module_id]).get(name)
-            if entry is not None:
-                found.append((module_id, entry))
-        return found
+    def get(self, name):
+        """The owner's declaration of `name`, or None."""
+        owner = self._resolve()[0].get(name)
+        return owner[1] if owner else None
+
+    def provider(self, name):
+        """The id ('core' or a module id) that owns `name`, or None."""
+        owner = self._resolve()[0].get(name)
+        return owner[0] if owner else None
+
+    def available(self, name):
+        return self.get(name) is not None
 
     def core_provides(self, name):
         return name in self._core
 
-    def provider(self, name):
-        """The id ('core' or a module id) whose implementation runs, or None."""
-        found = self.implementations(name)
-        return found[0][0] if found else None
-
-    def available(self, name):
-        return self.provider(name) is not None
-
     def route(self, name):
-        """The URL path the running implementation serves for a browser, or
-        None (for functions that also have a page or form endpoint)."""
-        found = self.implementations(name)
-        return found[0][1]['route'] if found else None
+        fn = self.get(name)
+        return fn.route if fn else None
 
     def problem_with(self, name, arguments):
-        """What is wrong with `arguments` for `name`, or None. For callers
-        that show the problem to a user without catching an exception."""
-        contract = self.contracts.get(name)
-        if contract is None:
-            return f'there is no function {name}'
-        return contract.validate(arguments)[1]
+        """What is wrong with `arguments` for `name`, or None. For callers that
+        show the problem to a user without catching an exception."""
+        fn = self.get(name)
+        if fn is None:
+            return f'no enabled module provides {name}'
+        return fn.validate(arguments)[1]
 
     def call(self, name, **arguments):
-        """Run the function with arguments checked against its contract."""
-        contract = self.contracts.get(name)
-        if contract is None:
-            raise FunctionUnavailable(f'There is no function {name}')
-        found = self.implementations(name)
-        if not found:
+        """Run the owner's code with arguments checked against its declaration."""
+        fn = self.get(name)
+        if fn is None:
             raise FunctionUnavailable(f'No enabled module provides {name}')
-        return found[0][1]['call'](**contract.check(arguments))
+        return fn.call(**fn.check(arguments))
 
     def find(self, **flags):
-        """Contracts with a running implementation whose attributes match
-        `flags` (e.g. assistant=True), sorted by name."""
-        return [c for name, c in sorted(self.contracts.items())
-                if all(getattr(c, k) == v for k, v in flags.items()) and self.available(name)]
+        """Owned functions whose attributes match `flags` (e.g. assistant=True),
+        sorted by name."""
+        owners = self._resolve()[0]
+        return [fn for name, (_, fn) in sorted(owners.items())
+                if all(getattr(fn, k) == v for k, v in flags.items())]
+
+    def status(self, module_id):
+        """For a module's card: what it provides, what it declares but another
+        provider owns, and declarations that cannot be used."""
+        owners, conflicts, problems = self._resolve()
+        return {
+            'provides': sorted(fn.signature for p, fn in owners.values() if p == module_id),
+            'conflicts': [{'function': name, 'owner': owner}
+                          for p, name, owner in conflicts if p == module_id],
+            'problems': [{'function': name, 'problem': problem}
+                         for p, name, problem in problems if p == module_id],
+        }
 
     def check_all(self):
-        """Log every invalid registration of the loaded modules; returns them
-        as [(module id, function, problem)]."""
-        problems = []
-        modules = dict(self._mm.modules) if self._mm is not None else {}
-        for module_id in sorted(modules):
-            try:
-                raw = modules[module_id].get_functions() or {}
-            except Exception as e:
-                problems.append((module_id, '*', f'failed to list its functions ({type(e).__name__})'))
-                continue
-            for name, entry in raw.items():
-                problem = self.problem(name, entry)
-                if problem:
-                    problems.append((module_id, name, problem))
-        for module_id, name, problem in problems:
-            self._report(module_id, name, problem)
-        return problems
+        """Log every conflict and bad declaration once; returns
+        (conflicts, problems) as lists of tuples."""
+        _, conflicts, problems = self._resolve()
+        for provider, name, owner in conflicts:
+            self._log(('conflict', provider, name, owner),
+                      "Function '%s' of '%s' is not used: '%s' already provides it",
+                      name, provider, owner)
+        for provider, name, problem in problems:
+            self._log(('problem', provider, name, problem),
+                      "Function '%s' of '%s' is ignored: it %s", name, provider, problem)
+        return conflicts, problems
+
+    def _log(self, key, message, *args):
+        if key not in self._reported:
+            self._reported.add(key)
+            logger.warning(message, *args)

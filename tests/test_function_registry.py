@@ -1,35 +1,38 @@
-"""The function registry: contracts, core and module implementations,
-argument checks, and dependencies on function names."""
+"""The function registry: declarations in the core and in modules, the first
+registration owning a name, warnings for later claims, argument checks, and
+dependencies on function names."""
 import logging
 from datetime import date
 from types import SimpleNamespace
 
 import pytest
 
-from contracts import CONTRACTS
-from functions import (CORE, Contract, FunctionRegistry, FunctionUnavailable,
+from functions import (CORE, Function, FunctionRegistry, FunctionUnavailable,
                        InvalidArguments, Param)
 from module_manager import BaseModule
 
-ECHO = Contract('test.echo', 1, 'Echo the text.',
-                params=(Param('text', 'str', required=True, max_length=10),
-                        Param('times', 'int', minimum=1, maximum=3)))
-DAY = Contract('test.day', 1, 'A date.', params=(Param('day', 'date'),))
+TEXT = Param('text', 'str', required=True, max_length=10)
+TIMES = Param('times', 'int', minimum=1, maximum=3)
+
+
+def echo(call=None, name='test.echo', **extra):
+    return Function(name, call or (lambda text, times=1: text * times), 'Echo the text.',
+                    params=(TEXT, TIMES), **extra)
 
 
 def _manager(**modules):
     return SimpleNamespace(modules=modules)
 
 
-def _module(functions=None, raises=False):
+def _module(*functions, raises=False):
     def get_functions():
         if raises:
             raise RuntimeError('broken')
-        return functions or {}
+        return list(functions)
     return SimpleNamespace(get_functions=get_functions)
 
 
-# --- contracts and parameters ------------------------------------------------ #
+# --- declarations ------------------------------------------------------------ #
 
 @pytest.mark.parametrize('arguments,expected', [
     ({'text': ' hi '}, {'text': 'hi'}),
@@ -37,8 +40,8 @@ def _module(functions=None, raises=False):
     ({'text': 'hi', 'times': None}, {'text': 'hi'}),
     ({'text': 'hi', 'times': ''}, {'text': 'hi'}),
 ])
-def test_contract_cleans_arguments(arguments, expected):
-    assert ECHO.check(arguments) == expected
+def test_declaration_cleans_arguments(arguments, expected):
+    assert echo().check(arguments) == expected
 
 
 @pytest.mark.parametrize('arguments,problem', [
@@ -51,134 +54,139 @@ def test_contract_cleans_arguments(arguments, expected):
     ({'text': 5}, 'text must be text'),
     ({'text': 'hi', 'id': 1}, "parameter 'id' is not allowed"),
 ])
-def test_contract_refuses_bad_arguments(arguments, problem):
-    assert ECHO.validate(arguments) == (None, problem)
-    with pytest.raises(InvalidArguments, match=problem.replace('(', r'\(')):
-        ECHO.check(arguments)
+def test_declaration_refuses_bad_arguments(arguments, problem):
+    assert echo().validate(arguments) == (None, problem)
+    with pytest.raises(InvalidArguments):
+        echo().check(arguments)
 
 
 def test_problem_names_the_parameter_not_the_value():
-    _, problem = DAY.validate({'day': '<script>'})
-    assert problem == 'day must be a date (YYYY-MM-DD)'
-    assert DAY.check({'day': '2035-02-03'}) == {'day': date(2035, 2, 3)}
-    assert DAY.validate({'day': '2035-02-30'})[1] == 'day must be a date (YYYY-MM-DD)'
+    day = Function('test.day', lambda day=None: day, 'A date.', params=(Param('day', 'date'),))
+    assert day.validate({'day': '<script>'})[1] == 'day must be a date (YYYY-MM-DD)'
+    assert day.check({'day': '2035-02-03'}) == {'day': date(2035, 2, 3)}
+    assert day.validate({'day': '2035-02-30'})[1] == 'day must be a date (YYYY-MM-DD)'
 
 
-def test_choices_and_bytes():
-    c = Contract('test.file', 1, 'x', params=(Param('data', 'bytes', required=True),
-                                             Param('kind', 'str', choices=('a', 'b'))))
-    assert c.check({'data': bytearray(b'1'), 'kind': 'a'}) == {'data': b'1', 'kind': 'a'}
-    assert c.validate({'data': 'text'})[1] == 'data must be bytes'
-    assert c.validate({'data': b'1', 'kind': 'c'})[1] == 'kind must be one of: a, b'
+def test_choices_bytes_and_signature():
+    fn = Function('test.file', lambda data, kind=None: None, 'x',
+                  params=(Param('data', 'bytes', required=True),
+                          Param('kind', 'str', choices=('a', 'b'))))
+    assert fn.check({'data': bytearray(b'1'), 'kind': 'a'}) == {'data': b'1', 'kind': 'a'}
+    assert fn.validate({'data': 'text'})[1] == 'data must be bytes'
+    assert fn.validate({'data': b'1', 'kind': 'c'})[1] == 'kind must be one of: a, b'
+    assert fn.signature == 'test.file(data, kind?)'
 
 
-def test_assistant_functions_must_be_read_only_and_internal():
-    with pytest.raises(ValueError):
-        Contract('test.write', 1, 'x', read_only=False, assistant=True)
-    with pytest.raises(ValueError):
-        Contract('test.out', 1, 'x', external=True, assistant=True)
+@pytest.mark.parametrize('function,problem', [
+    (Function('nodot', lambda: None, 'x'), 'has no valid name'),
+    (Function('test.x', 'not callable', 'x'), 'has no callable'),
+    (Function('test.x', lambda: None, ''), 'has no summary'),
+    (echo(call=lambda only_this: None), 'does not take its declared parameters'),
+    (Function('test.x', lambda: None, 'x', read_only=False, assistant=True,
+              record_kind='r', assistant_fields=('id',)), 'is not read-only or sends data out'),
+    (Function('test.x', lambda: None, 'x', external=True, assistant=True,
+              record_kind='r', assistant_fields=('id',)), 'is not read-only or sends data out'),
+    (Function('test.x', lambda: None, 'x', assistant=True), 'without record_kind'),
+])
+def test_bad_declarations_are_explained(function, problem):
+    assert problem in function.problem()
+
+
+def test_unknown_param_kind():
     with pytest.raises(ValueError):
         Param('x', 'float')
 
 
-def test_shipped_contracts_are_complete():
-    for name, contract in CONTRACTS.items():
-        assert name == contract.name and '.' in name and contract.version >= 1
-        assert contract.summary and contract.returns
-        if contract.assistant:
-            assert contract.read_only and not contract.external
-            assert contract.record_kind and contract.assistant_fields
-
-
 # --- the registry ------------------------------------------------------------ #
 
-def test_module_implementation_is_found_and_called():
-    reg = FunctionRegistry(_manager(echo_mod=_module({'test.echo': lambda text, times=1: text * times})),
-                           contracts={'test.echo': ECHO})
+def test_module_function_is_found_and_called():
+    reg = FunctionRegistry(_manager(echo_mod=_module(echo())))
     assert reg.available('test.echo') and reg.provider('test.echo') == 'echo_mod'
     assert reg.call('test.echo', text='ab', times='2') == 'abab'
     with pytest.raises(InvalidArguments):
         reg.call('test.echo', text='ab', times=9)
 
 
-def test_core_implementation_comes_first():
-    reg = FunctionRegistry(_manager(alt=_module({'test.echo': lambda text, times=1: 'alt'})),
-                           contracts={'test.echo': ECHO})
-    reg.register_core('test.echo', lambda text, times=1: 'core')
-    assert [p for p, _ in reg.implementations('test.echo')] == [CORE, 'alt']
-    assert reg.call('test.echo', text='x') == 'core'
+def test_first_registration_owns_the_name_and_later_claims_warn(caplog):
+    first = _module(echo(call=lambda text, times=1: 'first'))
+    second = _module(echo(call=lambda text, times=1: 'second'),
+                     Function('test.extra', lambda: 'extra', 'An extra function.'))
+    reg = FunctionRegistry(_manager(first_mod=first, second_mod=second))
+    assert reg.call('test.echo', text='x') == 'first'
+    assert reg.call('test.extra') == 'extra'           # its own new names still work
+    assert reg.status('second_mod') == {
+        'provides': ['test.extra()'],
+        'conflicts': [{'function': 'test.echo', 'owner': 'first_mod'}],
+        'problems': []}
+    assert reg.status('first_mod')['provides'] == ['test.echo(text, times?)']
+    with caplog.at_level(logging.WARNING, logger='functions'):
+        conflicts, _ = reg.check_all()
+        reg.check_all()
+    assert conflicts == [('second_mod', 'test.echo', 'first_mod')]
+    assert caplog.text.count("Function 'test.echo' of 'second_mod' is not used: "
+                             "'first_mod' already provides it") == 1
+
+
+def test_the_next_declaration_takes_over_when_the_owner_goes():
+    modules = {'first_mod': _module(echo(call=lambda text, times=1: 'first')),
+               'second_mod': _module(echo(call=lambda text, times=1: 'second'))}
+    reg = FunctionRegistry(SimpleNamespace(modules=modules))
+    assert reg.call('test.echo', text='x') == 'first'
+    modules.pop('first_mod')
+    assert reg.call('test.echo', text='x') == 'second'
+    assert reg.status('second_mod')['conflicts'] == []
+    modules.pop('second_mod')
+    assert not reg.available('test.echo')
+
+
+def test_the_core_registers_first():
+    reg = FunctionRegistry(_manager(alt=_module(echo(call=lambda text, times=1: 'alt'))))
+    reg.register_core(echo(call=lambda text, times=1: 'core'))
+    assert reg.call('test.echo', text='x') == 'core' and reg.provider('test.echo') == CORE
+    assert reg.status('alt')['conflicts'] == [{'function': 'test.echo', 'owner': CORE}]
     assert reg.core_provides('test.echo')
+    with pytest.raises(ValueError):
+        reg.register_core(echo())                       # twice
+    with pytest.raises(ValueError):
+        reg.register_core(echo(call=lambda: None, name='test.other'))   # bad declaration
 
 
-def test_modules_are_tried_in_id_order():
-    reg = FunctionRegistry(_manager(zeta=_module({'test.echo': lambda text, times=1: 'z'}),
-                                    alpha=_module({'test.echo': lambda text, times=1: 'a'})),
-                           contracts={'test.echo': ECHO})
-    assert reg.call('test.echo', text='x') == 'a'
+def test_bad_declarations_are_ignored_and_reported():
+    mods = _manager(
+        bad=_module(echo(call=lambda only_this: None), 'not a function', echo(), echo()),
+        broken=_module(raises=True))
+    reg = FunctionRegistry(mods)
+    assert reg.provider('test.echo') == 'bad'           # the valid declaration counts
+    assert reg.status('bad')['problems'] == [
+        {'function': 'test.echo', 'problem': 'has code that does not take its declared parameters'},
+        {'function': '?', 'problem': 'returned something that is not a Function'},
+        {'function': 'test.echo', 'problem': 'declares this name twice'}]
+    assert reg.status('broken')['problems'] == [
+        {'function': '*', 'problem': 'failed to list its functions (RuntimeError)'}]
 
 
-def test_missing_function_and_unknown_contract():
-    reg = FunctionRegistry(_manager(), contracts={'test.echo': ECHO})
+def test_missing_function():
+    reg = FunctionRegistry(_manager())
     with pytest.raises(FunctionUnavailable, match='No enabled module provides test.echo'):
         reg.call('test.echo', text='x')
-    with pytest.raises(FunctionUnavailable, match='There is no function test.nope'):
-        reg.call('test.nope')
-    assert reg.problem_with('test.nope', {}) == 'there is no function test.nope'
+    assert reg.problem_with('test.echo', {}) == 'no enabled module provides test.echo'
+
+
+def test_routes_find_and_problem_with():
+    reg = FunctionRegistry(_manager(web=_module(
+        echo(route='/web/echo'),
+        Function('test.ask', lambda: {}, 'x', assistant=True, record_kind='r',
+                 assistant_fields=('id',)))))
+    assert reg.route('test.echo') == '/web/echo' and reg.route('test.ask') is None
+    assert [f.name for f in reg.find()] == ['test.ask', 'test.echo']
+    assert [f.name for f in reg.find(assistant=True)] == ['test.ask']
     assert reg.problem_with('test.echo', {}) == 'text is required'
     assert reg.problem_with('test.echo', {'text': 'ok'}) is None
 
 
-def test_invalid_implementations_are_ignored_and_logged_once(caplog):
-    mods = _manager(
-        bad=_module({'test.echo': lambda only_this: None,   # wrong parameters
-                     'test.unknown': lambda: None,           # no such contract
-                     'test.day': 'not callable'}),
-        broken=_module(raises=True),
-        good=_module({'test.echo': lambda text, **rest: 'good'}))
-    reg = FunctionRegistry(mods, contracts={'test.echo': ECHO, 'test.day': DAY})
-    with caplog.at_level(logging.WARNING, logger='functions'):
-        assert reg.call('test.echo', text='x') == 'good'
-        reg.call('test.echo', text='x')
-        problems = reg.check_all()
-    assert sorted((m, n) for m, n, _ in problems) == [
-        ('bad', 'test.day'), ('bad', 'test.echo'), ('bad', 'test.unknown'), ('broken', '*')]
-    assert caplog.text.count("Function 'test.echo' of 'bad' ignored") == 1
-    assert 'does not take the parameters of the contract' in caplog.text
-    assert not reg.available('test.day')
-
-
-def test_core_registration_is_checked():
-    reg = FunctionRegistry(_manager(), contracts={'test.echo': ECHO})
-    with pytest.raises(ValueError):
-        reg.register_core('test.echo', lambda: None)
-    with pytest.raises(ValueError):
-        reg.register_core('test.unknown', lambda: None)
-
-
-def test_routes_and_find():
-    reg = FunctionRegistry(
-        _manager(web=_module({'test.echo': {'call': lambda text, times=1: text,
-                                            'route': '/web/echo'}})),
-        contracts={'test.echo': ECHO, 'test.day': DAY,
-                   'test.ask': Contract('test.ask', 1, 'x', assistant=True,
-                                        record_kind='r', assistant_fields=('id',))})
-    reg.register_core('test.ask', lambda: {})
-    assert reg.route('test.echo') == '/web/echo' and reg.route('test.day') is None
-    assert [c.name for c in reg.find()] == ['test.ask', 'test.echo']
-    assert [c.name for c in reg.find(assistant=True)] == ['test.ask']
-
-
-def test_disabling_a_module_removes_its_functions_at_once():
-    modules = {'echo_mod': _module({'test.echo': lambda text, times=1: text})}
-    reg = FunctionRegistry(SimpleNamespace(modules=modules), contracts={'test.echo': ECHO})
-    assert reg.available('test.echo')
-    modules.pop('echo_mod')
-    assert not reg.available('test.echo')
-
-
 # --- the module manager -------------------------------------------------------- #
 
-def _fake(module_id, deps=(), functions=None):
+def _fake(module_id, deps=(), functions=()):
     class Fake(BaseModule):
         @property
         def module_id(self):
@@ -193,18 +201,19 @@ def _fake(module_id, deps=(), functions=None):
             return list(deps)
 
         def get_functions(self):
-            return dict(functions or {})
+            return list(functions)
     return Fake
 
 
 @pytest.fixture
 def mm(app, loaded_modules, monkeypatch):
-    monkeypatch.setitem(loaded_modules.functions.contracts, 'test.echo', ECHO)
     fakes = {
-        'fn_impl': _fake('fn_impl', functions={'test.echo': lambda text, times=1: text}),
+        'fn_impl': _fake('fn_impl', functions=[echo()]),
         'fn_user': _fake('fn_user', deps=['test.echo']),
         'fn_core_user': _fake('fn_core_user', deps=['ledger.list_invoices']),
         'fn_lost': _fake('fn_lost', deps=['test.nothing']),
+        'fn_rival': _fake('fn_rival', functions=[
+            Function('ledger.list_customers', lambda: {'data': []}, 'Rival customer list.')]),
     }
     monkeypatch.setattr(loaded_modules, 'discovered', {**loaded_modules.discovered, **fakes})
     yield loaded_modules
@@ -231,18 +240,26 @@ def test_unknown_function_dependency_is_logged(mm, caplog):
     assert mm.missing_dependencies('fn_lost') == ['test.nothing']
 
 
-def test_module_states_list_functions(mm):
+def test_module_cards_show_functions_and_claims(mm, app, client):
+    mm.modules['fn_impl'] = mm.discovered['fn_impl'](mm.core)
+    mm.modules['fn_rival'] = mm.discovered['fn_rival'](mm.core)
     states = {s['module_id']: s for s in mm.get_all_module_states()}
-    assert states['fn_impl']['functions'] == ['test.echo']
+    assert states['fn_impl']['functions'] == ['test.echo(text, times?)']
+    assert states['fn_rival']['function_conflicts'] == [
+        {'function': 'ledger.list_customers', 'owner': CORE}]
     assert states['fn_user']['functions'] == []
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/settings').get_data(as_text=True)
+    assert '<code>ledger.list_customers</code> is already provided by <strong>core</strong>' in html
 
 
 def test_core_services_expose_the_registry(loaded_modules):
     assert loaded_modules.core.functions is loaded_modules.functions
 
 
-def test_bundled_modules_register_valid_functions(loaded_modules):
-    assert loaded_modules.functions.check_all() == []
+def test_bundled_modules_declare_valid_functions_without_conflicts(loaded_modules):
+    assert loaded_modules.functions.check_all() == ([], [])
 
 
 # --- the core's functions -------------------------------------------------- #

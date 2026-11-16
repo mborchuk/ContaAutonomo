@@ -983,7 +983,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
 | `get_auth_providers()` | Return `AuthProvider` instances for pluggable auth |
 | `get_capabilities()` | Declare capabilities for cross-module discovery |
-| `get_functions()` | Registry functions this module implements, by contract name — see [Functions](#functions) |
+| `get_functions()` | The functions this module declares and provides (`functions.Function`) — see [Functions](#functions) |
 | `on_user_authenticated(identity)` | Called after successful login (any provider) |
 | `on_user_logout()` | Called when user logs out |
 
@@ -1003,49 +1003,67 @@ use a capability, or look a module up with `provider_of` and use its
 
 ### Functions
 
-A **function** is a named operation with a contract, implemented by the core
-or by a module and called by name, so the caller does not know or care which
-one runs. A module that implements the same names replaces the one that did.
+A **function** is a named operation that the core or a module declares and
+implements, and that other code calls by name — so the caller does not know or
+care which one runs. A module, also one written outside this repository,
+replaces another by declaring the same names, and adds its own by declaring
+new ones; nothing in the core has to change.
 
-- **Contracts** live in the core, in `contracts.py`: name (`area.verb_object`),
-  version, parameters (`functions.Param`: kind `str` / `int` / `date` /
-  `bytes`, required, choices, limits), what it returns, and flags —
-  `read_only`, `external` (sends data out of the app), `assistant` (the ledger
-  assistant may call it; needs `read_only` and not `external`), with the
-  `record_kind` and `assistant_fields` it may send. Results are plain JSON
-  values, never database objects.
-- **Implementations**: the core registers its own in `core_functions.py`; a
-  module returns its own from `get_functions()`:
+- **Declaring**: a module returns its functions from `get_functions()` as
+  `functions.Function` objects — description and code together, in the
+  module's own folder:
 
   ```python
+  from functions import Function, Param
+
   def get_functions(self):
-      return {'ledger.list_expenses': self.list_expenses,
-              'ai.parse_document': {'call': self.parse, 'route': '/ai-parser/parse'}}
+      return [
+          Function('ai.complete_text', self.complete_text,
+                   'The AI provider\'s reply to `user` under the `system` instruction.',
+                   params=(Param('system', 'str', required=True, max_length=20_000),
+                           Param('user', 'str', required=True, max_length=400_000),
+                           Param('max_tokens', 'int', minimum=1, maximum=16_000)),
+                   returns='str', external=True),
+      ]
   ```
 
-  The implementation must accept every parameter of the contract by name
-  (defaults for the optional ones). One that does not, or names an unknown
-  contract, is ignored and logged once; a test fails if a bundled module has one.
+  A `Function` has a name (`area.verb_object`), a summary written for people
+  and AI tools, parameters (`Param`: kind `str` / `int` / `date` / `bytes`,
+  required, choices, limits), what it returns (plain JSON values, never
+  database objects), flags — `read_only`, `external` (sends data out of the
+  app), `assistant` (the ledger assistant may call it; needs `read_only`, not
+  `external`, plus `record_kind` and the `assistant_fields` it may send) — the
+  callable, which must accept every parameter by name, and an optional browser
+  `route`. The core declares its own the same way (`core_functions.py`).
+- **Who owns a name**: the first provider to register it — the core, then the
+  modules in load order (module id order). A later module that declares the
+  same name is not used for it; its card in the Modules tab shows
+  "⚠ `<name>` is already provided by `<owner>`", and the log says so once.
+  When the owner is disabled, the next declaration in load order takes over.
+  Declarations that cannot be used (no summary, code that does not take the
+  declared parameters, an unsafe assistant flag, …) are ignored and shown on
+  the card the same way. A test fails if a bundled module has either.
 - **Calling**: `self.core.functions.call('ledger.list_invoices', client='acme')`
-  checks the arguments first (`InvalidArguments`, a message that names the
-  parameter, never its value) and raises `FunctionUnavailable` when nothing
-  implements it. `available(name)`, `provider(name)`, `route(name)` (the URL a
-  browser form posts to) and `find(assistant=True)` answer the other questions;
+  checks the arguments against the owner's declaration first
+  (`InvalidArguments`, a message that names the parameter, never its value)
+  and raises `FunctionUnavailable` when nothing provides it. `available(name)`,
+  `provider(name)`, `get(name)`, `route(name)` (the URL a browser form posts
+  to) and `find(assistant=True)` answer the other questions;
   `problem_with(name, arguments)` returns the problem as text for a response.
-- **Which implementation runs**: the core's when it has one, else the first
-  enabled module in id order. Choosing another one in Settings is not built yet.
+- **Replacing a module** means declaring the same names with parameters the
+  callers use. The Modules tab lists each module's functions with their
+  parameters (`ai.complete_text(system, user, max_tokens?)`), and the table
+  below lists the bundled ones.
 - **Dependencies** may name a function: `dependencies = ['ai.complete_text']`
-  is met by the core or by any enabled module that implements it, and enabling
+  is met by the core or by any enabled module that declares it, and enabling
   the module enables the first module that does.
-- The Modules tab lists each module's functions.
 
 Functions today:
 
-| Function | Implemented by | Notes |
+| Function | Provided by | Notes |
 |---|---|---|
 | `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
-| `ledger.list_expenses`, `tax.draft_303`, `tax.draft_130`, `ai.text_status`, `ai.complete_text`, `ai.parse_document` | — | Contracts defined; implementations follow |
 
 ### Dependencies
 
