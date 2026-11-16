@@ -6,7 +6,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
-- **Function registry**: named functions with contracts in the core
+- **Function registry** (#146): named functions with contracts in the core
   (`contracts.py`), implemented by the core (`core_functions.py`) or by a
   module (`get_functions()`) and called by name through `core.functions`, so
   an implementation can be replaced without changing its callers. Arguments
