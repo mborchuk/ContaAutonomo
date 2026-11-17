@@ -2,7 +2,7 @@
 """
 AI Agent Module — the bridge between the app's modules and AI vendors.
 
-CAVEMAN NOTE: one place that talks to AI. It holds the provider choice, the
+Scope: the one place that talks to AI. It holds the provider choice, the
 API keys and the models, and answers text questions through registry
 functions; it has no features of its own. A module that needs AI calls
 `ai.complete_text` / `ai.text_status` by name (the Ledger Assistant does) and
