@@ -528,9 +528,36 @@ Detect and display digital signature information in PDF files.
   - `file_badge_script` — renders JS that loads badges via AJAX
 - Used by: `pdf_signature` module (for invoice badge verification), `documents` module (for file badges)
 
+### AI Agent (`ai_agent`)
+
+The bridge between modules and AI vendors: holds the provider choice, API keys
+and models, and answers text questions through registry functions. It has no
+features of its own; modules that need AI (the Ledger Assistant) call
+`ai.complete_text` / `ai.text_status` and never see a key or a vendor.
+
+- Routes: `POST /ai-agent/models/<openai|anthropic|kiro_cli>/refresh` (loads
+  the model list; JSON body `api_key` optional), `POST /ai-agent/check` (one
+  short question to the saved provider)
+- Models: `AIAgentConfig` (`ai_agent_config`: provider, encrypted API keys,
+  a model per provider, `models_cache`)
+- Functions: `ai.complete_text(system, user, max_tokens?)` (external) and
+  `ai.text_status()` — `{available, provider, reason}`
+- Providers: OpenAI and Anthropic (API key), Claude Code CLI and Kiro CLI
+  (programs on the server, run without any tool in an empty temporary
+  directory; off unless the server sets `AI_AGENT_ALLOW_CLI=1`;
+  `AI_AGENT_CLAUDE_BIN`, `AI_AGENT_KIRO_BIN`, `AI_AGENT_CLI_TIMEOUT`). An unset
+  `AI_AGENT_*` variable falls back to the AI Parser's `AI_PARSER_*` one
+- On first enable, while it has no settings, it copies the AI Parser's
+  provider, models and (still encrypted) keys from `ai_parser_config` by SQL;
+  after that the two are configured separately
+- Settings: dedicated "AI Agent" tab (provider, keys, models, Refresh list,
+  Check connection); fields are prefixed `agent_`
+- Details: `modules/ai_agent/README.md`
+
 ### AI Parser (`ai_parser`)
 
 Parse invoice and expense-receipt data from PDFs and images using AI providers.
+Text questions from other modules go to the AI Agent, not here.
 
 - Routes: `/ai-parser/` (page), `POST /ai-parser/parse` (accepts
   `doc_type=invoice|expense`), `POST /ai-parser/models/<openai|anthropic>/refresh`
@@ -637,7 +664,7 @@ app data. Full reference: [`modules/api/README.md`](api/README.md).
 
 Opt-in, read-only questions over the books (`/assistant/`). It names no
 module: it reads with the registry functions offered to the assistant and
-asks with `ai.complete_text` ([Functions](#functions)). Depends on
+asks with `ai.complete_text`, provided by the AI Agent ([Functions](#functions)). Depends on
 `ledger.list_invoices` (the core).
 
 - The text function plans read-only calls from the question alone; the
@@ -1080,7 +1107,7 @@ Functions today:
 | `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
 | `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
 | `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
-| `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with the selected provider — OpenAI, Anthropic, Claude Code CLI or Kiro CLI (not Google Document AI); the key stays in the module |
+| `ai.text_status`, `ai.complete_text` | `ai_agent` | Text questions with the provider selected in Settings → AI Agent — OpenAI, Anthropic, Claude Code CLI or Kiro CLI; the key stays in the module |
 | `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever provides it |
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the

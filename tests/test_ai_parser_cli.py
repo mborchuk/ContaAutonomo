@@ -243,7 +243,7 @@ def test_module_uses_a_cli_provider(ai_module, cli_env):
     db.session.commit()
     provider = ai_module._get_provider()
     assert provider.name == 'kiro_cli' and provider.model == 'auto'
-    assert ai_module.provider_settings()['configured']
+    assert provider.is_configured()
     cfg.provider = 'openai'
     db.session.commit()
 
@@ -301,89 +301,3 @@ def test_settings_panel_shows_cli_agents(ai_module, app, monkeypatch):
     assert 'Claude Code CLI' in html and 'Kiro CLI' in html
     assert 'value="claude_cli"' in html and 'value="kiro_cli"' in html
     assert 'Not available: CLI agents are off' in html
-
-
-# --- text questions (ai.complete_text) through a CLI agent ------------------ #
-
-def test_claude_text_has_no_tools_and_reads_the_message_on_stdin(cli_env):
-    runs = cli_env(stdout=_claude_out('{"calls": []}'))
-    reply = ClaudeCLIProvider({'claude_cli_model': 'sonnet'}).complete_text(
-        'Plan the lookups.', 'How much did I invoice?', 1500)
-    assert reply == '{"calls": []}'
-    run = runs[0]
-    args = run['args']
-    assert args[args.index('--tools') + 1] == ''                 # no tool at all
-    assert '--allowedTools' not in args
-    assert args[args.index('--system-prompt') + 1] == 'Plan the lookups.'
-    assert args[args.index('--model') + 1] == 'sonnet'
-    for flag in ('--restricted', '--safe-mode', '--no-session-persistence'):
-        assert flag in args
-    assert run['kw']['input'] == 'How much did I invoice?'
-    assert run['files'] == []                                    # nothing in the directory
-
-
-def test_kiro_text_uses_an_agent_without_tools(cli_env):
-    runs = cli_env(stdout='\x1b[0m{"answer": "ok"}\n')
-    reply = KiroCLIProvider({}).complete_text('Answer briefly.', 'Records: []')
-    assert reply == '{"answer": "ok"}'
-    run = runs[0]
-    args = run['args']
-    assert args[:3] == ['/usr/bin/kiro-cli', 'chat', '--v2']
-    assert args[args.index('--agent') + 1] == cli_agents.KIRO_TEXT_AGENT
-    assert not any(a.startswith('--trust-tools') for a in args) and '-a' not in args
-    assert run['kw']['input'] == 'Answer briefly.\n\n---\n\nRecords: []'
-
-
-def test_kiro_text_agent_file_has_no_tools(cli_env, monkeypatch):
-    seen = {}
-
-    def fake_run(args, **kw):
-        path = os.path.join(kw['cwd'], '.kiro', 'agents', f'{cli_agents.KIRO_TEXT_AGENT}.json')
-        with open(path) as fh:
-            seen.update(json.load(fh))
-        return SimpleNamespace(stdout='ok', stderr='', returncode=0)
-    cli_env()
-    monkeypatch.setattr(cli_agents.subprocess, 'run', fake_run)
-    KiroCLIProvider({}).complete_text('s', 'u')
-    assert seen['tools'] == [] and seen['allowedTools'] == [] and seen['mcpServers'] == {}
-
-
-def test_cli_text_when_off_or_failing(cli_env, monkeypatch):
-    cli_env(returncode=1, stderr='not logged in')
-    with pytest.raises(CLIError, match='not logged in'):
-        KiroCLIProvider({}).complete_text('s', 'u')
-    monkeypatch.delenv(cli_agents.ALLOW_ENV)
-    with pytest.raises(CLIError, match='CLI agents are off'):
-        ClaudeCLIProvider({}).complete_text('s', 'u')
-
-
-def test_ai_parser_answers_text_with_the_selected_cli(ai_module, cli_env):
-    from app import db
-    runs = cli_env(stdout='PONG')
-    cfg = ai_module._get_config()
-    cfg.provider = 'kiro_cli'
-    db.session.commit()
-    assert ai_module.text_status() == {'available': True, 'provider': 'Kiro CLI',
-                                       'reason': None}
-    assert ai_module.complete_text('Say PONG.', 'Now.') == 'PONG'
-    assert runs[0]['args'][1] == 'chat'
-    cfg.provider = 'openai'
-    db.session.commit()
-
-
-def test_ai_parser_text_status_for_an_unavailable_cli(ai_module, monkeypatch):
-    from app import db
-    from functions import FunctionUnavailable
-    monkeypatch.delenv(cli_agents.ALLOW_ENV, raising=False)
-    cfg = ai_module._get_config()
-    cfg.provider = 'claude_cli'
-    db.session.commit()
-    status = ai_module.text_status()
-    assert status['available'] is False and cli_agents.ALLOW_ENV in status['reason']
-    with pytest.raises(FunctionUnavailable):
-        ai_module.complete_text('s', 'u')
-    cfg.provider = 'google_docai'
-    db.session.commit()
-    assert 'cannot answer questions' in ai_module.text_status()['reason']
-    cfg.provider = 'openai'
-    db.session.commit()

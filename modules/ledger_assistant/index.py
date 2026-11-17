@@ -37,9 +37,9 @@ from module_manager import BaseModule
 from . import assistant as core_steps
 
 MAX_QUESTION = 500
-NO_TEXT_PROVIDER = ('No enabled module answers text questions. Enable the AI Parser '
+NO_TEXT_PROVIDER = ('No enabled module answers text questions. Enable the AI Agent '
                     'module in Settings → Modules and choose OpenAI or Anthropic with an '
-                    'API key, or Claude Code CLI or Kiro CLI, in Settings → AI Parser.')
+                    'API key, or Claude Code CLI or Kiro CLI, in Settings → AI Agent.')
 NOTHING_TO_READ = 'No enabled module provides data the assistant can read.'
 TEXT_STATUS_FAILED = ('The module that answers text questions could not report its status. '
                       'Check the server log.')
@@ -74,7 +74,7 @@ class LedgerAssistantModule(BaseModule):
     @property
     def description(self):
         return ('Ask questions about your invoices, expenses and tax drafts in plain '
-                'language. Read-only; uses the AI Parser provider and sends only the '
+                'language. Read-only; asks through the AI Agent and sends only the '
                 'records the question needs. Not tax advice.')
 
     @property

@@ -1,7 +1,7 @@
 """G-7 — read-only ledger assistant: off by default, cannot write, sends only
 the records needed, lists them, and explains a missing provider. It reads and
 asks through registry functions, so the tests give it a stand-in text module
-instead of the AI Parser — what a third-party module replacing it would do."""
+instead of the AI Agent — what a third-party module replacing it would do."""
 import json
 from datetime import date
 
@@ -107,7 +107,7 @@ def test_it_depends_on_functions_not_modules(la, loaded_modules):
 
 def test_without_a_text_module_it_says_what_is_missing(la, ledger):
     out = la.ask('How much did I invoice ACME in Q3?', TODAY)
-    assert 'Enable the AI Parser module' in out['missing']
+    assert 'Enable the AI Agent module' in out['missing']
     assert out['answer'] is None and out['calls'] == []
 
 
@@ -150,8 +150,8 @@ def test_a_failing_text_module_does_not_break_the_page(la, text_ai, client, monk
 
 def test_the_text_module_reason_is_shown(la, text_ai):
     text_ai(status={'available': False, 'provider': 'Google Document AI',
-                    'reason': 'The AI Parser uses Google Document AI, which cannot answer.'})
-    assert la.missing() == 'The AI Parser uses Google Document AI, which cannot answer.'
+                    'reason': 'CLI agents are off on this server.'})
+    assert la.missing() == 'CLI agents are off on this server.'
 
 
 # --- read only -------------------------------------------------------------- #
@@ -306,7 +306,7 @@ def test_page_requires_login(loaded_modules, client):
 def test_page_explains_a_missing_provider(la, client):
     _auth(client)
     html = client.get('/assistant/').get_data(as_text=True)
-    assert 'Enable the AI Parser module' in html and 'Not tax advice' in html
+    assert 'Enable the AI Agent module' in html and 'Not tax advice' in html
 
 
 def test_page_shows_answer_records_and_disclaimer(la, ledger, text_ai, client):

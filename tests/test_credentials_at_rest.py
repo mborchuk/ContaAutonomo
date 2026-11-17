@@ -101,6 +101,7 @@ def test_smtp_password_encrypted_in_json_and_migrated(loaded_modules):
 @pytest.mark.parametrize('module_id,table,attr', [
     ('external_storage', 'storage_config', 's3_secret_key'),
     ('ai_parser', 'ai_parser_config', 'openai_api_key'),
+    ('ai_agent', 'ai_agent_config', 'anthropic_api_key'),
     ('pdf_signature', 'pdf_signature_config', 'certificate_password'),
 ])
 def test_module_credential_columns_encrypted(standalone_module, module_id, table, attr):
