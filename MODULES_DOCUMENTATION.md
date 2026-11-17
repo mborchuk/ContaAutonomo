@@ -1030,7 +1030,7 @@ new ones; nothing in the core has to change.
   ```
 
   A `Function` has a name (`area.verb_object`), a summary written for people
-  and AI tools, parameters (`Param`: kind `str` / `int` / `date` / `bytes`,
+  and AI tools, parameters (`Param`: kind `str` / `int` / `float` / `date` / `bytes`,
   required, choices, limits), what it returns (plain values — JSON types and
   `date` — never database objects), flags — `read_only`, `external` (sends data out of the
   app), `assistant` (the ledger assistant may call it; needs `read_only`, not
@@ -1067,7 +1067,12 @@ Functions today:
 | `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
-| `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter` |
+| `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
+| `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
+| `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
+| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate}` for a quarter; the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
+| `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
+| `reta.projection` | `reta_advisor` | `today?`, `income_delta?`, `expense_delta?`, `monthly_quota?` (`float`); the RETA projection. Tax Provision and the IRPF what-if simulator call it |
 | `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
 | `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
 | `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
@@ -1076,7 +1081,8 @@ Functions today:
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
 `/api/v1` invoice, customer and expense lists, the expense form, the dashboard,
-Tax Provision, Tax Obligations and the Modelo 347 draft. A calendar entry is a
+Tax Provision, Tax Obligations, the tax drafts, the IRPF Estimator and the
+RETA Advisor. A calendar entry is a
 dict: `form`, `period`, `period_label`, `year`, `quarter` (1-4 or None),
 `window_start`, `window_end` (`date`), `verified`. Without a calendar provider
 the dashboard and the obligations page say to enable the Fiscal Calendar, and
@@ -1101,9 +1107,11 @@ def dependencies(self):
   consistent when a dependency is declared later.
 - The Modules tab shows "Requires" and "Required by" for each module.
 
-Declared today: `tax_es_forms` → `expenses`, `tax_management`, `tax_es_irpf`;
-`tax_es_irpf` → `expenses`, `tax_management`; `reta_advisor` →
-`tax_management`. Optional integrations (external storage for backups, PDF
+Declared today: `tax_es_forms` → `expenses`, `tax.filed_boxes`,
+`tax.modelo130_boxes`, `tax.equipment_rule`; `tax_es_irpf` → `expenses`,
+`tax.filed_boxes`, `ss.payments_total`; `reta_advisor` → `ss.payments_total`.
+A function dependency is met by whatever module declares it, so a replacement
+needs no `provides`. Optional integrations (external storage for backups, PDF
 signing for documents, email for fiscal reminders, AI receipt parsing) are not
 dependencies: they use the capabilities below or check whether the other module
 is loaded, and work without it.
@@ -1134,10 +1142,6 @@ Interfaces declared today:
 
 | Module | `interface` | Used by |
 |---|---|---|
-| `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
-| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
-| `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
-| `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
 | `api` | `verify_token(request)` | Reports |
 | `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 

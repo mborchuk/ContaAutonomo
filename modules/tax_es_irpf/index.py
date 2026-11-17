@@ -50,12 +50,6 @@ class TaxEsIrpfModule(BaseModule):
         return 'tax_es_irpf'
 
     @property
-    def interface(self):
-        # Spanish Tax Forms: Modelo 303 equipment, Modelo 130 draft.
-        # Tax Provision: the Modelo 130 payment and the Modelo 100 result.
-        return ['is_equipment', 'modelo130_boxes', 'modelo100_result']
-
-    @property
     def name(self):
         return 'IRPF Estimator (España)'
 
@@ -71,9 +65,9 @@ class TaxEsIrpfModule(BaseModule):
 
     @property
     def dependencies(self):
-        # Expenses feed box 02; Social Security payments and filed returns come
-        # from Tax Forms (tax_management).
-        return ['expenses', 'tax_management']
+        # Expenses feed box 02; filed returns and Social Security payments come
+        # from whatever provides these functions (Tax Management).
+        return ['expenses', 'tax.filed_boxes', 'ss.payments_total']
 
     @property
     def nav_items(self):
@@ -154,17 +148,25 @@ class TaxEsIrpfModule(BaseModule):
         from app import Expense
         return Expense
 
-    def _tax_management(self):
-        mm = getattr(self.core, 'module_manager', None)
-        return mm.provider_of('tax_management') if mm else None
+    def _function(self, name):
+        """The registry, if something provides `name`; else None."""
+        functions = getattr(self.core, 'functions', None)
+        return functions if functions is not None and functions.available(name) else None
 
-    def _ss_model(self):
-        """tax_management's SSPayment model, if that module is enabled."""
-        mm = getattr(self.core, 'module_manager', None)
-        if mm is None:
-            return None
-        tm = mm.provider_of('tax_management')
-        return getattr(tm, 'SSPayment', None) if tm else None
+    def _filed_boxes(self, form_type, year, quarter):
+        functions = self._function('tax.filed_boxes')
+        if functions is None:
+            return {}
+        return functions.call('tax.filed_boxes', form_type=form_type, year=year,
+                              quarter=quarter)
+
+    def _ss_paid(self, date_from, date_to):
+        """Social Security recorded as paid in the window; 0 without a provider."""
+        functions = self._function('ss.payments_total')
+        if functions is None:
+            return 0.0
+        return functions.call('ss.payments_total', date_from=date_from,
+                              date_to=date_to)['total']
 
     def on_enable(self):
         """Idempotent guarded migrations for this module's own columns."""
@@ -269,13 +271,6 @@ class TaxEsIrpfModule(BaseModule):
                 profile.equipment_threshold if profile.equipment_threshold is not None else 300.0,
                 categories)
 
-    def is_equipment(self, exp, net_eur):
-        """Equipment (bien de inversión): an equipment category, at or above
-        the threshold. Shared with Modelo 303 boxes 30/31."""
-        _, _, threshold, categories = self._equipment_rule(self._get_profile())
-        return (net_eur >= threshold
-                and (exp.category or '').strip().lower() in categories)
-
     def _expense_net_eur(self, exp):
         """VAT-excluded, deductible share of an expense in EUR (0 if not deductible).
 
@@ -321,14 +316,7 @@ class TaxEsIrpfModule(BaseModule):
         SSPayment rows exist. Mutualidad alternativa caps the deduction.
         """
         start_dt = self._year_start(year, profile)
-        ss_model = self._ss_model()
-        reta = 0.0
-        if ss_model is not None:
-            payments = ss_model.query.filter(
-                ss_model.payment_date >= start_dt,
-                ss_model.payment_date <= end_dt,
-            ).all()
-            reta = sum((p.amount or 0.0) for p in payments)
+        reta = self._ss_paid(start_dt, end_dt)
         if reta == 0:
             settings = self.core.get_settings()
             monthly = getattr(settings, 'social_security_monthly', 0.0) or 0.0
@@ -384,10 +372,9 @@ class TaxEsIrpfModule(BaseModule):
 
         # Box 05: what was paid in earlier quarters — the filed box 07 when
         # the AEAT PDF is in Tax Forms, else this module's own estimate.
-        filed_forms = self._tax_management()
         prior = 0.0
         for q in range(1, quarter):
-            filed = filed_forms.filed_boxes('130', year, q) if filed_forms else {}
+            filed = self._filed_boxes('130', year, q)
             if '07' in filed:
                 prior += max(0.0, filed['07'])
                 continue
@@ -471,6 +458,40 @@ class TaxEsIrpfModule(BaseModule):
         return self._engine(year).compute_modelo100(
             self._build_modelo100_input(year, profile), region).as_dict()
 
+    def equipment_rule(self):
+        """What counts as equipment (bien de inversión) in the profile; Modelo
+        303 boxes 30/31 use the same rule."""
+        _, _, threshold, categories = self._equipment_rule(self._read_profile())
+        return {'threshold': threshold, 'categories': sorted(categories)}
+
+    def _modelo130(self, year, quarter):
+        boxes, rate = self.modelo130_boxes(year, quarter)
+        return {'boxes': boxes, 'rate': rate}
+
+    # ── Registry functions ───────────────────────────────────────────────
+
+    def get_functions(self):
+        from functions import Function, Param
+        year = Param('year', 'int', 'Tax year', required=True, minimum=2000, maximum=2100)
+        quarter = Param('quarter', 'int', 'Quarter, 1-4', required=True, minimum=1, maximum=4)
+        return [
+            Function('tax.modelo130_boxes', self._modelo130,
+                     'Modelo 130 (IRPF) boxes 01-07 for one quarter, year to date, '
+                     'from the IRPF profile.',
+                     params=(year, quarter),
+                     returns='{"boxes": {"01".."07": amount}, "rate": fraction}'),
+            Function('tax.modelo100_result', self.modelo100_result,
+                     'Modelo 100 (renta) estimate for the year so far. Fails with '
+                     'ValueError for a foral region (not modelled).',
+                     params=(year,),
+                     returns='IrpfResult.as_dict(): "summary"."modelo100_diferencial" '
+                             '> 0 to pay, < 0 refund; ...'),
+            Function('tax.equipment_rule', self.equipment_rule,
+                     'What counts as equipment (bien de inversión): net amount at or '
+                     'above the threshold, in one of the categories.',
+                     returns='{"threshold": amount, "categories": [lowercase name]}'),
+        ]
+
     # ── What-if simulator (G-3) — reads only, saves nothing ─────────────
 
     def _read_profile(self):
@@ -487,10 +508,6 @@ class TaxEsIrpfModule(BaseModule):
             spouse_retenciones=0.0, spouse_pagos_fraccionados=0.0,
             equipment_method='depreciate', depreciation_rate=25.0,
             equipment_threshold=300.0, equipment_categories='Equipment')
-
-    def _reta_advisor(self):
-        mm = getattr(self.core, 'module_manager', None)
-        return mm.provider_of('reta_advisor') if mm else None
 
     # Comunidades of the common regime. Those without a scale in the year's
     # params are computed with the state supletoria scale, and the engine says
@@ -520,14 +537,17 @@ class TaxEsIrpfModule(BaseModule):
 
         settings = self.core.get_settings()
         quota = (getattr(settings, 'social_security_monthly', 0.0) or 0.0) if settings else 0.0
-        reta = self._reta_advisor()
+        functions = self._function('reta.projection')
         rate = None
         reta_fn = None
-        if reta is not None:
-            rate = reta.projection(today)['contribution_rate_pct']
+        if functions is not None:
+            rate = functions.call('reta.projection', today=today)['contribution_rate_pct']
 
             def reta_fn(income_delta, expense_delta, monthly_quota):
-                return reta.projection(today, income_delta, expense_delta, monthly_quota)
+                return functions.call('reta.projection', today=today,
+                                      income_delta=income_delta,
+                                      expense_delta=expense_delta,
+                                      monthly_quota=monthly_quota)
 
         cap = None
         if profile.uses_mutualidad:

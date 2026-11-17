@@ -94,7 +94,17 @@ def test_bad_declarations_are_explained(function, problem):
 
 def test_unknown_param_kind():
     with pytest.raises(ValueError):
-        Param('x', 'float')
+        Param('x', 'decimal')
+
+
+@pytest.mark.parametrize('value,result', [
+    (1.5, (1.5, None)), (2, (2.0, None)), ('-3.25', (-3.25, None)),
+    (True, (None, 'eur must be a number')), ('abc', (None, 'eur must be a number')),
+    ('nan', (None, 'eur must be a number')), (float('inf'), (None, 'eur must be a number')),
+    (1e9, (None, 'eur must be between -1000 and 1000')),
+])
+def test_float_param(value, result):
+    assert Param('eur', 'float', minimum=-1000, maximum=1000).clean(value) == result
 
 
 # --- the registry ------------------------------------------------------------ #

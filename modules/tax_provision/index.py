@@ -2,19 +2,19 @@
 """
 Tax Provision Module (G-2) — "how much tax do I owe so far" on the dashboard.
 
-One total and its four parts, each read from the module that already
-calculates it; this module adds no tax logic:
+One total and its four parts, each read through the function registry from
+whatever module calculates it; this module adds no tax logic:
 
-  - IVA, open quarter      -> tax_es_forms.draft_303()      box 71
-  - IRPF, open quarter     -> tax_es_irpf.modelo130_boxes()  box 07
-  - Renta, year to date    -> tax_es_irpf.modelo100_result() cuota diferencial
-  - RETA regularización    -> reta_advisor.projection()      regularization_delta
+  - IVA, open quarter      -> tax.draft_303          box 71
+  - IRPF, open quarter     -> tax.modelo130_boxes    box 07
+  - Renta, year to date    -> tax.modelo100_result   cuota diferencial
+  - RETA regularización    -> reta.projection        regularization_delta
 
 The Modelo 100 result already credits the year's Modelo 130 payments
 (including the open quarter), so the four parts add up without counting the
-130 twice. Each part links to its own page and shows its next filing date
-from the Fiscal Calendar. A part whose module is disabled (or that fails) is
-left out of the total and named as missing.
+130 twice. Each part links to its page (when the bundled module provides it)
+and shows its next filing date from calendar.deadline_for. A part nothing
+provides (or that fails) is left out of the total and named as missing.
 
 Estimate, not tax advice: the panel says so.
 """
@@ -65,23 +65,32 @@ class TaxProvisionModule(BaseModule):
 
     # --- Parts -------------------------------------------------------------- #
 
-    def _provider(self, module_id):
-        mm = getattr(self.core, 'module_manager', None)
-        return mm.provider_of(module_id) if mm else None
+    def _available(self, name):
+        functions = getattr(self.core, 'functions', None)
+        return functions is not None and functions.available(name)
+
+    def _call(self, name, **arguments):
+        return self.core.functions.call(name, **arguments)
 
     def _calendar_available(self):
-        functions = getattr(self.core, 'functions', None)
-        return functions is not None and functions.available('calendar.deadline_for')
+        return self._available('calendar.deadline_for')
 
     def _deadline(self, form, year, quarter=None):
         if not self._calendar_available():
             return None
         try:
-            return self.core.functions.call('calendar.deadline_for',
-                                            form=form, year=year, quarter=quarter)
+            return self._call('calendar.deadline_for', form=form, year=year, quarter=quarter)
         except Exception:  # pragma: no cover - defensive
             self.logger.exception('Fiscal calendar lookup failed')
             return None
+
+    def _link_only_to_the_provider(self, part):
+        """The page link belongs to the bundled module; a replacement that
+        provides the function may not have that page."""
+        provider = (self.core.functions.provider(part['function'])
+                    if self._available(part['function']) else None)
+        if part['endpoint'] and part['endpoint'].split('.')[0] != provider:
+            part['endpoint'] = None
 
     @staticmethod
     def _missing(part, module_name):
@@ -97,14 +106,14 @@ class TaxProvisionModule(BaseModule):
 
     def _iva_part(self, year, quarter):
         part = {'id': 'iva', 'label': f'IVA {quarter}T {year}', 'form': '303',
-                'endpoint': 'tax_es_forms.draft_303',
+                'function': 'tax.draft_303', 'endpoint': 'tax_es_forms.draft_303',
                 'args': {'year': year, 'quarter': quarter},
                 'deadline': self._deadline('303', year, quarter)}
-        forms = self._provider('tax_es_forms')
-        if forms is None:
+        if not self._available('tax.draft_303'):
             return self._missing(part, 'Spanish Tax Forms (Modelo 303)')
         try:
-            amount = round2(forms.draft_303(year, quarter)['boxes']['71'])
+            amount = round2(self._call('tax.draft_303', year=year,
+                                       quarter=quarter)['boxes']['71'])
         except Exception:
             return self._failed(part, 'Modelo 303')
         # A negative 303 is compensated in a later quarter; only Q4 can be refunded.
@@ -114,14 +123,13 @@ class TaxProvisionModule(BaseModule):
 
     def _m130_part(self, year, quarter):
         part = {'id': 'm130', 'label': f'IRPF Modelo 130 {quarter}T {year}', 'form': '130',
-                'endpoint': 'tax_es_irpf.modelo130',
+                'function': 'tax.modelo130_boxes', 'endpoint': 'tax_es_irpf.modelo130',
                 'args': {'year': year, 'quarter': quarter},
                 'deadline': self._deadline('130', year, quarter)}
-        irpf = self._provider('tax_es_irpf')
-        if irpf is None:
+        if not self._available('tax.modelo130_boxes'):
             return self._missing(part, 'IRPF Estimator')
         try:
-            boxes, _rate = irpf.modelo130_boxes(year, quarter)
+            boxes = self._call('tax.modelo130_boxes', year=year, quarter=quarter)['boxes']
             amount = round2(boxes['07'])
         except Exception:
             return self._failed(part, 'Modelo 130')
@@ -130,13 +138,13 @@ class TaxProvisionModule(BaseModule):
 
     def _renta_part(self, year):
         part = {'id': 'renta', 'label': f'Renta {year} (Modelo 100, year to date)',
-                'form': '100', 'endpoint': 'tax_es_irpf.modelo100', 'args': {'year': year},
+                'form': '100', 'function': 'tax.modelo100_result',
+                'endpoint': 'tax_es_irpf.modelo100', 'args': {'year': year},
                 'deadline': self._deadline('100', year)}
-        irpf = self._provider('tax_es_irpf')
-        if irpf is None:
+        if not self._available('tax.modelo100_result'):
             return self._missing(part, 'IRPF Estimator')
         try:
-            result = irpf.modelo100_result(year)
+            result = self._call('tax.modelo100_result', year=year)
             amount = round2(result['summary']['modelo100_diferencial'])
         except ValueError as e:  # foral region: not modelled
             part.update(amount=None, direction=None, reason=str(e))
@@ -148,14 +156,14 @@ class TaxProvisionModule(BaseModule):
 
     def _reta_part(self, today):
         part = {'id': 'reta', 'label': f'RETA regularización {today.year}', 'form': None,
-                'endpoint': 'reta_advisor.reta_index', 'args': {}, 'deadline': None,
+                'function': 'reta.projection', 'endpoint': 'reta_advisor.reta_index',
+                'args': {}, 'deadline': None,
                 'deadline_note': 'Settled by the Seguridad Social after the year, '
                                  'once the income is known'}
-        reta = self._provider('reta_advisor')
-        if reta is None:
+        if not self._available('reta.projection'):
             return self._missing(part, 'RETA Quota Advisor')
         try:
-            amount = round2(reta.projection(today)['regularization_delta'])
+            amount = round2(self._call('reta.projection', today=today)['regularization_delta'])
         except Exception:
             return self._failed(part, 'RETA projection')
         part.update(amount=amount, direction=direction(amount))
@@ -171,6 +179,8 @@ class TaxProvisionModule(BaseModule):
             self._renta_part(year),
             self._reta_part(today),
         ]
+        for part in parts:
+            self._link_only_to_the_provider(part)
         summary = summarise(parts)
         summary.update(year=year, quarter=quarter, today=today,
                        calendar_enabled=self._calendar_available())
