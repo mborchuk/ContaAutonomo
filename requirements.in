@@ -25,6 +25,6 @@ signxml>=4.0.0
 Pillow
 pypdf>=7.0.0
 asn1crypto>=1.5.0
-gunicorn>=26.2.0
+gunicorn>=27.0.1
 # Error tracking, enabled only when SENTRY_DSN is set.
 sentry-sdk[flask]>=2.74.0
