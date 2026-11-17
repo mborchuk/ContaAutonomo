@@ -12,7 +12,7 @@ from secret_box import EncryptedString, encrypt_existing
 
 from functions import Function, FunctionUnavailable, Param
 
-from . import catalog, text
+from . import catalog
 from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
 from .cli_agents import (ALLOW_ENV, CLI_PROVIDERS, SCANNED_PDF_MESSAGE, CLIError,
                          ScannedPDF, cli_allowed, valid_model)
@@ -97,8 +97,9 @@ class AIParserModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        # A module that declares these names replaces this one for them (the
-        # Ledger Assistant calls ai.text_status and ai.complete_text).
+        # A module that declares this name replaces this one for it (the
+        # expense form posts to its route). Text questions (ai.complete_text,
+        # ai.text_status) are the AI Agent's.
         return [
             Function(
                 'ai.parse_document', self.parse_file,
@@ -110,19 +111,6 @@ class AIParserModule(BaseModule):
                               choices=('invoice', 'expense'))),
                 returns='{field: value}; fields per doc_type in modules/ai_parser/README.md',
                 external=True, route='/ai-parser/parse'),
-            Function(
-                'ai.complete_text', self.complete_text,
-                "The AI provider's reply to `user` under the `system` instruction.",
-                params=(Param('system', 'str', 'Instruction', required=True, max_length=20_000),
-                        Param('user', 'str', 'Message', required=True, max_length=400_000),
-                        Param('max_tokens', 'int', 'Reply length limit', minimum=1,
-                              maximum=16_000)),
-                returns='str', external=True),
-            Function(
-                'ai.text_status', self.text_status,
-                'Whether text questions can be answered, by which provider, and what to '
-                'configure if not.',
-                returns='{"available": bool, "provider": str or null, "reason": str or null}'),
         ]
 
     def parse_file(self, file_data, filename, doc_type='invoice'):
@@ -131,55 +119,6 @@ class AIParserModule(BaseModule):
         if provider is None:
             raise FunctionUnavailable(self._not_configured_message())
         return provider.parse_document(file_data, filename, doc_type)
-
-    def _cli_agent(self):
-        """The selected CLI agent provider, or None for an API provider."""
-        cfg = self.AIParserConfig.query.first()
-        cls = CLI_PROVIDERS.get(cfg.provider) if cfg else None
-        return cls(self._provider_config(cfg)) if cls else None
-
-    def text_status(self):
-        """Whether the selected provider answers text: OpenAI and Anthropic
-        with a key, a CLI agent when it can run; not Google Document AI."""
-        settings = self.provider_settings()
-        agent = self._cli_agent()
-        reason = agent.unavailable_reason() if agent else text.missing_reason(settings)
-        return {'available': reason is None, 'provider': settings['display_name'],
-                'reason': reason}
-
-    def complete_text(self, system, user, max_tokens=1500):
-        """The reply text; the API key never leaves this module."""
-        agent = self._cli_agent()
-        if agent is not None:
-            reason = agent.unavailable_reason()
-            if reason:
-                raise FunctionUnavailable(reason)
-            return agent.complete_text(system, user, max_tokens)
-        settings = self.provider_settings()
-        reason = text.missing_reason(settings)
-        if reason:
-            raise FunctionUnavailable(reason)
-        return text.complete(settings, system, user, max_tokens)
-
-    def provider_settings(self):
-        """The active provider and its credentials, read only (no default row
-        is created): {'provider', 'display_name', 'api_key', 'model',
-        'configured'}. `api_key` is the decrypted key; never log it or return
-        it outside this module."""
-        cfg = self.AIParserConfig.query.first()
-        provider = (cfg.provider if cfg else None) or 'openai'
-        key = model = ''
-        if cfg is not None and provider == 'openai':
-            key, model = cfg.openai_api_key or '', cfg.openai_model or DEFAULT_MODELS['openai']
-        elif cfg is not None and provider == 'anthropic':
-            key, model = (cfg.anthropic_api_key or '',
-                          cfg.anthropic_model or DEFAULT_MODELS['anthropic'])
-        cls = ALL_PROVIDERS.get(provider)
-        configured = bool(key) if provider in ('openai', 'anthropic') else bool(
-            cfg is not None and cls is not None and cls(self._provider_config(cfg)).is_configured())
-        return {'provider': provider,
-                'display_name': cls.display_name if cls else provider,
-                'api_key': key, 'model': model, 'configured': configured}
 
     @staticmethod
     def _provider_config(cfg):

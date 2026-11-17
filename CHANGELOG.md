@@ -6,6 +6,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **AI Agent** (`ai_agent`), the bridge between modules and AI providers:
+  OpenAI and Anthropic over their APIs, Claude Code CLI and Kiro CLI as
+  programs on the server (run without any tool; off unless
+  `AI_AGENT_ALLOW_CLI=1`). It declares `ai.complete_text` and
+  `ai.text_status` and has no features of its own; the Ledger Assistant asks
+  through it and never sees an API key. Settings → AI Agent holds the
+  provider, the encrypted keys and the models, with "Refresh list" and "Check
+  connection". On first enable it copies the provider, models and keys the
+  AI Parser has stored, once; `AI_PARSER_*` CLI variables are used when the
+  `AI_AGENT_*` ones are not set.
 - **Invoice templates render themselves**: a module template in
   `get_invoice_templates()` may carry a `render(invoice, customer, settings)`
   callable instead of a file `path`. The Invoice Designer uses it, so the core
@@ -174,6 +184,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Text questions moved from the AI Parser to the AI Agent**: the AI Parser
+  no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
+  agents for text); it reads documents only, with its own provider settings.
+  Enable the AI Agent for the Ledger Assistant — its page says so until then.
 - **Invoice status only through lifecycle actions** (#91): new invoices are
   always drafts; the status field is gone from the forms and the API
   (`POST /invoices/<id>/issue`, `/mark-paid`); annulled invoices are locked.

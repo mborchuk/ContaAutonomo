@@ -37,6 +37,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **PDF Verify** | Detect digital signatures in PDFs — shows signer info, clickable badge on documents and invoices |
 | **Invoice Comments** | Internal comments/notes on invoices (not visible on PDF) |
 | **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout and presets |
+| **AI Agent** | Connection between modules and AI providers (OpenAI, Anthropic, Claude Code CLI, Kiro CLI): modules ask through it by function name and never see an API key |
 | **AI Parser** | Parse invoice and expense-receipt data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
 | **Fiscal Calendar** | Spanish AEAT filing deadlines as a dashboard panel with configurable reminders |
 | **Modelo 303/130 Drafts** | Box-level quarterly IVA/IRPF draft calculator (estimate, not tax advice) |
@@ -47,7 +48,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Verifactu** | Tamper-evident, hash-chained billing records on issue/annul (RD 1007/2023 compliance assist) |
 | **Bank Import** | Norma 43 / CSV statement import with match suggestions and one-click reconciliation |
 | **E-Invoice (Facturae)** | Facturae 3.2.2 XML export for issued invoices with a readiness checklist |
-| **Ledger Assistant** | Opt-in, read-only questions over invoices, expenses and tax drafts with the AI Parser's provider; sends only the records needed and lists them (not tax advice) |
+| **Ledger Assistant** | Opt-in, read-only questions over invoices, expenses and tax drafts through the AI Agent; sends only the records needed and lists them (not tax advice) |
 
 ## Quick Start
 
@@ -140,6 +141,7 @@ ContaAutonomo/
 ├── auth.py / auth_routes.py    # Authentication (pluggable providers)
 ├── currency_converter.py       # ECB exchange rates + shared CURRENCY_SYMBOLS
 ├── modules/                    # Dynamic modules
+│   ├── ai_agent/               # Bridge between modules and AI providers
 │   ├── ai_parser/              # AI-powered invoice parsing
 │   ├── backup/                 # Backup & Restore
 │   ├── documents/              # Document management

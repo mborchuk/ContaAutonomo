@@ -1,0 +1,133 @@
+{% from "_secret_field.html" import secret_input %}
+{% macro model_select(provider, current, refresh=True) -%}
+{% set m = models[provider] %}
+<div class="form-group">
+    <label for="agent_{{ provider }}_model">Model</label>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <select id="agent_{{ provider }}_model" name="agent_{{ provider }}_model" style="flex: 1;">
+            {% for opt in m.models %}
+            <option value="{{ opt.id }}" {% if opt.id == current %}selected{% endif %}>{{ opt.name }}{% if opt.name != opt.id %} — {{ opt.id }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        {% if refresh %}
+        <button type="button" class="btn btn-secondary btn-sm"
+                onclick="refreshAgentModels('{{ provider }}')">Refresh list</button>
+        {% endif %}
+    </div>
+    <small id="agent_{{ provider }}_models_status" style="display: block; margin-top: 5px; color: var(--color-text-muted);">
+        {% if not refresh %}Aliases for the latest model of each tier.{% elif m.live %}Models available to the account, loaded {{ m.fetched_at }}.{% else %}Default list. "Refresh list" loads the models available to the account.{% endif %}
+    </small>
+</div>
+{%- endmacro %}
+<h3 style="margin-bottom: 15px; color: var(--color-text);">🧠 AI Agent</h3>
+<p style="color: var(--color-text-muted); margin-bottom: 20px;">
+    The connection between the app and an AI provider. Modules that need AI — the Ledger
+    Assistant today — ask through the AI Agent and never see the API key. The AI Parser
+    still uses its own provider settings for reading documents.
+</p>
+
+<div class="form-group">
+    <label style="font-weight: 600; margin-bottom: 10px; display: block;">Active Provider</label>
+    {% for p in providers %}
+    <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
+        <input type="radio" name="agent_provider" value="{{ p.id }}"
+               {% if cfg.provider == p.id %}checked{% endif %}
+               style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;"
+               onchange="showAgentProvider('{{ p.id }}')">
+        <span>{{ p.name }}
+            {% if p.ready %}
+            <span style="color: var(--color-success); font-size: 12px; margin-left: 5px;">✓ ready</span>
+            {% endif %}
+        </span>
+    </label>
+    {% endfor %}
+</div>
+
+{% for pid, title, placeholder in [('openai', 'OpenAI', 'sk-...'), ('anthropic', 'Anthropic', 'sk-ant-...')] %}
+<div id="agent_config_{{ pid }}" class="agent-provider-config"
+     style="{% if cfg.provider != pid %}display:none;{% endif %}
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">{{ title }} Settings</h4>
+    <div class="form-group">
+        <label for="agent_{{ pid }}_api_key">API Key</label>
+        {{ secret_input('agent_' ~ pid ~ '_api_key', cfg[pid ~ '_api_key'], placeholder=placeholder, style='') }}
+    </div>
+    {{ model_select(pid, cfg[pid ~ '_model']) }}
+</div>
+{% endfor %}
+
+{% for pid, title in [('claude_cli', 'Claude Code CLI'), ('kiro_cli', 'Kiro CLI')] %}
+<div id="agent_config_{{ pid }}" class="agent-provider-config"
+     style="{% if cfg.provider != pid %}display:none;{% endif %}
+            background: var(--color-surface-2); padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+    <h4 style="margin-bottom: 10px;">{{ title }} Settings</h4>
+    <p style="color: var(--color-text-muted); margin-bottom: 10px;">
+        Runs <code>{{ agents[pid].binary }}</code> on this server under the account it is logged
+        in with, for each question, in an empty temporary folder and without any tool: it can
+        only answer. The question is still sent to the CLI's AI service.
+    </p>
+    {% if agents[pid].reason %}
+    <p style="color: var(--color-danger-fg); margin-bottom: 10px;">Not available: {{ agents[pid].reason }}</p>
+    {% else %}
+    <p style="color: var(--color-success-fg); margin-bottom: 10px;">✓ Found on the server PATH.</p>
+    {% endif %}
+    {{ model_select(pid, cfg[pid ~ '_model'], refresh=(pid == 'kiro_cli')) }}
+    <small style="color: var(--color-text-muted);">
+        Server settings: <code>{{ allow_env }}=1</code> turns CLI agents on;
+        <code>{{ agents[pid].bin_env }}</code> sets another binary path;
+        <code>{{ timeout_env }}</code> (seconds, default 180). The AI Parser's
+        <code>AI_PARSER_*</code> variables are used when these are not set.
+    </small>
+</div>
+{% endfor %}
+
+<div class="form-group">
+    <button type="button" class="btn btn-secondary btn-sm" onclick="checkAgentConnection()">Check connection</button>
+    <small id="agent_check_status" style="margin-left: 8px; color: var(--color-text-muted);">
+        Sends one short test question to the saved provider. Save first after a change.
+    </small>
+</div>
+
+<script>
+function showAgentProvider(provider) {
+    document.querySelectorAll('.agent-provider-config').forEach(el => el.style.display = 'none');
+    const panel = document.getElementById('agent_config_' + provider);
+    if (panel) panel.style.display = 'block';
+}
+function refreshAgentModels(provider) {
+    const status = document.getElementById('agent_' + provider + '_models_status');
+    const select = document.getElementById('agent_' + provider + '_model');
+    const keyInput = document.getElementById('agent_' + provider + '_api_key');
+    status.textContent = 'Loading…';
+    fetch('/ai-agent/models/' + provider + '/refresh', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({api_key: keyInput ? keyInput.value : '', current: select.value})})
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { status.textContent = '✗ ' + data.error; return; }
+            const current = select.value;
+            select.replaceChildren();
+            data.models.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = m.name === m.id ? m.id : m.name + ' — ' + m.id;
+                opt.selected = m.id === current;
+                select.appendChild(opt);
+            });
+            status.textContent = data.models.length + ' models available to the account, loaded ' + data.fetched_at + '.';
+        })
+        .catch(err => { status.textContent = '✗ Request failed: ' + err; });
+}
+function checkAgentConnection() {
+    const status = document.getElementById('agent_check_status');
+    status.textContent = 'Asking…';
+    fetch('/ai-agent/check', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
+        .then(r => r.json())
+        .then(data => {
+            status.textContent = data.ok
+                ? '✓ ' + data.provider + ' answered: ' + data.reply
+                : '✗ ' + (data.provider ? data.provider + ': ' : '') + data.error;
+        })
+        .catch(err => { status.textContent = '✗ Request failed: ' + err; });
+}
+</script>

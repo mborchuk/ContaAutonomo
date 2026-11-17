@@ -6,12 +6,13 @@ the module is off until enabled in Settings → Modules.
 
 It names no other module. It reads with the registry functions whose
 declaration allows the assistant (`functions.Function`, `assistant=True`),
-and asks with `ai.complete_text` and `ai.text_status` — today provided by the
-AI Parser with whichever provider is selected there (OpenAI, Anthropic, Claude
-Code CLI or Kiro CLI). A module that declares the same functions,
-also one from outside this repository, replaces either side without a change
-here: with the AI Parser disabled it is used; with both enabled the first to
-register owns the names, and the other's card in Settings → Modules says so.
+and asks with `ai.complete_text` and `ai.text_status` — provided by the AI
+Agent (`modules/ai_agent`) with whichever provider is selected there (OpenAI,
+Anthropic, Claude Code CLI or Kiro CLI). A module that declares the same
+functions, also one from outside this repository, replaces either side without
+a change here: with the AI Agent disabled it is used; with both enabled the
+first to register owns the names, and the other's card in Settings → Modules
+says so.
 
 ## How a question is answered
 
@@ -20,7 +21,7 @@ sequenceDiagram
     participant U as Owner
     participant A as ledger_assistant
     participant R as Function registry
-    participant T as ai.complete_text (AI Parser)
+    participant T as ai.complete_text (AI Agent)
     participant D as Data functions (core, expenses, tax_es_forms)
     U->>A: question
     A->>R: find(assistant=True)
@@ -69,8 +70,8 @@ sequenceDiagram
 ## When it cannot answer
 
 The page and the settings panel say what is missing: no enabled module
-implements the text functions (enable the AI Parser), or `ai.text_status`
-gives the reason (Google Document AI or a CLI agent selected, no API key).
+implements the text functions (enable the AI Agent), or `ai.text_status`
+gives the reason (no API key, CLI agents off on the server, CLI not installed).
 
 Dependency: `ledger.list_invoices`, which the core implements, so enabling
 the assistant enables nothing else.
@@ -78,4 +79,5 @@ the assistant enables nothing else.
 ## Tests
 
 `tests/test_ledger_assistant.py` — with a stand-in text module instead of the
-AI Parser, which is the replacement path in practice.
+AI Agent, which is the replacement path in practice;
+`tests/test_ai_agent.py` asks one question through the AI Agent itself.
