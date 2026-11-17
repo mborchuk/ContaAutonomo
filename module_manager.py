@@ -457,7 +457,10 @@ class BaseModule(ABC):
             list[dict]: each dict has:
                 - 'id': unique template identifier (used in Settings.invoice_template)
                 - 'name': human-readable name (shown in dropdown)
-                - 'path': absolute path to the .py template file
+                - 'path': absolute path to the .py template file, or
+                - 'render': callable(invoice, customer, settings) -> PDF bytes,
+                  or None when the template no longer exists (the core then
+                  falls back to the default template)
         """
         return []
 
@@ -2582,7 +2585,7 @@ class ModuleManager:
         """Collect invoice PDF templates from core + all active modules.
 
         Returns:
-            list[dict]: each dict has 'id', 'name', 'path'
+            list[dict]: each dict has 'id', 'name' and 'path' or 'render'
         """
         # Core templates from invoice_templates/ directory
         templates = []

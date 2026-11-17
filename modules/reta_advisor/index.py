@@ -48,13 +48,25 @@ class RetaAdvisorModule(BaseModule):
 
     @property
     def dependencies(self):
-        # Actual Social Security payments come from Tax Forms (tax_management).
-        return ['tax_management']
+        # Actual Social Security payments (Tax Management provides them).
+        return ['ss.payments_total']
 
-    @property
-    def interface(self):
-        # Used by Tax Provision (dashboard total).
-        return ['projection']
+    # --- Registry functions ------------------------------------------------ #
+
+    def get_functions(self):
+        from functions import Function, Param
+        return [Function(
+            'reta.projection', self.projection,
+            'RETA projection for the year of `today`: bracket, quota and the year-end '
+            'regularization. The deltas and the quota are what-if changes; nothing '
+            'is saved.',
+            params=(Param('today', 'date', 'Reference day, default today'),
+                    Param('income_delta', 'float', 'Added to year-to-date income, EUR'),
+                    Param('expense_delta', 'float', 'Added to year-to-date expenses, EUR'),
+                    Param('monthly_quota', 'float', 'Quota for the rest of the year, EUR')),
+            returns='{"regularization_delta": amount (> 0 owed, < 0 refund), '
+                    '"recommended_monthly_quota", "current_monthly_quota", '
+                    '"contribution_rate_pct", ...}')]
 
     @property
     def nav_items(self):
@@ -134,17 +146,18 @@ class RetaAdvisorModule(BaseModule):
         return amount
 
     def _paid_ytd(self, year):
-        """Actual SS payments this year via tax_management, if enabled."""
-        tm = self.core.module_manager.provider_of('tax_management')
-        if not tm or not hasattr(tm, 'SSPayment'):
+        """Social Security recorded as paid in `year`, or None when nothing is
+        recorded or nothing provides ss.payments_total."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('ss.payments_total'):
             return None
         try:
-            payments = tm.SSPayment.query.filter(
-                self._db.extract('year', tm.SSPayment.payment_date) == year).all()
-            return sum(p.amount for p in payments) if payments else None
+            paid = functions.call('ss.payments_total', date_from=date(year, 1, 1),
+                                  date_to=date(year, 12, 31))
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.warning('Reading SS payments failed: %s', e)
+            self.logger.warning('Reading SS payments failed: %s', type(e).__name__)
             return None
+        return paid['total'] if paid['count'] else None
 
     def projection(self, today=None, income_delta=0.0, expense_delta=0.0,
                    monthly_quota=None):

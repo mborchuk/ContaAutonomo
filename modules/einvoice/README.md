@@ -43,7 +43,9 @@ The readiness check requires:
 ## XAdES signature
 
 When the **PDF Signature** module is enabled and has a PFX/P12 certificate
-(Settings → PDF Signature), the export is signed with an enveloped
+(Settings → PDF Signature) — read through the registry function
+`pdf.signing_certificate`, so any module that declares it can supply the
+certificate — the export is signed with an enveloped
 **XAdES-EPES** signature (`xades.py`, library `signxml`):
 
 | Element | Value |

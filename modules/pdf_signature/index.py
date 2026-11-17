@@ -34,11 +34,6 @@ class PDFSignatureModule(BaseModule):
         return 'pdf_signature'
 
     @property
-    def interface(self):
-        # Used by the core invoice PDF route to auto-sign.
-        return ['PDFSignatureInvoice']
-
-    @property
     def name(self):
         return 'PDF Signature'
 
@@ -326,11 +321,11 @@ class PDFSignatureModule(BaseModule):
             digital: whether to apply digital signature
 
         On failure the original PDF is left unchanged; a warning is flashed
-        and the error is logged.
+        and the error is logged. Returns True when the PDF was signed.
         """
         if not visual and not digital:
             self.logger.debug('PDF Signature: _sign_invoice_pdf called with no flags, skipping')
-            return
+            return False
 
         self.logger.info(
             'PDF Signature: starting signing for invoice #%s (visual=%s, digital=%s)',
@@ -344,7 +339,7 @@ class PDFSignatureModule(BaseModule):
                     'PDF Signature: no PDF found for invoice #%s — skipping signing.',
                     invoice.invoice_number,
                 )
-                return
+                return False
 
             pdf_bytes, _filename = result
             self.logger.info(
@@ -374,6 +369,7 @@ class PDFSignatureModule(BaseModule):
                 'PDF Signature: invoice #%s signed (visual=%s, digital=%s)',
                 invoice.invoice_number, visual, digital,
             )
+            return True
 
         except Exception as exc:
             import traceback
@@ -386,24 +382,69 @@ class PDFSignatureModule(BaseModule):
             except RuntimeError:
                 # Outside request context — flash not available
                 pass
+            return False
+
+    # --- Registry functions ---
+
+    def sign_invoice(self, invoice_id):
+        """Sign the invoice's stored PDF with the signatures chosen on its form."""
+        from app import Invoice
+        from db_helpers import db_get
+        sig = self.PDFSignatureInvoice.query.filter_by(invoice_id=invoice_id).first()
+        if not sig or not (sig.has_visual or sig.has_digital):
+            return {'signed': False, 'requested': False}
+        invoice = db_get(Invoice, invoice_id)
+        if invoice is None:
+            return {'signed': False, 'requested': True}
+        signed = self._sign_invoice_pdf(invoice, visual=sig.has_visual,
+                                        digital=sig.has_digital)
+        return {'signed': bool(signed), 'requested': True}
+
+    def signing_certificate(self):
+        """(PFX bytes, password) of the configured certificate, as a dict, or None."""
+        cfg = self._get_config()
+        if not cfg.certificate_key:
+            return None
+        stored = self.core.storage.get(cfg.certificate_key)
+        if not stored:
+            return None
+        return {'pfx': stored[0], 'password': cfg.certificate_password or ''}
+
+    def get_functions(self):
+        from functions import Function, Param
+        return [
+            Function('pdf.sign_invoice', self.sign_invoice,
+                     "Sign an invoice's stored PDF with the signatures chosen on its form "
+                     '(visual, digital); nothing when none were chosen.',
+                     params=(Param('invoice_id', 'int', 'Invoice id', required=True,
+                                   minimum=1),),
+                     returns='{"signed": bool, "requested": bool}', read_only=False),
+            Function('pdf.signing_certificate', self.signing_certificate,
+                     'The X.509 certificate configured for signing, for modules that sign '
+                     'other formats (Facturae XML).',
+                     returns='{"pfx": bytes, "password": str}, or None'),
+        ]
 
     # --- Invoice view page actions ---
 
     def _check_real_pdf_signed(self, invoice):
         """Check the actual PDF file for embedded digital signatures.
 
-        Uses pdf_verify's extract_signatures if available.
+        Uses whatever provides pdf.extract_signatures (PDF Verify).
         Returns list of signature dicts if signed, empty list otherwise.
         """
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('pdf.extract_signatures'):
+            return []
         try:
-            from modules.pdf_verify.index import extract_signatures
             result = self.core.invoice_service.get_pdf(invoice)
             if not result:
                 return []
             pdf_bytes, _ = result
-            return extract_signatures(pdf_bytes)
+            return functions.call('pdf.extract_signatures', pdf_bytes=pdf_bytes)
         except Exception as exc:
-            self.logger.debug('PDF Signature: _check_real_pdf_signed failed: %s', exc)
+            self.logger.debug('PDF Signature: _check_real_pdf_signed failed: %s',
+                              type(exc).__name__)
             return []
 
     def get_invoice_actions(self, invoice):

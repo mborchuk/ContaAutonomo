@@ -23,7 +23,7 @@
             {% for p in data.parts %}
                 <tr>
                     <td>
-                        {% if p.amount is not none %}<a href="{{ url_for(p.endpoint, **p.args) }}">{{ p.label }}</a>{% else %}{{ p.label }}{% endif %}
+                        {% if p.amount is not none and p.endpoint %}<a href="{{ url_for(p.endpoint, **p.args) }}">{{ p.label }}</a>{% else %}{{ p.label }}{% endif %}
                     </td>
                     {% if p.amount is not none %}
                     <td class="text-right num">

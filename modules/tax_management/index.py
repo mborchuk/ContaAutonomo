@@ -47,11 +47,6 @@ class TaxManagementModule(BaseModule):
         return 'tax_management'
 
     @property
-    def interface(self):
-        # Used by IRPF Estimator, Spanish Tax Forms and RETA Advisor.
-        return ['filed_boxes', 'SSPayment']
-
-    @property
     def name(self):
         return 'Tax Management'
 
@@ -461,6 +456,34 @@ class TaxManagementModule(BaseModule):
             form_type=form_type, year=year, quarter=quarter).first()
         return tax_form.boxes if tax_form else {}
 
+    def ss_payments_total(self, date_from, date_to):
+        """Social Security payments recorded between two dates, inclusive."""
+        rows = self.SSPayment.query.filter(self.SSPayment.payment_date >= date_from,
+                                           self.SSPayment.payment_date <= date_to).all()
+        return {'total': sum(p.amount or 0.0 for p in rows), 'count': len(rows)}
+
+    # --- Registry functions ------------------------------------------------ #
+
+    def get_functions(self):
+        from functions import Function, Param
+        return [
+            Function('tax.filed_boxes', self.filed_boxes,
+                     'Boxes declared on the filed AEAT return of a period, read from its '
+                     'PDF in Tax Forms; {} when there is none.',
+                     params=(Param('form_type', 'str', "Form number, e.g. '303'",
+                                   required=True, max_length=10),
+                             Param('year', 'int', 'Tax year', required=True,
+                                   minimum=2000, maximum=2100),
+                             Param('quarter', 'int', 'Quarter 1-4; omit for an annual form',
+                                   minimum=1, maximum=4)),
+                     returns='{box: amount}'),
+            Function('ss.payments_total', self.ss_payments_total,
+                     'Social Security (RETA) payments recorded between two dates, inclusive.',
+                     params=(Param('date_from', 'date', 'First day', required=True),
+                             Param('date_to', 'date', 'Last day', required=True)),
+                     returns='{"total": amount, "count": int}'),
+        ]
+
     def _download_tax_form(self, id):
         """Download a tax form"""
         tax_form = db_get_or_404(self.TaxForm, id)
@@ -591,26 +614,27 @@ class TaxManagementModule(BaseModule):
     # --- F10: obligations workflow ---------------------------------------- #
 
     def _obligation_rows(self, year, today=None):
-        """Cross the fiscal-calendar dataset with recorded TaxForms.
+        """Cross the filing calendar with recorded TaxForms.
 
         One row per obligation instance (form × period) for `year`, each with
-        its filing status: pending / filed / paid / overdue. The calendar
-        dataset ships with the fiscal_calendar module but is plain data — safe
-        to import whether or not that module is enabled.
+        its filing status: pending / filed / paid / overdue. The deadlines come
+        from whatever provides `calendar.deadlines_for_year` (the Fiscal
+        Calendar); without a provider there are no rows.
         """
         from datetime import date as _date
-        from modules.fiscal_calendar.calendar_data import all_deadlines
 
         today = today or _date.today()
+        if not self._calendar_available():
+            return []
+        functions = self.core.functions
+        entries = functions.call('calendar.deadlines_for_year', year=year)
 
-        # Which forms does the user file? Prefer fiscal_calendar's selection,
-        # else infer from TaxForm history, else all.
+        # Which forms does the user file? The calendar's selection, else
+        # inferred from TaxForm history, else all.
         selected = None
-        fc = self.core.module_manager.provider_of('fiscal_calendar') \
-            if self.core.module_manager else None
-        if fc:
+        if functions.available('calendar.selected_forms'):
             try:
-                selected = fc._selected_forms()
+                selected = set(functions.call('calendar.selected_forms'))
             except Exception:  # pragma: no cover - defensive
                 selected = None
         if selected is None:
@@ -621,7 +645,7 @@ class TaxManagementModule(BaseModule):
                  for f in self.TaxForm.query.filter_by(year=year).all()}
 
         out = []
-        for entry in all_deadlines(years=[year]):
+        for entry in entries:
             if selected is not None and entry['form'] not in selected:
                 continue
             key = f"{entry['form']}|{entry['year']}|{entry['quarter'] or 0}"
@@ -643,6 +667,10 @@ class TaxManagementModule(BaseModule):
             })
         return out
 
+    def _calendar_available(self):
+        functions = getattr(self.core, 'functions', None)
+        return functions is not None and functions.available('calendar.deadlines_for_year')
+
     def _obligations_view(self):
         year = request.args.get('year', type=int) or datetime.now().year
         rows = self._obligation_rows(year)
@@ -655,7 +683,8 @@ class TaxManagementModule(BaseModule):
             if f.amount:
                 totals[f.form_type] = totals.get(f.form_type, 0.0) + f.amount
         return render_template('tax_obligations.html', rows=rows, year=year,
-                               years=years, totals=totals)
+                               years=years, totals=totals,
+                               calendar_enabled=self._calendar_available())
 
     def _record_filing(self):
         """Record a filing for an obligation: status + amount, evidence optional.

@@ -38,12 +38,6 @@ class FiscalCalendarModule(BaseModule):
         return 'fiscal_calendar'
 
     @property
-    def interface(self):
-        # _selected_forms: Tax Forms (payment projection); upcoming_deadlines:
-        # the dashboard; deadline_for: Tax Provision.
-        return ['_selected_forms', 'upcoming_deadlines', 'deadline_for']
-
-    @property
     def name(self):
         return 'Fiscal Calendar'
 
@@ -138,6 +132,42 @@ class FiscalCalendarModule(BaseModule):
             if entry['form'] == form and entry['quarter'] == quarter:
                 return entry
         return None
+
+    def year_deadlines(self, year):
+        """Every filing window of fiscal `year`, all forms, by window end."""
+        return deadlines_for_year(year)
+
+    def selected_forms(self):
+        return sorted(self._selected_forms())
+
+    # --- Registry functions ------------------------------------------------ #
+
+    def get_functions(self):
+        from functions import Function, Param
+        year = Param('year', 'int', 'Fiscal year', required=True, minimum=2000, maximum=2100)
+        entry = ('{"form", "period", "period_label", "year", "quarter": 1-4 or None, '
+                 '"window_start": date, "window_end": date, "verified": bool}')
+        return [
+            Function('calendar.upcoming_deadlines', self.upcoming_deadlines,
+                     'Next open or upcoming filing windows for the forms the user files.',
+                     params=(Param('limit', 'int', 'How many, default 4', minimum=1, maximum=50),
+                             Param('today', 'date', 'Reference day, default today')),
+                     returns=f'[entry + "state", "days_to_end", "days_to_start"]; entry: {entry}'),
+            Function('calendar.deadline_for', self.deadline_for,
+                     'The filing window of one return, whether or not the user files the form.',
+                     params=(Param('form', 'str', "Form number, e.g. '303'", required=True,
+                                   max_length=10),
+                             year,
+                             Param('quarter', 'int', 'Quarter 1-4; omit for an annual form',
+                                   minimum=1, maximum=4)),
+                     returns=f'{entry}, or None'),
+            Function('calendar.deadlines_for_year', self.year_deadlines,
+                     'Every filing window of one fiscal year, all forms, by window end.',
+                     params=(year,), returns=f'[{entry}]'),
+            Function('calendar.selected_forms', self.selected_forms,
+                     'Form numbers the user files (Settings → Fiscal Calendar).',
+                     returns='[form], sorted'),
+        ]
 
     def get_dashboard_panels(self):
         items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())

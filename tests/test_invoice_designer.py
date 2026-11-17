@@ -37,9 +37,31 @@ def test_create_and_edit_template_from_json(designer, app):
     assert tpl.name == 'Plain v2'
     assert json.loads(tpl.config_json)['accent_color'] == '#445566'
 
-    listed = inst.get_invoice_templates()
-    assert {'id': f'designer_{tpl.id}', 'name': '🎨 Plain v2', 'path': '__designer__',
-            '_designer_id': tpl.id} in listed
+    listed = {t['id']: t for t in inst.get_invoice_templates()}
+    entry = listed[f'designer_{tpl.id}']
+    assert entry['name'] == '🎨 Plain v2' and callable(entry['render'])
+    assert 'path' not in entry
+
+
+def test_template_renders_itself_and_reports_a_missing_one(designer, monkeypatch):
+    inst, g = designer
+    from types import SimpleNamespace
+    tpl = inst.InvoiceTemplate(name='Render me',
+                               config_json=json.dumps({'labels': {'invoice_title': 'FACTURA'}}))
+    inst._db.session.add(tpl)
+    inst._db.session.commit()
+    seen = {}
+
+    def fake_generate(invoice, customer, settings, config, storage=None, blocks=None):
+        seen.update(config=config, blocks=blocks)
+        return b'%PDF-fake'
+    monkeypatch.setitem(g, 'generate_pdf_from_config', fake_generate)
+    render = {t['id']: t for t in inst.get_invoice_templates()}[f'designer_{tpl.id}']['render']
+    assert render(SimpleNamespace(), None, None) == b'%PDF-fake'
+    assert seen['config']['labels']['invoice_title'] == 'FACTURA'
+    assert set(g['DEFAULT_CONFIG']['labels']) <= set(seen['config']['labels'])
+    assert isinstance(seen['blocks'], list)
+    assert inst.render_invoice_pdf(10 ** 6, SimpleNamespace(), None, None) is None
 
 
 def test_name_is_required(designer, app):
@@ -74,3 +96,39 @@ def test_render_pdf_from_config(designer):
     assert pdf[:5] == b'%PDF-'
     text = ''.join(p.extract_text() or '' for p in PdfReader(io.BytesIO(pdf)).pages)
     assert '2026-DEMO' in text and 'Frontend Development' in text
+
+
+def test_core_renders_a_module_template_through_its_callable(loaded_modules, client,
+                                                             monkeypatch):
+    from datetime import date
+    from app import Invoice, Settings, db
+    from module_manager import BaseModule
+    seen = []
+
+    class Templates(BaseModule):
+        module_id = 'zz_templates'
+        name = 'Templates'
+
+        def get_invoice_templates(self):
+            return [{'id': 'zz_plain', 'name': 'Plain',
+                     'render': lambda inv, cust, settings: seen.append(inv.id) or b'%PDF-zz'}]
+
+    settings = Settings.query.first() or Settings()
+    db.session.add(settings)
+    before = settings.invoice_template
+    settings.invoice_template = 'zz_plain'
+    inv = Invoice(invoice_number='TPL-1', client_name='Template SL', amount_usd=0.0,
+                  amount_eur=50.0, exchange_rate=1.0, invoice_date=date(2026, 11, 12),
+                  status='draft', currency='EUR')
+    db.session.add(inv)
+    db.session.commit()
+    monkeypatch.setitem(loaded_modules.modules, 'zz_templates', Templates(loaded_modules.core))
+    monkeypatch.setattr(loaded_modules, 'filter_invoice_pdf', lambda invoice, pdf: pdf)
+    try:
+        with client.session_transaction() as sess:
+            sess['authenticated'] = True
+        resp = client.get(f'/preview-pdf/{inv.id}')
+    finally:
+        settings.invoice_template = before
+        db.session.commit()
+    assert resp.data == b'%PDF-zz' and seen == [inv.id]
