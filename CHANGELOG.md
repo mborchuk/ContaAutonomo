@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Invoice templates render themselves**: a module template in
+  `get_invoice_templates()` may carry a `render(invoice, customer, settings)`
+  callable instead of a file `path`. The Invoice Designer uses it, so the core
+  no longer imports the designer or reads its table with SQL when it creates,
+  downloads or previews an invoice PDF; a test refuses any core import of a
+  module.
+- **No module imports another module**: the API declares `api.check_token`,
+  which Reports' API route uses instead of the module's `verify_token`; the
+  invoice output-VAT rule Reports shares with Spanish Tax Forms moved to the
+  core (`invoice_vat.py`). The OpenAPI document lists `/expenses` while
+  something provides `ledger.list_expenses`.
+- **PDF signing on the function registry**: PDF Signature declares
+  `pdf.sign_invoice` and `pdf.signing_certificate`, PDF Verify
+  `pdf.extract_signatures`. The core invoice route, E-invoice, the document
+  form and PDF Signature's badge call them instead of reading another module's
+  model or configuration, or importing its code.
 - **Tax data on the function registry**: Tax Management declares
   `tax.filed_boxes` and `ss.payments_total`, the IRPF Estimator
   `tax.modelo130_boxes`, `tax.modelo100_result` and `tax.equipment_rule`, the

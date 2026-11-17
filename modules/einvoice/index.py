@@ -59,23 +59,16 @@ class EInvoiceModule(BaseModule):
     # --- Signing (D-4) --------------------------------------------------------- #
 
     def _certificate(self):
-        """(pfx_bytes, password) of the PDF Signature module's certificate, or
-        None when signing is not available (module off, no certificate, no
+        """(pfx_bytes, password) from pdf.signing_certificate (PDF Signature),
+        or None when signing is not available (no provider, no certificate, no
         XAdES library)."""
         if not xades.available():
             return None
-        mm = getattr(self.core, 'module_manager', None)
-        pdf_sig = mm.provider_of('pdf_signature') if mm else None
-        if pdf_sig is None or not hasattr(pdf_sig, '_get_config'):
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('pdf.signing_certificate'):
             return None
-        cfg = pdf_sig._get_config()
-        if not cfg.certificate_key:
-            return None
-        stored = self.core.storage.get(cfg.certificate_key)
-        if not stored:
-            return None
-        pfx_bytes, _name = stored
-        return pfx_bytes, cfg.certificate_password or ''
+        cert = functions.call('pdf.signing_certificate')
+        return (cert['pfx'], cert['password']) if cert else None
 
     def _export(self, invoice, seller, customer, unsigned=False):
         """(xml_bytes, signed) — signed with XAdES-EPES when a certificate is

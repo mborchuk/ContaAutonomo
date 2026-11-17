@@ -203,13 +203,9 @@ def test_modules_look_each_other_up_through_provider_of():
     assert not offenders, offenders
 
 
-# Imports of another module's code that remain; each one ties the caller to
-# that module. Remove an entry when its import goes; never add one — add a
-# registry function (functions.py) instead.
-KNOWN_CROSS_MODULE_IMPORTS = {
-    ('pdf_signature', 'pdf_verify'),
-    ('reports', 'tax_es_forms'),
-}
+# Imports of another module's code tie the caller to that module. There are
+# none left; never add one — add a registry function (functions.py) instead.
+KNOWN_CROSS_MODULE_IMPORTS = set()
 
 
 def test_no_new_imports_between_modules():
@@ -222,6 +218,9 @@ def test_no_new_imports_between_modules():
         for other in re.findall(r'^\s*(?:from|import) modules\.(\w+)', path.read_text(), re.M):
             if other != own:
                 found.add((own, other))
+    core = sorted(p.name for p in root.glob('*.py')
+                  if re.search(r'^\s*(?:from|import) modules\.', p.read_text(), re.M))
+    assert not core, f'core files import a module: {core}'
     assert found <= KNOWN_CROSS_MODULE_IMPORTS, sorted(found - KNOWN_CROSS_MODULE_IMPORTS)
     assert found == KNOWN_CROSS_MODULE_IMPORTS, (
         'remove these from KNOWN_CROSS_MODULE_IMPORTS: '
