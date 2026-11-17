@@ -488,3 +488,17 @@ def test_expense_form_uses_the_parse_function_route(loaded_modules, client, monk
     monkeypatch.setitem(loaded_modules.modules, 'other_parser', OtherParser(loaded_modules.core))
     html = client.get('/expenses/create').get_data(as_text=True)
     assert 'id="ai-parse-block"' in html and '"/other-parser/parse"' in html
+
+
+def test_expense_form_applies_category_defaults_after_a_parse(loaded_modules, client):
+    """Setting the parsed category in code fires no change event, so the
+    prefill applies the category's defaults itself (deductible %, and the VAT
+    rate only when the document gave no VAT data). Checked in a browser: a
+    parsed "Vehicle" receipt gets 50 %, not the form's 100 %."""
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/expenses/create').get_data(as_text=True)
+    assert "catEl.addEventListener('change', () => applyCategoryDefaults(false));" in html
+    assert ('applyCategoryDefaults(data.vat_rate != null || data.net_amount != null'
+            in html)
+    assert '"Vehicle"' in html and '"deductible_pct": 50.0' in html   # the defaults it applies
