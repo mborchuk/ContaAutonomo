@@ -595,7 +595,7 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
   - Edit as JSON toggle with live sync to visual editor
   - Preview generates PDF with real settings data (sender, bank, customer from DB)
   - Templates appear in Settings → Invoice PDF Template dropdown with `🎨` prefix
-  - `app.py` patched in 3 locations (create, download, preview) to handle `__designer__` template path
+  - Each template entry carries a `render` callable; the core calls it on create, download and preview, and falls back to the default template when it returns None (template deleted)
 
 ### Tax Poland IT (`tax_poland`)
 
@@ -978,7 +978,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `on_invoice_rectified(new_invoice, original, request)` | Called when a rectificative draft is created, before commit. Raising aborts. |
 | `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
 | `on_invoice_deleted(invoice)` | Called when a draft invoice is deleted, before commit. Delete the module's rows that reference the invoice; raising aborts. |
-| `get_invoice_templates()` | Invoice PDF templates provided by this module |
+| `get_invoice_templates()` | Invoice PDF templates provided by this module: `id`, `name` and a template file `path` or a `render(invoice, customer, settings)` callable returning PDF bytes (None: template gone, default used) |
 | `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render) |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |

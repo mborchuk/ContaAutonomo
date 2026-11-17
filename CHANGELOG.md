@@ -6,6 +6,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Invoice templates render themselves**: a module template in
+  `get_invoice_templates()` may carry a `render(invoice, customer, settings)`
+  callable instead of a file `path`. The Invoice Designer uses it, so the core
+  no longer imports the designer or reads its table with SQL when it creates,
+  downloads or previews an invoice PDF; a test refuses any core import of a
+  module.
 - **No module imports another module**: the API declares `api.check_token`,
   which Reports' API route uses instead of the module's `verify_token`; the
   invoice output-VAT rule Reports shares with Spanish Tax Forms moved to the

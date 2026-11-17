@@ -798,6 +798,11 @@ def get_invoice_templates(self):
     }]
 ```
 
+A module that builds the PDF itself (the Invoice Designer does) gives a
+`render` callable instead of `path`: `render(invoice, customer, settings)`
+returns the PDF bytes, or None when the template no longer exists, and the core
+then uses the default template. The core never imports the module.
+
 ### Template file contract
 
 The template `.py` file must define a `generate_invoice_pdf` function:
