@@ -6,6 +6,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Tax data on the function registry**: Tax Management declares
+  `tax.filed_boxes` and `ss.payments_total`, the IRPF Estimator
+  `tax.modelo130_boxes`, `tax.modelo100_result` and `tax.equipment_rule`, the
+  RETA Advisor `reta.projection`. Spanish Tax Forms, the IRPF Estimator, the
+  RETA Advisor and Tax Provision call them by name instead of using another
+  module's methods or its `SSPayment` model, and their dependencies name these
+  functions instead of modules, so a replacement that declares them needs no
+  `provides`. Registry parameters may be `float`.
+- **Fiscal calendar on the function registry**: the Fiscal Calendar declares
+  `calendar.upcoming_deadlines`, `calendar.deadline_for`,
+  `calendar.deadlines_for_year` and `calendar.selected_forms`; the dashboard,
+  Tax Provision, Tax Obligations and the Modelo 347 draft call them instead of
+  importing the calendar data or using the module's `interface`, so another
+  calendar module can replace it. With no calendar enabled the obligations page
+  lists no rows and says to enable the Fiscal Calendar (it used to read the
+  bundled dataset directly).
 - **Modules on the function registry** (#147): Expenses declares
   `ledger.list_expenses`, Spanish Tax Forms `tax.draft_303` and
   `tax.draft_130`, the AI Parser `ai.parse_document`, `ai.complete_text` and
