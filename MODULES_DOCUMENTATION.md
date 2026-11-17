@@ -1073,6 +1073,9 @@ Functions today:
 | `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate}` for a quarter; the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
 | `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
 | `reta.projection` | `reta_advisor` | `today?`, `income_delta?`, `expense_delta?`, `monthly_quota?` (`float`); the RETA projection. Tax Provision and the IRPF what-if simulator call it |
+| `pdf.sign_invoice` | `pdf_signature` | `invoice_id`; signs the stored PDF with the signatures chosen on the invoice form, `{signed, requested}`. The core calls it after generating an invoice PDF; the document form shows the signing hint when it exists |
+| `pdf.signing_certificate` | `pdf_signature` | `{pfx, password}` of the configured certificate, or None. E-invoice (Facturae XAdES) calls it |
+| `pdf.extract_signatures` | `pdf_verify` | `pdf_bytes`; the embedded signatures, `[]` when none. PDF Signature's invoice badge calls it |
 | `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
 | `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
 | `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
@@ -1081,8 +1084,9 @@ Functions today:
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
 `/api/v1` invoice, customer and expense lists, the expense form, the dashboard,
-Tax Provision, Tax Obligations, the tax drafts, the IRPF Estimator and the
-RETA Advisor. A calendar entry is a
+Tax Provision, Tax Obligations, the tax drafts, the IRPF Estimator, the RETA
+Advisor, the invoice PDF route, E-invoice, the document form and PDF
+Signature. A calendar entry is a
 dict: `form`, `period`, `period_label`, `year`, `quarter` (1-4 or None),
 `window_start`, `window_end` (`date`), `verified`. Without a calendar provider
 the dashboard and the obligations page say to enable the Fiscal Calendar, and
@@ -1143,7 +1147,6 @@ Interfaces declared today:
 | Module | `interface` | Used by |
 |---|---|---|
 | `api` | `verify_token(request)` | Reports |
-| `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
 
 **Expenses** has no methods in its interface: the tax modules read the core
 `expense` table (`from app import Expense`). A replacement expenses module must
@@ -1152,9 +1155,9 @@ write its records there with these columns filled: `expense_date`, `amount`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-Code imports between modules (`pdf_verify.extract_signatures`,
-`tax_es_forms.calculator`) are not covered:
-replacing those modules means keeping those import paths. `ApiError` is in the
+The code import between modules that remains (`tax_es_forms.calculator`, used
+by Reports) is not covered: replacing Spanish Tax Forms means keeping that
+import path. `ApiError` is in the
 core (`from api_errors import ApiError`); `modules.api.index.ApiError` is the
 same class.
 

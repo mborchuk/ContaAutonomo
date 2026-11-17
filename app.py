@@ -1569,29 +1569,18 @@ def create_invoice():
                 invoice.pdf_generated = True
                 db.session.commit()
 
-                # Auto-sign PDF if pdf_signature module requested it
+                # Sign the new PDF if its form asked for it (pdf.sign_invoice).
                 try:
-                    pdf_sig_mod = module_manager.provider_of('pdf_signature')
-                    if pdf_sig_mod:
-                        sig_rec = pdf_sig_mod.PDFSignatureInvoice.query.filter_by(
-                            invoice_id=invoice.id
-                        ).first()
-                        if sig_rec and (sig_rec.has_visual or sig_rec.has_digital):
-                            app.logger.info(
-                                'Auto-signing invoice #%s after PDF generation '
-                                '(visual=%s, digital=%s)',
-                                invoice.invoice_number,
-                                sig_rec.has_visual, sig_rec.has_digital,
-                            )
-                            pdf_sig_mod._sign_invoice_pdf(
-                                invoice,
-                                visual=sig_rec.has_visual,
-                                digital=sig_rec.has_digital,
-                            )
+                    if module_manager.functions.available('pdf.sign_invoice'):
+                        result = module_manager.functions.call('pdf.sign_invoice',
+                                                               invoice_id=invoice.id)
+                        if result['requested']:
+                            app.logger.info('Auto-signed invoice #%s after PDF generation: %s',
+                                            invoice.invoice_number, result['signed'])
                 except Exception as sign_err:
                     app.logger.error(
                         'Auto-sign failed for invoice #%s: %s',
-                        invoice.invoice_number, sign_err,
+                        invoice.invoice_number, type(sign_err).__name__,
                     )
             except Exception as e:
                 logger.error('PDF auto-generation failed for invoice #%s: %s',
