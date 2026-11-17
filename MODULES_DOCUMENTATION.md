@@ -595,7 +595,7 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
   - Edit as JSON toggle with live sync to visual editor
   - Preview generates PDF with real settings data (sender, bank, customer from DB)
   - Templates appear in Settings → Invoice PDF Template dropdown with `🎨` prefix
-  - `app.py` patched in 3 locations (create, download, preview) to handle `__designer__` template path
+  - Each template entry carries a `render` callable; the core calls it on create, download and preview, and falls back to the default template when it returns None (template deleted)
 
 ### Tax Poland IT (`tax_poland`)
 
@@ -978,7 +978,7 @@ Items without `group` appear as top-level links. The full menu is built by `Modu
 | `on_invoice_rectified(new_invoice, original, request)` | Called when a rectificative draft is created, before commit. Raising aborts. |
 | `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
 | `on_invoice_deleted(invoice)` | Called when a draft invoice is deleted, before commit. Delete the module's rows that reference the invoice; raising aborts. |
-| `get_invoice_templates()` | Invoice PDF templates provided by this module |
+| `get_invoice_templates()` | Invoice PDF templates provided by this module: `id`, `name` and a template file `path` or a `render(invoice, customer, settings)` callable returning PDF bytes (None: template gone, default used) |
 | `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render) |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
@@ -1030,9 +1030,9 @@ new ones; nothing in the core has to change.
   ```
 
   A `Function` has a name (`area.verb_object`), a summary written for people
-  and AI tools, parameters (`Param`: kind `str` / `int` / `date` / `bytes`,
-  required, choices, limits), what it returns (plain JSON values, never
-  database objects), flags — `read_only`, `external` (sends data out of the
+  and AI tools, parameters (`Param`: kind `str` / `int` / `float` / `date` / `bytes`,
+  required, choices, limits), what it returns (plain values — JSON types and
+  `date` — never database objects), flags — `read_only`, `external` (sends data out of the
   app), `assistant` (the ledger assistant may call it; needs `read_only`, not
   `external`, plus `record_kind` and the `assistant_fields` it may send) — the
   callable, which must accept every parameter by name, and an optional browser
@@ -1067,12 +1067,31 @@ Functions today:
 | `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
-| `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter` |
+| `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
+| `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
+| `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
+| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate}` for a quarter; the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
+| `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
+| `reta.projection` | `reta_advisor` | `today?`, `income_delta?`, `expense_delta?`, `monthly_quota?` (`float`); the RETA projection. Tax Provision and the IRPF what-if simulator call it |
+| `api.check_token` | `api` | `token`; whether it is the API token (constant-time). Reports' `POST /api/v1/reports/generate` checks `X-API-Token` with it; without a provider the route answers 401 |
+| `pdf.sign_invoice` | `pdf_signature` | `invoice_id`; signs the stored PDF with the signatures chosen on the invoice form, `{signed, requested}`. The core calls it after generating an invoice PDF; the document form shows the signing hint when it exists |
+| `pdf.signing_certificate` | `pdf_signature` | `{pfx, password}` of the configured certificate, or None. E-invoice (Facturae XAdES) calls it |
+| `pdf.extract_signatures` | `pdf_verify` | `pdf_bytes`; the embedded signatures, `[]` when none. PDF Signature's invoice badge calls it |
+| `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
+| `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
+| `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
 | `ai.text_status`, `ai.complete_text` | `ai_parser` | Text questions with the selected provider — OpenAI, Anthropic, Claude Code CLI or Kiro CLI (not Google Document AI); the key stays in the module |
 | `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever provides it |
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
-`/api/v1` invoice, customer and expense lists, and the expense form.
+`/api/v1` invoice, customer and expense lists, the expense form, the dashboard,
+Tax Provision, Tax Obligations, the tax drafts, the IRPF Estimator, the RETA
+Advisor, the invoice PDF route, E-invoice, the document form, PDF Signature
+and Reports. A calendar entry is a
+dict: `form`, `period`, `period_label`, `year`, `quarter` (1-4 or None),
+`window_start`, `window_end` (`date`), `verified`. Without a calendar provider
+the dashboard and the obligations page say to enable the Fiscal Calendar, and
+the drafts show no filing date.
 
 ### Dependencies
 
@@ -1093,9 +1112,11 @@ def dependencies(self):
   consistent when a dependency is declared later.
 - The Modules tab shows "Requires" and "Required by" for each module.
 
-Declared today: `tax_es_forms` → `expenses`, `tax_management`, `tax_es_irpf`;
-`tax_es_irpf` → `expenses`, `tax_management`; `reta_advisor` →
-`tax_management`. Optional integrations (external storage for backups, PDF
+Declared today: `tax_es_forms` → `expenses`, `tax.filed_boxes`,
+`tax.modelo130_boxes`, `tax.equipment_rule`; `tax_es_irpf` → `expenses`,
+`tax.filed_boxes`, `ss.payments_total`; `reta_advisor` → `ss.payments_total`.
+A function dependency is met by whatever module declares it, so a replacement
+needs no `provides`. Optional integrations (external storage for backups, PDF
 signing for documents, email for fiscal reminders, AI receipt parsing) are not
 dependencies: they use the capabilities below or check whether the other module
 is loaded, and work without it.
@@ -1118,34 +1139,24 @@ def provides(self):
 - Modules find each other with `module_manager.provider_of('<module id>')`,
   never `module_manager.modules.get(...)`: the lookup returns the bundled
   module first, else a replacement. A test fails if a direct lookup comes back.
-- A module lists what others use on it in `interface` (method and model
+- A module may list what others use on it in `interface` (method and model
   names). A replacement must have all of them; `provider_of` skips and logs one
   that does not, and a test checks every loaded module has its own interface.
+  No bundled module declares one: they call each other through registry
+  functions ([Functions](#functions)), which a replacement declares instead.
 
-Interfaces declared today:
-
-| Module | `interface` | Used by |
-|---|---|---|
-| `tax_management` | `filed_boxes(form_type, year, quarter)`, `SSPayment` model | IRPF Estimator, Spanish Tax Forms, RETA Advisor |
-| `tax_es_irpf` | `is_equipment(expense, net_eur)`, `modelo130_boxes(year, quarter)`, `modelo100_result(year)` | Spanish Tax Forms, Tax Provision |
-| `tax_es_forms` | `draft_303(year, quarter)` | Tax Provision |
-| `reta_advisor` | `projection(today, income_delta, expense_delta, monthly_quota)` | Tax Provision, IRPF what-if simulator |
-| `fiscal_calendar` | `_selected_forms()`, `upcoming_deadlines(limit, today)`, `deadline_for(form, year, quarter)` | Tax Forms, core dashboard, Tax Provision |
-| `api` | `verify_token(request)` | Reports |
-| `pdf_signature` | `PDFSignatureInvoice` model | Core invoice PDF route |
-
-**Expenses** has no methods in its interface: the tax modules read the core
-`expense` table (`from app import Expense`). A replacement expenses module must
+The tax modules read the core `expense` table (`from app import Expense`). A
+replacement expenses module must
 write its records there with these columns filled: `expense_date`, `amount`,
 `currency`, `net_amount`, `vat_amount`, `vat_rate`, `deductible`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-Code imports between modules (`fiscal_calendar.calendar_data`,
-`pdf_verify.extract_signatures`, `tax_es_forms.calculator`) are not covered:
-replacing those modules means keeping those import paths. `ApiError` is in the
-core (`from api_errors import ApiError`); `modules.api.index.ApiError` is the
-same class.
+No module imports another module's code; a test fails if one does. Shared
+rules on core data live in the core: `invoice_vat.py` (output VAT of one
+invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
+`ApiError` is in the core (`from api_errors import ApiError`);
+`modules.api.index.ApiError` is the same class.
 
 ### Capabilities System
 

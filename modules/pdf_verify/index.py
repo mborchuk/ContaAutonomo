@@ -370,6 +370,15 @@ class PDFVerifyModule(BaseModule):
     def register_models(self, db):
         self._db = db
 
+    def get_functions(self):
+        from functions import Function, Param
+        return [Function(
+            'pdf.extract_signatures', extract_signatures,
+            'Digital signatures embedded in a PDF; [] when unsigned or not a PDF.',
+            params=(Param('pdf_bytes', 'bytes', 'The PDF file', required=True),),
+            returns='[{"signer", "issuer", "signed_at": ISO or None, "serial", '
+                    '"algorithm", "reason", "location", "contact"}]')]
+
     def get_capabilities(self):
         """Expose capabilities for cross-module integration."""
         return [

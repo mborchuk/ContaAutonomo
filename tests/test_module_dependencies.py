@@ -142,18 +142,26 @@ def test_toggle_route_refuses_to_disable_a_needed_module(loaded_modules, client)
     assert 'tax_management' in loaded_modules.modules
 
 
-def test_declared_dependencies_of_real_modules_exist():
-    from module_manager import ModuleManager  # noqa: F401
-    import importlib
-    for module_id, deps in {'tax_es_forms': ['expenses', 'tax_management', 'tax_es_irpf'],
-                            'tax_es_irpf': ['expenses', 'tax_management'],
-                            'reta_advisor': ['tax_management']}.items():
-        mod = importlib.import_module(f'modules.{module_id}.index')
-        cls = next(v for v in vars(mod).values()
-                   if isinstance(v, type) and issubclass(v, BaseModule) and v is not BaseModule)
-        assert cls(None).dependencies == deps
+def test_declared_dependencies_of_real_modules_exist(loaded_modules):
+    expected = {
+        'tax_es_forms': ['expenses', 'tax.filed_boxes', 'tax.modelo130_boxes',
+                         'tax.equipment_rule'],
+        'tax_es_irpf': ['expenses', 'tax.filed_boxes', 'ss.payments_total'],
+        'reta_advisor': ['ss.payments_total'],
+    }
+    for module_id, deps in expected.items():
+        assert loaded_modules.declared_dependencies(module_id) == deps
         for dep in deps:
-            importlib.import_module(f'modules.{dep}.index')
+            assert loaded_modules.providers(dep), dep
+
+
+def test_tax_functions_are_provided_by_the_data_owner(loaded_modules):
+    owner = loaded_modules.functions.provider
+    assert owner('tax.filed_boxes') == owner('ss.payments_total') == 'tax_management'
+    assert owner('tax.modelo130_boxes') == owner('tax.modelo100_result') == 'tax_es_irpf'
+    assert owner('tax.equipment_rule') == 'tax_es_irpf'
+    assert owner('reta.projection') == 'reta_advisor'
+    assert owner('tax.draft_303') == 'tax_es_forms'
 
 
 # ── Capabilities ─────────────────────────────────────────────────────────
@@ -195,15 +203,9 @@ def test_modules_look_each_other_up_through_provider_of():
     assert not offenders, offenders
 
 
-# Imports of another module's code that remain; each one ties the caller to
-# that module. Remove an entry when its import goes; never add one — add a
-# registry function (functions.py) instead.
-KNOWN_CROSS_MODULE_IMPORTS = {
-    ('tax_es_forms', 'fiscal_calendar'),
-    ('tax_management', 'fiscal_calendar'),
-    ('pdf_signature', 'pdf_verify'),
-    ('reports', 'tax_es_forms'),
-}
+# Imports of another module's code tie the caller to that module. There are
+# none left; never add one — add a registry function (functions.py) instead.
+KNOWN_CROSS_MODULE_IMPORTS = set()
 
 
 def test_no_new_imports_between_modules():
@@ -216,6 +218,9 @@ def test_no_new_imports_between_modules():
         for other in re.findall(r'^\s*(?:from|import) modules\.(\w+)', path.read_text(), re.M):
             if other != own:
                 found.add((own, other))
+    core = sorted(p.name for p in root.glob('*.py')
+                  if re.search(r'^\s*(?:from|import) modules\.', p.read_text(), re.M))
+    assert not core, f'core files import a module: {core}'
     assert found <= KNOWN_CROSS_MODULE_IMPORTS, sorted(found - KNOWN_CROSS_MODULE_IMPORTS)
     assert found == KNOWN_CROSS_MODULE_IMPORTS, (
         'remove these from KNOWN_CROSS_MODULE_IMPORTS: '

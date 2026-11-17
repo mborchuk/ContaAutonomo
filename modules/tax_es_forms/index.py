@@ -60,14 +60,10 @@ class TaxEsFormsModule(BaseModule):
 
     @property
     def dependencies(self):
-        # Expenses feed 303; filed returns and Social Security come from Tax Forms;
-        # Modelo 130 is calculated by the IRPF Estimator (owner decision 2026-10-03).
-        return ['expenses', 'tax_management', 'tax_es_irpf']
-
-    @property
-    def interface(self):
-        # Used by Tax Provision (dashboard total).
-        return ['draft_303']
+        # Expenses feed 303; the filed returns (Tax Management) carry the VAT
+        # credit; Modelo 130 and the equipment rule come from the IRPF Estimator
+        # (owner decision 2026-10-03).
+        return ['expenses', 'tax.filed_boxes', 'tax.modelo130_boxes', 'tax.equipment_rule']
 
     @property
     def nav_items(self):
@@ -166,19 +162,33 @@ class TaxEsFormsModule(BaseModule):
 
     # --- Computation entry points (shared by pages + API) ---------------- #
 
-    @staticmethod
-    def _default_is_equipment(exp, net_eur):
-        """Without the IRPF Estimator: category "Equipment", 300 EUR net or more."""
-        return (exp.category or '').strip().lower() == 'equipment' and net_eur >= 300.0
+    # Without a tax.equipment_rule provider: category "Equipment", 300 EUR net or more.
+    _DEFAULT_EQUIPMENT_RULE = {'threshold': 300.0, 'categories': ['equipment']}
+
+    def _function(self, name):
+        """The registry, if something provides `name`; else None."""
+        functions = getattr(self.core, 'functions', None)
+        return functions if functions is not None and functions.available(name) else None
+
+    def _is_equipment(self):
+        """fn(expense, net_eur) -> bool for Modelo 303 boxes 30/31."""
+        functions = self._function('tax.equipment_rule')
+        rule = (functions.call('tax.equipment_rule') if functions
+                else self._DEFAULT_EQUIPMENT_RULE)
+        threshold, categories = rule['threshold'], set(rule['categories'])
+
+        def is_equipment(exp, net_eur):
+            return net_eur >= threshold and (exp.category or '').strip().lower() in categories
+        return is_equipment
 
     def _carried_forward(self, year, quarter):
         """VAT credit carried into this quarter (box 110), from the filed
         Modelo 303 of the previous quarter: its box 87 plus its negative
         result when compensated (no refund requested in box 73)."""
-        mm = getattr(self.core, 'module_manager', None)
-        tm = mm.provider_of('tax_management') if mm else None
         prev_year, prev_quarter = (year, quarter - 1) if quarter > 1 else (year - 1, 4)
-        boxes = tm.filed_boxes('303', prev_year, prev_quarter) if tm else {}
+        functions = self._function('tax.filed_boxes')
+        boxes = functions.call('tax.filed_boxes', form_type='303', year=prev_year,
+                               quarter=prev_quarter) if functions else {}
         if not boxes:
             return 0.0, None
         carried = boxes.get('87', 0.0)
@@ -190,12 +200,10 @@ class TaxEsFormsModule(BaseModule):
         vat_rate, _ = self._rates()
         invoices = self._invoices_in(year, quarter=quarter)
         expenses = self._expenses_in(year, quarter=quarter)
-        irpf = self._irpf_module()
         carried, carried_from = self._carried_forward(year, quarter)
         result = compute_modelo_303(
             invoices, expenses, vat_rate, convert_expense=self._convert_to_eur,
-            is_equipment=irpf.is_equipment if irpf else self._default_is_equipment,
-            carried_forward=carried)
+            is_equipment=self._is_equipment(), carried_forward=carried)
         result['meta']['carried_from'] = carried_from
         result['meta']['checks'] = self._data_checks(invoices, expenses)
         result['labels'] = self._box_labels(year, '303')
@@ -239,18 +247,14 @@ class TaxEsFormsModule(BaseModule):
                 + ', '.join((e.description or '?').splitlines()[0][:40] for e in unmarked))
         return checks
 
-    def _irpf_module(self):
-        mm = getattr(self.core, 'module_manager', None)
-        return mm.provider_of('tax_es_irpf') if mm else None
-
     def _draft_130(self, year, quarter):
-        # One owner for Modelo 130 (owner decision 2026-10-03): when the IRPF
-        # Estimator is enabled its figures are shown here too.
-        irpf = self._irpf_module()
-        if irpf is not None:
-            boxes, rate = irpf.modelo130_boxes(year, quarter)
+        # One owner for Modelo 130 (owner decision 2026-10-03): when something
+        # provides tax.modelo130_boxes (the IRPF Estimator) its figures are shown.
+        functions = self._function('tax.modelo130_boxes')
+        if functions is not None:
+            m130 = functions.call('tax.modelo130_boxes', year=year, quarter=quarter)
             return {
-                'form': '130', 'boxes': boxes, 'irpf_rate': rate,
+                'form': '130', 'boxes': m130['boxes'], 'irpf_rate': m130['rate'],
                 'labels': self._box_labels(year, '130'), 'year': year, 'quarter': quarter,
                 **self._table_info(year),
                 'meta': {'basis': 'cumulative_ytd', 'source': 'tax_es_irpf'},
@@ -301,6 +305,17 @@ class TaxEsFormsModule(BaseModule):
         })
         return result
 
+    def _deadline(self, form, year, quarter=None):
+        """The filing window from `calendar.deadline_for`, or None without a provider."""
+        functions = self._function('calendar.deadline_for')
+        if functions is None:
+            return None
+        try:
+            return functions.call('calendar.deadline_for', form=form, year=year, quarter=quarter)
+        except Exception:  # pragma: no cover - defensive
+            self.logger.exception('Fiscal calendar lookup failed')
+            return None
+
     def _draft_347(self, year):
         """Annual operations with third parties above the threshold."""
         from year_tables import fallback_note
@@ -309,8 +324,7 @@ class TaxEsFormsModule(BaseModule):
         result = compute_modelo_347(
             self._invoices_in(year), self._expenses_in(year), vat_rate,
             rules['threshold'], convert_expense=self._convert_to_eur)
-        from modules.fiscal_calendar.calendar_data import deadlines_for_year
-        deadline = next((e for e in deadlines_for_year(year) if e['form'] == '347'), None)
+        deadline = self._deadline('347', year)
         from .aeat_files import residence
         file_warnings = [w for w in (residence(line)[2] for line in result['lines']) if w]
         result.update({

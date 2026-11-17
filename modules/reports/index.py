@@ -5,7 +5,7 @@ Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
 from module_manager import BaseModule
-from modules.tax_es_forms.calculator import invoice_vat_line
+from invoice_vat import invoice_vat_line
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
@@ -156,6 +156,15 @@ class ReportsModule(BaseModule):
                  'description': s.get('description', '')} for s in sections]
         return {'data': data, 'total': len(data)}, 200
 
+    def _token_ok(self, sent):
+        """Whether `sent` is the API token; False without a provider of api.check_token."""
+        functions = getattr(self.core, 'functions', None)
+        if not sent or functions is None or not functions.available('api.check_token'):
+            return False
+        if functions.problem_with('api.check_token', {'token': sent}):
+            return False
+        return functions.call('api.check_token', token=sent) is True
+
     def _api_generate(self, request):
         """REST: build a report from a JSON body and return the PDF/ZIP bytes.
 
@@ -172,9 +181,8 @@ class ReportsModule(BaseModule):
               "include_files": ["documents"]         # optional, attach files as ZIP
             }
         """
-        # Auth: reuse the api module's constant-time token check.
-        api_mod = self.core.module_manager.provider_of('api') if self.core.module_manager else None
-        if not api_mod or not api_mod.verify_token(request):
+        # Auth: the API token check of whatever provides api.check_token.
+        if not self._token_ok(request.headers.get('X-API-Token', '')):
             return jsonify(error='unauthorized',
                            message='Missing or invalid X-API-Token'), 401
 

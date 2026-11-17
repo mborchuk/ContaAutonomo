@@ -67,11 +67,6 @@ class ApiModule(BaseModule):
         return 'api'
 
     @property
-    def interface(self):
-        # Used by Reports for API authentication.
-        return ['verify_token']
-
-    @property
     def name(self):
         return 'AI Communication API'
 
@@ -179,14 +174,20 @@ class ApiModule(BaseModule):
     # Auth decorator
     # ------------------------------------------------------------------ #
 
-    def verify_token(self, request):
-        """Public helper so other modules can token-protect their own API
-        blueprint routes (e.g. a heavy, dedicated rate-limited route that does
-        not fit the generic /m dispatcher). Returns True if the X-API-Token
-        header matches, using the same constant-time compare."""
-        token = self._get_token()
-        sent = request.headers.get('X-API-Token', '')
-        return bool(token) and hmac.compare_digest(sent, token)
+    def check_token(self, token):
+        """Whether `token` is the API token (constant-time compare). Other
+        modules token-protect their own API routes with it through
+        api.check_token (e.g. Reports' dedicated, rate-limited route)."""
+        expected = self._get_token()
+        return bool(expected) and hmac.compare_digest(token.encode(), expected.encode())
+
+    def get_functions(self):
+        from functions import Function, Param
+        return [Function(
+            'api.check_token', self.check_token,
+            'Whether a token is the API token (X-API-Token), compared in constant time.',
+            params=(Param('token', 'str', 'The token sent', required=True, max_length=512),),
+            returns='bool')]
 
     def _require_api_token(self, f):
         """Constant-time check of the X-API-Token header."""
@@ -891,8 +892,8 @@ class ApiModule(BaseModule):
         paths['/dashboard/summary'] = op('get', 'Money summary + tax totals')
         paths['/rates'] = op('get', 'Exchange rate lookup (from, to, date)')
 
-        # Module-aware: only advertise expenses when its module is enabled.
-        if mm and 'expenses' in mm.modules:
+        # Only advertise expenses while something provides the list it serves.
+        if mm and mm.functions.available('ledger.list_expenses'):
             paths['/expenses'] = op('get', 'List expenses (date_from, date_to, category, '
                                            'page, per_page)')
 

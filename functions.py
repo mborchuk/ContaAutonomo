@@ -20,6 +20,7 @@ owner's declaration before its code runs.
 """
 import inspect
 import logging
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 CORE = 'core'
 _DATE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 _NAME = re.compile(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$')
-_KINDS = ('str', 'int', 'date', 'bytes')
+_KINDS = ('str', 'int', 'float', 'date', 'bytes')
 
 
 class FunctionUnavailable(LookupError):
@@ -48,8 +49,8 @@ class Param:
     description: str = ''
     required: bool = False
     choices: tuple = ()
-    minimum: int | None = None     # int only
-    maximum: int | None = None     # int only
+    minimum: float | None = None   # int and float only
+    maximum: float | None = None   # int and float only
     max_length: int = 200          # str only
 
     def __post_init__(self):
@@ -68,13 +69,16 @@ class Param:
                 except ValueError:
                     pass
             return None, f'{self.name} must be a date (YYYY-MM-DD)'
-        if self.kind == 'int':
+        if self.kind in ('int', 'float'):
+            what = 'a whole number' if self.kind == 'int' else 'a number'
             if isinstance(value, bool):
-                return None, f'{self.name} must be a whole number'
+                return None, f'{self.name} must be {what}'
             try:
-                value = int(value)
-            except (TypeError, ValueError):
-                return None, f'{self.name} must be a whole number'
+                value = int(value) if self.kind == 'int' else float(value)
+            except (TypeError, ValueError, OverflowError):
+                return None, f'{self.name} must be {what}'
+            if self.kind == 'float' and not math.isfinite(value):
+                return None, f'{self.name} must be {what}'
             if ((self.minimum is not None and value < self.minimum)
                     or (self.maximum is not None and value > self.maximum)):
                 return None, f'{self.name} must be between {self.minimum} and {self.maximum}'

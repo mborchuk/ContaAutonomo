@@ -90,3 +90,38 @@ def test_overdue_note_on_tax_panel(tax_mgmt, loaded_modules):
 
     rows = tax_mgmt._obligation_rows(2026, today=date(2026, 8, 1))
     assert any(r['status'] == 'overdue' for r in rows)
+
+
+def test_no_obligations_without_a_calendar(tax_mgmt, loaded_modules, client, monkeypatch):
+    monkeypatch.delitem(loaded_modules.modules, 'fiscal_calendar')
+    assert tax_mgmt._obligation_rows(2026, today=date(2026, 8, 1)) == []
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/tax-forms/obligations?year=2026').get_data(as_text=True)
+    assert 'Fiscal Calendar</a> module' in html
+
+
+def test_obligations_follow_the_calendar_function(tax_mgmt, loaded_modules, monkeypatch):
+    from functions import Function, Param
+    from module_manager import BaseModule
+
+    def entry(form):
+        return {'form': form, 'period': 'Q1', 'period_label': 'Q1 2031', 'year': 2031,
+                'quarter': 1, 'window_start': date(2031, 4, 1),
+                'window_end': date(2031, 4, 30), 'verified': True}
+
+    class OtherCalendar(BaseModule):
+        module_id = 'other_calendar'
+        name = 'Other calendar'
+
+        def get_functions(self):
+            return [Function('calendar.deadlines_for_year',
+                             lambda year: [entry('303'), entry('130')], 'Deadlines.',
+                             params=(Param('year', 'int', required=True),)),
+                    Function('calendar.selected_forms', lambda: ['303'], 'Forms.')]
+
+    monkeypatch.delitem(loaded_modules.modules, 'fiscal_calendar')
+    monkeypatch.setitem(loaded_modules.modules, 'other_calendar', OtherCalendar(loaded_modules.core))
+    rows = tax_mgmt._obligation_rows(2031, today=date(2031, 4, 25))
+    assert [(r['form'], r['period_label'], r['status']) for r in rows] == \
+        [('303', 'Q1 2031', 'pending')]

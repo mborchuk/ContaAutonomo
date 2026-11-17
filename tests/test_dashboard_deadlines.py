@@ -53,16 +53,52 @@ def test_dashboard_uses_fiscal_calendar(loaded_modules, app, client, no_network)
 
 def test_dashboard_hint_when_fiscal_calendar_disabled(loaded_modules, app, client,
                                                       no_network, monkeypatch):
-    real = loaded_modules.provider_of
-    monkeypatch.setattr(loaded_modules, 'provider_of',
-                        lambda role: None if role == 'fiscal_calendar' else real(role))
+    monkeypatch.delitem(loaded_modules.modules, 'fiscal_calendar')
     html, ctx = _dashboard(app, client)
     assert ctx['tax_deadlines'] is None
     assert 'Fiscal Calendar</a> module to see filing deadlines' in html
 
 
+def test_dashboard_uses_any_provider_of_the_function(loaded_modules, app, client,
+                                                     no_network, monkeypatch):
+    from functions import Function, Param
+    from module_manager import BaseModule
+
+    entry = {'form': '999', 'period_label': 'Q1 2026', 'window_start': date(2026, 4, 1),
+             'window_end': date(2026, 4, 20), 'state': 'upcoming', 'days_to_end': 9,
+             'days_to_start': 1, 'verified': True}
+
+    class OtherCalendar(BaseModule):
+        module_id = 'other_calendar'
+        name = 'Other calendar'
+
+        def get_functions(self):
+            return [Function('calendar.upcoming_deadlines', lambda limit=4, today=None: [entry],
+                             'Deadlines.', params=(Param('limit', 'int'), Param('today', 'date')))]
+
+    monkeypatch.delitem(loaded_modules.modules, 'fiscal_calendar')
+    monkeypatch.setitem(loaded_modules.modules, 'other_calendar', OtherCalendar(loaded_modules.core))
+    _html, ctx = _dashboard(app, client)
+    assert ctx['tax_deadlines'] == [entry]
+
+
 def test_upcoming_deadlines_limit(loaded_modules):
-    fc = loaded_modules.modules['fiscal_calendar']
-    items = fc.upcoming_deadlines(limit=2, today=date(2026, 3, 1))
+    items = loaded_modules.functions.call('calendar.upcoming_deadlines', limit=2,
+                                          today='2026-03-01')
     assert len(items) == 2
     assert items[0]['window_end'] <= items[1]['window_end']
+
+
+def test_calendar_functions(loaded_modules):
+    functions = loaded_modules.functions
+    assert functions.provider('calendar.deadline_for') == 'fiscal_calendar'
+    q2 = functions.call('calendar.deadline_for', form='303', year=2026, quarter=2)
+    assert q2['window_end'] == date(2026, 7, 20)
+    renta = functions.call('calendar.deadline_for', form='100', year=2026)
+    assert renta['window_end'] == date(2027, 6, 30)
+    assert functions.call('calendar.deadline_for', form='999', year=2026) is None
+    year = functions.call('calendar.deadlines_for_year', year=2026)
+    assert {e['form'] for e in year} >= {'303', '130', '347', '100'}
+    assert [e['window_end'] for e in year] == sorted(e['window_end'] for e in year)
+    forms = functions.call('calendar.selected_forms')
+    assert forms == sorted(forms) and isinstance(forms, list)
