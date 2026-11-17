@@ -197,3 +197,12 @@ def test_api_draft_347_is_json(loaded_modules, app):
         body = flask_json.loads(flask_json.dumps(data))
     assert body['form'] == '347' and body['threshold'] == THRESHOLD
     assert body['deadline']['window_start'] == '2032-02-01'
+
+
+def test_draft_347_without_a_calendar_has_no_deadline(loaded_modules, app, client, monkeypatch):
+    monkeypatch.delitem(loaded_modules.modules, 'fiscal_calendar')
+    assert loaded_modules.modules['tax_es_forms']._draft_347(2031)['deadline'] is None
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    resp = client.get('/tax-forms-draft/347/2031')
+    assert resp.status_code == 200 and 'Filing window' not in resp.get_data(as_text=True)

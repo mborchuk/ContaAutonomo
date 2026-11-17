@@ -119,6 +119,15 @@ def test_filing_dates_come_from_the_fiscal_calendar(synthetic_year):
     assert by_id['m130']['deadline']['form'] == '130'
     assert by_id['renta']['deadline']['window_end'] == date(YEAR + 1, 6, 30)
     assert by_id['reta']['deadline'] is None and by_id['reta']['deadline_note']
+    assert provision['calendar_enabled']
+
+
+def test_no_filing_dates_without_a_calendar(synthetic_year, monkeypatch):
+    monkeypatch.delitem(synthetic_year.modules, 'fiscal_calendar')
+    provision = synthetic_year.modules['tax_provision'].provision(TODAY)
+    assert not provision['calendar_enabled']
+    assert all(p['deadline'] is None for p in provision['parts'])
+    assert provision['total'] is not None
 
 
 # --- dashboard -------------------------------------------------------------- #
