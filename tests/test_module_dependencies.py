@@ -203,12 +203,9 @@ def test_modules_look_each_other_up_through_provider_of():
     assert not offenders, offenders
 
 
-# Imports of another module's code that remain; each one ties the caller to
-# that module. Remove an entry when its import goes; never add one — add a
-# registry function (functions.py) instead.
-KNOWN_CROSS_MODULE_IMPORTS = {
-    ('reports', 'tax_es_forms'),
-}
+# Imports of another module's code tie the caller to that module. There are
+# none left; never add one — add a registry function (functions.py) instead.
+KNOWN_CROSS_MODULE_IMPORTS = set()
 
 
 def test_no_new_imports_between_modules():

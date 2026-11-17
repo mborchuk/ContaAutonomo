@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from pypdf import PdfReader
 
-from modules.tax_es_forms.calculator import invoice_vat_line
+from invoice_vat import invoice_vat_line
 
 TEMPLATE = os.path.join(os.path.dirname(__file__), '..', 'modules', 'reports',
                         'report_templates', 'official_template.py')

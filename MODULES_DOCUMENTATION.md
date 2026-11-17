@@ -1073,6 +1073,7 @@ Functions today:
 | `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate}` for a quarter; the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
 | `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
 | `reta.projection` | `reta_advisor` | `today?`, `income_delta?`, `expense_delta?`, `monthly_quota?` (`float`); the RETA projection. Tax Provision and the IRPF what-if simulator call it |
+| `api.check_token` | `api` | `token`; whether it is the API token (constant-time). Reports' `POST /api/v1/reports/generate` checks `X-API-Token` with it; without a provider the route answers 401 |
 | `pdf.sign_invoice` | `pdf_signature` | `invoice_id`; signs the stored PDF with the signatures chosen on the invoice form, `{signed, requested}`. The core calls it after generating an invoice PDF; the document form shows the signing hint when it exists |
 | `pdf.signing_certificate` | `pdf_signature` | `{pfx, password}` of the configured certificate, or None. E-invoice (Facturae XAdES) calls it |
 | `pdf.extract_signatures` | `pdf_verify` | `pdf_bytes`; the embedded signatures, `[]` when none. PDF Signature's invoice badge calls it |
@@ -1085,8 +1086,8 @@ Functions today:
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
 `/api/v1` invoice, customer and expense lists, the expense form, the dashboard,
 Tax Provision, Tax Obligations, the tax drafts, the IRPF Estimator, the RETA
-Advisor, the invoice PDF route, E-invoice, the document form and PDF
-Signature. A calendar entry is a
+Advisor, the invoice PDF route, E-invoice, the document form, PDF Signature
+and Reports. A calendar entry is a
 dict: `form`, `period`, `period_label`, `year`, `quarter` (1-4 or None),
 `window_start`, `window_end` (`date`), `verified`. Without a calendar provider
 the dashboard and the obligations page say to enable the Fiscal Calendar, and
@@ -1138,28 +1139,24 @@ def provides(self):
 - Modules find each other with `module_manager.provider_of('<module id>')`,
   never `module_manager.modules.get(...)`: the lookup returns the bundled
   module first, else a replacement. A test fails if a direct lookup comes back.
-- A module lists what others use on it in `interface` (method and model
+- A module may list what others use on it in `interface` (method and model
   names). A replacement must have all of them; `provider_of` skips and logs one
   that does not, and a test checks every loaded module has its own interface.
+  No bundled module declares one: they call each other through registry
+  functions ([Functions](#functions)), which a replacement declares instead.
 
-Interfaces declared today:
-
-| Module | `interface` | Used by |
-|---|---|---|
-| `api` | `verify_token(request)` | Reports |
-
-**Expenses** has no methods in its interface: the tax modules read the core
-`expense` table (`from app import Expense`). A replacement expenses module must
+The tax modules read the core `expense` table (`from app import Expense`). A
+replacement expenses module must
 write its records there with these columns filled: `expense_date`, `amount`,
 `currency`, `net_amount`, `vat_amount`, `vat_rate`, `deductible`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-The code import between modules that remains (`tax_es_forms.calculator`, used
-by Reports) is not covered: replacing Spanish Tax Forms means keeping that
-import path. `ApiError` is in the
-core (`from api_errors import ApiError`); `modules.api.index.ApiError` is the
-same class.
+No module imports another module's code; a test fails if one does. Shared
+rules on core data live in the core: `invoice_vat.py` (output VAT of one
+invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
+`ApiError` is in the core (`from api_errors import ApiError`);
+`modules.api.index.ApiError` is the same class.
 
 ### Capabilities System
 

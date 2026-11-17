@@ -1111,11 +1111,11 @@ def _upload_file(self):
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
 17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
 18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
-19. **Look up other modules with `self.core.module_manager.provider_of('<module id>')`**, never `module_manager.modules.get(...)` — the direct lookup ignores a replacement module, and a test fails on it. Use only names the other module lists in its `interface`; add a name there when you start using it.
+19. **Use another module through registry functions** — `self.core.functions.call('<area.name>', ...)`, after `available(name)` when the function is optional (see `MODULES_DOCUMENTATION.md` → "Functions"). Declare what you offer in `get_functions()`. Never import another module's code (a test fails on it) and never reach into `module_manager.modules`; when a module itself is needed, use `provider_of('<module id>')`.
 
 ### Replacing a module
 
-Any module can be replaced by another one that declares the replaced module's id:
+A module that declares the same registry functions replaces another for those functions; a dependency that names a function is met by it, with no `provides`. To stand in for a whole module (its pages, its dependants that name the module id), declare the replaced module's id:
 
 ```python
 @property
@@ -1123,7 +1123,7 @@ def provides(self):
     return ['expenses']
 ```
 
-The replacement must have every name in the replaced module's `interface`, otherwise `provider_of` skips it and logs a warning. The interfaces in use, and the `expense` table columns a replacement expenses module must fill, are listed in `MODULES_DOCUMENTATION.md` → "Replacing a module".
+The replacement must have every name in the replaced module's `interface` (no bundled module declares one), otherwise `provider_of` skips it and logs a warning. The `expense` table columns a replacement expenses module must fill are listed in `MODULES_DOCUMENTATION.md` → "Replacing a module".
 
 ---
 
