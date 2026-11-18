@@ -704,12 +704,21 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
   other AEAT changes. Years outside `VERIFIED_YEARS` are marked *(verify)*.
   Yearly checklist: `CONTRIBUTING.md` → *Annual Tax Data Update*.
 - Routes: `/fiscal-calendar/` (year view)
-- Dashboard panel: upcoming/open filing windows for the user's selected forms
+- Messages (message center, through `messages.post`; no dashboard panel):
+  each filing window of the selected forms that opens within 60 days
+  (`LOOKAHEAD_DAYS`) or is open gets one `info` message with both dates and a
+  link to the year view (key `window:<form>:<year>:<quarter|annual>`).
+  Reminders at T-14/T-7/T-1 before a window closes are messages too, at level
+  `info`/`warning`/`danger` (key `reminder:<form>:<year>:<quarter|annual>:<days>`).
+  Each key is posted once, so a read or deleted message does not come back.
+  Without the function (core older than the message center) nothing is posted
 - Settings: "which forms do I file" checkboxes (defaults inferred from
   `TaxForm` history)
-- Scheduler: daily reminder job at T-14/T-7/T-1 before a window closes;
-  idempotent across restarts; delivers through the `notify` capability
-  (e.g. email when `invoice_email` is enabled) and always writes the activity log
+- Scheduler: daily job at 08:00 posts the window messages and the
+  T-14/T-7/T-1 reminders; reminders are idempotent across restarts, also
+  go through the `notify` capability (e.g. email when `invoice_email` is
+  enabled) and always write the activity log. Opening the dashboard posts new
+  window messages too
 
 ### Modelo 303/130/349/390 Drafts (`tax_es_forms`)
 

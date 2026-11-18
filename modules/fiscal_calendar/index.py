@@ -2,11 +2,12 @@
 """
 Fiscal Calendar Module (F3) — Spanish AEAT deadlines + reminders.
 
-Uses local data (calendar_data.py), no external API. Shows a dashboard panel
-of upcoming filing windows for the forms the user actually files, and runs a
-daily scheduler job that sends reminders 14, 7 and 1 days before a deadline.
-Reminders go through the `notify` capability (email plugs in through F8) and
-are always written to the activity log.
+Uses local data (calendar_data.py), no external API. The upcoming filing
+windows of the forms the user actually files, and reminders 14, 7 and 1 days
+before a window closes, are messages in the core message center (top-bar bell)
+posted through `messages.post`; each is posted once. A daily scheduler job and
+the dashboard post them. Reminders also go through the `notify` capability
+(email plugs in through F8) and are always written to the activity log.
 """
 
 import json
@@ -26,8 +27,10 @@ from .calendar_data import (
 
 # Reminder thresholds (days before the filing window closes).
 REMINDER_THRESHOLDS = (14, 7, 1)
-# How far ahead the dashboard panel looks.
-PANEL_LOOKAHEAD_DAYS = 60
+# How far ahead a filing window gets its message.
+LOOKAHEAD_DAYS = 60
+CALENDAR_LINK = '[fiscal calendar](/fiscal-calendar/)'
+
 
 
 class FiscalCalendarModule(BaseModule):
@@ -44,7 +47,7 @@ class FiscalCalendarModule(BaseModule):
     @property
     def description(self):
         return ('Spanish AEAT filing deadlines (Modelo 303/130/349/111/390/347/100) '
-                'as a dashboard panel with reminders. Local data, no external API.')
+                'with messages and reminders in the message center. Local data, no external API.')
 
     @property
     def version(self):
@@ -170,16 +173,57 @@ class FiscalCalendarModule(BaseModule):
         ]
 
     def get_dashboard_panels(self):
-        items = upcoming(PANEL_LOOKAHEAD_DAYS, selected_forms=self._selected_forms())
-        if not items:
-            return []
-        return [{
-            'id': 'fiscal_calendar',
-            'title': '📅 Fiscal Deadlines',
-            'template': 'fiscal_calendar_panel.html',
-            'data': {'deadlines': items, 'today': date.today()},
-            'order': 12,
-        }]
+        # No panel: upcoming windows are messages in the top-bar bell. Opening
+        # the dashboard posts any new one at once, besides the daily job.
+        self.post_window_messages()
+        return []
+
+    # --- Messages (message center) ---------------------------------------- #
+
+    def _post_message(self, text, level, key):
+        """messages.post; True when a new message was created. Never raises."""
+        functions = self.core.functions
+        if not functions.available('messages.post'):
+            return False
+        try:
+            result = functions.call('messages.post', source=self.module_id, text=text,
+                                    level=level, key=key)
+        except Exception:
+            self.logger.warning('Could not post a fiscal calendar message', exc_info=True)
+            return False
+        return bool(result.get('created'))
+
+    @staticmethod
+    def _label(entry):
+        label = f"Modelo {entry['form']} · {entry['period_label']}"
+        return label if entry.get('verified', True) else label + ' (dates to verify)'
+
+    @staticmethod
+    def _key(kind, entry, *extra):
+        quarter = entry['quarter'] if entry['quarter'] is not None else 'annual'
+        return ':'.join([kind, entry['form'], str(entry['year']), str(quarter),
+                         *map(str, extra)])
+
+    def post_window_messages(self, today=None):
+        """One message per filing window of the selected forms that opens
+        within LOOKAHEAD_DAYS or is open now, with both dates. Keyed by form
+        and period, so it is posted once. Returns how many were new."""
+        today = today or date.today()
+        created = 0
+        try:
+            entries = upcoming(LOOKAHEAD_DAYS, today=today,
+                               selected_forms=self._selected_forms())
+        except Exception:
+            self.logger.warning('Could not read the fiscal calendar', exc_info=True)
+            return 0
+        for e in entries:
+            start, end = e['window_start'].strftime('%d/%m/%Y'), e['window_end'].strftime('%d/%m/%Y')
+            if e['state'] == 'open':
+                text = f'📅 {self._label(e)} can be filed now, until {end} — {CALENDAR_LINK}'
+            else:
+                text = f'📅 {self._label(e)}: file from {start} to {end} — {CALENDAR_LINK}'
+            created += self._post_message(text, 'info', self._key('window', e))
+        return created
 
     # --- Routes: year view (F3-X1) ---------------------------------------- #
 
@@ -263,6 +307,7 @@ class FiscalCalendarModule(BaseModule):
                     fired.append(key)
         if fired:
             self._save_reminder_state(state)
+        self.post_window_messages(today=today)
         return fired
 
     def _notify(self, entry, days_left):
@@ -271,6 +316,12 @@ class FiscalCalendarModule(BaseModule):
                    f"{entry['window_end'].strftime('%d/%m/%Y')}.")
         # Always write the user-visible activity log.
         self.core.log_activity('fiscal_deadline_reminder', 'system', message)
+        # The reminder as a message in the bell.
+        level = 'danger' if days_left <= 1 else 'warning' if days_left <= 7 else 'info'
+        self._post_message(
+            f"⏰ {self._label(entry)}: the filing window closes in {days_left} day(s), "
+            f"on {entry['window_end'].strftime('%d/%m/%Y')} — {CALENDAR_LINK}",
+            level, self._key('reminder', entry, days_left))
         # Ride any notify capability (F8 email, webhooks...) without hard coupling.
         try:
             channels = self.core.module_manager.find_capabilities('notify')
