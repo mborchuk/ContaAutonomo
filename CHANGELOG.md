@@ -214,6 +214,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Document expiry alerts moved to the message center**: the Documents module
+  no longer draws a "Document Alerts" panel on the dashboard. A document that
+  expires within 30 days, or expired in the last 30 days, gets one message in
+  the top-bar bell with a link to it (a daily job at 07:30 and the dashboard
+  post them). A read or deleted alert does not come back; a new expiry date
+  gives a new one.
 - **Parsed supplier picks the contractor**: an AI-parsed expense selected a
   contractor only when its name was exactly the document's, so most suppliers
   ended up in Notes ("Contractor: Media Markt Saturn S.A. (ESA82037292)"). The
