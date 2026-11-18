@@ -191,6 +191,23 @@ class BaseModule(ABC):
         """
         return []
 
+    def get_header_widgets(self):
+        """
+        Return widgets for the top bar shown above every page (for example
+        a search box or a notifications bell).
+
+        Returns:
+            list of dicts: [{'id': 'notifications', 'template': 'notify_header_widget.html',
+                             'data': {...}, 'order': 10, 'position': 'end'}]
+
+        ``template`` is a module-prefixed file name found through the
+        blueprint's template folder; it is included with ``data`` in the
+        context. ``position`` is ``'end'`` (right, the default) or ``'start'``
+        (left). Lower ``order`` comes first. Called on every page render, so
+        keep it cheap.
+        """
+        return []
+
     def get_capabilities(self):
         """
         Declare capabilities this module provides for cross-module interaction.
@@ -2367,6 +2384,33 @@ class ModuleManager:
             panels.extend(mod.get_dashboard_panels())
         panels.sort(key=lambda p: p.get('order', 99))
         return panels
+
+    def get_header_widgets(self):
+        """Top-bar widgets from all active modules, sorted by ``order``.
+
+        Every page calls this through ``base.html``, so one failing module
+        is logged and skipped instead of breaking the page. Entries without
+        a ``template`` are dropped; ``position`` is ``'start'`` only when the
+        module asks for it, otherwise ``'end'`` (right).
+        """
+        widgets = []
+        for module_id, mod in self.modules.items():
+            try:
+                entries = mod.get_header_widgets() or []
+            except Exception as e:
+                logger.warning('Header widgets of module %s failed: %s',
+                               _sanitize_log(module_id), e, exc_info=True)
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict) or not entry.get('template'):
+                    continue
+                widget = dict(entry)
+                widget['position'] = 'start' if widget.get('position') == 'start' else 'end'
+                widget.setdefault('data', {})
+                widget.setdefault('module_id', module_id)
+                widgets.append(widget)
+        widgets.sort(key=lambda w: w.get('order', 99))
+        return widgets
 
     def get_report_sections(self):
         """Get report sections from all active modules"""

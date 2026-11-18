@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Sidebar navigation**: the menu moved from the top bar to a left sidebar.
+  Groups (Invoices, System, and groups that modules create) open and close in
+  place and remember their state; the current page is highlighted and its
+  group opens. Settings, a dark-mode switch and Logout sit at the bottom of
+  the sidebar; the floating theme button is gone (the `D` shortcut still
+  works). On phones and tablets the sidebar opens as a drawer from the menu
+  button (Escape or the backdrop closes it; focus stays inside while open).
+- **Top bar for module widgets**: `BaseModule.get_header_widgets()` lets a
+  module place a widget such as search or notifications in the top bar, on
+  the right (`position: 'end'`, default) or the left (`'start'`). A failing
+  module is skipped; with no widget the bar is hidden on wide screens.
 - **VAT deduction check on parsed expenses**: the AI Parser also reports the
   buyer's tax ID (`buyer_tax_id`). When a parsed document has Spanish VAT but
   does not show the owner's NIF, or shows another tax ID, the expense form warns
