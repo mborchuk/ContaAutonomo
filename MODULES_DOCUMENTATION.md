@@ -430,7 +430,7 @@ Document management system with categories, tags, multi-file attachments, and ch
   - Duplicate: create a copy of any document with all metadata and file references
   - Expiry tracking: documents with expiry dates shown with color-coded warnings
   - Cross-module integration: "Sign PDF" button uses `pdf_signature` module when enabled
-  - Dashboard: expiry alerts panel (expiring within 30 days + already expired)
+  - Expiry alerts as messages (message center, top-bar bell): a document that expires within 30 days gets a `warning` message, one that expired in the last 30 days a `danger` message, each with a link to the document. Posted through `messages.post` by a daily job (`documents.expiry_messages`, 07:30) and when the dashboard opens, with the key `expiry-soon:<id>:<date>` / `expired:<id>:<date>`, so each alert appears once, also after it was read or deleted; a new expiry date gives a new alert. No dashboard panel
   - Reports: contributes "Documents with Amounts" section to financial reports
   - Dropdown action menu per document (⋮) with view files, edit, duplicate, delete
   - Row coloring by category (toggleable in Categories page)
