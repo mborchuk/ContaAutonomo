@@ -173,6 +173,14 @@ class DocumentsModule(BaseModule):
                 self._db.session.commit()
         except Exception as e:
             self.logger.debug('document migration: %s', e)
+        try:
+            self.core.scheduler.add_job(
+                job_id='documents.expiry_messages', func=self.post_expiry_messages,
+                job_type='daily', time_str='07:30',
+                description='Messages for documents about to expire or just expired',
+                timeout=120)
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.error('Failed to register the expiry-messages job: %s', e)
 
     def _migrate_files_to_multi(self):
         """Move file_path from Document rows into DocumentFile table (one-time migration)."""
@@ -1044,36 +1052,52 @@ class DocumentsModule(BaseModule):
         self._db.session.commit()
         return redirect(url_for('documents.documents_view', id=doc_id))
 
-    # ---- dashboard integration ----
+    # ---- expiry alerts as messages (message center) ----
+
+    EXPIRY_WARNING_DAYS = 30   # "expires soon" from this many days before
+    EXPIRED_RECENT_DAYS = 30   # "expired" for documents that expired this recently
 
     def get_dashboard_panels(self):
-        today = date.today()
-        soon = today + timedelta(days=30)
-        expiring = self.Document.query.filter(
-            self.Document.expiry_date.isnot(None),
-            self.Document.expiry_date >= today,
-            self.Document.expiry_date <= soon,
-        ).order_by(self.Document.expiry_date).all()
+        # No panel: the alerts are messages in the top-bar bell. Opening the
+        # dashboard posts any new ones at once, besides the daily job.
+        self.post_expiry_messages()
+        return []
 
-        expired = self.Document.query.filter(
-            self.Document.expiry_date.isnot(None),
-            self.Document.expiry_date < today,
-        ).order_by(self.Document.expiry_date.desc()).limit(5).all()
-
-        if not expiring and not expired:
-            return []
-
-        return [{
-            'id': 'documents_expiry',
-            'title': '📄 Document Alerts',
-            'template': 'documents_dashboard.html',
-            'data': {
-                'expiring': expiring,
-                'expired': expired,
-                'today': today,
-            },
-            'order': 15,
-        }]
+    def post_expiry_messages(self, today=None):
+        """Post a message for each document that expires within
+        EXPIRY_WARNING_DAYS or expired within EXPIRED_RECENT_DAYS, through
+        `messages.post`. The key holds the document and its expiry date, so
+        each alert is posted once, also after it was read or deleted, and a
+        new expiry date gives a new alert. Returns how many were new; never
+        raises (it runs from the dashboard and the scheduler)."""
+        functions = self.core.functions
+        if not functions.available('messages.post'):
+            return 0
+        today = today or date.today()
+        created = 0
+        try:
+            docs = self.Document.query.filter(
+                self.Document.expiry_date.isnot(None),
+                self.Document.expiry_date >= today - timedelta(days=self.EXPIRED_RECENT_DAYS),
+                self.Document.expiry_date <= today + timedelta(days=self.EXPIRY_WARNING_DAYS),
+            ).order_by(self.Document.expiry_date).all()
+            for doc in docs:
+                name = (doc.name or 'Untitled').replace('[', '(').replace(']', ')')
+                when = doc.expiry_date.strftime('%d/%m/%Y')
+                link = f'[open it](/documents/view/{doc.id})'
+                if doc.expiry_date < today:
+                    key, level = f'expired:{doc.id}:{doc.expiry_date.isoformat()}', 'danger'
+                    text = f'✕ Document "{name}" expired on {when} — {link}'
+                else:
+                    key, level = f'expiry-soon:{doc.id}:{doc.expiry_date.isoformat()}', 'warning'
+                    text = f'📄 Document "{name}" expires on {when} — {link}'
+                result = functions.call('messages.post', source=self.module_id, text=text,
+                                        level=level, key=key)
+                created += 1 if result.get('created') else 0
+        except Exception:
+            self._db.session.rollback()
+            self.logger.warning('Could not post the document expiry messages', exc_info=True)
+        return created
 
     # ---- report integration ----
 
