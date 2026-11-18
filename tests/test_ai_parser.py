@@ -549,3 +549,29 @@ def test_expense_form_knows_the_owner_tax_ids(loaded_modules, client):
     assert 'const OWNER_TAX_IDS = ["12345678Z", "X1234567L"];' in html
     assert 'id="vat-deduction-warning" hidden' in html
     assert 'showVatDeductionCheck(data);' in html
+
+
+def test_expense_form_matches_the_parsed_supplier_to_a_contractor(loaded_modules, client):
+    """Each contractor option carries its VAT number, so the prefill can pick
+    the contractor by VAT number first, then by name (accents, punctuation and
+    legal forms such as S.A. ignored). Checked in a browser with synthetic
+    contractors: "Media Markt Saturn S.A. (ESA82037292)" picks a contractor
+    saved as "MediaMarkt Castellón" with that VAT number; "Telefónica de
+    España, S.A.U." picks "Telefonica"; a same-name contractor with another
+    VAT number is not chosen; an unknown supplier is named next to the field
+    and on its own line in Notes."""
+    from app import Contractor, db
+    c = Contractor(name='Synthetic Supplier SL', vat_number='ESB00000000')
+    db.session.add(c)
+    db.session.commit()
+    try:
+        with client.session_transaction() as sess:
+            sess['authenticated'] = True
+        html = client.get('/expenses/create').get_data(as_text=True)
+    finally:
+        db.session.delete(c)
+        db.session.commit()
+    assert f'value="{c.id}" data-vat="ESB00000000"' in html
+    assert 'id="contractor-parse-note" hidden' in html
+    assert 'if (data.contractor_name || data.contractor_vat) selectContractor(data);' in html
+    assert "'sau'" in html and "'sarl'" in html            # legal forms ignored in names

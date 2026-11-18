@@ -85,12 +85,13 @@
                 <select id="contractor_id" name="contractor_id">
                     <option value="">-- No Contractor --</option>
                     {% for contractor in contractors %}
-                    <option value="{{ contractor.id }}"
+                    <option value="{{ contractor.id }}" data-vat="{{ contractor.vat_number or '' }}"
                             {% if expense and expense.contractor_id == contractor.id %}selected{% endif %}>
                         {{ contractor.name }}
                     </option>
                     {% endfor %}
                 </select>
+                <small class="helper-text" id="contractor-parse-note" hidden></small>
                 <small class="helper-text">
                     <a href="{{ url_for('settings') }}#contractors" target="_blank">Manage contractors in Settings</a>
                 </small>
@@ -302,23 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.vat_rate != null && data.net_amount == null && data.vat_amount == null) {
             recalcFromGrossRate();
         }
-        if (data.contractor_name) {
-            // Try to select a matching contractor; fall back to a note.
-            const sel = document.getElementById('contractor_id');
-            const wanted = data.contractor_name.toLowerCase();
-            let matched = false;
-            for (const opt of sel.options) {
-                if (opt.text.trim().toLowerCase() === wanted) {
-                    sel.value = opt.value; matched = true; break;
-                }
-            }
-            if (!matched) {
-                document.getElementById('notes').value =
-                    (document.getElementById('notes').value || '') +
-                    'Contractor: ' + data.contractor_name +
-                    (data.contractor_vat ? ' (' + data.contractor_vat + ')' : '');
-            }
-        }
+        if (data.contractor_name || data.contractor_vat) selectContractor(data);
         // Only set when the document says the buyer accounts for the VAT.
         const rcEl = document.getElementById('reverse_charge');
         if (rcEl && (data.reverse_charge === 'eu' || data.reverse_charge === 'non_eu')) {
@@ -360,6 +345,74 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!reason) return;
         document.getElementById('vat-deduction-reason').textContent = reason;
         box.hidden = false;
+    }
+
+    // Company name compared without case, accents, punctuation or a trailing
+    // legal form ("Media Markt Saturn S.A." -> "media markt saturn").
+    const LEGAL_FORMS = new Set(['sl', 'slu', 'sll', 'sa', 'sau', 'scoop', 'sc', 'cb', 'slne',
+        'gmbh', 'ag', 'kg', 'ug', 'ltd', 'limited', 'llc', 'llp', 'inc', 'corp', 'co', 'plc',
+        'bv', 'nv', 'sarl', 'srl', 'spa', 'sas', 'oy', 'ab', 'as', 'aps', 'lda', 'sro']);
+    function normName(value) {
+        const words = String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase().replace(/\./g, '').replace(/[^a-z0-9]+/g, ' ').trim().split(' ')
+            .filter(Boolean);
+        while (words.length > 1) {
+            const last = words[words.length - 1];
+            if (LEGAL_FORMS.has(last)) { words.pop(); continue; }
+            const pair = words.length > 2 ? words[words.length - 2] + last : '';
+            if (LEGAL_FORMS.has(pair)) { words.splice(-2, 2); continue; }   // "sa rl", "s rl"
+            break;
+        }
+        return words.join(' ');
+    }
+
+    // Pick the contractor of a parsed document: by VAT number first, then by
+    // name (the same name, else the longest name where one starts with the
+    // other as whole words). A contractor is selected only when exactly one
+    // matches, and a name match is skipped when both VAT numbers are known and
+    // differ.
+    function selectContractor(data) {
+        const sel = document.getElementById('contractor_id');
+        const note = document.getElementById('contractor-parse-note');
+        const label = (data.contractor_name || '') +
+            (data.contractor_vat ? ' (' + data.contractor_vat + ')' : '');
+        const vat = normTaxId(data.contractor_vat);
+        const name = normName(data.contractor_name);
+        const options = Array.from(sel.options).filter(o => o.value)
+            .map(o => ({opt: o, vat: normTaxId(o.dataset.vat), name: normName(o.text)}));
+        const nameOk = c => !(vat && c.vat && c.vat !== vat);
+        const prefix = (a, b) => b.length >= 4 && (a === b || a.startsWith(b + ' '));
+        let found = [];
+        let how = '';
+        if (vat) { found = options.filter(c => c.vat === vat); how = 'its VAT number'; }
+        if (!found.length && name) {
+            found = options.filter(c => c.name === name && nameOk(c));
+            how = 'its name';
+        }
+        if (!found.length && name) {
+            found = options.filter(c => nameOk(c) && (prefix(name, c.name) || prefix(c.name, name)));
+            // Prefer the longest name: "Amazon Business" over "Amazon".
+            const longest = Math.max(0, ...found.map(c => c.name.length));
+            found = found.filter(c => c.name.length === longest);
+            how = 'its name';
+        }
+        note.hidden = false;
+        if (found.length === 1) {
+            sel.value = found[0].opt.value;
+            note.textContent = '✓ Contractor chosen from the document by ' + how + '. Check it.';
+            return;
+        }
+        const otherVat = name && options.some(c => !nameOk(c) && (c.name === name
+            || prefix(name, c.name) || prefix(c.name, name)));
+        note.textContent = found.length > 1
+            ? 'Several contractors match "' + label + '". Choose one.'
+            : otherVat
+                ? 'A contractor with this name has a different VAT number, so none was chosen: "'
+                  + label + '". Check which one is right.'
+                : 'Supplier not in your contractors: "' + label + '". Add it in Settings to pick it next time.';
+        const notes = document.getElementById('notes');
+        notes.value = (notes.value ? notes.value.replace(/\s+$/, '') + '\n' : '') +
+            'Contractor: ' + label;
     }
 
     // AI prefill support (legacy path: parsed on the AI Parser page)

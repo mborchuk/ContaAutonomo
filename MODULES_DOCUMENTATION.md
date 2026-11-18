@@ -344,7 +344,13 @@ a full VAT breakdown.
   VAT but does not show the owner's NIF (Settings → Business Information: VAT Number or NIE Number), or
   shows another tax ID (`buyer_tax_id`), a warning next to "Deductible (IVA
   soportado)" explains that its VAT is normally not deductible; nothing is
-  changed automatically
+  changed automatically. The parsed supplier picks a contractor by VAT number
+  first (normalized), then by name (case, accents, punctuation and legal forms
+  such as S.L., S.A.U. or GmbH ignored; the same name, else the longest one
+  where one name starts with the other). It is chosen only when exactly one
+  matches, and a name match is skipped when both VAT numbers are known and
+  differ. Otherwise a note next to the field names the supplier, which is also
+  added to Notes on its own line
 - **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
   shortcut of the installed app): Take photo / Choose photo above the expense
   form. The photo goes through the AI parse above, so the form below is
@@ -971,12 +977,13 @@ class MyModule(BaseModule):
 | `name` | Yes | — | Human-readable name |
 | `description` | No | `''` | Shown in Modules settings |
 | `version` | No | `'1.0.0'` | Semantic version |
-| `nav_items` | No | `[]` | Navigation menu entries (supports `group` key for dropdown placement) |
+| `nav_items` | No | `[]` | Sidebar entries (supports `group` key for placement in a collapsible group) |
 | `settings_tab` | No | `'general'` | Which settings tab to place module settings in |
 
 ### Navigation Grouping
 
-Module nav items support a `group` key to place them inside existing or new dropdown menus:
+Navigation is a left sidebar (`templates/base.html`). Module nav items support a
+`group` key to place them inside an existing or a new collapsible group:
 
 ```python
 @property
@@ -986,8 +993,12 @@ def nav_items(self):
     ]
 ```
 
-Core dropdown groups: `Invoices`, `System`. Any other group name creates a new dropdown.
-Items without `group` appear as top-level links. The full menu is built by `ModuleManager.get_full_nav()`.
+Core groups: `Invoices`, `System`. Any other group name creates a new group, shown with
+the first item's `icon`. Items without `group` appear as top-level links with their `icon`;
+items inside a group are listed by label only. The full menu is built by
+`ModuleManager.get_full_nav()`. Settings, the dark-mode switch and Logout sit at the
+bottom of the sidebar, not in the list. The current page is highlighted (exact endpoint
+first, else the first entry of the same blueprint), and its group opens.
 
 An optional `order` key (lower first) sorts items within their group or among the
 top-level links; items without it keep load order after the ordered ones, and groups keep
@@ -998,6 +1009,27 @@ the order in which they first appear. Bundled modules use these groups:
 | Invoices | All Invoices, Create Invoice (core); Invoice Designer, Recurring, Verifactu |
 | Taxes | Tax Forms (10), Obligations (20), Tax Drafts (30), IRPF Estimator (40), RETA Advisor (50), Fiscal Calendar (60) |
 | System | Logs, Scheduled Tasks (core); Bank Import |
+
+### Top Bar Widgets
+
+The top bar above every page is reserved for module widgets such as a search box or a
+notifications bell. A module returns them from `get_header_widgets()`:
+
+```python
+def get_header_widgets(self):
+    return [{
+        'id': 'notifications',
+        'template': 'notify_header_widget.html',   # module-prefixed, in the blueprint's templates/
+        'data': {'unread': 3},                     # available to the template as `data`
+        'order': 10,                               # lower first
+        'position': 'end',                         # 'end' = right (default), 'start' = left
+    }]
+```
+
+It is called on every page render, so keep it cheap. Templates are rendered with
+auto-escaping. A module that raises is logged and skipped; the page still renders.
+With no widget the bar is hidden on wide screens; on phones and tablets it always shows
+the menu button that opens the sidebar.
 
 ### BaseModule Methods
 
@@ -1011,6 +1043,7 @@ the order in which they first appear. Bundled modules use these groups:
 | `get_settings_html(settings)` | Return HTML for settings tab |
 | `save_settings(settings, form)` | Handle settings form POST |
 | `get_dashboard_panels()` | Dashboard widget data |
+| `get_header_widgets()` | Widgets for the top bar above every page (search, notifications); see *Top Bar Widgets* |
 | `get_report_sections()` | Report section generators |
 | `get_invoice_actions(invoice)` | HTML snippets for invoice view actions bar |
 | `get_invoice_view_panels(invoice)` | HTML panels rendered below invoice view (e.g. comments) |
