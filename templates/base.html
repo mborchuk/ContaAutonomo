@@ -14,6 +14,7 @@
     <script>
         (function () {
             var root = document.documentElement;
+            root.classList.add('js');
             var t = localStorage.getItem('theme');
             if (t === 'dark') { root.classList.add('dark'); root.classList.remove('theme-auto'); }
             else if (t === 'light') { root.classList.remove('theme-auto'); }
@@ -35,86 +36,180 @@
     <script src="{{ url_for('static', filename='js/pwa.js') }}" defer></script>
     {% block head %}{% endblock %}
 </head>
-<body>
+<body class="app-shell">
     <a href="#main" class="skip-link">Skip to main content</a>
 
-    <header class="top-nav">
-        <nav class="nav-container" aria-label="Primary">
-            <a href="{{ url_for('dashboard') }}" class="nav-logo">
-                <span class="nav-logo-icon" aria-hidden="true">CA</span>
-                <span class="nav-logo-text">Conta<span>Autónomo</span></span>
+    {# Navigation entries: modules add theirs through nav_items (get_full_nav).
+       Settings is not listed here: it lives in the sidebar footer with the
+       theme switch and Logout. #}
+    {% if module_manager %}
+        {% set nav = module_manager.get_full_nav() %}
+    {% else %}
+        {% set nav = [
+            {'type': 'dropdown', 'label': 'Invoices', 'items': [
+                {'label': 'All Invoices', 'endpoint': 'index'},
+                {'label': 'Create Invoice', 'endpoint': 'create_invoice'}]},
+            {'type': 'dropdown', 'label': 'System', 'items': [
+                {'label': 'Logs', 'endpoint': 'system_logs'},
+                {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'}]},
+        ] %}
+    {% endif %}
+
+    {# Active item: the exact endpoint; detail pages of core entities map to
+       their list; a module page without its own entry falls back to the
+       first entry of the same blueprint. #}
+    {% set core_parent = {
+        'view_invoice': 'index', 'edit_invoice': 'index',
+        'customers': 'settings', 'create_customer': 'settings',
+        'view_customer': 'settings', 'edit_customer': 'settings',
+        'add_bank': 'settings', 'edit_bank': 'settings',
+        'create_contractor': 'settings', 'edit_contractor': 'settings',
+    } %}
+    {% set nav_ns = namespace(endpoints=['dashboard', 'settings'], active='') %}
+    {% for entry in nav %}
+        {% if entry.type == 'link' %}
+            {% set nav_ns.endpoints = nav_ns.endpoints + [entry.endpoint] %}
+        {% elif entry.type == 'dropdown' %}
+            {% for item in entry['items'] %}
+                {% set nav_ns.endpoints = nav_ns.endpoints + [item.endpoint] %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+    {% set current_ep = core_parent.get(request.endpoint or '', request.endpoint or '') %}
+    {% if current_ep in nav_ns.endpoints %}
+        {% set nav_ns.active = current_ep %}
+    {% elif request.blueprint %}
+        {% for ep in nav_ns.endpoints if not nav_ns.active and ep.startswith(request.blueprint ~ '.') %}
+            {% set nav_ns.active = ep %}
+        {% endfor %}
+    {% endif %}
+    {% set group_icons = {'Invoices': '🧾', 'Taxes': '🧮', 'System': '🖥️'} %}
+
+    <aside class="sidebar" id="sidebar" aria-label="Sidebar">
+        <div class="sidebar-brand">
+            <a href="{{ url_for('dashboard') }}" class="brand">
+                <span class="brand-mark" aria-hidden="true">CA</span>
+                <span class="brand-text">Conta<span>Autónomo</span></span>
             </a>
+            <button type="button" class="sidebar-close icon-btn" aria-label="Close menu">✕</button>
+        </div>
 
-            <button class="nav-toggle" aria-label="Toggle navigation menu"
-                    aria-expanded="false" aria-controls="nav-menu">☰</button>
-
-            <div class="nav-menu" id="nav-menu">
-                <a href="{{ url_for('dashboard') }}"
-                   {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
-                {% if module_manager %}
-                    {% for entry in module_manager.get_full_nav() %}
-                        {% if entry.type == 'link' %}
-                        <a href="{{ url_for(entry.endpoint) }}"
-                           {% if request.endpoint == entry.endpoint %}aria-current="page"{% endif %}>{{ entry.icon ~ ' ' if entry.icon }}{{ entry.label }}</a>
-                        {% elif entry.type == 'dropdown' %}
-                        <div class="nav-dropdown">
-                            <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">{{ entry.label }}</button>
-                            <div class="nav-dropdown-menu">
-                                {% for item in entry['items'] %}
-                                <a href="{{ url_for(item.endpoint) }}">{{ item.icon ~ ' ' if item.icon }}{{ item.label }}</a>
-                                {% endfor %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    {% endfor %}
-                {% else %}
-                <div class="nav-dropdown">
-                    <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">Invoices</button>
-                    <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('index') }}">All Invoices</a>
-                        <a href="{{ url_for('create_invoice') }}">Create Invoice</a>
-                    </div>
-                </div>
-                <div class="nav-dropdown">
-                    <button class="nav-dropdown-toggle" aria-haspopup="true" aria-expanded="false">System</button>
-                    <div class="nav-dropdown-menu">
-                        <a href="{{ url_for('system_logs') }}">Logs</a>
-                        <a href="{{ url_for('scheduled_tasks') }}">Scheduled Tasks</a>
-                    </div>
-                </div>
-                <a href="{{ url_for('settings') }}"
-                   {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
-                {% endif %}
-            </div>
-
-            <div class="nav-actions">
-                <form method="POST" action="{{ url_for('auth.logout') }}" style="display: inline;">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="nav-btn nav-btn-primary">Logout</button>
-                </form>
-            </div>
-        </nav>
-    </header>
-
-    <main class="container" id="main">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+        <nav class="sidebar-nav" aria-label="Primary">
+            <ul class="side-list">
+                <li>
+                    <a href="{{ url_for('dashboard') }}" class="side-link"
+                       {% if nav_ns.active == 'dashboard' %}aria-current="page"{% endif %}>
+                        <span class="side-icon" aria-hidden="true">🏠</span><span class="side-label">Dashboard</span>
+                    </a>
+                </li>
+                {% for entry in nav if not (entry.type == 'link' and entry.endpoint == 'settings') %}
+                    {% if entry.type == 'link' %}
+                    <li>
+                        <a href="{{ url_for(entry.endpoint) }}" class="side-link"
+                           {% if nav_ns.active == entry.endpoint %}aria-current="page"{% endif %}>
+                            <span class="side-icon" aria-hidden="true">{{ entry.icon or '•' }}</span><span class="side-label">{{ entry.label }}</span>
+                        </a>
+                    </li>
+                    {% elif entry.type == 'dropdown' and entry['items'] %}
+                    {% set group_id = 'nav-group-' ~ loop.index %}
+                    {% set ns_grp = namespace(open=false) %}
+                    {% for item in entry['items'] if item.endpoint == nav_ns.active %}{% set ns_grp.open = true %}{% endfor %}
+                    <li class="side-group{% if ns_grp.open %} is-open has-active{% endif %}" data-group="{{ entry.label }}">
+                        <button type="button" class="side-link side-group-toggle"
+                                aria-expanded="{{ 'true' if ns_grp.open else 'false' }}" aria-controls="{{ group_id }}">
+                            <span class="side-icon" aria-hidden="true">{{ group_icons.get(entry.label) or entry['items'][0].icon or '📂' }}</span><span class="side-label">{{ entry.label }}</span>
+                            <span class="side-chevron" aria-hidden="true"></span>
+                        </button>
+                        <ul class="side-sublist" id="{{ group_id }}">
+                            {% for item in entry['items'] %}
+                            <li>
+                                <a href="{{ url_for(item.endpoint) }}" class="side-sublink"
+                                   {% if nav_ns.active == item.endpoint %}aria-current="page"{% endif %}>{{ item.label }}</a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </li>
+                    {% endif %}
                 {% endfor %}
-            {% endif %}
-        {% endwith %}
+            </ul>
+        </nav>
+        <script>
+            // Re-open the groups the owner left open on the previous page.
+            (function () {
+                try {
+                    var open = JSON.parse(localStorage.getItem('navGroups') || '[]');
+                    document.querySelectorAll('.side-group').forEach(function (g) {
+                        if (open.indexOf(g.dataset.group) > -1) {
+                            g.classList.add('is-open');
+                            g.querySelector('.side-group-toggle').setAttribute('aria-expanded', 'true');
+                        }
+                    });
+                } catch (e) { /* storage blocked: groups follow the current page */ }
+            })();
+        </script>
 
-        {% block content %}{% endblock %}
-    </main>
+        <div class="sidebar-footer">
+            <a href="{{ url_for('settings') }}" class="side-link"
+               {% if nav_ns.active == 'settings' %}aria-current="page"{% endif %}>
+                <span class="side-icon" aria-hidden="true">⚙️</span><span class="side-label">Settings</span>
+            </a>
+            <button id="theme-toggle" type="button" class="side-link theme-switch"
+                    role="switch" aria-checked="false" title="Dark mode (D)">
+                <span class="side-icon theme-icon" aria-hidden="true">🌙</span><span class="side-label">Dark mode</span>
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            </button>
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="side-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="side-link side-link-logout">
+                    <span class="side-icon" aria-hidden="true">🚪</span><span class="side-label">Logout</span>
+                </button>
+            </form>
+        </div>
+    </aside>
+    <div class="sidebar-backdrop" hidden></div>
 
-    <footer class="site-footer">
-        ContaAutónomo <a href="https://github.com/mborchuk/ContaAutonomo/releases" target="_blank" rel="noopener">v{{ app_version }}</a>
-        · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" rel="noopener">Mykola Borchuk</a>
-    </footer>
+    <div class="app-main">
+        {% set header_widgets = module_manager.get_header_widgets() if module_manager else [] %}
+        <header class="topbar{% if not header_widgets %} topbar--empty{% endif %}">
+            <button type="button" class="nav-toggle icon-btn" aria-label="Open menu"
+                    aria-expanded="false" aria-controls="sidebar">☰</button>
+            <a href="{{ url_for('dashboard') }}" class="brand topbar-brand">
+                <span class="brand-mark" aria-hidden="true">CA</span>
+                <span class="brand-text">Conta<span>Autónomo</span></span>
+            </a>
+            {# Space for module widgets (search, notifications, …): see
+               BaseModule.get_header_widgets. #}
+            <div class="topbar-slot topbar-start">
+                {% for widget in header_widgets if widget.position == 'start' %}
+                    {% set data = widget.data %}
+                    {% include widget.template ignore missing %}
+                {% endfor %}
+            </div>
+            <div class="topbar-slot topbar-end">
+                {% for widget in header_widgets if widget.position == 'end' %}
+                    {% set data = widget.data %}
+                    {% include widget.template ignore missing %}
+                {% endfor %}
+            </div>
+        </header>
 
-    <button id="theme-toggle" class="theme-toggle" type="button"
-            aria-pressed="false" aria-label="Toggle dark mode (press D)" title="Toggle dark mode (D)">🌙</button>
+        <main class="container" id="main">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer class="site-footer">
+            ContaAutónomo <a href="https://github.com/mborchuk/ContaAutonomo/releases" target="_blank" rel="noopener">v{{ app_version }}</a>
+            · © {{ current_year }} <a href="https://github.com/mborchuk" target="_blank" rel="noopener">Mykola Borchuk</a>
+        </footer>
+    </div>
 
 <script>
 // --- CSRF: inject token into POST forms + fetch headers -------------------
@@ -157,7 +252,11 @@
     var btn = document.getElementById('theme-toggle');
     function sync() {
         var dark = root.classList.contains('dark');
-        if (btn) { btn.setAttribute('aria-pressed', String(dark)); btn.textContent = dark ? '☀️' : '🌙'; }
+        if (btn) {
+            btn.setAttribute('aria-checked', String(dark));
+            var icon = btn.querySelector('.theme-icon');
+            if (icon) icon.textContent = dark ? '☀️' : '🌙';
+        }
     }
     function toggle() {
         root.classList.remove('theme-auto');
@@ -176,24 +275,61 @@
         });
     }
 
-    // --- Responsive nav ---
+    // --- Sidebar: groups and the phone/tablet drawer ---
+    var sidebar = document.getElementById('sidebar');
     var navToggle = document.querySelector('.nav-toggle');
-    var navMenu = document.getElementById('nav-menu');
-    if (navToggle && navMenu) {
-        navToggle.addEventListener('click', function () {
-            var open = navMenu.classList.toggle('open');
-            navToggle.setAttribute('aria-expanded', String(open));
+    var backdrop = document.querySelector('.sidebar-backdrop');
+    function saveGroups() {
+        try {
+            var open = [];
+            document.querySelectorAll('.side-group.is-open').forEach(function (g) { open.push(g.dataset.group); });
+            localStorage.setItem('navGroups', JSON.stringify(open));
+        } catch (e) { /* storage blocked: nothing to remember */ }
+    }
+    document.querySelectorAll('.side-group-toggle').forEach(function (t) {
+        t.addEventListener('click', function () {
+            var group = t.closest('.side-group');
+            var open = group.classList.toggle('is-open');
+            t.setAttribute('aria-expanded', String(open));
+            saveGroups();
         });
-        // On mobile, tapping a dropdown label expands it instead of hovering.
-        navMenu.querySelectorAll('.nav-dropdown-toggle').forEach(function (t) {
-            t.addEventListener('click', function () {
-                if (window.matchMedia('(max-width: 900px)').matches) {
-                    var dd = t.closest('.nav-dropdown');
-                    var open = dd.classList.toggle('open');
-                    t.setAttribute('aria-expanded', String(open));
-                }
-            });
-        });
+    });
+    function setDrawer(open) {
+        if (!sidebar) return;
+        sidebar.classList.toggle('open', open);
+        root.classList.toggle('drawer-open', open);
+        if (backdrop) backdrop.hidden = !open;
+        if (navToggle) navToggle.setAttribute('aria-expanded', String(open));
+        if (open) {
+            var target = sidebar.querySelector('[aria-current="page"]') || sidebar.querySelector('.side-link');
+            // Wait one frame: the drawer must be visible before it can take focus.
+            if (target) requestAnimationFrame(function () { target.focus(); });
+        } else if (navToggle && sidebar.contains(document.activeElement)) {
+            navToggle.focus();
+        }
+    }
+    function focusables() {
+        return Array.prototype.filter.call(
+            sidebar.querySelectorAll('a[href], button:not([disabled])'),
+            function (el) { return el.offsetParent !== null; });
+    }
+    if (navToggle) navToggle.addEventListener('click', function () { setDrawer(!sidebar.classList.contains('open')); });
+    if (backdrop) backdrop.addEventListener('click', function () { setDrawer(false); });
+    var closeBtn = document.querySelector('.sidebar-close');
+    if (closeBtn) closeBtn.addEventListener('click', function () { setDrawer(false); });
+    document.addEventListener('keydown', function (e) {
+        if (!sidebar || !sidebar.classList.contains('open')) return;
+        if (e.key === 'Escape') { setDrawer(false); return; }
+        if (e.key === 'Tab') {   // keep focus inside the open drawer
+            var items = focusables();
+            if (!items.length) return;
+            var first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
+    if (window.matchMedia) {
+        window.matchMedia('(min-width: 901px)').addEventListener('change', function (e) { if (e.matches) setDrawer(false); });
     }
 
     // --- Keyboard-accessible clickable rows (progressive enhancement) ---

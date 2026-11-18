@@ -52,72 +52,137 @@ a { color: var(--color-link); }
 }
 
 /* ============================================================================
-   Top navigation (semantic <header><nav>)
+   App shell: left sidebar + main column (top bar, page, footer)
    ============================================================================ */
-.top-nav {
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border);
-    position: sticky; top: 0; z-index: var(--z-nav);
-    box-shadow: var(--shadow-sm);
+.app-shell {
+    display: grid; grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    min-height: 100vh;
 }
-.nav-container {
-    max-width: var(--container-max); margin: 0 auto;
-    display: flex; align-items: center; justify-content: space-between;
-    gap: var(--space-4); padding: 0 var(--space-5); min-height: var(--nav-height);
-}
-.nav-logo {
-    display: flex; align-items: center; gap: var(--space-3);
+.app-main { min-width: 0; padding: 0 var(--space-5); }
+
+.brand {
+    display: flex; align-items: center; gap: var(--space-3); min-width: 0;
     font-size: var(--fs-lg); font-weight: var(--fw-bold);
     color: var(--color-text); text-decoration: none; white-space: nowrap;
 }
-.nav-logo-icon {
-    width: 36px; height: 36px; border-radius: var(--radius-lg);
+.brand-mark {
+    flex: none; width: 36px; height: 36px; border-radius: var(--radius-lg);
     background: linear-gradient(135deg, var(--indigo-500), var(--indigo-700));
     display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: var(--fs-base); font-weight: var(--fw-bold);
+    color: var(--white); font-size: var(--fs-base); font-weight: var(--fw-bold);
 }
-.nav-logo-text span { color: var(--color-accent); }
+.brand-text span { color: var(--color-accent); }
 
-.nav-menu { display: flex; align-items: center; gap: var(--space-1); flex: 1; justify-content: center; }
-.nav-menu a, .nav-dropdown-toggle {
-    padding: var(--space-2) var(--space-4);
-    color: var(--color-text-muted); text-decoration: none;
-    font-size: var(--fs-base); font-weight: var(--fw-medium);
-    border-radius: var(--radius-md); transition: background .15s, color .15s;
-    background: none; border: none; font-family: inherit; cursor: pointer;
+.icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; flex: none; cursor: pointer;
+    background: var(--color-surface); color: var(--color-text);
+    border: 1px solid var(--color-border); border-radius: var(--radius-md);
+    font-size: var(--fs-lg); font-family: inherit;
 }
-.nav-menu a:hover, .nav-dropdown-toggle:hover { background: var(--color-surface-3); color: var(--color-text); }
-.nav-menu a.active, .nav-menu a[aria-current="page"] { color: var(--color-primary); background: var(--color-primary-tint); }
+.icon-btn:hover { background: var(--color-surface-3); }
 
-.nav-dropdown { position: relative; }
-.nav-dropdown-toggle::after { content: ' ▾'; font-size: .7em; opacity: .6; }
-.nav-dropdown-menu {
-    display: none; position: absolute; top: 100%; left: 0;
-    background: var(--color-surface); border: 1px solid var(--color-border);
-    border-radius: var(--radius-md); box-shadow: var(--shadow-md);
-    min-width: 190px; z-index: var(--z-dropdown); padding: var(--space-1) 0;
+/* ---- Sidebar ---- */
+.sidebar {
+    position: sticky; top: 0; height: 100vh; z-index: var(--z-nav);
+    display: flex; flex-direction: column;
+    background: var(--color-surface); border-right: 1px solid var(--color-border);
 }
-.nav-dropdown:hover .nav-dropdown-menu,
-.nav-dropdown:focus-within .nav-dropdown-menu { display: block; }
-.nav-dropdown-menu a {
-    display: block; padding: var(--space-2) var(--space-4);
+.sidebar-brand {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+    min-height: var(--topbar-height); padding: 0 var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+}
+/* Wordmark stays at --fs-lg bold: the orange accent passes AA only as large text. */
+.sidebar-close { display: none; width: 36px; height: 36px; }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: var(--space-3); }
+.side-list, .side-sublist { list-style: none; }
+.side-list { display: flex; flex-direction: column; gap: 2px; }
+
+.side-link {
+    display: flex; align-items: center; gap: var(--space-3); width: 100%;
+    padding: var(--space-2) var(--space-3); min-height: 40px;
+    color: var(--color-text-muted); text-decoration: none; text-align: left;
+    font-size: var(--fs-base); font-weight: var(--fw-medium); font-family: inherit; line-height: var(--lh-tight);
+    background: none; border: none; border-radius: var(--radius-md); cursor: pointer;
+    transition: background .15s, color .15s;
+}
+.side-link:hover { background: var(--color-surface-3); color: var(--color-text); }
+.side-link[aria-current="page"] { background: var(--color-primary-tint); color: var(--color-primary); }
+html.dark .side-link[aria-current="page"],
+html.dark .side-sublink[aria-current="page"] { color: var(--color-primary-hover); }  /* 3.8:1 → AA */
+.side-icon { flex: none; width: 1.5em; text-align: center; font-size: 1.05em; }
+.side-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.side-chevron {
+    flex: none; width: .5em; height: .5em; margin-right: 2px;
+    border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+    transform: rotate(45deg) translateY(-2px); opacity: .6; transition: transform .15s;
+}
+.side-group.is-open > .side-group-toggle .side-chevron { transform: rotate(-135deg) translateY(-2px); }
+.side-group.has-active > .side-group-toggle { color: var(--color-text); }
+
+/* Sub-items hang from a guide line under the group icon. Groups start
+   collapsed only when JS can open them (html.js); without JS all show. */
+.side-sublist {
+    margin: 2px 0 var(--space-1) calc(var(--space-3) + .75em);
+    padding-left: var(--space-3); border-left: 1px solid var(--color-border-strong);
+    display: flex; flex-direction: column; gap: 2px;
+}
+html.js .side-group:not(.is-open) > .side-sublist { display: none; }
+.side-sublink {
+    display: block; padding: 6px var(--space-3); border-radius: var(--radius-md);
     color: var(--color-text-muted); text-decoration: none; font-size: var(--fs-sm);
 }
-.nav-dropdown-menu a:hover { background: var(--color-surface-3); color: var(--color-text); }
-
-.nav-actions { display: flex; align-items: center; gap: var(--space-2); }
-
-/* Hamburger — hidden on desktop */
-.nav-toggle {
-    display: none; background: none; border: 1px solid var(--color-border);
-    border-radius: var(--radius-md); width: 40px; height: 40px;
-    font-size: var(--fs-lg); cursor: pointer; color: var(--color-text);
+.side-sublink:hover { background: var(--color-surface-3); color: var(--color-text); }
+.side-sublink[aria-current="page"] {
+    background: var(--color-primary-tint); color: var(--color-primary); font-weight: var(--fw-semibold);
 }
+
+.sidebar-footer {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: var(--space-3); border-top: 1px solid var(--color-border);
+}
+.side-form { display: contents; }
+.side-link-logout:hover { background: var(--color-danger-bg); color: var(--color-danger-fg); }
+
+/* Dark-mode switch (role=switch; aria-checked drives the look) */
+.switch-track {
+    flex: none; position: relative; width: 34px; height: 20px;
+    border-radius: var(--radius-full); background: var(--color-border-strong); transition: background .15s;
+}
+.switch-thumb {
+    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--white); box-shadow: var(--shadow-sm); transition: transform .15s;
+}
+.theme-switch[aria-checked="true"] .switch-track { background: var(--color-primary); }
+.theme-switch[aria-checked="true"] .switch-thumb { transform: translateX(14px); }
+
+.sidebar-backdrop {
+    position: fixed; inset: 0; z-index: var(--z-overlay);
+    background: rgba(15, 23, 42, .45);
+}
+.sidebar-backdrop[hidden] { display: none; }
+
+/* ---- Top bar: module widgets (search, notifications, …) ---- */
+.topbar {
+    position: sticky; top: 0; z-index: var(--z-dropdown);
+    display: flex; align-items: center; gap: var(--space-3);
+    min-height: var(--topbar-height); padding: var(--space-2) 0;
+    background: var(--color-bg);
+}
+.topbar-slot { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.topbar-start { flex: 1; }
+.topbar-end { margin-left: auto; }
+.topbar-slot:empty { display: none; }
+/* No widget yet: no empty strip on desktop (phone/tablet keeps the menu button). */
+.topbar--empty { display: none; }
+.nav-toggle, .topbar-brand { display: none; }
 
 /* ============================================================================
    Buttons
    ============================================================================ */
-.btn, .nav-btn {
+.btn {
     display: inline-block; padding: var(--space-2) var(--space-4);
     font-size: var(--fs-sm); font-weight: var(--fw-medium);
     border-radius: var(--radius-md); border: 1px solid transparent;
@@ -128,7 +193,6 @@ a { color: var(--color-link); }
     padding: var(--space-1) var(--space-2);
     font-size: var(--fs-xs);
 }
-.nav-btn { font-size: var(--fs-base); }
 .btn-primary  { background: var(--color-primary); color: var(--color-on-primary); }
 .btn-primary:hover  { background: var(--color-primary-hover); }
 .btn-secondary { background: var(--color-surface); color: var(--color-text-muted); border-color: var(--color-border-strong); }
@@ -136,10 +200,6 @@ a { color: var(--color-link); }
 .btn-success  { background: var(--color-success); color: #fff; }
 .btn-danger   { background: var(--color-danger); color: #fff; }
 .btn-success:hover, .btn-danger:hover { filter: brightness(1.07); }
-.nav-btn-outline { background: var(--color-surface); color: var(--color-text-muted); border-color: var(--color-border-strong); }
-.nav-btn-outline:hover { background: var(--color-surface-3); color: var(--color-text); }
-.nav-btn-primary { background: var(--color-accent); color: var(--color-on-accent); }
-.nav-btn-primary:hover { background: var(--color-accent-hover); }
 
 /* ============================================================================
    Layout container, cards, alerts
@@ -427,19 +487,10 @@ html.dark tbody tr.cat-fill, html.dark tbody tr.cat-fill:hover {
 .sortable.desc::after { content: ' ↓'; opacity: 1; }
 
 /* ============================================================================
-   Footer & floating theme toggle
+   Footer
    ============================================================================ */
 .site-footer { text-align: center; padding: var(--space-5) 0; color: var(--color-text-faint); font-size: var(--fs-sm); }
 .site-footer a { color: var(--color-text-faint); text-decoration: underline; }
-
-.theme-toggle {
-    position: fixed; right: var(--space-4); bottom: var(--space-4); z-index: var(--z-toast);
-    border: 1px solid var(--color-border); border-radius: var(--radius-full);
-    width: 44px; height: 44px; cursor: pointer;
-    background: var(--color-surface); color: var(--color-text);
-    font-size: var(--fs-lg); box-shadow: var(--shadow-md);
-    display: flex; align-items: center; justify-content: center;
-}
 
 /* ============================================================================
    Responsive
@@ -453,28 +504,32 @@ img, svg, video, canvas, pre { max-width: 100%; }
 /* ---- Tablet landscape ---- */
 @media (max-width: 1024px) {
     .container { padding: var(--space-5); }
-    .nav-container { padding: 0 var(--space-4); }
+    .app-main { padding: 0 var(--space-4); }
 }
 
-/* ---- Nav collapses to hamburger ---- */
+/* ---- Sidebar becomes a drawer opened from the top bar ---- */
 @media (max-width: 900px) {
-    .nav-toggle { display: flex; align-items: center; justify-content: center; }
-    .nav-menu {
-        display: none; position: absolute; top: var(--nav-height); left: 0; right: 0;
-        flex-direction: column; align-items: stretch; justify-content: flex-start;
-        background: var(--color-surface); border-bottom: 1px solid var(--color-border);
-        box-shadow: var(--shadow-md); padding: var(--space-2); gap: var(--space-1);
-        max-height: calc(100vh - var(--nav-height)); overflow-y: auto;
+    .app-shell { grid-template-columns: minmax(0, 1fr); }
+    .topbar, .topbar--empty { display: flex; }
+    .nav-toggle, .topbar-brand { display: inline-flex; }
+    .topbar-start { flex: 1; }
+    html.js .sidebar {
+        position: fixed; left: 0; top: 0; bottom: 0; height: auto;
+        width: min(288px, 88vw); z-index: var(--z-toast);
+        box-shadow: var(--shadow-lg); transform: translateX(-100%); visibility: hidden;
+        transition: transform .2s ease, visibility .2s;
     }
-    .nav-menu.open { display: flex; }
-    .nav-dropdown-menu { position: static; box-shadow: none; border: none; min-width: 0; padding-left: var(--space-4); }
-    .nav-dropdown:hover .nav-dropdown-menu { display: none; }
-    .nav-dropdown.open .nav-dropdown-menu { display: block; }
+    html.js .sidebar.open { transform: none; visibility: visible; }
+    html.js .sidebar-close { display: inline-flex; }
+    html.drawer-open { overflow: hidden; }
+    /* Without JS the sidebar stays a block above the page. */
+    html:not(.js) .sidebar { position: static; height: auto; }
 }
 
 /* ---- Phone & tablet portrait: stack multi-column layouts ---- */
 @media (max-width: 768px) {
     .container { margin: var(--space-3); padding: var(--space-4); }
+    .app-main > .container { margin: var(--space-2) 0 var(--space-4); }
     .page-header { flex-direction: column; align-items: stretch; }
     .page-actions { width: 100%; }
     .page-actions .btn { flex: 1 1 auto; text-align: center; }
@@ -499,7 +554,7 @@ img, svg, video, canvas, pre { max-width: 100%; }
     }
 
     /* Bigger tap targets. */
-    .btn, .nav-btn { padding: var(--space-3) var(--space-4); }
+    .btn { padding: var(--space-3) var(--space-4); }
 }
 
 /* ---- Small phone ---- */
@@ -508,7 +563,6 @@ img, svg, video, canvas, pre { max-width: 100%; }
     h1 { font-size: var(--fs-xl); }
     h2 { font-size: var(--fs-lg); }
     table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
-    .nav-logo-text { display: none; }          /* keep the icon, drop the wordmark */
-    .nav-container { gap: var(--space-2); }
-    .theme-toggle { width: 40px; height: 40px; }
+    .app-main { padding: 0 var(--space-2); }
+    .topbar-brand .brand-text { display: none; }   /* keep the mark, drop the wordmark */
 }
