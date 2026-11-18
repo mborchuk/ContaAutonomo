@@ -164,13 +164,17 @@ def test_mark_read_from_the_bell_returns_json(center, owner):
 
 def test_history_page_unread_again_and_delete(center, owner):
     msg, _ = center.post('mod', 'History entry')
-    owner.post(f'/messages/{msg.id}/read', data={'next': '/messages'})
+    owner.post(f'/messages/{msg.id}/read', data={'show': 'all'})
     html = owner.get('/messages?show=unread').get_data(as_text=True)
     assert 'History entry' not in html.split('<h1>Messages</h1>')[1]
-    resp = owner.post(f'/messages/{msg.id}/unread', data={'next': '//evil.com'})
-    assert resp.status_code == 302 and resp.headers['Location'].endswith('/messages')
+    # Back to the Messages page with its filter and page; any other value is ignored.
+    resp = owner.post(f'/messages/{msg.id}/unread', data={'show': 'unread', 'page': '2'})
+    assert resp.status_code == 302 and resp.headers['Location'].endswith('/messages?show=unread&page=2')
+    resp = owner.post(f'/messages/{msg.id}/read', data={'next': '//evil.com', 'show': 'x', 'page': 'y'})
+    assert resp.headers['Location'].endswith('/messages')
+    owner.post(f'/messages/{msg.id}/unread')
     assert center.unread_count() == 1
-    owner.post(f'/messages/{msg.id}/delete', data={'next': '/messages'})
+    owner.post(f'/messages/{msg.id}/delete')
     assert 'History entry' not in owner.get('/messages').get_data(as_text=True)
     owner.post('/messages/read-all')
 

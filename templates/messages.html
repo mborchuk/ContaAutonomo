@@ -33,18 +33,18 @@
         <div class="msg-actions">
             {% if m.read_at %}
             <form method="post" action="{{ url_for('messages_mark_unread', message_id=m.id) }}">
-                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
                 <button type="submit" class="btn btn-secondary btn-sm">Mark as unread</button>
             </form>
             {% else %}
             <form method="post" action="{{ url_for('messages_mark_read', message_id=m.id) }}">
-                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
                 <button type="submit" class="btn btn-secondary btn-sm">Mark as read</button>
             </form>
             {% endif %}
             <form method="post" action="{{ url_for('messages_delete', message_id=m.id) }}"
                   onsubmit="return confirm('Delete message #{{ m.id }}? The same message will not be posted again.');">
-                <input type="hidden" name="next" value="{{ request.full_path }}">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
                 <button type="submit" class="btn btn-danger btn-sm">Delete</button>
             </form>
         </div>
