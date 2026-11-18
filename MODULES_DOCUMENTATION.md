@@ -1046,14 +1046,14 @@ the core:
 self.core.functions.call(
     'messages.post', source=self.module_id, level='warning',
     key=f'expiry-soon:{doc.id}:{doc.expiry_date}',
-    text=f'📄 "{doc.name}" expires on {doc.expiry_date:%d/%m/%Y} — [open it](/documents/{doc.id})')
+    text=f'📄 "{doc.name}" expires on {doc.expiry_date:%d/%m/%Y} — [open it](/documents/view/{doc.id})')
 # -> {'id': 12, 'created': True}
 ```
 
 | Field | Rule |
 |---|---|
 | `source` | The module id (lower case, digits, `_`) |
-| `text` | Up to 1,000 characters, plain text and emoji. `[label](url)` makes a link: an app path (`/documents/12`) or an `http(s)://` URL (opens in a new tab). Nothing else is HTML |
+| `text` | Up to 1,000 characters, plain text and emoji. `[label](url)` makes a link: an app path (`/documents/view/12`) or an `http(s)://` URL (opens in a new tab). Nothing else is HTML |
 | `level` | `info` (default), `warning`, `danger` — the colour of the message's edge |
 | `image` | Optional picture, at most 64×64 (`message_center.IMAGE_MAX_PX`): a `data:image/png\|jpeg\|gif\|webp;base64,` URI of at most 16 KB, checked with Pillow, or a path in the app. External images are refused |
 | `key` | Optional deduplication key: one `source` + `key` is posted once, so a message that was read or deleted does not come back. Without a key every call posts a new message |
