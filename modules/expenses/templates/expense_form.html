@@ -257,10 +257,12 @@ document.addEventListener('DOMContentLoaded', function() {
     const dedPctEl = document.getElementById('deductible_pct');
     const userTouched = new Set();
     [rateEl, dedPctEl].forEach(el => el.addEventListener('input', () => userTouched.add(el.id)));
-    function applyCategoryDefaults() {
+    // `keepVat`: the VAT fields came from a parsed document, so the category's
+    // rate must not recompute them.
+    function applyCategoryDefaults(keepVat) {
         const def = CATEGORY_DEFAULTS[catEl.value];
         if (!def) return;
-        if (!userTouched.has('vat_rate') && (rateEl.value === '' )) {
+        if (!keepVat && !userTouched.has('vat_rate') && (rateEl.value === '' )) {
             rateEl.value = def.vat_rate;
             recalcFromGrossRate();
         }
@@ -268,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function() {
             dedPctEl.value = def.deductible_pct;
         }
     }
-    catEl.addEventListener('change', applyCategoryDefaults);
+    catEl.addEventListener('change', () => applyCategoryDefaults(false));
 
     // Shared prefill: used by the legacy sessionStorage path and the F11
     // in-form parse. Nothing auto-saves — every field stays editable.
@@ -309,6 +311,13 @@ document.addEventListener('DOMContentLoaded', function() {
         const rcEl = document.getElementById('reverse_charge');
         if (rcEl && (data.reverse_charge === 'eu' || data.reverse_charge === 'non_eu')) {
             rcEl.value = data.reverse_charge;
+        }
+        // Setting the category in code fires no change event: apply its
+        // defaults (deductible %, and the VAT rate when the document gave no
+        // VAT data) as choosing it by hand would.
+        if (data.category) {
+            applyCategoryDefaults(data.vat_rate != null || data.net_amount != null
+                                  || data.vat_amount != null);
         }
     }
 

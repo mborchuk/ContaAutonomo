@@ -211,6 +211,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
+- **Expense category defaults after an AI parse**: the parsed category was set
+  without the change event, so its defaults were never applied — a parsed fuel
+  receipt ("Vehicle") kept "Deductible %" at 100 instead of 50. The prefill now
+  applies them as choosing the category by hand does: the deductible %, and the
+  category's VAT rate only when the document gave no VAT data (parsed VAT
+  figures are never recomputed).
 - **Ledger Assistant with a CLI agent**: with Claude Code CLI or Kiro CLI
   selected in the AI Parser, the assistant said the provider "cannot answer
   questions". The AI Parser now answers `ai.complete_text` with the selected
