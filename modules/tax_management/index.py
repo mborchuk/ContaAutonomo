@@ -61,9 +61,10 @@ class TaxManagementModule(BaseModule):
     @property
     def nav_items(self):
         return [
-            {'label': 'Tax Forms', 'endpoint': 'tax_management.tax_forms_index', 'icon': '📋'},
+            {'label': 'Tax Forms', 'endpoint': 'tax_management.tax_forms_index', 'icon': '📋',
+             'group': 'Taxes', 'order': 10},
             {'label': 'Obligations', 'endpoint': 'tax_management.obligations_index',
-             'icon': '✅', 'group': 'System'},
+             'icon': '✅', 'group': 'Taxes', 'order': 20},
         ]
 
     def on_enable(self):

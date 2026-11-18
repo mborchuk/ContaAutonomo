@@ -989,6 +989,16 @@ def nav_items(self):
 Core dropdown groups: `Invoices`, `System`. Any other group name creates a new dropdown.
 Items without `group` appear as top-level links. The full menu is built by `ModuleManager.get_full_nav()`.
 
+An optional `order` key (lower first) sorts items within their group or among the
+top-level links; items without it keep load order after the ordered ones, and groups keep
+the order in which they first appear. Bundled modules use these groups:
+
+| Group | Items (`order`) |
+|---|---|
+| Invoices | All Invoices, Create Invoice (core); Invoice Designer, Recurring, Verifactu |
+| Taxes | Tax Forms (10), Obligations (20), Tax Drafts (30), IRPF Estimator (40), RETA Advisor (50), Fiscal Calendar (60) |
+| System | Logs, Scheduled Tasks (core); Bank Import |
+
 ### BaseModule Methods
 
 | Method | Description |

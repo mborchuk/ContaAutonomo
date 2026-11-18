@@ -73,7 +73,7 @@ class TaxEsIrpfModule(BaseModule):
     def nav_items(self):
         return [
             {'label': 'IRPF Estimator', 'endpoint': 'tax_es_irpf.index',
-             'icon': '🧮', 'group': 'Taxes'}
+             'icon': '🧮', 'group': 'Taxes', 'order': 40}
         ]
 
     @property

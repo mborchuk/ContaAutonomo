@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Navigation order**: a module's nav item may carry `order` (lower first) to
+  sort it within its group or among the top-level links; items without it keep
+  load order.
 - **VAT deduction check on parsed expenses**: the AI Parser also reports the
   buyer's tax ID (`buyer_tax_id`). When a parsed document has Spanish VAT but
   does not show the owner's NIF, or shows another tax ID, the expense form warns
@@ -191,6 +194,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Tax pages grouped under Taxes**: Tax Forms, Obligations, Tax Drafts, IRPF
+  Estimator, RETA Advisor and Fiscal Calendar now sit together in the Taxes
+  menu (they were spread over System, Taxes and the top level). Verifactu moved
+  to Invoices. System keeps Logs, Scheduled Tasks and Bank Import.
 - **Text questions moved from the AI Parser to the AI Agent**: the AI Parser
   no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
   agents for text); it reads documents only, with its own provider settings.
