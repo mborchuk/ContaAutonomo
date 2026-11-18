@@ -56,7 +56,8 @@ The field names are the contract with the forms; change them together.
   `reverse_charge`. VAT fields are `null` when the document shows no
   breakdown. `buyer_tax_id` is the tax ID the document is issued to (`null` on
   most tickets); the expense form compares it with the owner's NIF to warn
-  that the VAT is normally not deductible.
+  that the VAT is normally not deductible. The form picks the contractor by
+  `contractor_vat`, then by `contractor_name`.
 
 ## CLI agents (`cli_agents.py`)
 
