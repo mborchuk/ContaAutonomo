@@ -344,7 +344,13 @@ a full VAT breakdown.
   VAT but does not show the owner's NIF (Settings → Business Information: VAT Number or NIE Number), or
   shows another tax ID (`buyer_tax_id`), a warning next to "Deductible (IVA
   soportado)" explains that its VAT is normally not deductible; nothing is
-  changed automatically
+  changed automatically. The parsed supplier picks a contractor by VAT number
+  first (normalized), then by name (case, accents, punctuation and legal forms
+  such as S.L., S.A.U. or GmbH ignored; the same name, else the longest one
+  where one name starts with the other). It is chosen only when exactly one
+  matches, and a name match is skipped when both VAT numbers are known and
+  differ. Otherwise a note next to the field names the supplier, which is also
+  added to Notes on its own line
 - **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
   shortcut of the installed app): Take photo / Choose photo above the expense
   form. The photo goes through the AI parse above, so the form below is

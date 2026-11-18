@@ -202,6 +202,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Parsed supplier picks the contractor**: an AI-parsed expense selected a
+  contractor only when its name was exactly the document's, so most suppliers
+  ended up in Notes ("Contractor: Media Markt Saturn S.A. (ESA82037292)"). The
+  form now matches by VAT number first, then by name, ignoring case, accents,
+  punctuation and legal forms (S.L., S.A.U., GmbH, …). It chooses a contractor
+  only when exactly one matches, skips a name match whose VAT number differs,
+  and otherwise names the supplier next to the field and on its own line in
+  Notes.
 - **Text questions moved from the AI Parser to the AI Agent**: the AI Parser
   no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
   agents for text); it reads documents only, with its own provider settings.
