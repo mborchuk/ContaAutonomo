@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<h1>Messages</h1>
+<p class="muted">
+    Messages from the app and its modules. A message stays in the bell until you mark it as
+    read; mark it unread to see it there again. Deleting removes it from this list, and the
+    same message is not posted again.
+</p>
+
+<div class="action-row" style="margin-bottom: var(--space-4);">
+    <a href="{{ url_for('messages_index') }}" class="btn {{ 'btn-primary' if show == 'all' else 'btn-secondary' }} btn-sm">All</a>
+    <a href="{{ url_for('messages_index', show='unread') }}" class="btn {{ 'btn-primary' if show == 'unread' else 'btn-secondary' }} btn-sm">Unread</a>
+    {% if message_bell and message_bell.count %}
+    <form method="post" action="{{ url_for('messages_mark_all_read') }}" style="margin-left: auto;">
+        <button type="submit" class="btn btn-secondary btn-sm">Mark all as read</button>
+    </form>
+    {% endif %}
+</div>
+
+{% if messages %}
+<ul class="msg-history">
+    {% for m in messages %}
+    <li class="msg-item msg-{{ m.level }}{% if not m.read_at %} is-unread{% endif %}" id="message-{{ m.id }}">
+        {% if m.image %}<img src="{{ m.image }}" alt="" class="msg-img">{% endif %}
+        <div class="msg-body">
+            <div class="msg-text">{{ m.text | message_html }}</div>
+            <div class="msg-meta">
+                #{{ m.id }} · {{ m.source }} · {{ m.created_at.strftime('%d/%m/%Y %H:%M') }} UTC ·
+                {% if m.read_at %}read {{ m.read_at.strftime('%d/%m/%Y %H:%M') }}{% else %}<strong>unread</strong>{% endif %}
+            </div>
+        </div>
+        <div class="msg-actions">
+            {% if m.read_at %}
+            <form method="post" action="{{ url_for('messages_mark_unread', message_id=m.id) }}">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
+                <button type="submit" class="btn btn-secondary btn-sm">Mark as unread</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('messages_mark_read', message_id=m.id) }}">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
+                <button type="submit" class="btn btn-secondary btn-sm">Mark as read</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('messages_delete', message_id=m.id) }}"
+                  onsubmit="return confirm('Delete message #{{ m.id }}? The same message will not be posted again.');">
+                <input type="hidden" name="show" value="{{ show }}"><input type="hidden" name="page" value="{{ page }}">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+
+<div class="action-row" style="margin-top: var(--space-5); justify-content: center;">
+    {% if page > 1 %}
+    <a href="{{ url_for('messages_index', page=page-1, show=show) }}" class="btn btn-secondary">&laquo; Previous</a>
+    {% endif %}
+    <span class="muted" style="padding: var(--space-2) var(--space-4);">Page {{ page }} · {{ total }} message(s)</span>
+    {% if page * per_page < total %}
+    <a href="{{ url_for('messages_index', page=page+1, show=show) }}" class="btn btn-secondary">Next &raquo;</a>
+    {% endif %}
+</div>
+{% else %}
+<div class="empty-state">
+    <p style="font-size: var(--fs-md);">{{ 'No unread messages.' if show == 'unread' else 'No messages.' }}</p>
+    <p class="fine-print">Modules post messages here, for example documents that are about to expire.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -43,9 +43,10 @@ def serialize_customer(c):
     }
 
 
-def register(registry, core, Invoice, Customer):
-    """Register the core functions on `registry`; `core` is CoreServices and
-    `Invoice`, `Customer` the app's models."""
+def register(registry, core, Invoice, Customer, message_center=None):
+    """Register the core functions on `registry`; `core` is CoreServices,
+    `Invoice`, `Customer` the app's models and `message_center` the
+    MessageCenter (message_center.py), when the app has one."""
 
     def list_invoices(date_from=None, date_to=None, client=None, status=None,
                       page=1, per_page=20):
@@ -91,3 +92,35 @@ def register(registry, core, Invoice, Customer):
                 'tax_type, is_default',
         assistant=True, record_kind='customer',
         assistant_fields=('id', 'name', 'country', 'tax_type')))
+    if message_center is not None:
+        register_messages(registry, message_center)
+
+
+def register_messages(registry, center):
+    """`messages.post` and `messages.unread_count` (message_center.py)."""
+    from message_center import IMAGE_MAX_PX, LEVELS, MAX_KEY, MAX_TEXT
+
+    def post(source, text, level='info', image=None, key=None):
+        msg, created = center.post(source, text, level=level, image=image, key=key)
+        return {'id': msg.id, 'created': created}
+
+    registry.register_core(Function(
+        'messages.post', post,
+        'Show the owner a message in the message center (top-bar bell, Messages page). '
+        'The text may hold emoji and [label](url) links to an app page (/...) or an '
+        'http(s) URL. With `key`, the same source and key is posted only once, also '
+        'after the message was read or deleted.',
+        params=(Param('source', 'str', 'Who posts: the module id', required=True,
+                      max_length=50),
+                Param('text', 'str', 'Message text', required=True, max_length=MAX_TEXT),
+                Param('level', 'str', 'How it is shown', choices=LEVELS),
+                Param('image', 'str', f'Small picture, at most {IMAGE_MAX_PX}x{IMAGE_MAX_PX}: '
+                      'a data:image/png|jpeg|gif|webp;base64 URI or a path in the app',
+                      max_length=24_000),
+                Param('key', 'str', 'Deduplication key', max_length=MAX_KEY)),
+        returns='{"id": int, "created": bool}',
+        read_only=False))
+    registry.register_core(Function(
+        'messages.unread_count', center.unread_count,
+        'Number of messages the owner has not read yet.',
+        returns='int'))

@@ -26,6 +26,7 @@ Technical reference for the Autónomos application architecture.
 | `Settings` | `settings` | Application configuration (single row) |
 | `Contractor` | `contractor` | Contractor/vendor info |
 | `Expense` | `expense` | Expense records with VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`, `deductible`, `deductible_pct`) |
+| `Message` | `message` | Message center: `source`, `dedupe_key` (unique with `source`), `text`, `level`, `image`, `created_at`, `read_at`, `deleted_at` (see *Message Center*) |
 
 #### Invoice amount columns
 
@@ -1008,7 +1009,7 @@ the order in which they first appear. Bundled modules use these groups:
 |---|---|
 | Invoices | All Invoices, Create Invoice (core); Invoice Designer, Recurring, Verifactu |
 | Taxes | Tax Forms (10), Obligations (20), Tax Drafts (30), IRPF Estimator (40), RETA Advisor (50), Fiscal Calendar (60) |
-| System | Logs, Scheduled Tasks (core); Bank Import |
+| System | Messages, Logs, Scheduled Tasks (core); Bank Import |
 
 ### Top Bar Widgets
 
@@ -1029,7 +1030,41 @@ def get_header_widgets(self):
 It is called on every page render, so keep it cheap. Templates are rendered with
 auto-escaping. A module that raises is logged and skipped; the page still renders.
 With no widget the bar is hidden on wide screens; on phones and tablets it always shows
-the menu button that opens the sidebar.
+the menu button that opens the sidebar. For a signed-in owner the bar always holds the
+core message bell (right), after the modules' right-hand widgets.
+
+### Message Center
+
+The core shows short messages to the owner: a 🔔 bell in the top bar with the number
+of unread messages and, when opened, the unread messages (newest first, at most 10)
+each with **Mark as read**; and a **Messages** page (System → Messages, `/messages`) with the
+whole history, where a message can be marked as read, marked as unread (it shows in
+the bell again) or deleted. A module posts through the registry, never by importing
+the core:
+
+```python
+self.core.functions.call(
+    'messages.post', source=self.module_id, level='warning',
+    key=f'expiry-soon:{doc.id}:{doc.expiry_date}',
+    text=f'📄 "{doc.name}" expires on {doc.expiry_date:%d/%m/%Y} — [open it](/documents/view/{doc.id})')
+# -> {'id': 12, 'created': True}
+```
+
+| Field | Rule |
+|---|---|
+| `source` | The module id (lower case, digits, `_`) |
+| `text` | Up to 1,000 characters, plain text and emoji. `[label](url)` makes a link: an app path (`/documents/view/12`) or an `http(s)://` URL (opens in a new tab). Nothing else is HTML |
+| `level` | `info` (default), `warning`, `danger` — the colour of the message's edge |
+| `image` | Optional picture, at most 64×64 (`message_center.IMAGE_MAX_PX`): a `data:image/png\|jpeg\|gif\|webp;base64,` URI of at most 16 KB, checked with Pillow, or a path in the app. External images are refused |
+| `key` | Optional deduplication key: one `source` + `key` is posted once, so a message that was read or deleted does not come back. Without a key every call posts a new message |
+
+Each message has its own id. Deleting hides a message and keeps its row, so its key
+stays used. Every change writes an activity-log entry in category `messages` —
+`message_posted`, `message_read`, `message_unread`, `message_deleted` — with the
+message id; System → Logs links the entry to the message on the Messages page
+(`/messages#message-<id>`). Rules and rendering: `message_center.py`; routes
+`/messages`, `POST /messages/<id>/read|unread|delete`, `POST /messages/read-all` (the
+bell's script posts with `Accept: application/json` and updates the count in place).
 
 ### BaseModule Methods
 
@@ -1143,6 +1178,8 @@ Functions today:
 |---|---|---|
 | `ledger.list_invoices` | core | Filters `date_from`, `date_to`, `client`, `status`; paged. `GET /api/v1/invoices` calls it |
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
+| `messages.post` | core | `source`, `text`, `level?`, `image?`, `key?` → `{id, created}`; shows a message in the bell and on the Messages page (*Message Center*). Not read-only |
+| `messages.unread_count` | core | Number of unread messages |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |

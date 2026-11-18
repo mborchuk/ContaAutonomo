@@ -23,7 +23,7 @@ def test_tax_pages_are_grouped_under_taxes(loaded_modules):
 
 def test_system_keeps_system_pages(loaded_modules):
     _, groups = _nav(loaded_modules)
-    assert groups['System'] == ['Logs', 'Scheduled Tasks', 'Bank Import']
+    assert groups['System'] == ['Messages', 'Logs', 'Scheduled Tasks', 'Bank Import']
 
 
 def test_verifactu_is_under_invoices(loaded_modules):

@@ -1178,6 +1178,8 @@ class CoreServices:
         self._settings_model = None
         self._module_enabled_model = None
         self._module_manager = None
+        # MessageCenter (message_center.py), set by register_core_functions.
+        self.message_center = None
         self._storage_backend = LocalStorageBackend(app.root_path)
         self._activity_logger = FileActivityLogger(app.root_path)
         self._scheduler = TaskScheduler(app)
@@ -1887,10 +1889,18 @@ class ModuleManager:
         self.failed_modules = {}    # module_id -> error message (load failures)
         self._enabled_cache = None
 
-    def register_core_functions(self, Invoice, Customer):
+    def register_core_functions(self, Invoice, Customer, Message=None):
         """Register the core's functions (core_functions.py) with the app's
-        models; the app calls this right after creating the manager."""
-        core_functions.register(self.functions, self.core, Invoice=Invoice, Customer=Customer)
+        models; the app calls this right after creating the manager. With
+        `Message`, the message center (message_center.py) is created as
+        `core.message_center` and its functions are registered."""
+        center = None
+        if Message is not None:
+            from message_center import MessageCenter
+            center = MessageCenter(self.db, Message, self.core.log_activity)
+        self.core.message_center = center
+        core_functions.register(self.functions, self.core, Invoice=Invoice, Customer=Customer,
+                                message_center=center)
 
     def _get_module_enabled_model(self):
         """Get or create the ModuleEnabled model"""
@@ -2331,6 +2341,7 @@ class ModuleManager:
                 'type': 'dropdown',
                 'label': 'System',
                 'items': [
+                    {'label': 'Messages', 'endpoint': 'messages_index'},
                     {'label': 'Logs', 'endpoint': 'system_logs'},
                     {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'},
                 ],

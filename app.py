@@ -618,6 +618,27 @@ class SSPayment(db.Model):
         return f'<SSPayment {self.payment_date} {self.amount}>'
 
 
+class Message(db.Model):
+    """A message in the message center (top-bar bell, Messages page).
+    Posted by the core or a module through the `messages.post` function;
+    message_center.py holds the rules."""
+    __table_args__ = (db.UniqueConstraint('source', 'dedupe_key', name='uq_message_source_key'),)
+    id = db.Column(db.Integer, primary_key=True)
+    source = db.Column(db.String(50), nullable=False)       # 'core' or a module id
+    # Optional key from the poster: the same (source, key) is never posted
+    # twice, so a message that was read or deleted does not come back.
+    dedupe_key = db.Column(db.String(200))
+    text = db.Column(db.Text, nullable=False)                 # plain text + [label](url) links
+    level = db.Column(db.String(10), default='info', nullable=False)  # info | warning | danger
+    image = db.Column(db.Text)                                # data: URI or app path, max 64x64
+    created_at = db.Column(db.DateTime, default=utcnow, nullable=False)
+    read_at = db.Column(db.DateTime)
+    deleted_at = db.Column(db.DateTime)                       # hidden; kept so the key stays used
+
+    def __repr__(self):
+        return f'<Message {self.id} {self.source}>'
+
+
 
 @app.route('/customers')
 @login_required
@@ -2364,6 +2385,116 @@ def delete_contractor(id):
 
 
 # ============================================================================
+# MESSAGES (message center: top-bar bell + history page; message_center.py)
+# ============================================================================
+
+def _message_center():
+    return getattr(module_manager.core, 'message_center', None) if module_manager else None
+
+
+@app.context_processor
+def inject_message_bell():
+    """Unread messages for the top-bar bell, on every page of a signed-in
+    owner. A failure leaves the bell empty instead of breaking the page."""
+    center = _message_center()
+    if center is None or not session.get('authenticated'):
+        return {'message_bell': None}
+    try:
+        return {'message_bell': {'count': center.unread_count(), 'items': center.unread()}}
+    except Exception:
+        logger.warning('Message bell could not be loaded', exc_info=True)
+        db.session.rollback()
+        return {'message_bell': None}
+
+
+@app.template_filter('message_html')
+def message_html_filter(text):
+    from message_center import render_text
+    return render_text(text)
+
+
+def _message_done(message):
+    """Answer a message action: JSON for the bell's script, else back to the
+    Messages page, keeping its `show` filter and `page` from the form. No
+    address is taken from the request, so nothing can redirect elsewhere."""
+    center = _message_center()
+    if request.accept_mimetypes.best == 'application/json' or request.is_json:
+        if message is None:
+            return {'error': 'Message not found'}, 404
+        return {'id': message.id, 'read': message.read_at is not None,
+                'unread_count': center.unread_count()}
+    if message is None:
+        flash('That message does not exist or was deleted.', 'warning')
+    show = 'unread' if request.form.get('show') == 'unread' else None
+    try:
+        page = max(1, int(request.form.get('page', 1)))
+    except ValueError:
+        page = 1
+    return redirect(url_for('messages_index', show=show, page=page if page > 1 else None))
+
+
+@app.route('/messages')
+@login_required
+def messages_index():
+    """Message history: every message not deleted, newest first."""
+    center = _message_center()
+    show = 'unread' if request.args.get('show') == 'unread' else 'all'
+    try:
+        page = max(1, int(request.args.get('page', 1)))
+    except ValueError:
+        page = 1
+    rows, total = center.history(unread_only=(show == 'unread'), page=page) if center else ([], 0)
+    return render_template('messages.html', messages=rows, total=total, show=show,
+                           page=page, per_page=50)
+
+
+@app.route('/messages/<int:message_id>/read', methods=['POST'])
+@login_required
+def messages_mark_read(message_id):
+    return _message_done(_message_center().mark_read(message_id))
+
+
+@app.route('/messages/<int:message_id>/unread', methods=['POST'])
+@login_required
+def messages_mark_unread(message_id):
+    return _message_done(_message_center().mark_unread(message_id))
+
+
+@app.route('/messages/<int:message_id>/delete', methods=['POST'])
+@login_required
+def messages_delete(message_id):
+    message = _message_center().delete(message_id)
+    if message is not None and not (request.accept_mimetypes.best == 'application/json'):
+        flash(f'Message #{message.id} deleted.', 'success')
+    return _message_done(message)
+
+
+@app.route('/messages/read-all', methods=['POST'])
+@login_required
+def messages_mark_all_read():
+    count = _message_center().mark_all_read()
+    if request.accept_mimetypes.best == 'application/json':
+        return {'marked': count, 'unread_count': 0}
+    flash(f'{count} message(s) marked as read.', 'success')
+    return redirect(url_for('messages_index'))
+
+
+def _message_log_link(entry):
+    """URL of the message an activity-log entry is about (category
+    `messages`, details holding its id), else None."""
+    if entry.get('category') != 'messages' or not entry.get('details'):
+        return None
+    import json as _json
+    try:
+        details = _json.loads(entry['details']) if isinstance(entry['details'], str) else entry['details']
+        message_id = int(details['id'])
+    except (ValueError, TypeError, KeyError):
+        return None
+    return {'id': message_id,
+            'url': url_for('messages_index', _anchor=f'message-{message_id}')}
+
+
+# ============================================================================
 # SYSTEM LOGS
 # ============================================================================
 
@@ -2390,6 +2521,9 @@ def system_logs():
             search=search or None)
         if hasattr(logger, 'get_categories'):
             categories = logger.get_categories()
+
+    for entry in entries:
+        entry['message_link'] = _message_log_link(entry)
 
     return render_template('logs.html',
                            entries=entries,
@@ -2478,7 +2612,7 @@ def init_module_manager():
 
     module_manager = ModuleManager(app, db)
     module_manager.core._settings_model = Settings
-    module_manager.register_core_functions(Invoice=Invoice, Customer=Customer)
+    module_manager.register_core_functions(Invoice=Invoice, Customer=Customer, Message=Message)
     module_manager.init_db()
     module_manager.discover_modules()
     module_manager.load_enabled_modules()

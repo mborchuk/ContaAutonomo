@@ -50,6 +50,7 @@
                 {'label': 'All Invoices', 'endpoint': 'index'},
                 {'label': 'Create Invoice', 'endpoint': 'create_invoice'}]},
             {'type': 'dropdown', 'label': 'System', 'items': [
+                {'label': 'Messages', 'endpoint': 'messages_index'},
                 {'label': 'Logs', 'endpoint': 'system_logs'},
                 {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'}]},
         ] %}
@@ -170,7 +171,7 @@
 
     <div class="app-main">
         {% set header_widgets = module_manager.get_header_widgets() if module_manager else [] %}
-        <header class="topbar{% if not header_widgets %} topbar--empty{% endif %}">
+        <header class="topbar{% if not header_widgets and message_bell is none %} topbar--empty{% endif %}">
             <button type="button" class="nav-toggle icon-btn" aria-label="Open menu"
                     aria-expanded="false" aria-controls="sidebar">☰</button>
             <a href="{{ url_for('dashboard') }}" class="brand topbar-brand">
@@ -190,6 +191,7 @@
                     {% set data = widget.data %}
                     {% include widget.template ignore missing %}
                 {% endfor %}
+                {% if message_bell is not none %}{% include '_message_bell.html' %}{% endif %}
             </div>
         </header>
 
@@ -244,6 +246,47 @@
         }
         return origFetch.call(this, url, opts);
     };
+})();
+
+// --- Message bell: open/close, mark as read without leaving the page -------
+(function () {
+    var bell = document.querySelector('[data-msg-bell]');
+    if (!bell) return;
+    var btn = bell.querySelector('.msg-bell-btn');
+    var panel = bell.querySelector('.msg-panel');
+    function setOpen(open) {
+        panel.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
+    }
+    btn.addEventListener('click', function (e) { e.stopPropagation(); setOpen(panel.hidden); });
+    document.addEventListener('click', function (e) { if (!bell.contains(e.target)) setOpen(false); });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !panel.hidden) { setOpen(false); btn.focus(); }
+    });
+    function showCount(n) {
+        document.querySelectorAll('[data-msg-count]').forEach(function (el) {
+            el.textContent = n > 99 ? '99+' : String(n);
+            el.hidden = n === 0;
+        });
+        btn.setAttribute('aria-label', n ? 'Messages: ' + n + ' unread' : 'Messages');
+    }
+    bell.querySelectorAll('form.msg-read-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+            e.preventDefault();
+            fetch(form.action, {method: 'POST', headers: {'Accept': 'application/json'}})
+                .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+                .then(function (data) {
+                    var item = form.closest('.msg-item');
+                    if (item) item.remove();
+                    showCount(data.unread_count);
+                    if (!bell.querySelector('.msg-item')) {
+                        var empty = bell.querySelector('.msg-empty');
+                        if (empty) empty.hidden = false;
+                    }
+                })
+                .catch(function () { form.submit(); });   // fall back to a normal post
+        });
+    });
 })();
 
 // --- Theme toggle ---------------------------------------------------------

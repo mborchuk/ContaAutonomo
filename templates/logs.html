@@ -70,7 +70,9 @@
                 <span class="status-badge {{ badge }}">{{ e.category }}</span>
             </td>
             <td style="font-weight: var(--fw-medium);">{{ e.action }}</td>
-            <td class="muted" style="word-break: break-all; white-space: normal;">{{ e.details or '' }}</td>
+            <td class="muted" style="word-break: break-all; white-space: normal;">
+                {% if e.message_link %}<a href="{{ e.message_link.url }}">Message #{{ e.message_link.id }}</a> · {% endif %}{{ e.details or '' }}
+            </td>
         </tr>
         {% endfor %}
     </tbody>
