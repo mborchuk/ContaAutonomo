@@ -40,7 +40,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Invoice Designer** | Visual editor for custom invoice PDF templates with grid layout and presets |
 | **AI Agent** | Connection between modules and AI providers (OpenAI, Anthropic, Claude Code CLI, Kiro CLI): modules ask through it by function name and never see an API key |
 | **AI Parser** | Parse invoice and expense-receipt data from PDFs/images using AI providers (OpenAI, Anthropic, Google) |
-| **Fiscal Calendar** | Spanish AEAT filing deadlines as a dashboard panel with configurable reminders |
+| **Fiscal Calendar** | Spanish AEAT filing deadlines and configurable reminders as messages in the 🔔 message center |
 | **Modelo 303/130 Drafts** | Box-level quarterly IVA/IRPF draft calculator (estimate, not tax advice) |
 | **RETA Advisor** | Contribution-bracket projection and year-end regularization forecast |
 | **Tax Provision** | Dashboard total of the tax owed so far (IVA, Modelo 130, renta, RETA), each part from its own module (estimate, not tax advice) |
