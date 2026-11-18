@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
+  messages; opened, it lists them, each with **Mark as read**, which hides it
+  without leaving the page. The **Messages** page (sidebar) keeps the history:
+  mark as read or unread, delete. Modules post with the core registry function
+  `messages.post` (text with emoji and `[label](url)` links to app pages or
+  external sites, an optional picture up to 64×64, a level, and a
+  deduplication key so a read or deleted message does not come back);
+  `messages.unread_count` gives the count. Each message has an id, and every
+  post, read, unread and delete is in System → Logs, linked to the message.
 - **Sidebar navigation**: the menu moved from the top bar to a left sidebar.
   Groups (Invoices, System, and groups that modules create) open and close in
   place and remember their state; the current page is highlighted and its

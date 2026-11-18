@@ -93,9 +93,13 @@ def test_core_detail_page_marks_its_parent(loaded_modules, client):
     assert _current(_sidebar_footer(html)) == ['Settings']
 
 
-def test_topbar_is_empty_without_widgets(loaded_modules, client):
+def test_topbar_always_shows_the_message_bell(loaded_modules, client):
+    # The core message bell (message_center.py) sits in the top bar's right
+    # slot, so the bar shows for a signed-in owner even without module widgets.
     html = _get(client, '/invoices')
-    assert 'class="topbar topbar--empty"' in html
+    assert 'topbar--empty' not in html
+    end = _between(html, 'class="topbar-slot topbar-end"', '</header>')
+    assert 'data-msg-bell' in end
     assert 'aria-controls="sidebar"' in html      # phone/tablet menu button
 
 
@@ -119,7 +123,7 @@ def test_failing_widget_module_does_not_break_pages(loaded_modules, client, monk
         raise RuntimeError('widget failed')
     monkeypatch.setattr(loaded_modules.modules['expenses'], 'get_header_widgets', boom)
     html = _get(client, '/invoices')
-    assert 'topbar--empty' in html
+    assert 'data-msg-bell' in html                 # the page and the core bell still render
 
 
 def test_manager_normalises_and_sorts_widgets(loaded_modules, widgets):

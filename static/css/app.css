@@ -179,6 +179,57 @@ html.js .side-group:not(.is-open) > .side-sublist { display: none; }
 .topbar--empty { display: none; }
 .nav-toggle, .topbar-brand { display: none; }
 
+/* ---- Message center: top-bar bell, its panel, the Messages page ---- */
+.msg-bell { position: relative; }
+.msg-bell-btn { position: relative; font-size: 1.15rem; }
+.msg-badge {
+    position: absolute; top: -4px; right: -6px; min-width: 18px; height: 18px;
+    padding: 0 5px; border-radius: var(--radius-full);
+    background: var(--color-danger); color: var(--color-on-primary);
+    font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.msg-badge[hidden] { display: none; }
+.msg-panel {
+    position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: var(--z-dropdown);
+    width: min(380px, calc(100vw - 2 * var(--space-4)));
+    max-height: 70vh; overflow-y: auto;
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+}
+.msg-panel[hidden] { display: none; }
+.msg-panel-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-border);
+    font-size: var(--fs-sm);
+}
+.msg-list, .msg-history { list-style: none; margin: 0; padding: 0; }
+.msg-item {
+    display: flex; gap: var(--space-3); align-items: flex-start;
+    padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--color-surface-3);
+    border-left: 3px solid var(--color-primary);
+}
+.msg-item.msg-warning { border-left-color: var(--color-warning); }
+.msg-item.msg-danger { border-left-color: var(--color-danger); }
+.msg-history .msg-item { background: var(--color-surface); }
+.msg-history .msg-item.is-unread { background: var(--color-primary-tint); }
+.msg-img { width: auto; height: auto; max-width: 64px; max-height: 64px; flex: none; border-radius: var(--radius-sm); }
+.msg-body { flex: 1; min-width: 0; }
+.msg-text { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.msg-meta { margin-top: var(--space-1); font-size: 11px; color: var(--color-text-muted); }
+.msg-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; }
+.msg-empty, .msg-more { padding: var(--space-3) var(--space-4); font-size: var(--fs-sm); color: var(--color-text-muted); }
+.msg-empty[hidden] { display: none; }
+.side-count {
+    margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: var(--radius-full);
+    background: var(--color-danger); color: var(--color-on-primary);
+    font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
+}
+.side-count[hidden] { display: none; }
+@media (max-width: 640px) {
+    .msg-item { flex-wrap: wrap; }
+    .msg-actions { width: 100%; }
+}
+
 /* ============================================================================
    Buttons
    ============================================================================ */

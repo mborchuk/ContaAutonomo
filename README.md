@@ -12,6 +12,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 - Customer and contractor management
 - Configurable tax rates (VAT, income tax advance) per country
 - Configurable payment methods per invoice
+- Message center: a bell in the top bar with unread messages from the app and its modules (mark as read in place) and a Messages page with the history, every change in the activity log
 - Modular architecture — enable only what you need
 - Password-protected access with pluggable auth providers (OAuth, SAML)
 - CSRF protection, rate limiting, and security headers

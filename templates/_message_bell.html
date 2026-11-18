@@ -1,0 +1,37 @@
+{# Top-bar message bell (core): the unread messages with "Mark as read".
+   Data: message_bell = {'count', 'items'} from app.inject_message_bell. #}
+<div class="msg-bell" data-msg-bell>
+    <button type="button" class="icon-btn msg-bell-btn" aria-haspopup="true" aria-expanded="false"
+            aria-controls="msg-bell-panel"
+            aria-label="Messages{% if message_bell.count %}: {{ message_bell.count }} unread{% endif %}">
+        <span aria-hidden="true">🔔</span>
+        <span class="msg-badge" data-msg-count {% if not message_bell.count %}hidden{% endif %}>{{ message_bell.count if message_bell.count < 100 else '99+' }}</span>
+    </button>
+    <div class="msg-panel" id="msg-bell-panel" role="region" aria-label="Unread messages" hidden>
+        <div class="msg-panel-head">
+            <strong>Messages</strong>
+            <a href="{{ url_for('messages_index') }}">All messages →</a>
+        </div>
+        <ul class="msg-list">
+            {% for m in message_bell['items'] %}
+            <li class="msg-item msg-{{ m.level }}" data-msg-id="{{ m.id }}">
+                {% if m.image %}<img src="{{ m.image }}" alt="" class="msg-img">{% endif %}
+                <div class="msg-body">
+                    <div class="msg-text">{{ m.text | message_html }}</div>
+                    <div class="msg-meta">#{{ m.id }} · {{ m.created_at.strftime('%d/%m/%Y %H:%M') }} UTC</div>
+                </div>
+                <form method="post" action="{{ url_for('messages_mark_read', message_id=m.id) }}" class="msg-read-form">
+                    {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button type="submit" class="btn btn-secondary btn-sm">Mark as read</button>
+                </form>
+            </li>
+            {% endfor %}
+            <li class="msg-empty" {% if message_bell['items'] %}hidden{% endif %}>No new messages.</li>
+        </ul>
+        {% if message_bell.count > message_bell['items'] | length %}
+        <div class="msg-more">{{ message_bell.count - message_bell['items'] | length }} more on the
+            <a href="{{ url_for('messages_index', show='unread') }}">Messages page</a>.</div>
+        {% endif %}
+    </div>
+</div>
