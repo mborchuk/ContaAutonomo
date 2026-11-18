@@ -22,7 +22,6 @@
                 </div>
                 <form method="post" action="{{ url_for('messages_mark_read', message_id=m.id) }}" class="msg-read-form">
                     {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
-                    <input type="hidden" name="next" value="{{ request.path }}">
                     <button type="submit" class="btn btn-secondary btn-sm">Mark as read</button>
                 </form>
             </li>

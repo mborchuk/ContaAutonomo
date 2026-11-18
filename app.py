@@ -2415,7 +2415,8 @@ def message_html_filter(text):
 
 def _message_done(message):
     """Answer a message action: JSON for the bell's script, else back to the
-    page it came from (an app path only) or the Messages page."""
+    Messages page, keeping its `show` filter and `page` from the form. No
+    address is taken from the request, so nothing can redirect elsewhere."""
     center = _message_center()
     if request.accept_mimetypes.best == 'application/json' or request.is_json:
         if message is None:
@@ -2424,10 +2425,12 @@ def _message_done(message):
                 'unread_count': center.unread_count()}
     if message is None:
         flash('That message does not exist or was deleted.', 'warning')
-    target = request.form.get('next') or ''
-    if not (target.startswith('/') and not target.startswith('//') and '\\' not in target):
-        target = url_for('messages_index')
-    return redirect(target)
+    show = 'unread' if request.form.get('show') == 'unread' else None
+    try:
+        page = max(1, int(request.form.get('page', 1)))
+    except ValueError:
+        page = 1
+    return redirect(url_for('messages_index', show=show, page=page if page > 1 else None))
 
 
 @app.route('/messages')
