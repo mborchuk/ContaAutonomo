@@ -226,6 +226,7 @@ class GoogleDocAIProvider(BaseAIProvider):
             'contractor_name': parsed.get('supplier_name', ''),
             'contractor_vat': parsed.get('supplier_tax_id') or None,
             'contractor_country': None,
+            'buyer_tax_id': parsed.get('receiver_tax_id') or None,
             'amount': total,
             'currency': parsed.get('currency', 'EUR'),
             'category': 'Other',

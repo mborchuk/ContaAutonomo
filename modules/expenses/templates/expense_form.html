@@ -188,6 +188,17 @@
                            {% if not expense or expense.deductible %}checked{% endif %}>
                     Deductible (IVA soportado)
                 </label>
+                <div class="note note-warning" id="vat-deduction-warning" hidden>
+                    <strong>Check the VAT deduction.</strong>
+                    <span id="vat-deduction-reason"></span>
+                    In Spain the VAT of an expense can normally be deducted only with an
+                    invoice issued to you with your NIF (Ley 37/1992 del IVA, art. 97;
+                    Reglamento de facturación, RD 1619/2012, arts. 6 and 7); a ticket
+                    without it does not qualify. Ask the supplier for a full invoice with
+                    your NIF. If the VAT cannot be deducted, set the VAT rate to 0: the
+                    net becomes the whole amount, so all of it counts as the expense and
+                    no VAT is deducted. Check with your gestor.
+                </div>
                 <div class="form-group">
                     <label for="reverse_charge">Reverse charge (inversión del sujeto pasivo)</label>
                     <select id="reverse_charge" name="reverse_charge">
@@ -225,6 +236,7 @@
 
 <script>
 const CATEGORY_DEFAULTS = {{ (category_defaults or {}) | tojson }};
+const OWNER_TAX_IDS = {{ (owner_tax_ids or []) | tojson }};
 
 document.addEventListener('DOMContentLoaded', function() {
     const dateField = document.getElementById('expense_date');
@@ -312,6 +324,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (rcEl && (data.reverse_charge === 'eu' || data.reverse_charge === 'non_eu')) {
             rcEl.value = data.reverse_charge;
         }
+        showVatDeductionCheck(data);
         // Setting the category in code fires no change event: apply its
         // defaults (deductible %, and the VAT rate when the document gave no
         // VAT data) as choosing it by hand would.
@@ -319,6 +332,34 @@ document.addEventListener('DOMContentLoaded', function() {
             applyCategoryDefaults(data.vat_rate != null || data.net_amount != null
                                   || data.vat_amount != null);
         }
+    }
+
+    // A tax ID without spaces, dashes or case; ES + NIF equals the NIF (as
+    // normalize_tax_id in modules/expenses/index.py).
+    function normTaxId(value) {
+        const clean = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return clean.startsWith('ES') && clean.length > 9 ? clean.slice(2) : clean;
+    }
+
+    // Warn, without changing anything, when the parsed document has Spanish VAT
+    // but is not issued to the owner's NIF: that VAT is normally not deductible.
+    function showVatDeductionCheck(data) {
+        const box = document.getElementById('vat-deduction-warning');
+        if (!box) return;
+        box.hidden = true;
+        const country = (data.contractor_country || '').toUpperCase();
+        if (data.reverse_charge || (country && country !== 'ES')) return;   // no Spanish VAT
+        if (data.vat_amount === 0 || data.vat_rate === 0) return;            // no VAT at all
+        const buyer = normTaxId(data.buyer_tax_id);
+        let reason = '';
+        if (!buyer) {
+            reason = 'The document does not show your NIF.';
+        } else if (OWNER_TAX_IDS.length && !OWNER_TAX_IDS.includes(buyer)) {
+            reason = 'The document is issued to another tax ID (' + data.buyer_tax_id + ').';
+        }
+        if (!reason) return;
+        document.getElementById('vat-deduction-reason').textContent = reason;
+        box.hidden = false;
     }
 
     // AI prefill support (legacy path: parsed on the AI Parser page)

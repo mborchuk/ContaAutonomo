@@ -338,7 +338,13 @@ a full VAT breakdown.
   `NULL` VAT fields ("unknown") and are surfaced with a "no VAT data" hint.
 - AI parsing: "Parse receipt with AI" on the create form — one upload prefills
   the form (including VAT fields) and becomes the attached receipt (requires
-  a module implementing `ai.parse_document`, the AI Parser)
+  a module implementing `ai.parse_document`, the AI Parser). The parsed
+  category's defaults apply as if it were chosen by hand (deductible %; the VAT
+  rate only when the document gave no VAT data). When the document has Spanish
+  VAT but does not show the owner's NIF (Settings → Business Information: VAT Number or NIE Number), or
+  shows another tax ID (`buyer_tax_id`), a warning next to "Deductible (IVA
+  soportado)" explains that its VAT is normally not deductible; nothing is
+  changed automatically
 - **Capture page** `/expenses/capture` (G-8; "📷 Capture receipt" on the list,
   shortcut of the installed app): Take photo / Choose photo above the expense
   form. The photo goes through the AI parse above, so the form below is
@@ -581,7 +587,8 @@ Text questions from other modules go to the AI Agent, not here.
   422 before a provider is called
 - Prompts (`prompts.py`, shared by the prompt-based providers): expense
   parsing extracts the VAT breakdown (`net_amount`, `vat_rate`, `vat_amount`),
-  the supplier's `contractor_vat` and `contractor_country`, and
+  the supplier's `contractor_vat` and `contractor_country`, the buyer's
+  `buyer_tax_id` (whom the document is issued to; null on most tickets), and
   `reverse_charge` (`eu` / `non_eu`, only when the document says so) alongside
   date, amount, contractor and a category from the expenses module's list;
   missing data is `null`, VAT is never guessed. A file that is not an invoice

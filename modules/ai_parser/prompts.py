@@ -52,6 +52,7 @@ EXPENSE_PROMPT = f"""Extract the data of this receipt or supplier invoice as a J
   "contractor_name": "string (the vendor or supplier)",
   "contractor_vat": "string or null (the supplier's tax ID: NIF/CIF/VAT number)",
   "contractor_country": "ISO 3166-1 alpha-2 code of the supplier's address, or null",
+  "buyer_tax_id": "string or null (the tax ID - NIF, CIF or VAT number - of the buyer the document is issued to)",
   "amount": number,
   "currency": "ISO 4217 code (EUR, USD, ...)",
   "category": "one of: {', '.join(EXPENSE_CATEGORIES)}",
@@ -68,6 +69,8 @@ set vat_rate to null.
 "reverse_charge" is "eu" or "non_eu" (by the supplier's country) only when the
 document says the buyer accounts for the VAT ("reverse charge", "inversión del
 sujeto pasivo", "Article 196 of Directive 2006/112/EC"); otherwise null.
+"buyer_tax_id" is the buyer's or recipient's tax ID as printed on the document,
+never the supplier's; null when the document shows none (most tickets).
 Restaurants and catering are "Meals"; fuel, parking, tolls and car costs are
 "Vehicle"; Spanish Social Security (RETA) receipts are "Social Security".
 {_COMMON_RULES}"""

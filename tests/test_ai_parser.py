@@ -408,7 +408,8 @@ def test_expense_prompt_matches_expense_categories():
     from modules.expenses.index import ExpensesModule
     assert set(ExpensesModule.SEED_CATEGORY_DEFAULTS) <= set(prompts.EXPENSE_CATEGORIES)
     for field in ('contractor_vat', 'contractor_country', 'reverse_charge', 'net_amount',
-                  'vat_rate', 'vat_amount', 'Meals', 'Vehicle', 'Social Security'):
+                  'vat_rate', 'vat_amount', 'buyer_tax_id', 'Meals', 'Vehicle',
+                  'Social Security'):
         assert field in prompts.EXPENSE_PROMPT
     assert 'never guess VAT' in prompts.EXPENSE_PROMPT
     assert prompts.prompt_for('invoice') == prompts.INVOICE_PROMPT
@@ -502,3 +503,49 @@ def test_expense_form_applies_category_defaults_after_a_parse(loaded_modules, cl
     assert ('applyCategoryDefaults(data.vat_rate != null || data.net_amount != null'
             in html)
     assert '"Vehicle"' in html and '"deductible_pct": 50.0' in html   # the defaults it applies
+
+
+# --- VAT deduction check: is the document issued to the owner? ---------------- #
+
+def test_google_docai_expense_reports_the_buyer_tax_id(monkeypatch):
+    _fake_docai(monkeypatch, [_ent('total_amount', '12.10'), _ent('receiver_tax_id', 'B12345678')])
+    out = GoogleDocAIProvider({'google_project_id': 'p', 'google_processor_id': 'x'}).parse_document(
+        PNG, 'r.png', 'expense')
+    assert out['buyer_tax_id'] == 'B12345678'
+    _fake_docai(monkeypatch, [_ent('total_amount', '12.10')])
+    out = GoogleDocAIProvider({'google_project_id': 'p', 'google_processor_id': 'x'}).parse_document(
+        PNG, 'r.png', 'expense')
+    assert out['buyer_tax_id'] is None
+
+
+@pytest.mark.parametrize('raw,expected', [
+    ('ES 12345678-Z', '12345678Z'), ('es12345678z', '12345678Z'), ('X1234567L', 'X1234567L'),
+    ('DE123456789', 'DE123456789'), ('', ''), (None, ''),
+])
+def test_normalize_tax_id(raw, expected):
+    from modules.expenses.index import normalize_tax_id
+    assert normalize_tax_id(raw) == expected
+
+
+def test_expense_form_knows_the_owner_tax_ids(loaded_modules, client):
+    """The form compares the parsed buyer tax ID with the owner's NIF/VAT
+    number (normalized) and shows a hidden warning box. Checked in a browser:
+    a ticket without NIF, or one issued to another tax ID, shows the warning;
+    the owner's NIF, reverse charge or 0 % VAT do not; the checkbox never
+    changes."""
+    from app import Settings, db
+    s = Settings.query.first() or Settings()
+    db.session.add(s)
+    old = (s.vat_number, s.nie_number)
+    s.vat_number, s.nie_number = 'ES 12345678-Z', 'x1234567l'
+    db.session.commit()
+    try:
+        with client.session_transaction() as sess:
+            sess['authenticated'] = True
+        html = client.get('/expenses/create').get_data(as_text=True)
+    finally:
+        s.vat_number, s.nie_number = old
+        db.session.commit()
+    assert 'const OWNER_TAX_IDS = ["12345678Z", "X1234567L"];' in html
+    assert 'id="vat-deduction-warning" hidden' in html
+    assert 'showVatDeductionCheck(data);' in html

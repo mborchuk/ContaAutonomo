@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **VAT deduction check on parsed expenses**: the AI Parser also reports the
+  buyer's tax ID (`buyer_tax_id`). When a parsed document has Spanish VAT but
+  does not show the owner's NIF, or shows another tax ID, the expense form warns
+  next to "Deductible (IVA soportado)" that its VAT is normally not deductible
+  (LIVA art. 97; RD 1619/2012, arts. 6–7) and how to record it. Nothing is
+  changed automatically. Reverse-charge, foreign and 0 % VAT documents are not
+  flagged.
 - **AI Agent** (`ai_agent`), the bridge between modules and AI providers:
   OpenAI and Anthropic over their APIs, Claude Code CLI and Kiro CLI as
   programs on the server (run without any tool; off unless

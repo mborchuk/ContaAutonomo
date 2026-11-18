@@ -51,9 +51,12 @@ The field names are the contract with the forms; change them together.
   `unit_price`), `total`, `notes`.
 - Expense (`modules/expenses/templates/expense_form.html`, `prefillFromData`):
   `invoice_number`, `expense_date`, `contractor_name`, `contractor_vat`,
-  `contractor_country`, `amount` (gross), `currency`, `category`,
-  `description`, `net_amount`, `vat_rate`, `vat_amount`, `reverse_charge`.
-  VAT fields are `null` when the document shows no breakdown.
+  `contractor_country`, `buyer_tax_id`, `amount` (gross), `currency`,
+  `category`, `description`, `net_amount`, `vat_rate`, `vat_amount`,
+  `reverse_charge`. VAT fields are `null` when the document shows no
+  breakdown. `buyer_tax_id` is the tax ID the document is issued to (`null` on
+  most tickets); the expense form compares it with the owner's NIF to warn
+  that the VAT is normally not deductible.
 
 ## CLI agents (`cli_agents.py`)
 
