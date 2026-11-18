@@ -54,7 +54,7 @@ class FiscalCalendarModule(BaseModule):
     def nav_items(self):
         return [
             {'label': 'Fiscal Calendar', 'endpoint': 'fiscal_calendar.calendar_index',
-             'icon': '📅', 'group': 'System'}
+             'icon': '📅', 'group': 'Taxes', 'order': 60}
         ]
 
     @property

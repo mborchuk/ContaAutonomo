@@ -1000,6 +1000,16 @@ items inside a group are listed by label only. The full menu is built by
 bottom of the sidebar, not in the list. The current page is highlighted (exact endpoint
 first, else the first entry of the same blueprint), and its group opens.
 
+An optional `order` key (lower first) sorts items within their group or among the
+top-level links; items without it keep load order after the ordered ones, and groups keep
+the order in which they first appear. Bundled modules use these groups:
+
+| Group | Items (`order`) |
+|---|---|
+| Invoices | All Invoices, Create Invoice (core); Invoice Designer, Recurring, Verifactu |
+| Taxes | Tax Forms (10), Obligations (20), Tax Drafts (30), IRPF Estimator (40), RETA Advisor (50), Fiscal Calendar (60) |
+| System | Logs, Scheduled Tasks (core); Bank Import |
+
 ### Top Bar Widgets
 
 The top bar above every page is reserved for module widgets such as a search box or a

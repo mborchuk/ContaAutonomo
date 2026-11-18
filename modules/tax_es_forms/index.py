@@ -69,7 +69,7 @@ class TaxEsFormsModule(BaseModule):
     def nav_items(self):
         return [
             {'label': 'Tax Drafts', 'endpoint': 'tax_es_forms.drafts_index',
-             'icon': '🧮', 'group': 'System'}
+             'icon': '🧮', 'group': 'Taxes', 'order': 30}
         ]
 
     def register_models(self, db):

@@ -2248,6 +2248,14 @@ class ModuleManager:
                 groups.setdefault(g, []).append(item)
             else:
                 ungrouped.append(item)
+        # Optional 'order' sorts items within their list (lower first). The
+        # sort is stable: items without it keep load order after ordered ones,
+        # and groups keep the order in which they first appear.
+        def by_order(i):
+            return i.get('order', 1000)
+        ungrouped.sort(key=by_order)
+        for g_items in groups.values():
+            g_items.sort(key=by_order)
         return ungrouped, groups
 
     def find_capabilities(self, cap_type, **filters):

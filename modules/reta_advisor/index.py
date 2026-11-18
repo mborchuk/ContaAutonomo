@@ -72,7 +72,7 @@ class RetaAdvisorModule(BaseModule):
     def nav_items(self):
         return [
             {'label': 'RETA Advisor', 'endpoint': 'reta_advisor.reta_index',
-             'icon': '🪙', 'group': 'System'}
+             'icon': '🪙', 'group': 'Taxes', 'order': 50}
         ]
 
     def register_models(self, db):

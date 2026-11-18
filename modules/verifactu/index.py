@@ -63,7 +63,7 @@ class VerifactuModule(BaseModule):
     def nav_items(self):
         return [
             {'label': 'Verifactu', 'endpoint': 'verifactu.verifactu_index',
-             'icon': '🔏', 'group': 'System'}
+             'icon': '🔏', 'group': 'Invoices'}
         ]
 
     def register_models(self, db):
