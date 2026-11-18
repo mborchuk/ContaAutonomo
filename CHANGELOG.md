@@ -214,12 +214,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
-- **Fiscal Calendar**: the "📅 Fiscal Deadlines" dashboard panel is gone.
-  Upcoming filing windows (within 60 days, or open now) are messages in the
-  🔔 message center, one per form and period with both dates, posted once by
-  the daily job or when the dashboard opens. The T-14/T-7/T-1 closing
-  reminders are messages too (info, warning, danger), besides the activity log
-  and email.
 - **Parsed supplier picks the contractor**: an AI-parsed expense selected a
   contractor only when its name was exactly the document's, so most suppliers
   ended up in Notes ("Contractor: Media Markt Saturn S.A. (ESA82037292)"). The
@@ -228,6 +222,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   only when exactly one matches, skips a name match whose VAT number differs,
   and otherwise names the supplier next to the field and on its own line in
   Notes.
+- **Fiscal Calendar**: the "📅 Fiscal Deadlines" dashboard panel is gone.
+  Upcoming filing windows (within 60 days, or open now) are messages in the
+  🔔 message center, one per form and period with both dates, posted once by
+  the daily job or when the dashboard opens. The T-14/T-7/T-1 closing
+  reminders are messages too (info, warning, danger), besides the activity log
+  and email.
 - **Tax pages grouped under Taxes**: Tax Forms, Obligations, Tax Drafts, IRPF
   Estimator, RETA Advisor and Fiscal Calendar now sit together in the Taxes
   menu (they were spread over System, Taxes and the top level). Verifactu moved
