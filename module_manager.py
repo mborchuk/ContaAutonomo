@@ -2341,6 +2341,7 @@ class ModuleManager:
                 'type': 'dropdown',
                 'label': 'System',
                 'items': [
+                    {'label': 'Messages', 'endpoint': 'messages_index'},
                     {'label': 'Logs', 'endpoint': 'system_logs'},
                     {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'},
                 ],

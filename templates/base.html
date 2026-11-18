@@ -50,6 +50,7 @@
                 {'label': 'All Invoices', 'endpoint': 'index'},
                 {'label': 'Create Invoice', 'endpoint': 'create_invoice'}]},
             {'type': 'dropdown', 'label': 'System', 'items': [
+                {'label': 'Messages', 'endpoint': 'messages_index'},
                 {'label': 'Logs', 'endpoint': 'system_logs'},
                 {'label': 'Scheduled Tasks', 'endpoint': 'scheduled_tasks'}]},
         ] %}
@@ -65,7 +66,7 @@
         'add_bank': 'settings', 'edit_bank': 'settings',
         'create_contractor': 'settings', 'edit_contractor': 'settings',
     } %}
-    {% set nav_ns = namespace(endpoints=['dashboard', 'messages_index', 'settings'], active='') %}
+    {% set nav_ns = namespace(endpoints=['dashboard', 'settings'], active='') %}
     {% for entry in nav %}
         {% if entry.type == 'link' %}
             {% set nav_ns.endpoints = nav_ns.endpoints + [entry.endpoint] %}
@@ -102,15 +103,6 @@
                         <span class="side-icon" aria-hidden="true">🏠</span><span class="side-label">Dashboard</span>
                     </a>
                 </li>
-                {% if message_bell is not none %}
-                <li>
-                    <a href="{{ url_for('messages_index') }}" class="side-link"
-                       {% if nav_ns.active == 'messages_index' %}aria-current="page"{% endif %}>
-                        <span class="side-icon" aria-hidden="true">🔔</span><span class="side-label">Messages</span>
-                        {% if message_bell.count %}<span class="side-count" data-msg-count>{{ message_bell.count if message_bell.count < 100 else '99+' }}</span>{% endif %}
-                    </a>
-                </li>
-                {% endif %}
                 {% for entry in nav if not (entry.type == 'link' and entry.endpoint == 'settings') %}
                     {% if entry.type == 'link' %}
                     <li>

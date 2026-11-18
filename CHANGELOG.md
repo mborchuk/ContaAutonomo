@@ -8,7 +8,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ### Added
 - **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
   messages; opened, it lists them, each with **Mark as read**, which hides it
-  without leaving the page. The **Messages** page (sidebar) keeps the history:
+  without leaving the page. The **Messages** page (System → Messages) keeps the history:
   mark as read or unread, delete. Modules post with the core registry function
   `messages.post` (text with emoji and `[label](url)` links to app pages or
   external sites, an optional picture up to 64×64, a level, and a

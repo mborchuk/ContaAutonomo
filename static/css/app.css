@@ -219,12 +219,6 @@ html.js .side-group:not(.is-open) > .side-sublist { display: none; }
 .msg-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; }
 .msg-empty, .msg-more { padding: var(--space-3) var(--space-4); font-size: var(--fs-sm); color: var(--color-text-muted); }
 .msg-empty[hidden] { display: none; }
-.side-count {
-    margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: var(--radius-full);
-    background: var(--color-danger); color: var(--color-on-primary);
-    font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
-}
-.side-count[hidden] { display: none; }
 @media (max-width: 640px) {
     .msg-item { flex-wrap: wrap; }
     .msg-actions { width: 100%; }

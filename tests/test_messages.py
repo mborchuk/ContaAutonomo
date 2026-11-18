@@ -188,3 +188,13 @@ def test_logs_page_links_message_entries(loaded_modules, owner):
         assert link == {'id': 12, 'url': '/messages#message-12'}
         assert _message_log_link({'category': 'invoice', 'details': '{"id": 3}'}) is None
         assert _message_log_link({'category': 'messages', 'details': 'not json'}) is None
+
+
+def test_messages_page_is_in_the_system_group(loaded_modules, owner):
+    system = [e for e in loaded_modules.get_full_nav()
+              if e.get('type') == 'dropdown' and e['label'] == 'System'][0]
+    assert system['items'][0] == {'label': 'Messages', 'endpoint': 'messages_index'}
+    top_level = [e['endpoint'] for e in loaded_modules.get_full_nav() if e.get('type') == 'link']
+    assert 'messages_index' not in top_level
+    html = owner.get('/messages').get_data(as_text=True)
+    assert 'href="/messages" class="side-sublink"' in html and 'aria-current="page"' in html

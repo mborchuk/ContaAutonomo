@@ -1009,7 +1009,7 @@ the order in which they first appear. Bundled modules use these groups:
 |---|---|
 | Invoices | All Invoices, Create Invoice (core); Invoice Designer, Recurring, Verifactu |
 | Taxes | Tax Forms (10), Obligations (20), Tax Drafts (30), IRPF Estimator (40), RETA Advisor (50), Fiscal Calendar (60) |
-| System | Logs, Scheduled Tasks (core); Bank Import |
+| System | Messages, Logs, Scheduled Tasks (core); Bank Import |
 
 ### Top Bar Widgets
 
@@ -1037,7 +1037,7 @@ core message bell (right), after the modules' right-hand widgets.
 
 The core shows short messages to the owner: a 🔔 bell in the top bar with the number
 of unread messages and, when opened, the unread messages (newest first, at most 10)
-each with **Mark as read**; and a **Messages** page (sidebar, `/messages`) with the
+each with **Mark as read**; and a **Messages** page (System → Messages, `/messages`) with the
 whole history, where a message can be marked as read, marked as unread (it shows in
 the bell again) or deleted. A module posts through the registry, never by importing
 the core:
