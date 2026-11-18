@@ -10,10 +10,19 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 from repositories import ExpenseRepository, SettingsRepository
 import os
+import re
 from . import deduction_rules
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
+
+
+def normalize_tax_id(value):
+    """A tax ID compared without spaces, dashes or case; a Spanish VAT number
+    (ES + NIF) compares equal to the NIF. The expense form's normTaxId() does
+    the same."""
+    clean = re.sub(r'[^A-Z0-9]', '', str(value or '').upper())
+    return clean[2:] if clean.startswith('ES') and len(clean) > 9 else clean
 
 class ExpensesModule(BaseModule):
     """Expense tracking and management"""
@@ -628,7 +637,16 @@ class ExpensesModule(BaseModule):
         return render_template('expense_form.html', expense=None,
                              contractors=contractors, tracked_currencies=tracked_currencies,
                              category_defaults=self.get_category_defaults(),
+                             owner_tax_ids=self._owner_tax_ids(),
                              capture_mode=capture)
+
+    def _owner_tax_ids(self):
+        """The owner's NIF/NIE and VAT number from Settings, normalized, so the
+        form can tell whether a parsed document is issued to the owner."""
+        settings = self.core.get_settings()
+        ids = {normalize_tax_id(getattr(settings, field, None))
+               for field in ('vat_number', 'nie_number')} if settings else set()
+        return sorted(i for i in ids if i)
 
     def _edit_expense(self, id):
         """Edit an existing expense"""
