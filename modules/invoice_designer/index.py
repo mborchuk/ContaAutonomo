@@ -18,7 +18,8 @@ a slot like "top-left", "header-right", "bottom-center", etc.
 Other modules add their own blocks through BaseModule.get_invoice_blocks()
 (for example the Verifactu tax QR). Each says whether it is required or
 suggested, which slots it may use and its default slot; the designer offers
-only those slots and the generator renders the block in the chosen one.
+only those slots and the generator renders the block in the chosen one. The
+designer reads them through the core registry function `invoice.list_blocks`.
 """
 
 from module_manager import BaseModule
@@ -313,10 +314,9 @@ class InvoiceDesignerModule(BaseModule):
         if 'labels' in cfg:
             merged['labels'] = dict(DEFAULT_CONFIG['labels'])
             merged['labels'].update(cfg['labels'])
-        mm = self.core.module_manager
         return generate_pdf_from_config(invoice, customer, settings, merged,
                                         storage=self.core.storage,
-                                        blocks=mm.get_invoice_blocks() if mm else [])
+                                        blocks=self._invoice_blocks())
 
     # ---- CRUD ----
 
@@ -352,10 +352,17 @@ class InvoiceDesignerModule(BaseModule):
                                line_below_zones=LINE_BELOW_ZONES,
                                layout_presets=LAYOUT_PRESETS)
 
+    def _invoice_blocks(self):
+        """Blocks the enabled modules add (registry function invoice.list_blocks),
+        [] when the core does not provide it."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('invoice.list_blocks'):
+            return []
+        return functions.call('invoice.list_blocks')['data']
+
     def _module_blocks(self):
         """Invoice blocks offered by the enabled modules (normalized)."""
-        manager = self.core.module_manager
-        return normalize_blocks(manager.get_invoice_blocks() if manager else [])
+        return normalize_blocks(self._invoice_blocks())
 
     def _save_template(self, tpl):
         blocks = self._module_blocks()
@@ -647,7 +654,7 @@ class InvoiceDesignerModule(BaseModule):
 # ---------------------------------------------------------------------------
 
 def normalize_blocks(blocks):
-    """Module blocks (from ModuleManager.get_invoice_blocks) in the shape the
+    """Module blocks (from invoice.list_blocks) in the shape the
     designer uses. Slots outside the grid are dropped; a suggested block may
     also be 'hidden', a required one may not. A block whose id clashes with a
     built-in block, or that has no usable slot, is left out."""
@@ -835,7 +842,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
     Blocks are placed according to config['block_positions'].
 
     `blocks` are the invoice blocks of the enabled modules
-    (ModuleManager.get_invoice_blocks); each is rendered by its module in the
+    (invoice.list_blocks); each is rendered by its module in the
     slot the template chose, or in its default slot. `preview` tells them the
     invoice is sample data (designer preview).
     """

@@ -15,9 +15,9 @@ template that returns None, or a missing file falls back to the default
 template, and the result says so (`fallback`). The PDF then passes through
 every module's `filter_invoice_pdf` (the Verifactu QR on issued invoices).
 
-Callers use the registry functions `invoice.render_pdf` and
-`invoice.list_pdf_templates` (core_functions.py). Storing the PDF stays with
-the caller.
+Callers use the registry functions `invoice.render_pdf`,
+`invoice.list_pdf_templates` and `invoice.list_blocks` (core_functions.py).
+Storing the PDF stays with the caller.
 """
 import importlib.util
 import inspect
@@ -45,6 +45,11 @@ class InvoicePdf:
     def templates(self):
         """Every template: [{'id', 'name', 'module_id', and 'path' or 'render'}]."""
         return self._mm.get_invoice_templates()
+
+    def blocks(self):
+        """The blocks modules add to designer layouts (BaseModule.get_invoice_blocks):
+        [{'id', 'label', 'slots', 'render', ..., 'module_id'}]."""
+        return self._mm.get_invoice_blocks()
 
     def _settings(self):
         model = self._mm.core._settings_model
