@@ -1,11 +1,11 @@
 """
 The core's own registry functions (functions.py): the data the core owns —
-invoices and customers — declared and implemented here, like a module does in
+invoices, customers, invoice PDFs and messages — declared and implemented here, like a module does in
 `get_functions()`. The app passes its models in
 (`ModuleManager.register_core_functions`), so this file imports nothing from
 app.py.
 """
-from functions import Function, Param
+from functions import Function, InvalidArguments, Param
 
 DATE_FROM = Param('date_from', 'date', 'Earliest date, YYYY-MM-DD')
 DATE_TO = Param('date_to', 'date', 'Latest date, YYYY-MM-DD')
@@ -43,10 +43,11 @@ def serialize_customer(c):
     }
 
 
-def register(registry, core, Invoice, Customer, message_center=None):
+def register(registry, core, Invoice, Customer, message_center=None, invoice_pdf=None):
     """Register the core functions on `registry`; `core` is CoreServices,
-    `Invoice`, `Customer` the app's models and `message_center` the
-    MessageCenter (message_center.py), when the app has one."""
+    `Invoice`, `Customer` the app's models, `message_center` the
+    MessageCenter (message_center.py) and `invoice_pdf` the InvoicePdf
+    (invoice_pdf.py), when the app has them."""
 
     def list_invoices(date_from=None, date_to=None, client=None, status=None,
                       page=1, per_page=20):
@@ -94,6 +95,37 @@ def register(registry, core, Invoice, Customer, message_center=None):
         assistant_fields=('id', 'name', 'country', 'tax_type')))
     if message_center is not None:
         register_messages(registry, message_center)
+    if invoice_pdf is not None:
+        register_invoice_pdf(registry, core, invoice_pdf)
+
+
+def register_invoice_pdf(registry, core, invoice_pdf):
+    """`invoice.render_pdf` and `invoice.list_pdf_templates` (invoice_pdf.py)."""
+
+    def render_pdf(invoice_id):
+        invoice = core.invoice_service.get(invoice_id)
+        if invoice is None:
+            raise InvalidArguments('invoice_id does not match an invoice')
+        result = invoice_pdf.render(invoice)
+        return {'pdf': result.pdf, 'template': result.template, 'fallback': result.fallback}
+
+    def list_pdf_templates():
+        return {'data': [{'id': t['id'], 'name': t['name'], 'module_id': t['module_id']}
+                         for t in invoice_pdf.templates()]}
+
+    registry.register_core(Function(
+        'invoice.render_pdf', render_pdf,
+        "An invoice's PDF in the template chosen in Settings → General, changed by "
+        'the modules that adjust invoice PDFs (the Verifactu QR). The default '
+        'template is used when the chosen one is not available. Builds the PDF '
+        'only; it does not store it.',
+        params=(Param('invoice_id', 'int', 'Invoice id', required=True, minimum=1),),
+        returns='{"pdf": bytes, "template": str, "fallback": bool}'))
+    registry.register_core(Function(
+        'invoice.list_pdf_templates', list_pdf_templates,
+        'The invoice PDF templates to choose from: the core files in '
+        'invoice_templates/ and those of enabled modules (Invoice Designer).',
+        returns='{"data": [record]}; record: id, name, module_id ("core" for the core files)'))
 
 
 def register_messages(registry, center):

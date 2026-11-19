@@ -803,6 +803,26 @@ A module that builds the PDF itself (the Invoice Designer does) gives a
 returns the PDF bytes, or None when the template no longer exists, and the core
 then uses the default template. The core never imports the module.
 
+### Building an invoice PDF
+
+One place builds every invoice PDF (`invoice_pdf.py`), and callers use it
+through two core registry functions:
+
+- `invoice.render_pdf(invoice_id)` → `{"pdf": bytes, "template": str,
+  "fallback": bool}`: the PDF in the template chosen in Settings, after every
+  module's `filter_invoice_pdf`. Only a listed template is used; a chosen id
+  that is not listed, a `render` that returns None or a missing file gives the
+  default template, with `fallback` true. It does not store the PDF: use
+  `core.invoice_service.attach_pdf` for that.
+- `invoice.list_pdf_templates()` → `{"data": [{"id", "name", "module_id"}]}`:
+  what the Settings dropdown shows (`module_id` is `core` for the files in
+  `invoice_templates/`).
+
+```python
+result = self.core.functions.call('invoice.render_pdf', invoice_id=invoice.id)
+pdf_bytes = result['pdf']
+```
+
 ### Template file contract
 
 The template `.py` file must define a `generate_invoice_pdf` function:

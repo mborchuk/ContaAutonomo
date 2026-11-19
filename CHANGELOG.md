@@ -214,6 +214,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **One code path for invoice PDFs**: the new-invoice PDF, the PDF download and
+  the PDF preview each had their own copy of "pick the template from
+  Settings, build the PDF, fall back to the default". They now call the core
+  registry function `invoice.render_pdf` (`invoice_pdf.py`), and the Settings
+  → General "Invoice PDF Template" list comes from `invoice.list_pdf_templates`;
+  modules can call both. Only a listed template is used: a template name that
+  is not in the list no longer loads `invoice_templates/<name>.py` from the
+  path the name gives. The new-invoice PDF now also passes through the modules'
+  PDF filters (the Verifactu QR is added to issued invoices only, so drafts look
+  the same). A missing template on download shows the same warning for core
+  and module templates.
 - **Document expiry alerts moved to the message center**: the Documents module
   no longer draws a "Document Alerts" panel on the dashboard. A document that
   expires within 30 days, or expired in the last 30 days, gets one message in
