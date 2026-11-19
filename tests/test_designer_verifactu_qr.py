@@ -88,6 +88,27 @@ def test_manager_skips_invalid_and_failing_blocks(loaded_modules, monkeypatch):
     assert extra['module_id'] == 'zz_fake'
 
 
+def test_core_function_gives_out_the_module_blocks(loaded_modules):
+    functions = loaded_modules.functions
+    assert functions.provider('invoice.list_blocks') == 'core'
+    blocks = {b['id']: b for b in functions.call('invoice.list_blocks')['data']}
+    assert blocks['verifactu_qr']['module_id'] == 'verifactu'
+    assert callable(blocks['verifactu_qr']['render'])
+    assert not functions.get('invoice.list_blocks').assistant
+
+
+def test_designer_reads_blocks_through_the_registry(designer, loaded_modules, monkeypatch):
+    inst, _g = designer
+    ok = {'id': 'zz_extra', 'label': 'Extra', 'slots': ['bottom-left'],
+          'render': lambda invoice, ctx: []}
+    monkeypatch.setitem(loaded_modules.modules, 'zz_fake', SimpleNamespace(
+        module_id='zz_fake', get_invoice_blocks=lambda: [ok]))
+    assert 'zz_extra' in [b['id'] for b in inst._module_blocks()]
+    # Without the function (an older core) the designer offers no module blocks.
+    monkeypatch.setattr(loaded_modules.functions, 'available', lambda name: False)
+    assert inst._module_blocks() == [] and inst._invoice_blocks() == []
+
+
 # ---- normalizing and sanitizing ----
 
 def test_normalize_blocks(designer):

@@ -617,7 +617,7 @@ Visual UI for creating custom invoice PDF templates with configurable block posi
   - Placeable blocks: logo, title, sender_info, recipient_info, invoice_meta, due_date, bank_details, notes, payment_terms
   - Each block assignable to any slot (e.g., `top-left`, `footer-right`, `hidden`)
   - **Blocks from modules**: enabled modules add blocks through `get_invoice_blocks()` (today the
-    Verifactu tax QR). Each is *required* (cannot be hidden) or *suggested* (can be hidden), and
+    Verifactu tax QR); the designer reads them through the core function `invoice.list_blocks`. Each is *required* (cannot be hidden) or *suggested* (can be hidden), and
     the module lists the slots it may use and its suggested slot (★ in the form), plus options
     (e.g. QR size). The form offers only those slots; positions go to `block_positions`,
     options to `block_options`. A block never placed in a template, or placed where it is not
@@ -1100,7 +1100,7 @@ bell's script posts with `Accept: application/json` and updates the count in pla
 | `on_invoice_annulled(invoice, request)` | Called when an issued invoice is annulled, before commit. Raising aborts. |
 | `on_invoice_deleted(invoice)` | Called when a draft invoice is deleted, before commit. Delete the module's rows that reference the invoice; raising aborts. |
 | `get_invoice_templates()` | Invoice PDF templates provided by this module: `id`, `name` and a template file `path` or a `render(invoice, customer, settings)` callable returning PDF bytes (None: template gone, default used). The core lists them through `invoice.list_pdf_templates` and builds with them in `invoice.render_pdf`; only a listed id is used |
-| `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render) |
+| `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render). The core collects them from every module and gives them out through `invoice.list_blocks` |
 | `get_tax_obligations(context)` | Tax panel contributions |
 | `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
@@ -1191,6 +1191,7 @@ Functions today:
 | `messages.unread_count` | core | Number of unread messages |
 | `invoice.render_pdf` | core | `invoice_id` → `{pdf, template, fallback}`: the PDF in the template chosen in Settings → General, after every module's `filter_invoice_pdf` (Verifactu QR); the default template when the chosen one is not available (`fallback` true). Builds only, does not store. The new-invoice PDF, `/generate-pdf/<id>` and `/preview-pdf/<id>` call it (`invoice_pdf.py`) |
 | `invoice.list_pdf_templates` | core | `{data: [{id, name, module_id}]}`: the core files in `invoice_templates/` (`module_id` `core`) and the templates of enabled modules. The Settings dropdown calls it |
+| `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |

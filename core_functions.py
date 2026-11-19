@@ -100,7 +100,8 @@ def register(registry, core, Invoice, Customer, message_center=None, invoice_pdf
 
 
 def register_invoice_pdf(registry, core, invoice_pdf):
-    """`invoice.render_pdf` and `invoice.list_pdf_templates` (invoice_pdf.py)."""
+    """`invoice.render_pdf`, `invoice.list_pdf_templates` and `invoice.list_blocks`
+    (invoice_pdf.py)."""
 
     def render_pdf(invoice_id):
         invoice = core.invoice_service.get(invoice_id)
@@ -126,6 +127,14 @@ def register_invoice_pdf(registry, core, invoice_pdf):
         'The invoice PDF templates to choose from: the core files in '
         'invoice_templates/ and those of enabled modules (Invoice Designer).',
         returns='{"data": [record]}; record: id, name, module_id ("core" for the core files)'))
+    registry.register_core(Function(
+        'invoice.list_blocks', lambda: {'data': invoice_pdf.blocks()},
+        'The blocks enabled modules add to invoice layouts (the Verifactu QR), '
+        'for a module that builds invoice layouts (Invoice Designer). Each block '
+        'carries its own render callable, so it is for modules only, not for the '
+        'ledger assistant or the API.',
+        returns='{"data": [block]}; block: id, label, help, required, slots, '
+                'default_slot, options, render (callable), module_id'))
 
 
 def register_messages(registry, center):

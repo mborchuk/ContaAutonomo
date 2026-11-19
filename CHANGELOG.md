@@ -214,6 +214,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
+- **Invoice designer blocks through the registry**: the Invoice Designer reads
+  the blocks other modules add to its layouts (the Verifactu QR) through the new
+  core registry function `invoice.list_blocks` instead of calling the module
+  manager directly. Modules still add blocks with `get_invoice_blocks()`; what
+  the designer shows and prints is unchanged.
 - **One code path for invoice PDFs**: the new-invoice PDF, the PDF download and
   the PDF preview each had their own copy of "pick the template from
   Settings, build the PDF, fall back to the default". They now call the core

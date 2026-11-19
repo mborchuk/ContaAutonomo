@@ -817,6 +817,10 @@ through two core registry functions:
 - `invoice.list_pdf_templates()` → `{"data": [{"id", "name", "module_id"}]}`:
   what the Settings dropdown shows (`module_id` is `core` for the files in
   `invoice_templates/`).
+- `invoice.list_blocks()` → `{"data": [block]}`: the blocks of all enabled
+  modules (see *Invoice layout blocks*), each with its `render` callable and
+  `module_id`. The Invoice Designer reads them this way; it is for modules
+  only, not for the ledger assistant or the API.
 
 ```python
 result = self.core.functions.call('invoice.render_pdf', invoice_id=invoice.id)
@@ -853,9 +857,14 @@ The core detects the signature via `inspect.signature` and passes `Bank` only if
 
 A module that needs something on every invoice (a tax QR, a legal notice) does
 not need its own template: it declares a **block**, and the invoice designer
-places it in its layouts. The designer lists the blocks of all enabled modules
-under *Blocks from modules*, offers only the slots the module allows, and calls
-the module to draw the block when it builds a PDF.
+places it in its layouts. The core collects the blocks of all enabled modules
+and gives them out through the registry function `invoice.list_blocks`; the
+designer lists them under *Blocks from modules*, offers only the slots the
+module allows, and calls the module to draw the block when it builds a PDF.
+
+`get_invoice_blocks()` and `filter_invoice_pdf()` stay module methods, not
+registry functions: every module may contribute (a block each, a change to the
+PDF each), while a registry function has one owner.
 
 ```python
 def get_invoice_blocks(self):
