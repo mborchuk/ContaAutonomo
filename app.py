@@ -4,7 +4,7 @@ Invoice Management Web Application
 Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 """
 
-from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response
+from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from functools import wraps
@@ -137,6 +137,7 @@ db = SQLAlchemy(app)
 # isinstance check means it only touches SQLite connections. ---
 from sqlalchemy import event as _sa_event
 from sqlalchemy.engine import Engine as _SAEngine
+from sqlalchemy.exc import IntegrityError
 import sqlite3 as _sqlite3
 
 
@@ -1372,12 +1373,48 @@ def invoice_amounts(total, currency, date_str):
     return total, amount_eur, rate
 
 
+def _invoice_with_number(number, exclude_id=None):
+    """The invoice that already has `number` (other than `exclude_id`), or None."""
+    query = Invoice.query.filter(Invoice.invoice_number == number)
+    if exclude_id is not None:
+        query = query.filter(Invoice.id != exclude_id)
+    return query.first()
+
+
+def _number_taken_message(number, other):
+    when = other.invoice_date.strftime('%d/%m/%Y') if other.invoice_date else 'no date'
+    return (f'Invoice number "{number}" is already used by the invoice for '
+            f'{other.client_name} ({when}). Choose another number.')
+
+
+@app.route('/invoices/check-number', methods=['POST'])
+@login_required
+def check_invoice_number():
+    """JSON {taken, message}: whether an invoice number is already used; the
+    create and edit forms ask before they are sent."""
+    data = request.get_json(silent=True) or {}
+    number = str(data.get('invoice_number') or '').strip()[:100]
+    try:
+        exclude_id = int(data['exclude_id']) if data.get('exclude_id') else None
+    except (TypeError, ValueError):
+        exclude_id = None
+    other = _invoice_with_number(number, exclude_id) if number else None
+    if other is None:
+        return jsonify({'taken': False, 'message': ''})
+    return jsonify({'taken': True, 'message': _number_taken_message(number, other)})
+
+
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_invoice():
     if request.method == 'POST':
+        # The number is unique: refuse a used one before anything is written.
+        taken = _invoice_with_number((request.form.get('invoice_number') or '').strip())
+        if taken is not None:
+            flash(_number_taken_message(request.form['invoice_number'].strip(), taken), 'danger')
+            return redirect(url_for('create_invoice'))
         try:
-            invoice_number = request.form['invoice_number']
+            invoice_number = request.form['invoice_number'].strip()
             client_name = request.form['client_name']
 
             invoice_date_str = request.form['invoice_date']
@@ -1503,7 +1540,14 @@ def create_invoice():
         )
 
         db.session.add(invoice)
-        db.session.flush()
+        try:
+            db.session.flush()
+        except IntegrityError:
+            # Taken by another request since the check above.
+            db.session.rollback()
+            flash(f'Invoice number "{invoice_number}" is already used. Choose another number.',
+                  'danger')
+            return redirect(url_for('create_invoice'))
 
         # Create invoice items
         for i, item_data in enumerate(items_data):
@@ -1594,8 +1638,13 @@ def edit_invoice(id):
         return redirect(url_for('view_invoice', id=id))
 
     if request.method == 'POST':
+        number = (request.form.get('invoice_number') or '').strip()
+        taken = _invoice_with_number(number, exclude_id=invoice.id)
+        if taken is not None:
+            flash(_number_taken_message(number, taken), 'danger')
+            return redirect(url_for('edit_invoice', id=id))
         try:
-            invoice.invoice_number = request.form['invoice_number']
+            invoice.invoice_number = request.form['invoice_number'].strip()
             invoice.client_name = request.form['client_name']
 
             invoice_date_str = request.form['invoice_date']
