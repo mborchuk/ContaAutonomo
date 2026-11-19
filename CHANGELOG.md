@@ -265,6 +265,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
 ### Fixed
+- **Used invoice number**: creating an invoice with a number that already
+  exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
+  The create and edit forms now say under the Invoice Number field, before
+  sending, that the number is used and by which invoice (customer and date), and
+  the browser blocks Submit until it changes. The server refuses a used number
+  with the same message before it writes anything (no new customer is created).
+  Spaces around the number are removed.
 - **Expense category defaults after an AI parse**: the parsed category was set
   without the change event, so its defaults were never applied — a parsed fuel
   receipt ("Vehicle") kept "Deductible %" at 100 instead of 50. The prefill now
