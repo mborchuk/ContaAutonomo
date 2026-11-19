@@ -184,8 +184,8 @@
             <label for="invoice_template">Invoice PDF Template</label>
             <select id="invoice_template" name="invoice_template">
                 {% set current_template = settings.invoice_template if settings and settings.invoice_template else 'default_template' %}
-                {% if module_manager %}
-                    {% for tpl in module_manager.get_invoice_templates() %}
+                {% if invoice_templates %}
+                    {% for tpl in invoice_templates %}
                     <option value="{{ tpl.id }}" {% if tpl.id == current_template %}selected{% endif %}>
                         {{ tpl.name }}
                     </option>

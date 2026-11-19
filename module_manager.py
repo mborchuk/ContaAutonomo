@@ -1178,8 +1178,10 @@ class CoreServices:
         self._settings_model = None
         self._module_enabled_model = None
         self._module_manager = None
-        # MessageCenter (message_center.py), set by register_core_functions.
+        # MessageCenter (message_center.py) and InvoicePdf (invoice_pdf.py),
+        # set by register_core_functions.
         self.message_center = None
+        self.invoice_pdf = None
         self._storage_backend = LocalStorageBackend(app.root_path)
         self._activity_logger = FileActivityLogger(app.root_path)
         self._scheduler = TaskScheduler(app)
@@ -1889,18 +1891,22 @@ class ModuleManager:
         self.failed_modules = {}    # module_id -> error message (load failures)
         self._enabled_cache = None
 
-    def register_core_functions(self, Invoice, Customer, Message=None):
+    def register_core_functions(self, Invoice, Customer, Message=None, Bank=None):
         """Register the core's functions (core_functions.py) with the app's
         models; the app calls this right after creating the manager. With
         `Message`, the message center (message_center.py) is created as
-        `core.message_center` and its functions are registered."""
+        `core.message_center` and its functions are registered. The invoice
+        PDF builder (invoice_pdf.py) is `core.invoice_pdf`; `Bank` goes to the
+        template files that take it."""
         center = None
         if Message is not None:
             from message_center import MessageCenter
             center = MessageCenter(self.db, Message, self.core.log_activity)
         self.core.message_center = center
+        from invoice_pdf import InvoicePdf
+        self.core.invoice_pdf = InvoicePdf(self, Bank=Bank)
         core_functions.register(self.functions, self.core, Invoice=Invoice, Customer=Customer,
-                                message_center=center)
+                                message_center=center, invoice_pdf=self.core.invoice_pdf)
 
     def _get_module_enabled_model(self):
         """Get or create the ModuleEnabled model"""
@@ -2648,7 +2654,8 @@ class ModuleManager:
         """Collect invoice PDF templates from core + all active modules.
 
         Returns:
-            list[dict]: each dict has 'id', 'name' and 'path' or 'render'
+            list[dict]: each dict has 'id', 'name', 'module_id' ('core' for
+            the files in invoice_templates/) and 'path' or 'render'
         """
         # Core templates from invoice_templates/ directory
         templates = []
@@ -2662,6 +2669,7 @@ class ModuleManager:
                     templates.append({
                         'id': tid,
                         'name': name,
+                        'module_id': 'core',
                         'path': os.path.join(core_dir, fname),
                     })
 
@@ -2669,7 +2677,7 @@ class ModuleManager:
         for mod in self.modules.values():
             try:
                 for tpl in mod.get_invoice_templates():
-                    templates.append(tpl)
+                    templates.append(dict(tpl, module_id=mod.module_id))
             except Exception as e:
                 logger.error("Module '%s' get_invoice_templates error: %s",
                              _sanitize_log(mod.module_id), e)

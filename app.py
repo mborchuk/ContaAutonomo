@@ -1532,29 +1532,7 @@ def create_invoice():
         # Auto-generate PDF and save via core.storage (skip if module already attached a PDF)
         if module_manager and not getattr(invoice, 'pdf_hash', None):
             try:
-                import importlib.util
-                from pathlib import Path
-                app_settings_obj = Settings.query.first()
-                template_name = app_settings_obj.invoice_template if app_settings_obj and app_settings_obj.invoice_template else 'default_template'
-                render, template_path = _invoice_template(template_name)
-                cust = invoice.customer
-                pdf_content = render(invoice, cust, app_settings_obj) if render else None
-
-                if pdf_content is None:
-                    if not template_path or not template_path.exists():
-                        template_path = Path('invoice_templates') / f'{template_name}.py'
-                    if not template_path.exists():
-                        template_path = Path('invoice_templates') / 'default_template.py'
-                    spec = importlib.util.spec_from_file_location(template_name, template_path)
-                    tmpl = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(tmpl)
-                    import inspect
-                    sig = inspect.signature(tmpl.generate_invoice_pdf)
-                    if 'Bank' in sig.parameters:
-                        buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj, Bank)
-                    else:
-                        buf = tmpl.generate_invoice_pdf(invoice, cust, app_settings_obj)
-                    pdf_content = buf.read()
+                pdf_content = _render_invoice_pdf(invoice)['pdf']
                 pdf_filename = f'invoice_{invoice.invoice_number}.pdf'
                 relative_path = os.path.join('invoices_pdf', pdf_filename)
                 new_key = module_manager.core.storage.save(pdf_content, relative_path)
@@ -1841,35 +1819,21 @@ def delete_invoice(id):
 
 
 
-def _invoice_template(template_name):
-    """(render, path) of the configured invoice template: a module template's
-    callable(invoice, customer, settings) -> PDF bytes or None, else the path
-    of a template file. (None, None) when it is not listed."""
-    from pathlib import Path
-    for tpl in (module_manager.get_invoice_templates() if module_manager else []):
-        if tpl['id'] == template_name:
-            if callable(tpl.get('render')):
-                return tpl['render'], None
-            return None, (Path(tpl['path']) if tpl.get('path') else None)
-    return None, None
+def _render_invoice_pdf(invoice):
+    """{'pdf', 'template', 'fallback'}: the invoice's PDF in the template chosen
+    in Settings, through the registry function invoice.render_pdf
+    (invoice_pdf.py)."""
+    if module_manager is None:
+        raise RuntimeError('Module manager not available')
+    return module_manager.functions.call('invoice.render_pdf', invoice_id=invoice.id)
 
-
-def _filter_invoice_pdf(invoice, pdf_bytes):
-    """Let modules adjust a generated invoice PDF (e.g. the Verifactu QR)."""
-    if module_manager:
-        return module_manager.filter_invoice_pdf(invoice, pdf_bytes)
-    return pdf_bytes
 
 @app.route('/generate-pdf/<int:id>')
 @login_required
 def generate_pdf(id):
-    """Generate invoice PDF using the configured template"""
-    import importlib.util
-    from pathlib import Path
-
+    """Download the invoice PDF: the stored one when it is unchanged, else a
+    new one in the template chosen in Settings (invoice.render_pdf), stored."""
     invoice = db.get_or_404(Invoice, id)
-    customer = invoice.customer
-    app_settings = Settings.query.first()
 
     # Check if user wants to force regeneration
     force_regenerate = request.args.get('force') == 'true'
@@ -1897,62 +1861,12 @@ def generate_pdf(id):
                 return render_template('confirm_regenerate.html', invoice=invoice)
 
     # Case 2/3: Generate new PDF
-    template_name = app_settings.invoice_template if app_settings and app_settings.invoice_template else 'default_template'
-
-    # Resolve the template: a module template renders itself, else a template file.
-    render, template_path = _invoice_template(template_name)
-
-    if render:
-        try:
-            pdf_content = render(invoice, customer, app_settings)
-        except Exception as e:
-            logger.error('Error generating PDF with module template: %s', type(e).__name__)
-            flash('Error generating PDF. Check server logs.', 'danger')
-            return redirect(url_for('view_invoice', id=invoice.id))
-    if render and pdf_content is not None:
-        try:
-            pdf_content = _filter_invoice_pdf(invoice, pdf_content)
-            pdf_hash = hashlib.sha256(pdf_content).hexdigest()
-            if storage:
-                relative_path = os.path.join('invoices_pdf', pdf_filename)
-                new_key = storage.save(pdf_content, relative_path)
-                if hasattr(invoice, 'pdf_storage_key'):
-                    invoice.pdf_storage_key = new_key
-                invoice.pdf_generated = True
-            if invoice.status == 'paid':
-                invoice.pdf_hash = pdf_hash
-            db.session.commit()
-            return send_file(io.BytesIO(pdf_content), as_attachment=True,
-                             download_name=pdf_filename, mimetype='application/pdf')
-        except Exception as e:
-            logger.error('Error generating PDF with module template: %s', type(e).__name__)
-            flash('Error generating PDF. Check server logs.', 'danger')
-            return redirect(url_for('view_invoice', id=invoice.id))
-    # A module template that no longer exists falls through to the default.
-
-    if not template_path or not template_path.exists():
-        template_path = Path('invoice_templates') / f'{template_name}.py'
-
-    if not template_path.exists():
-        flash(f'Invoice template "{template_name}" not found. Using default template.', 'warning')
-        template_path = Path('invoice_templates') / 'default_template.py'
-
     try:
-        spec = importlib.util.spec_from_file_location(template_name, template_path)
-        template_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(template_module)
-
-        import inspect
-        sig = inspect.signature(template_module.generate_invoice_pdf)
-        if 'Bank' in sig.parameters:
-            buffer = template_module.generate_invoice_pdf(invoice, customer, app_settings, Bank)
-        else:
-            buffer = template_module.generate_invoice_pdf(invoice, customer, app_settings)
-
-        pdf_content = _filter_invoice_pdf(invoice, buffer.read())
-        buffer = io.BytesIO(pdf_content)
-
-        pdf_hash = hashlib.sha256(pdf_content).hexdigest()
+        result = _render_invoice_pdf(invoice)
+        pdf_content = result['pdf']
+        if result['fallback']:
+            flash('The invoice template chosen in Settings is not available. '
+                  'Using the default template.', 'warning')
 
         # Save via core.storage
         if storage:
@@ -1969,12 +1883,10 @@ def generate_pdf(id):
                 f.write(pdf_content)
 
         if invoice.status == 'paid':
-            invoice.pdf_hash = pdf_hash
+            invoice.pdf_hash = hashlib.sha256(pdf_content).hexdigest()
         db.session.commit()
-
-        buffer.seek(0)
-        return send_file(buffer, as_attachment=True, download_name=pdf_filename, mimetype='application/pdf')
-
+        return send_file(io.BytesIO(pdf_content), as_attachment=True,
+                         download_name=pdf_filename, mimetype='application/pdf')
     except Exception as e:
         logger.error('Error generating PDF: %s', e)
         flash('Error generating PDF. Check server logs.', 'danger')
@@ -1984,67 +1896,27 @@ def generate_pdf(id):
 @app.route('/preview-pdf/<int:id>')
 @login_required
 def preview_invoice_pdf(id):
-    """Preview invoice PDF inline in the browser"""
+    """Preview invoice PDF inline in the browser: the stored one, else one
+    built on the fly (invoice.render_pdf), not stored."""
     invoice = db.get_or_404(Invoice, id)
     if not module_manager:
         flash('Module manager not available.', 'danger')
         return redirect(url_for('index'))
 
-    svc = module_manager.core.invoice_service
-    result = svc.get_pdf(invoice)
-
+    result = module_manager.core.invoice_service.get_pdf(invoice)
     if result:
         file_bytes, _ = result
         return Response(file_bytes, mimetype='application/pdf',
                         headers={'Content-Disposition': 'inline'})
 
-    # PDF not in storage — generate on the fly for preview
     try:
-        import importlib.util
-        from pathlib import Path
-
-        app_settings = Settings.query.first()
-        customer = invoice.customer
-        template_name = (app_settings.invoice_template
-                         if app_settings and app_settings.invoice_template
-                         else 'default_template')
-
-        render, template_path = _invoice_template(template_name)
-        pdf_content = render(invoice, customer, app_settings) if render else None
-        if pdf_content is not None:
-            pdf_content = _filter_invoice_pdf(invoice, pdf_content)
-            return Response(pdf_content, mimetype='application/pdf',
-                            headers={'Content-Disposition': 'inline'})
-
-        if not template_path or not template_path.exists():
-            template_path = Path('invoice_templates') / f'{template_name}.py'
-        if not template_path.exists():
-            template_path = Path('invoice_templates') / 'default_template.py'
-
-        spec = importlib.util.spec_from_file_location(template_name, template_path)
-        tmpl = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(tmpl)
-
-        import inspect
-        sig = inspect.signature(tmpl.generate_invoice_pdf)
-        if 'Bank' in sig.parameters:
-            buf = tmpl.generate_invoice_pdf(invoice, customer, app_settings, Bank)
-        else:
-            buf = tmpl.generate_invoice_pdf(invoice, customer, app_settings)
-
-        pdf_content = _filter_invoice_pdf(invoice, buf.read())
-        return Response(pdf_content, mimetype='application/pdf',
-                        headers={'Content-Disposition': 'inline'})
+        pdf_content = _render_invoice_pdf(invoice)['pdf']
     except Exception as e:
         logger.error('Error generating PDF preview: %s', e)
         flash('Error generating PDF. Check server logs.', 'danger')
         return redirect(url_for('index'))
-
-
-
-
-
-
+    return Response(pdf_content, mimetype='application/pdf',
+                    headers={'Content-Disposition': 'inline'})
 
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -2147,7 +2019,11 @@ def settings():
     module_settings_panels = module_manager.get_settings_html(app_settings) if module_manager else []
     field_labels = module_manager.get_field_labels() if module_manager else {}
 
-    return render_template('settings.html', settings=app_settings, banks=banks, customers=customers, contractors=contractors, module_states=module_states, module_settings_panels=module_settings_panels, field_labels=field_labels)
+    invoice_templates = []
+    if module_manager and module_manager.functions.available('invoice.list_pdf_templates'):
+        invoice_templates = module_manager.functions.call('invoice.list_pdf_templates')['data']
+    return render_template('settings.html', settings=app_settings, banks=banks, customers=customers, contractors=contractors, module_states=module_states, module_settings_panels=module_settings_panels, field_labels=field_labels,
+                           invoice_templates=invoice_templates)
 
 
 @app.route('/settings/banks/add', methods=['GET', 'POST'])
@@ -2612,7 +2488,8 @@ def init_module_manager():
 
     module_manager = ModuleManager(app, db)
     module_manager.core._settings_model = Settings
-    module_manager.register_core_functions(Invoice=Invoice, Customer=Customer, Message=Message)
+    module_manager.register_core_functions(Invoice=Invoice, Customer=Customer, Message=Message,
+                                           Bank=Bank)
     module_manager.init_db()
     module_manager.discover_modules()
     module_manager.load_enabled_modules()

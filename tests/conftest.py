@@ -52,7 +52,7 @@ def _loaded_modules_session():
     the suite exercises (expenses, tax_es_forms).
     """
     import sys
-    from app import Customer, Invoice, Message, Settings
+    from app import Bank, Customer, Invoice, Message, Settings
     appmod = sys.modules['app']
 
     ctx = flask_app.app_context()
@@ -61,7 +61,7 @@ def _loaded_modules_session():
 
     mm = ModuleManager(flask_app, _db)
     mm.core._settings_model = Settings
-    mm.register_core_functions(Invoice=Invoice, Customer=Customer, Message=Message)
+    mm.register_core_functions(Invoice=Invoice, Customer=Customer, Message=Message, Bank=Bank)
     mm.init_db()
     mm.discover_modules()
 
