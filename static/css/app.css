@@ -189,6 +189,13 @@ html.js .side-group:not(.is-open) > .side-sublist { display: none; }
     font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
 }
 .msg-badge[hidden] { display: none; }
+/* Error under a form field (e.g. an invoice number already used). */
+.field-error {
+    color: var(--color-danger);
+    font-size: var(--fs-sm);
+    margin: var(--space-1) 0 0;
+}
+
 .msg-panel {
     position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: var(--z-dropdown);
     width: min(380px, calc(100vw - 2 * var(--space-4)));

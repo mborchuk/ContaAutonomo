@@ -1,0 +1,44 @@
+{# Says under the Invoice Number field, before the form is sent, when the number
+   is already used (POST /invoices/check-number). The server refuses it anyway.
+   Context: number_exclude_id = the invoice being edited, or None. #}
+<p id="invoice-number-taken" class="field-error" role="alert" hidden></p>
+<script>
+(function () {
+    const input = document.getElementById('invoice_number');
+    const note = document.getElementById('invoice-number-taken');
+    if (!input || !note) return;
+    const url = {{ url_for('check_invoice_number') | tojson }};
+    const excludeId = {{ (number_exclude_id or none) | tojson }};
+    let asked = null;
+
+    function show(message) {
+        note.textContent = message;
+        note.hidden = !message;
+        input.setCustomValidity(message);   // the browser then blocks Submit
+    }
+
+    async function check() {
+        const number = input.value.trim();
+        if (!number || number === asked) return;
+        asked = number;
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify({invoice_number: number, exclude_id: excludeId})
+            });
+            if (!resp.ok || input.value.trim() !== number) return;
+            const data = await resp.json();
+            show(data.taken ? data.message : '');
+        } catch (e) { /* the server still checks on submit */ }
+    }
+
+    input.addEventListener('change', check);
+    input.addEventListener('input', function () {
+        if (note.hidden) return;
+        asked = null;
+        show('');
+    });
+    if (input.value.trim()) check();
+})();
+</script>
