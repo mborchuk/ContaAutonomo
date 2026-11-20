@@ -10,7 +10,7 @@ file adds no tax rule. Checked on 16 November 2026.
 | Model | How the Sede takes the file | Official layout (source) | In the app | Validated |
 |---|---|---|---|---|
 | Modelo 303 | Form → *Importar* (page records `<T303…>`) | DR303e26v101, ejercicio 2026 and later ([AEAT, Diseños de registro 300–399](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-300-399.html)) | Pages 01, 03 and DID, from 2026 | **Imports without errors** (3T 2026, 2026-11-20) |
-| Modelo 130 | Form → *Importar*; the layout's note asks for a file named `130.txt` | DR130e15v12 ([AEAT, Diseños de registro 100–199](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-100-199.html)) | Page 01 | **Not validated** |
+| Modelo 130 | Form → *Importar*; the layout's note asks for a file named `130.txt` | DR130e15v12 ([AEAT, Diseños de registro 100–199](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-100-199.html)) | Page 01 | **Imports without errors** (3T 2026, 2026-11-20) |
 | Modelo 390 | Form → *Importar* | dr390e2026, ejercicio 2026 and later | Pages 01–08, from 2026 | **Not validated** |
 | Modelo 349 | *Presentación mediante fichero* (500-character records) | DR_Anexo_349, Orden HAC/174/2020 | Key S lines of the quarter | **Not validated** |
 | Modelo 347 | *Presentación mediante fichero* (500-character records) | 347, ejercicio 2025 and later (Orden HAC/1431/2025) | Keys A and B of the 347 check | **Not validated** |

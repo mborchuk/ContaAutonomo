@@ -227,7 +227,8 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   rate casillas. The generator refuses a blank in any numeric field, and
   tests check every numeric field of the 303, 130 and 390 files and every 303
   rate casilla. After these fixes a 3T 2026 file imported in the Sede
-  with "No existen errores".
+  with "No existen errores"; the Modelo 130 file of the same quarter
+  imported without errors as it was.
 - **Used invoice number**: creating an invoice with a number that already
   exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
   The create and edit forms now say under the Invoice Number field, before
