@@ -39,7 +39,7 @@ def test_sales_boxes_and_equipment_split():
          expense(60.0, None)],                   # VAT unknown: counted as missing
         0.21, is_equipment=is_equipment)
     b = result['boxes']
-    assert (b['01'], b['03']) == (200.0, 42.0)
+    assert (b['07'], b['09']) == (200.0, 42.0)
     assert (b['59'], b['120']) == (1000.0, 500.0)
     assert (b['28'], b['29']) == (190.0, 39.9)
     assert (b['30'], b['31']) == (1000.0, 210.0)

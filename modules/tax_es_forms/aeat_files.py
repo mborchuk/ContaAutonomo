@@ -181,9 +181,8 @@ def _envelope(layout, year, period, pages):
 
 # --- Modelo 303 -------------------------------------------------------------- #
 
-# Draft box -> official casilla. The app's general-rate lines 01/03 are the
-# 21 % lines, which the official 2026 model numbers [07]/[09].
-_303_PAGE1 = {'01': '07', '03': '09', '10': '10', '11': '11', '12': '12', '13': '13',
+# Draft box -> official casilla (the draft uses the official numbers).
+_303_PAGE1 = {'07': '07', '09': '09', '10': '10', '11': '11', '12': '12', '13': '13',
               '27': '27', '28': '28', '29': '29', '30': '30', '31': '31',
               '36': '36', '37': '37', '38': '38', '39': '39', '45': '45', '46': '46'}
 

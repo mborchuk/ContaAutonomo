@@ -43,10 +43,9 @@ and Modelo 111. The app prepares neither.
 
 ### Modelo 303
 
-The draft's general-rate lines (boxes 01/03 on the draft page) are the 21 %
-lines. The 2026 layout numbers them **[07]/[08]/[09]**: [01]–[03] are 4 %,
-[04]–[06] 10 %. The file puts the 21 % base and cuota in [07] and [09] and the
-rate 21.00 in [08]. Page 03: [59], [120], [110], [78], [87]; [64] = [66] =
+The draft's output VAT is the 21 % line, numbered as on the official form:
+**[07]/[09]**, with the rate 21.00 in [08] ([01]–[03] are 4 %, [04]–[06]
+10 %; the app puts no figure there). Page 03: [59], [120], [110], [78], [87]; [64] = [66] =
 [46]; [65] = 100 %; [69] = [66] − [78]; [71]. Tipo de declaración: `I` when
 there is something to pay, `N` at zero, `C` (compensate) when negative —
 change it to `D` in the form to ask for a refund in 4T. Identification flags:
