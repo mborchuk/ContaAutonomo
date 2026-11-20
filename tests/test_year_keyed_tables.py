@@ -58,7 +58,7 @@ def test_box_table_own_year_and_fallback():
     assert boxes_for_year(own_year)[2] is False
     table_year, tables, fallback = boxes_for_year(own_year + 5)
     assert fallback and table_year == max(BOX_TABLES)
-    assert '01' in tables['303'] and '07' in tables['130']
+    assert '07' in tables['303'] and '07' in tables['130']
 
 
 def test_draft_for_year_without_table_shows_note(loaded_modules):

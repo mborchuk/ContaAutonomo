@@ -60,7 +60,7 @@ def test_layout_pages_are_contiguous_and_tagged(filename):
 # --- Modelo 303 ------------------------------------------------------------- #
 
 def _draft_303(**boxes):
-    base = {k: 0.0 for k in ('01', '03', '10', '11', '12', '13', '27', '28', '29', '30', '31',
+    base = {k: 0.0 for k in ('07', '09', '10', '11', '12', '13', '27', '28', '29', '30', '31',
                              '36', '37', '38', '39', '45', '46', '59', '120', '110', '78',
                              '87', '71')}
     base.update(boxes)
@@ -68,7 +68,7 @@ def _draft_303(**boxes):
 
 
 def test_303_file_places_each_box_at_its_official_position():
-    draft = _draft_303(**{'01': 10000.0, '03': 2100.0, '27': 2100.0, '28': 1000.0,
+    draft = _draft_303(**{'07': 10000.0, '09': 2100.0, '27': 2100.0, '28': 1000.0,
                           '29': 210.0, '45': 210.0, '46': 1890.0, '59': 5000.0,
                           '110': 90.0, '78': 90.0, '87': 0.0, '71': 1800.0})
     content, info = af.modelo_303(draft, SETTINGS)
@@ -103,6 +103,78 @@ def test_303_negative_result_is_signed_and_compensated():
 def test_303_before_the_layout_year_is_unsupported():
     with pytest.raises(af.UnsupportedYear):
         af.modelo_303(dict(_draft_303(), year=2025), SETTINGS)
+
+
+def _numeric_problems(content, model, year):
+    """Numeric fields (`Num`, `N`) of every page record that hold anything but
+    digits (an `N` field may start with the minus sign `N`). Constants come
+    from the official layout and are left out."""
+    import re
+    layout = af.load_layout(model, year)
+    problems = []
+    for pid, fields in layout['pages'].items():
+        if pid == '00':
+            continue
+        code = next(f[5] for f in fields if f[0] == 3)      # page number constant
+        start = content.find(f'<T{model}{code}')
+        if start < 0:
+            continue
+        record = content[start:start + sum(f[2] for f in fields)]
+        for n, pos, length, typ, _box, const, desc in fields:
+            if const is not None:          # the layout's own value, e.g. page '02B00'
+                continue
+            value = record[pos - 1:pos - 1 + length]
+            ok = re.fullmatch(r'N?\d+' if typ == 'N' else r'\d+', value) if typ in ('Num', 'N') else True
+            if not ok:
+                problems.append((pid, n, value, desc[:60]))
+    return problems
+
+
+@pytest.mark.parametrize('quarter', [1, 2, 3, 4])
+def test_303_numeric_fields_hold_only_digits(quarter):
+    """The Sede rejected a 3T file: fields 17 and 18 (prorrata especial) were
+    blank, and a numeric field takes digits only (E010170, E010180); they take
+    only 1 or 2 (E010171, E010181)."""
+    content, _ = af.modelo_303(dict(_draft_303(**{'07': 1000.0, '09': 210.0, '71': 210.0}),
+                                    quarter=quarter), SETTINGS)
+    assert _numeric_problems(content, '303', 2026) == []
+    layout = af.load_layout('303', 2026)
+    p1 = content[content.index('<T30301000'):]
+    flags = _cut(p1, _field(layout, '01', n=17)) + _cut(p1, _field(layout, '01', n=18))
+    assert flags == '22'
+    assert _cut(p1, _field(layout, '01', box='169')) == '00050'      # E010541: only 0,5
+
+
+def test_every_303_rate_field_has_its_fixed_rate():
+    """Each "Tipo %" casilla of the 303 holds a fixed rate the Sede checks
+    (E010541: [169] only admits 0,5); the layout must carry it as a constant,
+    also after a rebuild from the AEAT spreadsheet."""
+    layout = af.load_layout('303', 2026)
+    rates = {f[4]: f[5] for fields in layout['pages'].values() for f in fields
+             if 'Tipo %' in (f[6] or '')}
+    assert len(rates) == 11 and all(rates.values()), rates
+    assert rates['169'] == '00050' and rates['08'] == '02100'
+
+
+@pytest.mark.parametrize('quarter', [1, 2, 3, 4])
+def test_130_numeric_fields_hold_only_digits(quarter):
+    draft = {'year': 2026, 'quarter': quarter, 'boxes': {
+        '01': 100.0, '02': 600.0, '03': -500.0, '04': 0.0, '05': 0.0, '06': 0.0, '07': 0.0}}
+    content, _ = af.modelo_130(draft, SETTINGS)
+    assert _numeric_problems(content, '130', 2026) == []
+
+
+def test_390_numeric_fields_hold_only_digits():
+    boxes = {k: 0.0 for k in af._390_BOXES}
+    boxes.update({'05': 40000.0, '06': 8400.0})
+    content, _ = af.modelo_390({'year': 2026, 'boxes': boxes}, SETTINGS)
+    assert _numeric_problems(content, '390', 2026) == []
+
+
+def test_a_blank_numeric_field_is_refused():
+    layout = af.load_layout('303', 2026)
+    with pytest.raises(ValueError, match='field 17 is numeric'):
+        af.render_page(layout['pages']['01'], {17: ' '})
 
 
 # --- Modelo 130 ------------------------------------------------------------- #

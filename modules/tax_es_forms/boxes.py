@@ -31,8 +31,8 @@ BOX_TABLE_VERSION = "2026.1"
 # --- Modelo 303 (IVA, quarterly, régimen general) ---
 # Only the principal boxes an estimación-directa autónomo transcribes.
 MODELO_303_BOXES = {
-    "01": "Base imponible IVA devengado — régimen general (tipo general)",
-    "03": "Cuota IVA devengado — régimen general (tipo general)",
+    "07": "Base imponible IVA devengado — régimen general, tipo 21 %",
+    "09": "Cuota IVA devengado — régimen general, tipo 21 %",
     "10": "Base — adquisiciones intracomunitarias de bienes y servicios (inversión del sujeto pasivo)",
     "11": "Cuota — adquisiciones intracomunitarias de bienes y servicios",
     "12": "Base — otras operaciones con inversión del sujeto pasivo (proveedores fuera de la UE)",

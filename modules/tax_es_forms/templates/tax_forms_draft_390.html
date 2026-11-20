@@ -53,7 +53,7 @@
         <tr><th>303 box</th>{% for q in draft.quarters %}<th class="text-right">Q{{ q.quarter }}</th>{% endfor %}</tr>
     </thead>
     <tbody>
-        {% for box in ['01', '03', '10', '11', '12', '13', '28', '29', '30', '31', '36', '37', '38', '39', '45', '46', '59', '120', '78', '71'] %}
+        {% for box in ['07', '09', '10', '11', '12', '13', '28', '29', '30', '31', '36', '37', '38', '39', '45', '46', '59', '120', '78', '71'] %}
         <tr>
             <td><strong>{{ box }}</strong></td>
             {% for q in draft.quarters %}
