@@ -178,3 +178,30 @@ def test_draft_130_page_shows_the_breakdown(year_2026, loaded_modules, client):
     assert 'Depreciation:' in html and 'payments recorded in Tax Management' in html
     assert 'estimated by the app' in html and 'no boxes read from a filed 1T Modelo 130' in html
     assert 'Read filed boxes' in html
+
+
+def test_breakdown_parts_are_cents_and_add_up_exactly(year_2026):
+    """Each expense line and the Social Security total are in cents, so the
+    parts add up to box 02 to the cent and a capped difícil justificación
+    shows its cap, not the cap plus a rounding cent."""
+    from app import Expense, db
+    extra = Expense(expense_date=date(2026, 8, 20), category='Services',
+                    description='synthetic odd amount', amount=10.0049, net_amount=10.0049,
+                    vat_amount=0.0, vat_rate=0.0, currency='EUR', deductible=True,
+                    deductible_pct=33.3)
+    db.session.add(extra)
+    db.session.commit()
+    profile = year_2026._get_profile()
+    profile.apply_dificil_justif_m130 = True
+    try:
+        boxes, _ = year_2026.modelo130_boxes(2026, 3)
+        bd = year_2026.modelo130_breakdown(2026, 3, boxes)
+        amounts = ([l['amount'] for g in bd['expenses'] for l in g['lines']]
+                   + [d['amount'] for d in bd['depreciation']] + [bd['reta']['amount']])
+        assert all(round(a, 2) == a for a in amounts)
+        total = round(sum(amounts) + bd['dificil_justificacion'], 2)
+        assert total == boxes['02']
+    finally:
+        profile.apply_dificil_justif_m130 = False
+        db.session.delete(extra)
+        db.session.commit()

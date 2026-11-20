@@ -127,6 +127,11 @@
 .breakdown-130 { margin-top: var(--space-5); }
 .breakdown-130 .data-table + .table-wrap, .breakdown-130 .table-wrap + .table-wrap { margin-top: var(--space-4); }
 .breakdown-lines { margin: var(--space-2) 0 0; padding-left: var(--space-5); font-size: var(--fs-sm); }
+/* Long expense lines wrap and the amount column stays in view: the narrow-screen
+   rule makes tables one scrolling line, which a printed page cuts off. */
+.breakdown-130 table { display: table; table-layout: fixed; width: 100%; white-space: normal; }
+.breakdown-130 td, .breakdown-130 th { white-space: normal; overflow-wrap: anywhere; }
+.breakdown-130 td:last-child, .breakdown-130 th:last-child { width: 7.5rem; text-align: right; white-space: nowrap; }
 .copy-btn { background: none; border: none; cursor: pointer; color: var(--color-text-muted); font-size: 14px; margin-left: 6px; }
 .copy-btn:hover { color: var(--color-primary); }
 @media print {
