@@ -180,6 +180,11 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   not yet in force.
 
 ### Changed
+- **Ledger Assistant shows that it is thinking**: after **Ask**, the button
+  reads "Thinking…" and cannot be pressed twice, a note with a spinner says the
+  assistant is looking up records and asking the AI provider, a timer counts
+  the seconds, and after a minute the note says a CLI agent can take a few
+  minutes. The previous answer is dimmed until the new one arrives.
 - **Invoice designer blocks through the registry**: the Invoice Designer reads
   the blocks other modules add to its layouts (the Verifactu QR) through the new
   core registry function `invoice.list_blocks` instead of calling the module
