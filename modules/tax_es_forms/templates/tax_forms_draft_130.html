@@ -60,10 +60,36 @@
 
 {% if draft.breakdown %}{% set bd = draft.breakdown %}
 <section class="card breakdown-130" aria-labelledby="breakdown-130-title">
-    <div class="card-header" id="breakdown-130-title">How boxes 02 and 05 are made up</div>
+    <div class="card-header" id="breakdown-130-title">How boxes 01, 02 and 05 are made up</div>
     <div class="card-body">
-        <p class="fine-print">Year to date, as the IRPF Estimator counts them. Compare these lines
-            with your gestor's expense ledger (libro registro de gastos).</p>
+        <p class="fine-print">Year to date, as the IRPF Estimator counts them. Compare box 01 with
+            your gestor's sales ledger (libro registro de ingresos) and box 02 with the expense
+            ledger (libro registro de gastos), line by line.</p>
+        {% if bd.income is defined %}
+        <div class="table-wrap">
+        <table class="data-table">
+            <caption class="sr-only">Box 01, income</caption>
+            <thead><tr><th>Box 01</th><th class="text-right">EUR</th></tr></thead>
+            <tbody>
+            <tr><td>
+                <details>
+                    <summary>Invoices — {{ bd.income | length }}, by invoice date, every status except cancelled</summary>
+                    <ul class="breakdown-lines">
+                    {% for i in bd.income %}
+                        <li>{{ i.date[8:10] }}/{{ i.date[5:7] }}/{{ i.date[:4] }} · {{ i.number }} · {{ i.customer or '—' }}{% if i.status != 'paid' %} ({{ i.status }}){% endif %} —
+                            {% if i.rate %}{{ "%.2f"|format(i.amount) }} {{ i.currency }} × {{ "%.6f"|format(i.rate) }} = {{ "%.2f"|format(i.eur) }} EUR
+                            {% else %}{{ "%.2f"|format(i.eur) }} EUR{% endif %}
+                            {% if i.retention %} · retention {{ "%.2f"|format(i.retention) }} (box 06){% endif %}</li>
+                    {% endfor %}
+                    </ul>
+                </details>
+            </td><td class="text-right">{{ "%.2f"|format(bd.income | sum(attribute='eur')) }}</td></tr>
+            </tbody>
+            <tfoot><tr class="row-total"><td>Box 01</td>
+                <td class="text-right">{{ "%.2f"|format(draft.boxes['01']) }}</td></tr></tfoot>
+        </table>
+        </div>
+        {% endif %}
         <div class="table-wrap">
         <table class="data-table">
             <caption class="sr-only">Box 02, deductible expenses</caption>

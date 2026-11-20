@@ -245,23 +245,45 @@ class TaxEsIrpfModule(BaseModule):
         Devengo: every invoice dated in the window counts, paid or not, except
         cancelled ones (owner decision 2026-10-03).
         """
+        lines = self._income_lines(year, profile, end_dt)
+        return (round(sum(line['eur'] for line in lines), 2),
+                round(sum(line['retention'] for line in lines), 2))
+
+    def _income_lines(self, year, profile, end_dt):
+        """The invoices behind Modelo 130 box 01 (and box 06), one line each:
+        every invoice dated from the year start to `end_dt` except cancelled
+        ones, with its amount in its own currency, the stored rate, the EUR
+        value in cents (invoice_vat.invoice_base_eur, as in the books) and its
+        IRPF retention. [{'date', 'number', 'customer', 'status', 'currency',
+        'amount', 'rate' (None for EUR), 'eur', 'retention'}], by date."""
         start_dt = self._year_start(year, profile)
         invoices = self.Invoice.query.filter(
             self.Invoice.status.notin_(NON_INCOME_INVOICE_STATUSES),
             self.Invoice.invoice_date >= start_dt,
             self.Invoice.invoice_date <= end_dt,
-        ).all()
-        # Each invoice in cents, as in the books (invoice_vat.invoice_base_eur).
-        income = sum(invoice_base_eur(inv) for inv in invoices)
-        retenciones = 0.0
+        ).order_by(self.Invoice.invoice_date, self.Invoice.id).all()
+        lines = []
         for inv in invoices:
+            eur = invoice_base_eur(inv)
+            currency = (inv.currency or 'EUR').upper()
             amount = getattr(inv, 'irpf_retention_amount', None)
             pct = getattr(inv, 'irpf_retention_pct', None)
             if amount:
-                retenciones += to_cents(amount)
+                retention = to_cents(amount)
             elif pct:
-                retenciones += to_cents(invoice_base_eur(inv) * (pct / 100.0))
-        return round(income, 2), round(retenciones, 2)
+                retention = to_cents(eur * (pct / 100.0))
+            else:
+                retention = 0.0
+            lines.append({
+                'date': inv.invoice_date.isoformat(), 'number': inv.invoice_number or '',
+                'customer': inv.client_name or '', 'status': inv.status or '',
+                'currency': currency,
+                # Legacy naming: amount_usd holds a non-EUR invoice's own currency.
+                'amount': to_cents(inv.amount_eur if currency == 'EUR' else inv.amount_usd),
+                'rate': None if currency == 'EUR' else inv.exchange_rate,
+                'eur': eur, 'retention': retention,
+            })
+        return lines
 
     def _equipment_rule(self, profile):
         """(depreciate?, annual rate %, threshold EUR, category names)."""
@@ -464,7 +486,8 @@ class TaxEsIrpfModule(BaseModule):
         return rows
 
     def modelo130_breakdown(self, year, quarter, boxes=None):
-        """How boxes 02 and 05 of one quarter are made up: expenses by
+        """How boxes 01, 02 and 05 of one quarter are made up: the invoices
+        behind box 01, expenses by
         category (with their lines), equipment depreciation, RETA, the 5 %
         difícil justificación when the profile applies it, and each earlier
         quarter's payment with its source. Amounts in EUR, rounded."""
@@ -493,6 +516,7 @@ class TaxEsIrpfModule(BaseModule):
         prior = [dict(r, amount=round(r['amount'], 2))
                  for r in self._prior_payments(year, quarter, profile)]
         return {
+            'income': self._income_lines(year, profile, end_dt),
             'expenses': expenses, 'depreciation': depreciation, 'reta': reta,
             'dificil_justificacion': dificil if abs(dificil) >= 0.01 else 0.0,
             'prior_payments': prior,
@@ -550,7 +574,9 @@ class TaxEsIrpfModule(BaseModule):
                      'from the IRPF profile.',
                      params=(year, quarter),
                      returns='{"boxes": {"01".."07": amount}, "rate": fraction, '
-                             '"breakdown": {"expenses": [{category, amount, lines}], '
+                             '"breakdown": {"income": [{date, number, customer, status, '
+                             'currency, amount, rate, eur, retention}], '
+                             '"expenses": [{category, amount, lines}], '
                              '"depreciation": [line], "reta": {amount, source, monthly, '
                              'months, capped}, "dificil_justificacion": amount, '
                              '"prior_payments": [{quarter, amount, source}]}}'),
