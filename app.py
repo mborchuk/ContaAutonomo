@@ -64,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 
 app = Flask(__name__)
-APP_VERSION = '1'
+APP_VERSION = '2'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///invoices.db')
 
