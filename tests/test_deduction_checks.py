@@ -95,9 +95,10 @@ def test_every_notice_names_its_rule_and_source():
 
 
 def test_rule_table_cites_a_source_for_every_rule():
-    assert {r['id'] for r in RULES} == {'home_supplies', 'meal_limits', 'vehicle_use'}
+    assert {r['id'] for r in RULES} == {'home_supplies', 'meal_limits', 'vehicle_use',
+                                        'reverse_charge_region'}
     for rule in RULES:
-        assert rule['source'] and ('LIRPF' in rule['source'] or 'RIRPF' in rule['source'])
+        assert rule['source'] and any(law in rule['source'] for law in ('LIRPF', 'RIRPF', 'LIVA'))
 
 
 def test_no_rule_edits_the_expense():

@@ -16,6 +16,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, abort
 
 from module_manager import BaseModule
+from supplier_region import reverse_charge_problem
 
 from .boxes import (
     BOX_TABLE_VERSION,
@@ -245,6 +246,14 @@ class TaxEsFormsModule(BaseModule):
                 f'{len(unmarked)} expense(s) without Spanish VAT are not marked '
                 '"Reverse charge" — if the supplier is outside Spain, mark them: '
                 + ', '.join((e.description or '?').splitlines()[0][:40] for e in unmarked))
+        wrong_region = [e for e in expenses if reverse_charge_problem(e)]
+        if wrong_region:
+            checks.append(
+                f'{len(wrong_region)} expense(s) are marked reverse charge for a region '
+                "that does not match the supplier's country or VAT number (boxes 10/11 "
+                'are EU suppliers, 12/13 suppliers outside the EU) — check them: '
+                + ', '.join(f'{(getattr(e.contractor, "name", None) or "?")[:30]} '
+                            f'({e.expense_date:%d/%m/%Y})' for e in wrong_region))
         return checks
 
     def _draft_130(self, year, quarter):

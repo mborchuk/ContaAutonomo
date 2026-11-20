@@ -48,6 +48,13 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   instead of dashboard panels.
 
 ### Added
+- **Reverse charge must match the supplier's country**: an expense marked
+  reverse charge for "another EU country" whose supplier is outside the EU
+  (for example a US company), the opposite, or either for a Spanish supplier
+  gets a "Check" notice on the expense (a new deduction-check rule, LIVA arts.
+  15, 69, 84.Uno.2º) and is listed on the Modelo 303 draft. The region comes
+  from the supplier's country or its VAT number prefix; an unknown supplier
+  gets no notice.
 - **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
   messages; opened, it lists them, each with **Mark as read**, which hides it
   without leaving the page. The **Messages** page (System → Messages) keeps the history:
