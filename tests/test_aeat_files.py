@@ -135,7 +135,7 @@ def test_303_numeric_fields_hold_only_digits(quarter):
     """The Sede rejected a 3T file: fields 17 and 18 (prorrata especial) were
     blank, and a numeric field takes digits only (E010170, E010180); they take
     only 1 or 2 (E010171, E010181)."""
-    content, _ = af.modelo_303(dict(_draft_303(**{'01': 1000.0, '03': 210.0, '71': 210.0}),
+    content, _ = af.modelo_303(dict(_draft_303(**{'07': 1000.0, '09': 210.0, '71': 210.0}),
                                     quarter=quarter), SETTINGS)
     assert _numeric_problems(content, '303', 2026) == []
     layout = af.load_layout('303', 2026)
