@@ -18,7 +18,9 @@ Rules checked on 16 November 2026 against:
     affected to the activity; cars only with exclusive use, save the listed
     exceptions);
   - Ley 37/1992 (LIVA), art. 95.Tres.2ª (VAT on cars presumed 50 % deductible
-    when used in the activity).
+    when used in the activity); arts. 15, 69 and 84.Uno.2º (reverse charge:
+    services from another EU country are an intra-Community acquisition,
+    Modelo 303 boxes 10/11 and Modelo 349; from outside the EU, boxes 12/13).
 AEAT, "Manual práctico de Renta — rendimientos de actividades económicas en
 estimación directa: gastos fiscalmente deducibles".
 
@@ -28,8 +30,10 @@ owner decides.
 
 from collections import defaultdict
 
-RULES_VERSION = "2026.1"
-CHECKED_ON = "2026-11-16"
+from supplier_region import reverse_charge_problem
+
+RULES_VERSION = "2026.2"
+CHECKED_ON = "2026-11-20"
 
 # Severities, from strongest to weakest.
 EXCEEDS = 'exceeds'            # above the legal limit
@@ -95,6 +99,16 @@ RULES = [
                     'is used in the activity; more needs proof.'),
         'source': 'RD 439/2007 (RIRPF), art. 22.4; Ley 37/1992 (LIVA), art. 95.Tres.2ª',
         'categories': VEHICLE_CATEGORIES,
+    },
+    {
+        'id': 'reverse_charge_region',
+        'title': 'Reverse charge and supplier country',
+        'summary': ('An expense marked reverse charge declares its VAT by where the '
+                    'supplier is: another EU country in Modelo 303 boxes 10/11 (and '
+                    'Modelo 349), outside the EU in boxes 12/13. The mark must match '
+                    "the supplier's country or VAT number."),
+        'source': 'Ley 37/1992 (LIVA), arts. 15, 69 and 84.Uno.2º; Modelo 303 instructions',
+        'categories': None,       # any category
     },
 ]
 
@@ -180,6 +194,13 @@ def check_vehicle(expense):
     return []
 
 
+def check_reverse_charge_region(expense):
+    """The reverse-charge mark disagrees with the supplier's region
+    (supplier_region.py): EU marked for a US supplier, and so on."""
+    problem = reverse_charge_problem(expense)
+    return [_notice('reverse_charge_region', CHECK, problem, expense)] if problem else []
+
+
 def _meal_day_totals(expenses, to_eur):
     """{(date, abroad): total EUR} for deductible meal expenses."""
     totals = defaultdict(float)
@@ -213,6 +234,7 @@ def check_expenses(expenses, home_office_area_pct=None, to_eur=None):
         notices = []
         notices += check_home_supplies(exp, home_office_area_pct)
         notices += check_vehicle(exp)
+        notices += check_reverse_charge_region(exp)
         if _category(exp) in MEAL_CATEGORIES and _claimed_pct(exp) > 0 \
                 and getattr(exp, 'expense_date', None) is not None:
             notices += check_meal_day(day_totals[(exp.expense_date, _is_abroad(exp))],

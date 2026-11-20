@@ -373,7 +373,7 @@ a full VAT breakdown.
   (Expenses tab)
 - API: expenses CRUD including the VAT fields
 - **Deduction checks** (`deduction_rules.py`, pure, `RULES_VERSION`): a rule
-  table, each rule with its legal citation, checked on 2026-11-16:
+  table, each rule with its legal citation, checked on 2026-11-20:
   - *Home-office supplies* (category Utilities and supply names): deductible
     at 30 % of the share of the home used for the activity (LIRPF art.
     30.2.5ª b). The share is a setting; without it only claims above 30 % are
@@ -384,6 +384,13 @@ a full VAT breakdown.
   - *Vehicle costs* (category Vehicle, Fuel…): above 50 % needs proof of
     exclusive use; below 50 % looks under-claimed (RIRPF 22.4, LIVA
     95.Tres.2ª).
+  - *Reverse charge and supplier country* (any category): an expense marked
+    reverse charge for another EU country whose supplier is outside the EU,
+    the opposite, or either for a supplier in Spain (LIVA arts. 15, 69,
+    84.Uno.2º). The supplier's region comes from its country or, without a
+    recognised country, its VAT number prefix (`supplier_region.py` in the
+    core; `EU…` one-stop-shop numbers are outside the EU); unknown means no
+    notice. The Modelo 303 draft lists the same mismatches under its checks.
 
   Notices ("Breaks a rule", "Check", "Looks under-claimed") show as badges in
   the list and as notes on the edit form. They never change the expense. A
@@ -725,6 +732,8 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
 Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
 fraccionado), computed from data already in the app. Estimate only — every page
 carries a non-dismissible "not tax advice" banner.
+Invoice amounts are added in cents (`invoice_vat.to_cents`, half up), each
+invoice rounded first, as the books do; the IRPF Estimator does the same.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
@@ -1280,7 +1289,9 @@ write its records there with these columns filled: `expense_date`, `amount`,
 
 No module imports another module's code; a test fails if one does. Shared
 rules on core data live in the core: `invoice_vat.py` (output VAT of one
-invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
+invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports;
+`supplier_region.py` (an expense supplier's region and whether its reverse
+charge matches) by Expenses and Spanish Tax Forms.
 `ApiError` is in the core (`from api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 

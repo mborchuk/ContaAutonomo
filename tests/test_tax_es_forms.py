@@ -49,8 +49,8 @@ def test_303_output_vat_only_on_standard_customers():
         _inv(300.0, tax_type='non_eu'),    # export -> no output VAT
     ]
     result = compute_modelo_303(invoices, [], vat_rate=0.21)
-    assert result['boxes']['01'] == 1000.0     # base only from standard
-    assert result['boxes']['03'] == 210.0      # 21% of 1000
+    assert result['boxes']['07'] == 1000.0     # base only from standard
+    assert result['boxes']['09'] == 210.0      # 21% of 1000
     assert result['boxes']['27'] == 210.0
     # No deductible expenses -> result equals output VAT.
     assert result['boxes']['71'] == 210.0
@@ -62,7 +62,7 @@ def test_303_excludes_cancelled_invoices():
         _inv(1000.0, tax_type='standard', status='cancelled'),
     ]
     result = compute_modelo_303(invoices, [], vat_rate=0.21)
-    assert result['boxes']['01'] == 1000.0
+    assert result['boxes']['07'] == 1000.0
 
 
 def test_303_counts_expenses_missing_vat_data():
@@ -92,8 +92,8 @@ def test_303_uses_fiscal_snapshot_when_present():
     invoices = [_inv(1000.0, tax_type='non_eu', status='issued',
                      snap_vat_rate=21.0, snap_taxable_base=1000.0, snap_vat_amount=210.0)]
     result = compute_modelo_303(invoices, [], vat_rate=0.10)  # live rate ignored
-    assert result['boxes']['01'] == 1000.0
-    assert result['boxes']['03'] == 210.0   # from snapshot, not 0.10*1000
+    assert result['boxes']['07'] == 1000.0
+    assert result['boxes']['09'] == 210.0   # from snapshot, not 0.10*1000
 
 
 def test_303_snapshot_zero_rate_excludes_from_base():
@@ -101,8 +101,8 @@ def test_303_snapshot_zero_rate_excludes_from_base():
     invoices = [_inv(500.0, tax_type='eu_b2b', status='issued',
                      snap_vat_rate=0.0, snap_taxable_base=500.0, snap_vat_amount=0.0)]
     result = compute_modelo_303(invoices, [], vat_rate=0.21)
-    assert result['boxes']['01'] == 0.0
-    assert result['boxes']['03'] == 0.0
+    assert result['boxes']['07'] == 0.0
+    assert result['boxes']['09'] == 0.0
 
 
 def test_130_prefers_net_amount_over_gross():
@@ -166,3 +166,14 @@ def test_130_converts_expense_currency():
     result = compute_modelo_130(invoices, expenses, irpf_rate=0.20,
                                convert_expense=convert)
     assert result['boxes']['02'] == 200.0
+
+
+def test_303_output_vat_uses_the_official_21_percent_boxes():
+    """The official 303 numbers the 21 % line [07]/[08]/[09]; [01]-[03] are the
+    4 % line. The draft uses the official numbers (a filed 303 prints 21,00
+    next to [08])."""
+    from modules.tax_es_forms.boxes import MODELO_303_BOXES
+    boxes = compute_modelo_303([_inv(1000.0)], [], vat_rate=0.21)['boxes']
+    assert (boxes['07'], boxes['09']) == (1000.0, 210.0)
+    assert '01' not in boxes and '03' not in boxes
+    assert '21 %' in MODELO_303_BOXES['07'] and '01' not in MODELO_303_BOXES
