@@ -292,22 +292,39 @@ class TaxEsIrpfModule(BaseModule):
         says so) instead of deducted in full; its yearly share is added for
         assets bought this year or earlier.
         """
+        return sum(line['amount'] for line in self._expense_lines(year, profile, end_dt))
+
+    def _expense_lines(self, year, profile, end_dt):
+        """The expenses behind Modelo 130 box 02, one line each: an expense
+        of the year in full, or this year's depreciation of an asset.
+        [{'date', 'category', 'description', 'supplier', 'kind' ('expense' or
+        'depreciation'), 'amount', and for depreciation 'cost', 'rate'}]."""
         start_dt = self._year_start(year, profile)
         quarter = (end_dt.month - 1) // 3 + 1
         depreciate, rate, threshold, categories = self._equipment_rule(profile)
 
-        total = 0.0
+        lines = []
         for exp in self.Expense.query.filter(
-                self.Expense.expense_date <= end_dt).all():
+                self.Expense.expense_date <= end_dt).order_by(self.Expense.expense_date).all():
             net_eur = self._expense_net_eur(exp)
             is_asset = (depreciate and net_eur >= threshold
                         and (exp.category or '').strip().lower() in categories)
             if is_asset:
-                total += depreciation_in_year(net_eur, exp.expense_date,
-                                              year, quarter, rate)
+                amount = depreciation_in_year(net_eur, exp.expense_date, year, quarter, rate)
+                extra = {'kind': 'depreciation', 'cost': round(net_eur, 2), 'rate': rate}
             elif exp.expense_date >= start_dt:
-                total += net_eur
-        return total
+                amount, extra = net_eur, {'kind': 'expense'}
+            else:
+                continue
+            if not amount:
+                continue
+            contractor = getattr(exp, 'contractor', None)
+            lines.append({
+                'date': exp.expense_date.isoformat(), 'category': exp.category or '—',
+                'description': (exp.description or '').splitlines()[0][:80] if exp.description else '',
+                'supplier': getattr(contractor, 'name', None) or '',
+                'amount': amount, **extra})
+        return lines
 
     def _sum_reta(self, year, profile, end_dt):
         """RETA (Seguridad Social) paid in window — 100% deductible expense.
@@ -315,18 +332,26 @@ class TaxEsIrpfModule(BaseModule):
         Falls back to Settings.social_security_monthly × elapsed months when no
         SSPayment rows exist. Mutualidad alternativa caps the deduction.
         """
+        return self._reta_detail(year, profile, end_dt)['amount']
+
+    def _reta_detail(self, year, profile, end_dt):
+        """{'amount', 'source' ('payments' or 'settings'), 'monthly', 'months',
+        'capped'}: where the RETA figure of box 02 comes from."""
         start_dt = self._year_start(year, profile)
         reta = self._ss_paid(start_dt, end_dt)
+        detail = {'source': 'payments', 'monthly': None, 'months': None, 'capped': False}
         if reta == 0:
             settings = self.core.get_settings()
             monthly = getattr(settings, 'social_security_monthly', 0.0) or 0.0
-            months = end_dt.month - start_dt.month + 1
-            reta = monthly * max(0, months)
+            months = max(0, end_dt.month - start_dt.month + 1)
+            reta = monthly * months
+            detail.update(source='settings', monthly=monthly, months=months)
         if profile.uses_mutualidad:
             cap = self._params(year)['reta'].get('mutualidad_deduction_cap')
-            if cap is not None:
-                reta = min(reta, cap)
-        return reta
+            if cap is not None and reta > cap:
+                reta, detail['capped'] = cap, True
+        detail['amount'] = reta
+        return detail
 
     def _to_eur(self, amount, currency, when):
         if not amount or currency == 'EUR':
@@ -370,17 +395,7 @@ class TaxEsIrpfModule(BaseModule):
         expenses = self._sum_expenses(year, profile, end_dt)
         expenses += self._sum_reta(year, profile, end_dt)
 
-        # Box 05: what was paid in earlier quarters — the filed box 07 when
-        # the AEAT PDF is in Tax Forms, else this module's own estimate.
-        prior = 0.0
-        for q in range(1, quarter):
-            filed = self._filed_boxes('130', year, q)
-            if '07' in filed:
-                prior += max(0.0, filed['07'])
-                continue
-            prior_input = self._build_modelo130_input(year, q, profile)
-            prior += self._engine(year).compute_modelo130(
-                prior_input).summary['modelo130_due']
+        prior = sum(row['amount'] for row in self._prior_payments(year, quarter, profile))
 
         return Modelo130Input(
             year=year,
@@ -429,6 +444,57 @@ class TaxEsIrpfModule(BaseModule):
             spouse_pagos_fraccionados=profile.spouse_pagos_fraccionados or 0.0,
         )
 
+    def _prior_payments(self, year, quarter, profile):
+        """Box 05, quarter by quarter: what was paid in each earlier quarter —
+        the filed box 07 when the AEAT PDF is in Tax Forms, else this module's
+        own estimate. [{'quarter', 'amount', 'source' ('filed' or 'estimate')}]."""
+        rows = []
+        for q in range(1, quarter):
+            filed = self._filed_boxes('130', year, q)
+            if '07' in filed:
+                rows.append({'quarter': q, 'amount': max(0.0, filed['07']), 'source': 'filed'})
+                continue
+            prior_input = self._build_modelo130_input(year, q, profile)
+            rows.append({'quarter': q, 'source': 'estimate',
+                         'amount': self._engine(year).compute_modelo130(
+                             prior_input).summary['modelo130_due']})
+        return rows
+
+    def modelo130_breakdown(self, year, quarter, boxes=None):
+        """How boxes 02 and 05 of one quarter are made up: expenses by
+        category (with their lines), equipment depreciation, RETA, the 5 %
+        difícil justificación when the profile applies it, and each earlier
+        quarter's payment with its source. Amounts in EUR, rounded."""
+        profile = self._get_profile()
+        month, day = _QUARTER_END[quarter]
+        end_dt = date(year, month, day)
+        boxes = boxes or self.modelo130_boxes(year, quarter)[0]
+        lines = self._expense_lines(year, profile, end_dt)
+        groups = {}
+        for line in lines:
+            if line['kind'] != 'expense':
+                continue
+            g = groups.setdefault(line['category'], {'category': line['category'],
+                                                    'amount': 0.0, 'lines': []})
+            g['amount'] += line['amount']
+            g['lines'].append({**line, 'amount': round(line['amount'], 2)})
+        expenses = [dict(g, amount=round(g['amount'], 2))
+                    for g in sorted(groups.values(), key=lambda g: -g['amount'])]
+        depreciation = [{**line, 'amount': round(line['amount'], 2)}
+                        for line in lines if line['kind'] == 'depreciation']
+        reta = self._reta_detail(year, profile, end_dt)
+        reta['amount'] = round(reta['amount'], 2)
+        counted = (sum(g['amount'] for g in expenses) + sum(d['amount'] for d in depreciation)
+                   + reta['amount'])
+        dificil = round(boxes['02'] - counted, 2)
+        prior = [dict(r, amount=round(r['amount'], 2))
+                 for r in self._prior_payments(year, quarter, profile)]
+        return {
+            'expenses': expenses, 'depreciation': depreciation, 'reta': reta,
+            'dificil_justificacion': dificil if abs(dificil) >= 0.01 else 0.0,
+            'prior_payments': prior,
+        }
+
     def modelo130_boxes(self, year, quarter):
         """Modelo 130 boxes 01–07 for one quarter (used by Tax Drafts)."""
         profile = self._get_profile()
@@ -466,7 +532,8 @@ class TaxEsIrpfModule(BaseModule):
 
     def _modelo130(self, year, quarter):
         boxes, rate = self.modelo130_boxes(year, quarter)
-        return {'boxes': boxes, 'rate': rate}
+        return {'boxes': boxes, 'rate': rate,
+                'breakdown': self.modelo130_breakdown(year, quarter, boxes)}
 
     # ── Registry functions ───────────────────────────────────────────────
 
@@ -479,7 +546,11 @@ class TaxEsIrpfModule(BaseModule):
                      'Modelo 130 (IRPF) boxes 01-07 for one quarter, year to date, '
                      'from the IRPF profile.',
                      params=(year, quarter),
-                     returns='{"boxes": {"01".."07": amount}, "rate": fraction}'),
+                     returns='{"boxes": {"01".."07": amount}, "rate": fraction, '
+                             '"breakdown": {"expenses": [{category, amount, lines}], '
+                             '"depreciation": [line], "reta": {amount, source, monthly, '
+                             'months, capped}, "dificil_justificacion": amount, '
+                             '"prior_payments": [{quarter, amount, source}]}}'),
             Function('tax.modelo100_result', self.modelo100_result,
                      'Modelo 100 (renta) estimate for the year so far. Fails with '
                      'ValueError for a foral region (not modelled).',

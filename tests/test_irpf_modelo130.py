@@ -124,3 +124,56 @@ def test_tax_drafts_shows_the_irpf_figures(year_2026, loaded_modules):
     draft = drafts._draft_130(2026, 3)
     assert draft['meta']['source'] == 'tax_es_irpf'
     assert draft['boxes'] == year_2026.modelo130_boxes(2026, 3)[0]
+
+
+# --- How boxes 02 and 05 are made up ----------------------------------------- #
+
+def test_breakdown_adds_up_to_box_02(year_2026):
+    boxes, _ = year_2026.modelo130_boxes(2026, 3)
+    bd = year_2026.modelo130_breakdown(2026, 3, boxes)
+    by_category = {g['category']: g for g in bd['expenses']}
+    assert by_category['Services']['amount'] == pytest.approx(118.0)       # 100 + 18
+    assert by_category['Equipment']['amount'] == pytest.approx(40.0)      # under 300: in full
+    assert all(l['amount'] for g in bd['expenses'] for l in g['lines'])   # non-deductible out
+    assert sorted(d['amount'] for d in bd['depreciation']) == pytest.approx([62.5, 100.0])
+    assert {d['cost'] for d in bd['depreciation']} == {800.0, 1000.0}
+    assert bd['reta'] == {'amount': 3600.0, 'source': 'payments', 'monthly': None,
+                          'months': None, 'capped': False}
+    assert bd['dificil_justificacion'] == 0.0
+    total = (sum(g['amount'] for g in bd['expenses']) + sum(d['amount'] for d in bd['depreciation'])
+             + bd['reta']['amount'] + bd['dificil_justificacion'])
+    assert total == pytest.approx(boxes['02'])
+
+
+def test_breakdown_shows_where_box_05_comes_from(year_2026):
+    boxes, _ = year_2026.modelo130_boxes(2026, 3)
+    bd = year_2026.modelo130_breakdown(2026, 3, boxes)
+    assert [(p['quarter'], p['source']) for p in bd['prior_payments']] == \
+        [(1, 'estimate'), (2, 'estimate')]
+    assert sum(p['amount'] for p in bd['prior_payments']) == pytest.approx(boxes['05'])
+
+
+def test_breakdown_names_the_dificil_justificacion(year_2026):
+    profile = year_2026._get_profile()
+    profile.apply_dificil_justif_m130 = True
+    try:
+        boxes, _ = year_2026.modelo130_boxes(2026, 3)
+        bd = year_2026.modelo130_breakdown(2026, 3, boxes)
+        assert bd['dificil_justificacion'] > 0
+        total = (sum(g['amount'] for g in bd['expenses'])
+                 + sum(d['amount'] for d in bd['depreciation'])
+                 + bd['reta']['amount'] + bd['dificil_justificacion'])
+        assert total == pytest.approx(boxes['02'])
+    finally:
+        profile.apply_dificil_justif_m130 = False
+
+
+def test_draft_130_page_shows_the_breakdown(year_2026, loaded_modules, client):
+    draft = loaded_modules.modules['tax_es_forms']._draft_130(2026, 3)
+    assert draft['breakdown']['reta']['source'] == 'payments'
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/tax-forms-draft/130/2026/3').get_data(as_text=True)
+    assert 'How boxes 02 and 05 are made up' in html
+    assert 'Depreciation:' in html and 'payments recorded in Tax Management' in html
+    assert 'estimated by the app' in html and 'upload the filed 1T Modelo 130' in html
