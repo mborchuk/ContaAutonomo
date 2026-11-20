@@ -352,3 +352,22 @@ def test_api_expenses_answer_404_without_an_expenses_module(loaded_modules, app,
         with pytest.raises(Exception) as err:
             api._list_expenses()
     assert err.value.status == 404
+
+
+def test_page_shows_that_the_assistant_is_thinking(la, text_ai, client):
+    """The question can take a minute: the page has a hidden "thinking" note
+    with a timer that its script shows on submit, and the answer of the last
+    question sits in a block the script dims meanwhile."""
+    text_ai()
+    with client.session_transaction() as sess:
+        sess['authenticated'] = True
+    html = client.get('/assistant/').get_data(as_text=True)
+    assert 'id="assistant-thinking"' in html and 'hidden' in html.split('id="assistant-thinking"')[1][:80]
+    assert 'role="status"' in html and 'id="assistant-elapsed"' in html
+    assert 'id="assistant-form"' in html and 'id="assistant-ask"' in html
+    assert 'id="assistant-result"' in html and "button.textContent = 'Thinking…'" in html
+    # The page carries its own styles; the core stylesheet does not know the module.
+    assert '.assistant-thinking {' in html
+    from pathlib import Path
+    core_css = (Path(__file__).resolve().parent.parent / 'static' / 'css' / 'app.css').read_text()
+    assert 'assistant' not in core_css.lower()
