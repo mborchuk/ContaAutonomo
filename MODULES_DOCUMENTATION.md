@@ -732,6 +732,8 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
 Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
 fraccionado), computed from data already in the app. Estimate only — every page
 carries a non-dismissible "not tax advice" banner.
+Invoice amounts are added in cents (`invoice_vat.to_cents`, half up), each
+invoice rounded first, as the books do; the IRPF Estimator does the same.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
