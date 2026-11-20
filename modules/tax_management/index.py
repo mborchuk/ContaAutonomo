@@ -129,7 +129,7 @@ class TaxManagementModule(BaseModule):
             amount = db.Column(db.Float)
             filed_date = db.Column(db.Date)
             payment_date = db.Column(db.Date)
-            # Boxes read from the filed AEAT PDF, JSON {"01": 51789.62, ...}.
+            # Boxes read from the filed AEAT PDF, JSON {"01": 12345.67, ...}.
             filed_boxes = db.Column(db.Text)
 
             @property
@@ -316,7 +316,18 @@ class TaxManagementModule(BaseModule):
                              current_year=current_year,
                              form_types=form_types,
                              ss_by_year=ss_by_year,
-                             ss_years=ss_years)
+                             ss_years=ss_years,
+                             unread_forms=self._unread_filed_forms(all_forms))
+
+    @staticmethod
+    def _unread_filed_forms(forms):
+        """Uploaded Modelo 130/303/349 PDFs whose boxes were never read (for
+        example uploaded before boxes were read on upload). The drafts then
+        estimate what was filed (130 box 05, 303 box 110)."""
+        return [f for f in forms
+                if f.form_type in ('130', '303', '349') and f.file_path
+                and (f.original_filename or '').lower().endswith('.pdf')
+                and not f.filed_boxes]
 
     def _upload_tax_form(self):
         """Upload a tax form"""

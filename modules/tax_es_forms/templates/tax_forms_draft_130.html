@@ -58,7 +58,75 @@
     quarters show 0.00 — Modelo 130 has no refund at box 07.
 </p>
 
+{% if draft.breakdown %}{% set bd = draft.breakdown %}
+<section class="card breakdown-130" aria-labelledby="breakdown-130-title">
+    <div class="card-header" id="breakdown-130-title">How boxes 02 and 05 are made up</div>
+    <div class="card-body">
+        <p class="fine-print">Year to date, as the IRPF Estimator counts them. Compare these lines
+            with your gestor's expense ledger (libro registro de gastos).</p>
+        <div class="table-wrap">
+        <table class="data-table">
+            <caption class="sr-only">Box 02, deductible expenses</caption>
+            <thead><tr><th>Box 02</th><th class="text-right">EUR</th></tr></thead>
+            <tbody>
+            {% for g in bd.expenses %}
+            <tr><td>
+                <details>
+                    <summary>{{ g.category }} — {{ g.lines | length }} expense(s), without VAT</summary>
+                    <ul class="breakdown-lines">
+                    {% for l in g.lines %}
+                        <li>{{ l.date[8:10] }}/{{ l.date[5:7] }}/{{ l.date[:4] }} · {{ l.supplier or '—' }} · {{ l.description }} — {{ "%.2f"|format(l.amount) }}</li>
+                    {% endfor %}
+                    </ul>
+                </details>
+            </td><td class="text-right">{{ "%.2f"|format(g.amount) }}</td></tr>
+            {% endfor %}
+            {% for d in bd.depreciation %}
+            <tr><td>Depreciation: {{ d.supplier or d.category }} · {{ d.description }}
+                ({{ "%.2f"|format(d.cost) }} bought {{ d.date[8:10] }}/{{ d.date[5:7] }}/{{ d.date[:4] }},
+                {{ "%g"|format(d.rate) }} % a year)</td>
+                <td class="text-right">{{ "%.2f"|format(d.amount) }}</td></tr>
+            {% endfor %}
+            <tr><td>Social Security (RETA):
+                {% if bd.reta.source == 'payments' %}payments recorded in Tax Management
+                {% else %}no payments recorded — Settings monthly amount {{ "%.2f"|format(bd.reta.monthly or 0) }} × {{ bd.reta.months }} month(s){% endif %}
+                {% if bd.reta.capped %}(capped: mutualidad){% endif %}</td>
+                <td class="text-right">{{ "%.2f"|format(bd.reta.amount) }}</td></tr>
+            {% if bd.dificil_justificacion %}
+            <tr><td>Gastos de difícil justificación (5 % of the net, applied in Settings → IRPF)</td>
+                <td class="text-right">{{ "%.2f"|format(bd.dificil_justificacion) }}</td></tr>
+            {% endif %}
+            </tbody>
+            <tfoot><tr class="row-total"><td>Box 02</td>
+                <td class="text-right">{{ "%.2f"|format(draft.boxes['02']) }}</td></tr></tfoot>
+        </table>
+        </div>
+        {% if bd.prior_payments %}
+        <div class="table-wrap">
+        <table class="data-table">
+            <caption class="sr-only">Box 05, paid in earlier quarters</caption>
+            <thead><tr><th>Box 05</th><th class="text-right">EUR</th></tr></thead>
+            <tbody>
+            {% for p in bd.prior_payments %}
+            <tr><td>{{ p.quarter }}T {{ draft.year }} —
+                {% if p.source == 'filed' %}box 07 of the filed Modelo 130 (Tax Forms)
+                {% else %}<strong>estimated by the app</strong>: no boxes read from a filed {{ p.quarter }}T Modelo 130 — in Tax Forms, upload it, or press <em>Read filed boxes</em> if it is already there{% endif %}</td>
+                <td class="text-right">{{ "%.2f"|format(p.amount) }}</td></tr>
+            {% endfor %}
+            </tbody>
+            <tfoot><tr class="row-total"><td>Box 05</td>
+                <td class="text-right">{{ "%.2f"|format(draft.boxes['05']) }}</td></tr></tfoot>
+        </table>
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
 <style>
+.breakdown-130 { margin-top: var(--space-5); }
+.breakdown-130 .data-table + .table-wrap, .breakdown-130 .table-wrap + .table-wrap { margin-top: var(--space-4); }
+.breakdown-lines { margin: var(--space-2) 0 0; padding-left: var(--space-5); font-size: var(--fs-sm); }
 .copy-btn { background: none; border: none; cursor: pointer; color: var(--color-text-muted); font-size: 14px; margin-left: 6px; }
 .copy-btn:hover { color: var(--color-primary); }
 @media print {

@@ -27,7 +27,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Not yet validated against the official systems**: the AEAT import files
   (Modelo 303, 130, 349, 390, 347). Import each once in the AEAT Sede before
   filing with it.
-- The REST API (`/api/v1`) is unchanged.
+- The REST API (`/api/v1`) is unchanged, except that the Modelo 303 draft
+  reports output VAT in boxes `07`/`09` instead of `01`/`03`.
 
 ### Changes for module authors
 
@@ -48,6 +49,13 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   instead of dashboard panels.
 
 ### Added
+- **Reverse charge must match the supplier's country**: an expense marked
+  reverse charge for "another EU country" whose supplier is outside the EU
+  (for example a US company), the opposite, or either for a Spanish supplier
+  gets a "Check" notice on the expense (a new deduction-check rule, LIVA arts.
+  15, 69, 84.Uno.2º) and is listed on the Modelo 303 draft. The region comes
+  from the supplier's country or its VAT number prefix; an unknown supplier
+  gets no notice.
 - **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
   messages; opened, it lists them, each with **Mark as read**, which hides it
   without leaving the page. The **Messages** page (System → Messages) keeps the history:
@@ -171,8 +179,26 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 - **Verifactu and e-invoicing dates** (#134): obligation dates with their BOE
   source on the Verifactu page; the October 2028 date is shown as announced,
   not yet in force.
+- **How Modelo 130 boxes 02 and 05 are made up**: the Modelo 130 draft page
+  shows box 02 by expense category (each category opens to its expenses:
+  date, supplier, description, amount without VAT), each asset's
+  depreciation of the year, Social Security with its source (payments
+  recorded, or the Settings monthly amount × months) and the 5 % difícil
+  justificación when it is applied; and box 05 by earlier quarter, from the
+  filed return or estimated by the app, saying what to do in Tax Forms. It
+  makes a comparison with the gestor's expense ledger line by line. Tax
+  Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
+  (uploads made before boxes were read on upload) and names them; Read filed
+  boxes reads them.
 
 ### Changed
+
+### Changed
+- **Ledger Assistant shows that it is thinking**: after **Ask**, the button
+  reads "Thinking…" and cannot be pressed twice, a note with a spinner says the
+  assistant is looking up records and asking the AI provider, a timer counts
+  the seconds, and after a minute the note says a CLI agent can take a few
+  minutes. The previous answer is dimmed until the new one arrives.
 - **Invoice designer blocks through the registry**: the Invoice Designer reads
   the blocks other modules add to its layouts (the Verifactu QR) through the new
   core registry function `invoice.list_blocks` instead of calling the module
@@ -217,8 +243,24 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
   agents for text); it reads documents only, with its own provider settings.
   Enable the AI Agent for the Ledger Assistant — its page says so until then.
+- **Modelo 303 draft uses the official box numbers**: output VAT at 21 % is
+  in boxes **07/09**, as on the official form (the draft page showed it as
+  01/03, which are the 4 % boxes; a filed return prints 21,00 next to [08]).
+  The 303 and 390 draft pages, the AEAT file and the `tax.draft_303`
+  function and `GET /api/v1/m/tax_es_forms/draft/303/…` use `07`/`09`; the 390
+  casillas 05/06 and 99 sum them.
 
 ### Fixed
+- **Modelo 303 AEAT file rejected by the Sede**: importing a 1T–3T file failed
+  with "El fichero se rechazó" (E010170, E010180) because the two prorrata
+  especial flags were blank; they take only 1 or 2 (E010171, E010181) and are
+  now `2` (no). The rate casilla [169] was zero where the Sede admits only
+  0,50 (E010541): the 2026 layout now carries that fixed rate like the other
+  rate casillas. The generator refuses a blank in any numeric field, and
+  tests check every numeric field of the 303, 130 and 390 files and every 303
+  rate casilla. After these fixes a 3T 2026 file imported in the Sede
+  with "No existen errores"; the Modelo 130 file of the same quarter
+  imported without errors as it was.
 - **Used invoice number**: creating an invoice with a number that already
   exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
   The create and edit forms now say under the Invoice Number field, before
@@ -251,6 +293,12 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   the API key can use ("Refresh list", from the vendors' `/v1/models`). OpenAI
   requests send `max_completion_tokens` and no `temperature`, which current
   models require. Provider errors say what to fix (model, key, rate limit).
+- **Tax figures add each invoice in cents**: an invoice converted from
+  another currency stores its EUR amount with many decimals, and the tax
+  figures added the raw values, so Modelo 130 box 01 came out one cent above
+  the books. `invoice_vat` now rounds every invoice amount to the cent (half
+  up) before it is added: Modelo 303, 130, 390, 347, Reports and the IRPF
+  Estimator.
 
 ## [1.7.0] - 2026-11-12
 
