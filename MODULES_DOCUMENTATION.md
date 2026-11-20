@@ -725,6 +725,8 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
 Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
 fraccionado), computed from data already in the app. Estimate only — every page
 carries a non-dismissible "not tax advice" banner.
+Invoice amounts are added in cents (`invoice_vat.to_cents`, half up), each
+invoice rounded first, as the books do; the IRPF Estimator does the same.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
@@ -1280,9 +1282,7 @@ write its records there with these columns filled: `expense_date`, `amount`,
 
 No module imports another module's code; a test fails if one does. Shared
 rules on core data live in the core: `invoice_vat.py` (output VAT of one
-invoice, from its issue snapshot; every amount rounded to the cent, half up,
-so tax figures add per-invoice cents as the books do) is used by Spanish Tax
-Forms, Reports and the IRPF Estimator.
+invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
 `ApiError` is in the core (`from api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 
