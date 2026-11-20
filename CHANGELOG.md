@@ -219,6 +219,12 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   Enable the AI Agent for the Ledger Assistant — its page says so until then.
 
 ### Fixed
+- **Modelo 303 AEAT file rejected by the Sede**: importing a 1T–3T file failed
+  with "El fichero se rechazó" (E010170, E010180) because the two prorrata
+  especial flags were blank, and those fields take digits only. They are now
+  `0` before 4T and `2` (no) in 4T; the generator refuses a blank in any
+  numeric field, and tests check every numeric field of the 303, 130 and 390
+  files.
 - **Used invoice number**: creating an invoice with a number that already
   exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
   The create and edit forms now say under the Invoice Number field, before

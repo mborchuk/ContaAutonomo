@@ -139,7 +139,9 @@ def load_layout(model, year):
 def render_page(fields, values=None, boxes=None, used=None):
     """One page record. `values` fills fields by number, `boxes` by casilla
     (the first field carrying that casilla in the model); constants come
-    from the layout; anything else is blank (text) or zero (numbers)."""
+    from the layout; anything else is blank (text) or zero (numbers). A
+    numeric field never holds a blank: the Sede rejects the whole file
+    ("Caracteres no válidos")."""
     values = values or {}
     boxes = boxes or {}
     used = used if used is not None else set()
@@ -153,7 +155,9 @@ def render_page(fields, values=None, boxes=None, used=None):
             if not isinstance(v, str):
                 s = amount(v, length, typ == 'N')
             elif not v.strip():
-                s = ' ' * length          # a flag left blank on purpose
+                if numeric:
+                    raise ValueError(f'field {n} is numeric and cannot be blank')
+                s = ' ' * length          # a text flag left blank on purpose
             elif numeric:
                 s = digits(v, length)
             else:
@@ -203,7 +207,9 @@ def modelo_303(draft, settings):
     page1 = render_page(layout['pages']['01'], {
         6: kind, 7: number, 8: surname_first(name), 9: str(year), 10: period,
         11: '2', 12: '2', 13: '3', 14: '2', 15: '2', 16: '2',
-        17: '2' if last else ' ', 18: '2' if last else ' ', 19: '2',
+        # Prorrata especial: opted for or revoked only in the year's last
+        # return, so 2 (no) in 4T and 0 before, like 23 and 24.
+        17: '2' if last else '0', 18: '2' if last else '0', 19: '2',
         22: '2', 23: '2' if last else '0', 24: '1' if last else '0', 25: '0',
     }, {official: b.get(app, 0.0) for app, official in _303_PAGE1.items()})
     result_general = b.get('46', 0.0)
