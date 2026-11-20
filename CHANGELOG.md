@@ -5,6 +5,48 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-20
+
+### Upgrading to 2.0.0
+
+- **From 1.7.0** nothing is needed before the upgrade: the database is updated
+  on the first start (new tables such as `message` and `ai_agent_config`, and
+  the column `invoice.pdf_generated`). Back up first and keep the same
+  `SECRET_KEY`, `BACKUP_KEY`, `CREDENTIALS_KEY` and `VERIFACTU_KEY`.
+- **From a release older than 1.7.0**, add `VERIFACTU_KEY` and `CREDENTIALS_KEY`
+  to `.env` before the upgrade and start the first time with the same
+  `SECRET_KEY`, so the Verifactu records are re-signed with the new key; from a
+  release older than 1.6.0, also add `BACKUP_KEY` and run one Gunicorn worker.
+- **New modules start switched off**: AI Agent, Ledger Assistant and Tax
+  Provision (Settings → Modules). The Ledger Assistant needs the AI Agent to
+  answer; when first enabled, the AI Agent copies the AI Parser's provider
+  settings and keys once. CLI agents run only with `AI_AGENT_ALLOW_CLI=1` or
+  `AI_PARSER_ALLOW_CLI=1`.
+- **Dashboard**: the Document Alerts and Fiscal Deadlines panels are gone; their
+  alerts and deadlines are messages in the 🔔 bell (top right).
+- **Not yet validated against the official systems**: the AEAT import files
+  (Modelo 303, 130, 349, 390, 347). Import each once in the AEAT Sede before
+  filing with it.
+- The REST API (`/api/v1`) is unchanged.
+
+### Changes for module authors
+
+These make 2.0.0 a major version; a module written for 1.x needs them:
+
+- Modules do not import each other or reach into another module: they call
+  registry functions (`self.core.functions.call(name, ...)`) and declare their
+  own in `get_functions()`. The test suite refuses new imports.
+- `ai.complete_text` and `ai.text_status` come from the AI Agent, no longer
+  from the AI Parser.
+- Invoice PDFs are built by the core function `invoice.render_pdf`; only
+  templates listed by `get_invoice_templates()` are used, and a module template
+  may carry its own `render` callable. The Invoice Designer reads module blocks
+  through `invoice.list_blocks`.
+- Navigation is a left sidebar: `nav_items` take `group` and `order`; a module
+  can add a top-bar widget with `get_header_widgets()`.
+- Alerts for the owner go to the message center through `messages.post`
+  instead of dashboard panels.
+
 ### Added
 - **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
   messages; opened, it lists them, each with **Mark as read**, which hides it
@@ -129,6 +171,90 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Verifactu and e-invoicing dates** (#134): obligation dates with their BOE
   source on the Verifactu page; the October 2028 date is shown as announced,
   not yet in force.
+
+### Changed
+- **Invoice designer blocks through the registry**: the Invoice Designer reads
+  the blocks other modules add to its layouts (the Verifactu QR) through the new
+  core registry function `invoice.list_blocks` instead of calling the module
+  manager directly. Modules still add blocks with `get_invoice_blocks()`; what
+  the designer shows and prints is unchanged.
+- **One code path for invoice PDFs**: the new-invoice PDF, the PDF download and
+  the PDF preview each had their own copy of "pick the template from
+  Settings, build the PDF, fall back to the default". They now call the core
+  registry function `invoice.render_pdf` (`invoice_pdf.py`), and the Settings
+  → General "Invoice PDF Template" list comes from `invoice.list_pdf_templates`;
+  modules can call both. Only a listed template is used: a template name that
+  is not in the list no longer loads `invoice_templates/<name>.py` from the
+  path the name gives. The new-invoice PDF now also passes through the modules'
+  PDF filters (the Verifactu QR is added to issued invoices only, so drafts look
+  the same). A missing template on download shows the same warning for core
+  and module templates.
+- **Document expiry alerts moved to the message center**: the Documents module
+  no longer draws a "Document Alerts" panel on the dashboard. A document that
+  expires within 30 days, or expired in the last 30 days, gets one message in
+  the top-bar bell with a link to it (a daily job at 07:30 and the dashboard
+  post them). A read or deleted alert does not come back; a new expiry date
+  gives a new one.
+- **Parsed supplier picks the contractor**: an AI-parsed expense selected a
+  contractor only when its name was exactly the document's, so most suppliers
+  ended up in Notes ("Contractor: Media Markt Saturn S.A. (ESA82037292)"). The
+  form now matches by VAT number first, then by name, ignoring case, accents,
+  punctuation and legal forms (S.L., S.A.U., GmbH, …). It chooses a contractor
+  only when exactly one matches, skips a name match whose VAT number differs,
+  and otherwise names the supplier next to the field and on its own line in
+  Notes.
+- **Fiscal Calendar**: the "📅 Fiscal Deadlines" dashboard panel is gone.
+  Upcoming filing windows (within 60 days, or open now) are messages in the
+  🔔 message center, one per form and period with both dates, posted once by
+  the daily job or when the dashboard opens. The T-14/T-7/T-1 closing
+  reminders are messages too (info, warning, danger), besides the activity log
+  and email.
+- **Tax pages grouped under Taxes**: Tax Forms, Obligations, Tax Drafts, IRPF
+  Estimator, RETA Advisor and Fiscal Calendar now sit together in the Taxes
+  menu (they were spread over System, Taxes and the top level). Verifactu moved
+  to Invoices. System keeps Logs, Scheduled Tasks and Bank Import.
+- **Text questions moved from the AI Parser to the AI Agent**: the AI Parser
+  no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
+  agents for text); it reads documents only, with its own provider settings.
+  Enable the AI Agent for the Ledger Assistant — its page says so until then.
+
+### Fixed
+- **Used invoice number**: creating an invoice with a number that already
+  exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
+  The create and edit forms now say under the Invoice Number field, before
+  sending, that the number is used and by which invoice (customer and date), and
+  the browser blocks Submit until it changes. The server refuses a used number
+  with the same message before it writes anything (no new customer is created).
+  Spaces around the number are removed.
+- **Expense category defaults after an AI parse**: the parsed category was set
+  without the change event, so its defaults were never applied — a parsed fuel
+  receipt ("Vehicle") kept "Deductible %" at 100 instead of 50. The prefill now
+  applies them as choosing the category by hand does: the deductible %, and the
+  category's VAT rate only when the document gave no VAT data (parsed VAT
+  figures are never recomputed).
+- **Ledger Assistant with a CLI agent**: with Claude Code CLI or Kiro CLI
+  selected in the AI Parser, the assistant said the provider "cannot answer
+  questions". The AI Parser now answers `ai.complete_text` with the selected
+  CLI agent too — no tools, an empty temporary directory, the message on
+  stdin. Only Google Document AI cannot answer text.
+- **AI Parser PDF support** (#144): PDFs are sent as documents (Anthropic `document`
+  block, OpenAI `file` part) instead of as images, which the providers
+  rejected; the file type comes from its bytes, and GIF and WebP are accepted.
+  Prompts now cover the Meals, Vehicle and Social Security categories, the
+  supplier's VAT number and country, and reverse charge; a file that is not
+  an invoice or receipt returns 422. The module is split into `catalog.py`,
+  `media.py`, `prompts.py` and `providers.py`.
+- **AI Parser models** (#143): parsing with Anthropic failed with 404 because the
+  default `claude-sonnet-4-20250514` is retired. Defaults are now
+  `claude-sonnet-5-5` and `gpt-6.1-terra`; stored settings on a retired Claude
+  model move to the default on start-up. Settings → AI Parser lists the models
+  the API key can use ("Refresh list", from the vendors' `/v1/models`). OpenAI
+  requests send `max_completion_tokens` and no `temperature`, which current
+  models require. Provider errors say what to fix (model, key, rate limit).
+
+## [1.7.0] - 2026-11-12
+
+### Added
 - **Modelo 390 draft** (#125): annual VAT summary at `/tax-forms-draft/390/<year>`,
   each casilla the sum of the four quarterly 303 drafts; casillas checked
   against the AEAT 2025 instructions.
@@ -149,6 +275,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   specifications in `modules/verifactu/SPEC_COMPARISON.md`. Submission to AEAT
   is not available, so the QR uses the non-VERI*FACTU URL.
 - **Lint and coverage** (#120): `ruff` (`make lint`), coverage in CI.
+
+### Changed
+- **Invoice status only through lifecycle actions** (#91): new invoices are
+  always drafts; the status field is gone from the forms and the API
+  (`POST /invoices/<id>/issue`, `/mark-paid`); annulled invoices are locked.
+- **Dashboard income** (#112) counts every invoice dated in the year except
+  cancelled ones, like the tax drafts (`constants.counts_as_income`).
+- **Dashboard tax deadlines** (#119) come from the Fiscal Calendar module; the
+  core list is removed.
+- **Reports year picker** (#94) lists the current year and every year with data.
+- **Deprecated calls replaced** (#121): `utcnow()` and `Query.get()`; the test
+  run has no warnings.
+- Module comments rewritten in plain English (#122); tests for four modules
+  that had none (#123).
+
+### Fixed
+- Invoices in currencies other than EUR/USD are converted with their own rate,
+  not the USD rate; a missing rate stops the save instead of using 1:1 (#114).
+- The invoice view shows the invoice currency instead of "(USD)" (#113).
+- The backup list no longer offers the live database for download, restore
+  or delete (#92).
+
+### Security
+- **Module settings panels are auto-escaped and never show stored secrets**
+  (#116): passwords, API keys and tokens are write-only fields; the API token
+  is shown once after generation or rotation.
+- **Service credentials encrypted at rest** (#117) with `CREDENTIALS_KEY` (or
+  `instance/credentials.key`); existing values are encrypted on start-up.
+- **Verifactu records signed with a dedicated key** (#93) — `VERIFACTU_KEY` or
+  `instance/verifactu.key` — so rotating `SECRET_KEY` no longer breaks the
+  chain; existing records are re-signed once.
+
+## [1.6.0] - 2026-10-04
+
+Everything up to 1.6.0. Versions 1.6.1 to 1.6.3 have no entries of their own.
+
+### Added
 - **Invoice lifecycle (F2)**: `draft → issued → paid` states with issued-invoice
   immutability. Issuing assigns a per-series sequential number (e.g. `2026/0001`)
   and freezes a fiscal snapshot (VAT rate/amount, taxable base, customer fiscal
@@ -214,62 +377,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `constants.py`, `.env.example`, `Makefile`, `CHANGELOG.md`.
 
 ### Changed
-- **Invoice designer blocks through the registry**: the Invoice Designer reads
-  the blocks other modules add to its layouts (the Verifactu QR) through the new
-  core registry function `invoice.list_blocks` instead of calling the module
-  manager directly. Modules still add blocks with `get_invoice_blocks()`; what
-  the designer shows and prints is unchanged.
-- **One code path for invoice PDFs**: the new-invoice PDF, the PDF download and
-  the PDF preview each had their own copy of "pick the template from
-  Settings, build the PDF, fall back to the default". They now call the core
-  registry function `invoice.render_pdf` (`invoice_pdf.py`), and the Settings
-  → General "Invoice PDF Template" list comes from `invoice.list_pdf_templates`;
-  modules can call both. Only a listed template is used: a template name that
-  is not in the list no longer loads `invoice_templates/<name>.py` from the
-  path the name gives. The new-invoice PDF now also passes through the modules'
-  PDF filters (the Verifactu QR is added to issued invoices only, so drafts look
-  the same). A missing template on download shows the same warning for core
-  and module templates.
-- **Document expiry alerts moved to the message center**: the Documents module
-  no longer draws a "Document Alerts" panel on the dashboard. A document that
-  expires within 30 days, or expired in the last 30 days, gets one message in
-  the top-bar bell with a link to it (a daily job at 07:30 and the dashboard
-  post them). A read or deleted alert does not come back; a new expiry date
-  gives a new one.
-- **Parsed supplier picks the contractor**: an AI-parsed expense selected a
-  contractor only when its name was exactly the document's, so most suppliers
-  ended up in Notes ("Contractor: Media Markt Saturn S.A. (ESA82037292)"). The
-  form now matches by VAT number first, then by name, ignoring case, accents,
-  punctuation and legal forms (S.L., S.A.U., GmbH, …). It chooses a contractor
-  only when exactly one matches, skips a name match whose VAT number differs,
-  and otherwise names the supplier next to the field and on its own line in
-  Notes.
-- **Fiscal Calendar**: the "📅 Fiscal Deadlines" dashboard panel is gone.
-  Upcoming filing windows (within 60 days, or open now) are messages in the
-  🔔 message center, one per form and period with both dates, posted once by
-  the daily job or when the dashboard opens. The T-14/T-7/T-1 closing
-  reminders are messages too (info, warning, danger), besides the activity log
-  and email.
-- **Tax pages grouped under Taxes**: Tax Forms, Obligations, Tax Drafts, IRPF
-  Estimator, RETA Advisor and Fiscal Calendar now sit together in the Taxes
-  menu (they were spread over System, Taxes and the top level). Verifactu moved
-  to Invoices. System keeps Logs, Scheduled Tasks and Bank Import.
-- **Text questions moved from the AI Parser to the AI Agent**: the AI Parser
-  no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
-  agents for text); it reads documents only, with its own provider settings.
-  Enable the AI Agent for the Ledger Assistant — its page says so until then.
-- **Invoice status only through lifecycle actions** (#91): new invoices are
-  always drafts; the status field is gone from the forms and the API
-  (`POST /invoices/<id>/issue`, `/mark-paid`); annulled invoices are locked.
-- **Dashboard income** (#112) counts every invoice dated in the year except
-  cancelled ones, like the tax drafts (`constants.counts_as_income`).
-- **Dashboard tax deadlines** (#119) come from the Fiscal Calendar module; the
-  core list is removed.
-- **Reports year picker** (#94) lists the current year and every year with data.
-- **Deprecated calls replaced** (#121): `utcnow()` and `Query.get()`; the test
-  run has no warnings.
-- Module comments rewritten in plain English (#122); tests for four modules
-  that had none (#123).
 - SECRET_KEY now required in production (hard fail), warns in dev.
 - SQLite: WAL journal + `foreign_keys=ON`; SQLAlchemy `pool_pre_ping`/`pool_recycle`.
 - `MAX_CONTENT_LENGTH` = 50 MB + friendly 413 handling.
@@ -280,54 +387,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - `Content-Security-Policy-Report-Only` header added.
 - Dockerfile: `apt-get upgrade` to clear base-image CVEs.
 
-### Fixed
-- **Used invoice number**: creating an invoice with a number that already
-  exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
-  The create and edit forms now say under the Invoice Number field, before
-  sending, that the number is used and by which invoice (customer and date), and
-  the browser blocks Submit until it changes. The server refuses a used number
-  with the same message before it writes anything (no new customer is created).
-  Spaces around the number are removed.
-- **Expense category defaults after an AI parse**: the parsed category was set
-  without the change event, so its defaults were never applied — a parsed fuel
-  receipt ("Vehicle") kept "Deductible %" at 100 instead of 50. The prefill now
-  applies them as choosing the category by hand does: the deductible %, and the
-  category's VAT rate only when the document gave no VAT data (parsed VAT
-  figures are never recomputed).
-- **Ledger Assistant with a CLI agent**: with Claude Code CLI or Kiro CLI
-  selected in the AI Parser, the assistant said the provider "cannot answer
-  questions". The AI Parser now answers `ai.complete_text` with the selected
-  CLI agent too — no tools, an empty temporary directory, the message on
-  stdin. Only Google Document AI cannot answer text.
-- **AI Parser PDF support** (#144): PDFs are sent as documents (Anthropic `document`
-  block, OpenAI `file` part) instead of as images, which the providers
-  rejected; the file type comes from its bytes, and GIF and WebP are accepted.
-  Prompts now cover the Meals, Vehicle and Social Security categories, the
-  supplier's VAT number and country, and reverse charge; a file that is not
-  an invoice or receipt returns 422. The module is split into `catalog.py`,
-  `media.py`, `prompts.py` and `providers.py`.
-- **AI Parser models** (#143): parsing with Anthropic failed with 404 because the
-  default `claude-sonnet-4-20250514` is retired. Defaults are now
-  `claude-sonnet-5-5` and `gpt-6.1-terra`; stored settings on a retired Claude
-  model move to the default on start-up. Settings → AI Parser lists the models
-  the API key can use ("Refresh list", from the vendors' `/v1/models`). OpenAI
-  requests send `max_completion_tokens` and no `temperature`, which current
-  models require. Provider errors say what to fix (model, key, rate limit).
-- Invoices in currencies other than EUR/USD are converted with their own rate,
-  not the USD rate; a missing rate stops the save instead of using 1:1 (#114).
-- The invoice view shows the invoice currency instead of "(USD)" (#113).
-- The backup list no longer offers the live database for download, restore
-  or delete (#92).
-
 ### Security
-- **Module settings panels are auto-escaped and never show stored secrets**
-  (#116): passwords, API keys and tokens are write-only fields; the API token
-  is shown once after generation or rotation.
-- **Service credentials encrypted at rest** (#117) with `CREDENTIALS_KEY` (or
-  `instance/credentials.key`); existing values are encrypted on start-up.
-- **Verifactu records signed with a dedicated key** (#93) — `VERIFACTU_KEY` or
-  `instance/verifactu.key` — so rotating `SECRET_KEY` no longer breaks the
-  chain; existing records are re-signed once.
 - `delete_invoice` is POST-only + CSRF (was GET).
 - Session cleared before populating identity (session-fixation defense).
 - Failed logins recorded to the activity log.
@@ -335,3 +395,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - Hardened CSRF-error open-redirect to same-origin only.
 - Log-injection sanitization on user-controlled values.
 - `AUTH_CONFIG_PATH` env override; rate limits on backup/restore and AI parse.
+
+[Unreleased]: https://github.com/mborchuk/ContaAutonomo/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/mborchuk/ContaAutonomo/compare/v1.7.0...v2.0.0
+[1.7.0]: https://github.com/mborchuk/ContaAutonomo/compare/v1.6.3...v1.7.0
+[1.6.0]: https://github.com/mborchuk/ContaAutonomo/releases/tag/v1.6.0
