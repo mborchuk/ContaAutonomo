@@ -133,14 +133,27 @@ def _numeric_problems(content, model, year):
 @pytest.mark.parametrize('quarter', [1, 2, 3, 4])
 def test_303_numeric_fields_hold_only_digits(quarter):
     """The Sede rejected a 3T file: fields 17 and 18 (prorrata especial) were
-    blank, and a numeric field takes digits only (E010170, E010180)."""
+    blank, and a numeric field takes digits only (E010170, E010180); they take
+    only 1 or 2 (E010171, E010181)."""
     content, _ = af.modelo_303(dict(_draft_303(**{'01': 1000.0, '03': 210.0, '71': 210.0}),
                                     quarter=quarter), SETTINGS)
     assert _numeric_problems(content, '303', 2026) == []
     layout = af.load_layout('303', 2026)
     p1 = content[content.index('<T30301000'):]
     flags = _cut(p1, _field(layout, '01', n=17)) + _cut(p1, _field(layout, '01', n=18))
-    assert flags == ('22' if quarter == 4 else '00')
+    assert flags == '22'
+    assert _cut(p1, _field(layout, '01', box='169')) == '00050'      # E010541: only 0,5
+
+
+def test_every_303_rate_field_has_its_fixed_rate():
+    """Each "Tipo %" casilla of the 303 holds a fixed rate the Sede checks
+    (E010541: [169] only admits 0,5); the layout must carry it as a constant,
+    also after a rebuild from the AEAT spreadsheet."""
+    layout = af.load_layout('303', 2026)
+    rates = {f[4]: f[5] for fields in layout['pages'].values() for f in fields
+             if 'Tipo %' in (f[6] or '')}
+    assert len(rates) == 11 and all(rates.values()), rates
+    assert rates['169'] == '00050' and rates['08'] == '02100'
 
 
 @pytest.mark.parametrize('quarter', [1, 2, 3, 4])

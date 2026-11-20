@@ -221,10 +221,12 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 ### Fixed
 - **Modelo 303 AEAT file rejected by the Sede**: importing a 1T–3T file failed
   with "El fichero se rechazó" (E010170, E010180) because the two prorrata
-  especial flags were blank, and those fields take digits only. They are now
-  `0` before 4T and `2` (no) in 4T; the generator refuses a blank in any
-  numeric field, and tests check every numeric field of the 303, 130 and 390
-  files.
+  especial flags were blank; they take only 1 or 2 (E010171, E010181) and are
+  now `2` (no). The rate casilla [169] was zero where the Sede admits only
+  0,50 (E010541): the 2026 layout now carries that fixed rate like the other
+  rate casillas. The generator refuses a blank in any numeric field, and
+  tests check every numeric field of the 303, 130 and 390 files and every 303
+  rate casilla.
 - **Used invoice number**: creating an invoice with a number that already
   exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
   The create and edit forms now say under the Invoice Number field, before

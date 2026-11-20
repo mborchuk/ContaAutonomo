@@ -48,11 +48,13 @@ rate 21.00 in [08]. Page 03: [59], [120], [110], [78], [87]; [64] = [66] =
 there is something to pay, `N` at zero, `C` (compensate) when negative —
 change it to `D` in the form to ask for a refund in 4T. Identification flags:
 not foral, no monthly refund register, régimen general only, no criterio de
-caja, no SII; in 4T: files Modelo 390, volume of operations not zero, no
-option for (and no revocation of) the prorrata especial. Flags that apply only
-to the last period are `0` in 1T–3T: a numeric field never holds a blank — the
-Sede rejects the whole file (`FRECH`, "Caracteres no válidos", for example
-E010170 and E010180 on the prorrata especial flags).
+caja, no SII, no option for (and no revocation of) the prorrata especial
+(`2`; these two take only 1 or 2 in every period); in 4T: files Modelo 390,
+volume of operations not zero (`0` in 1T–3T). A numeric field never holds a
+blank — the Sede rejects the whole file (`FRECH`, "Caracteres no válidos").
+Every "Tipo %" casilla carries its fixed rate, also on an empty line ([169]
+only admits 0,50: E010541); the layout holds them as constants, and the [169]
+constant, missed by `build.py`, was added by hand on 2026-11-20.
 
 ### Modelo 130
 
