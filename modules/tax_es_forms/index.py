@@ -264,6 +264,7 @@ class TaxEsFormsModule(BaseModule):
             m130 = functions.call('tax.modelo130_boxes', year=year, quarter=quarter)
             return {
                 'form': '130', 'boxes': m130['boxes'], 'irpf_rate': m130['rate'],
+                'breakdown': m130.get('breakdown'),
                 'labels': self._box_labels(year, '130'), 'year': year, 'quarter': quarter,
                 **self._table_info(year),
                 'meta': {'basis': 'cumulative_ytd', 'source': 'tax_es_irpf'},

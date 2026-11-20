@@ -179,6 +179,19 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 - **Verifactu and e-invoicing dates** (#134): obligation dates with their BOE
   source on the Verifactu page; the October 2028 date is shown as announced,
   not yet in force.
+- **How Modelo 130 boxes 02 and 05 are made up**: the Modelo 130 draft page
+  shows box 02 by expense category (each category opens to its expenses:
+  date, supplier, description, amount without VAT), each asset's
+  depreciation of the year, Social Security with its source (payments
+  recorded, or the Settings monthly amount × months) and the 5 % difícil
+  justificación when it is applied; and box 05 by earlier quarter, from the
+  filed return or estimated by the app, saying what to do in Tax Forms. It
+  makes a comparison with the gestor's expense ledger line by line. Tax
+  Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
+  (uploads made before boxes were read on upload) and names them; Read filed
+  boxes reads them.
+
+### Changed
 
 ### Changed
 - **Ledger Assistant shows that it is thinking**: after **Ask**, the button
