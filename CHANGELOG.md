@@ -27,7 +27,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 - **Not yet validated against the official systems**: the AEAT import files
   (Modelo 303, 130, 349, 390, 347). Import each once in the AEAT Sede before
   filing with it.
-- The REST API (`/api/v1`) is unchanged.
+- The REST API (`/api/v1`) is unchanged, except that the Modelo 303 draft
+  reports output VAT in boxes `07`/`09` instead of `01`/`03`.
 
 ### Changes for module authors
 
@@ -229,8 +230,24 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
   agents for text); it reads documents only, with its own provider settings.
   Enable the AI Agent for the Ledger Assistant — its page says so until then.
+- **Modelo 303 draft uses the official box numbers**: output VAT at 21 % is
+  in boxes **07/09**, as on the official form (the draft page showed it as
+  01/03, which are the 4 % boxes; a filed return prints 21,00 next to [08]).
+  The 303 and 390 draft pages, the AEAT file and the `tax.draft_303`
+  function and `GET /api/v1/m/tax_es_forms/draft/303/…` use `07`/`09`; the 390
+  casillas 05/06 and 99 sum them.
 
 ### Fixed
+- **Modelo 303 AEAT file rejected by the Sede**: importing a 1T–3T file failed
+  with "El fichero se rechazó" (E010170, E010180) because the two prorrata
+  especial flags were blank; they take only 1 or 2 (E010171, E010181) and are
+  now `2` (no). The rate casilla [169] was zero where the Sede admits only
+  0,50 (E010541): the 2026 layout now carries that fixed rate like the other
+  rate casillas. The generator refuses a blank in any numeric field, and
+  tests check every numeric field of the 303, 130 and 390 files and every 303
+  rate casilla. After these fixes a 3T 2026 file imported in the Sede
+  with "No existen errores"; the Modelo 130 file of the same quarter
+  imported without errors as it was.
 - **Used invoice number**: creating an invoice with a number that already
   exists ended in an error page (`UNIQUE constraint failed: invoice.invoice_number`).
   The create and edit forms now say under the Invoice Number field, before

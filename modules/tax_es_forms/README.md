@@ -50,7 +50,9 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   `snap_vat_amount`), so later edits to customers or settings never change a
   past quarter. Legacy and draft invoices fall back to deriving from the
   customer's `tax_type` and the configured VAT rate; `eu_b2b` and `non_eu`
-  customers carry no output VAT.
+  customers carry no output VAT. It goes to boxes **07/09**, the 21 %
+  line of the official form ([01]–[03] are 4 %, [04]–[06] 10 %); the draft
+  uses the official box numbers throughout.
 - *IVA soportado (input VAT)*: per-expense `vat_amount` × `deductible_pct`,
   skipping non-deductible expenses. Legacy expenses without VAT data are
   excluded and counted — the page shows how many, so the user knows the
@@ -104,7 +106,7 @@ fiscal year uses that table and shows a "verify" banner until it is reviewed.
 
 | 390 casilla | From the 303 boxes (sum of Q1–Q4) |
 |-------------|-----------------------------------|
-| 05 / 06 — régimen ordinario 21 % | 01 / 03 |
+| 05 / 06 — régimen ordinario 21 % | 07 / 09 |
 | 551 / 552 — adquisiciones intracomunitarias de servicios 21 % | 10 / 11 |
 | 27 / 28 — otros supuestos de inversión del sujeto pasivo | 12 / 13 |
 | 33 / 34 / 47 — totals | 05+551+27 / 06+552+28 / 34 |
@@ -115,7 +117,7 @@ fiscal year uses that table and shows a "verify" banner until it is reviewed.
 | 64 — suma de deducciones; 65 — resultado (47 − 64) | = Σ 45; = Σ 46 |
 | 85 — compensación aplicada; 86 — resultado liquidación | Σ 78; = Σ 71 |
 | 95 — total a ingresar; 97 — último periodo a compensar | positive 71s; negative Q4 71 |
-| 99 / 103 / 110 / 108 — volumen de operaciones | 01 / 59 / 120 / sum |
+| 99 / 103 / 110 / 108 — volumen de operaciones | 07 / 59 / 120 / sum |
 
 The page lists what is out of scope (other VAT rates, intra-EU goods,
 imports, special regimes, exempt operations, SII taxpayers) and flags invoices

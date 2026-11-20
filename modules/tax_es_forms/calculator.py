@@ -154,8 +154,10 @@ def compute_modelo_303(invoices, expenses, vat_rate, convert_expense=None,
     liquidacion = resultado - applied             # 69 = 71
 
     boxes = {
-        "01": _round2(base_devengado),
-        "03": _round2(cuota_devengado),
+        # Output VAT at the general rate: the official 21 % line [07]/[09]
+        # ([01]-[03] are 4 %, [04]-[06] 10 %).
+        "07": _round2(base_devengado),
+        "09": _round2(cuota_devengado),
         "10": _round2(autoliquidado["eu"][0]),
         "11": _round2(autoliquidado["eu"][1]),
         "12": _round2(autoliquidado["non_eu"][0]),
@@ -302,7 +304,7 @@ def compute_modelo_390(quarterly_303):
         return _round2(sum(q.get(box, 0.0) for q in quarterly_303))
 
     b = {
-        "05": total("01"), "06": total("03"),
+        "05": total("07"), "06": total("09"),
         "551": total("10"), "552": total("11"),
         "27": total("12"), "28": total("13"),
         "48": total("28"), "49": total("29"),
@@ -310,7 +312,7 @@ def compute_modelo_390(quarterly_303):
         "597": total("36"), "598": total("37"),
         "58": total("38"), "59": total("39"),
         "85": total("78"),
-        "99": total("01"), "103": total("59"), "110": total("120"),
+        "99": total("07"), "103": total("59"), "110": total("120"),
     }
     b["33"] = _round2(b["05"] + b["551"] + b["27"])
     b["34"] = _round2(b["06"] + b["552"] + b["28"])
