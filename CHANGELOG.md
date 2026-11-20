@@ -29,7 +29,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   filing with it.
 - The REST API (`/api/v1`) is unchanged, except that the Modelo 303 draft
   reports output VAT in boxes `07`/`09` instead of `01`/`03`.
-- The REST API (`/api/v1`) is unchanged.
 
 ### Changes for module authors
 
@@ -224,7 +223,6 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   no longer declares `ai.complete_text` and `ai.text_status` (nor runs CLI
   agents for text); it reads documents only, with its own provider settings.
   Enable the AI Agent for the Ledger Assistant — its page says so until then.
-
 - **Modelo 303 draft uses the official box numbers**: output VAT at 21 % is
   in boxes **07/09**, as on the official form (the draft page showed it as
   01/03, which are the 4 % boxes; a filed return prints 21,00 next to [08]).
