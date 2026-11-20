@@ -366,3 +366,8 @@ def test_page_shows_that_the_assistant_is_thinking(la, text_ai, client):
     assert 'role="status"' in html and 'id="assistant-elapsed"' in html
     assert 'id="assistant-form"' in html and 'id="assistant-ask"' in html
     assert 'id="assistant-result"' in html and "button.textContent = 'Thinking…'" in html
+    # The page carries its own styles; the core stylesheet does not know the module.
+    assert '.assistant-thinking {' in html
+    from pathlib import Path
+    core_css = (Path(__file__).resolve().parent.parent / 'static' / 'css' / 'app.css').read_text()
+    assert 'assistant' not in core_css.lower()

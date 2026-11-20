@@ -1,5 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Assistant{% endblock %}
+{% block head %}
+{# This page's own styles; the core stylesheet knows nothing of the assistant. #}
+<style>
+.assistant-spinner {
+    display: inline-block;
+    flex: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: assistant-spin .8s linear infinite;
+}
+@keyframes assistant-spin { to { transform: rotate(360deg); } }
+.assistant-thinking {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+.assistant-thinking[hidden] { display: none; }
+.assistant-thinking p { margin: 0; }
+.assistant-stale { opacity: .45; transition: opacity .2s; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>💬 Ledger Assistant</h1>
@@ -25,7 +50,7 @@
         <button type="submit" class="btn btn-primary" id="assistant-ask" {% if missing %}disabled{% endif %}>Ask</button>
         {# Shown while the answer is prepared; the request can take a while. #}
         <div id="assistant-thinking" class="note note-info assistant-thinking" hidden>
-            <span class="spinner" aria-hidden="true"></span>
+            <span class="assistant-spinner" aria-hidden="true"></span>
             <div>
                 <p role="status" aria-live="polite" id="assistant-thinking-text"></p>
                 <p class="fine-print" aria-hidden="true">Waiting <span id="assistant-elapsed">0</span> s</p>
@@ -120,7 +145,7 @@
         button.disabled = false;
         button.textContent = 'Ask';
         question.readOnly = false;
-        previous.classList.remove('is-stale');
+        previous.classList.remove('assistant-stale');
         previous.removeAttribute('aria-busy');
     }
 
@@ -130,7 +155,7 @@
         button.disabled = true;
         button.textContent = 'Thinking…';
         question.readOnly = true;
-        previous.classList.add('is-stale');
+        previous.classList.add('assistant-stale');
         previous.setAttribute('aria-busy', 'true');
         text.textContent = 'Thinking… The assistant is looking up your records and ' +
             'asking the AI provider. This usually takes from a few seconds to a minute.';

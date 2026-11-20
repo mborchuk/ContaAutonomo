@@ -189,28 +189,6 @@ html.js .side-group:not(.is-open) > .side-sublist { display: none; }
     font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
 }
 .msg-badge[hidden] { display: none; }
-/* Busy state: a small spinner and a "thinking" note (Ledger Assistant). */
-.spinner {
-    display: inline-block;
-    flex: none;
-    width: 1.1rem;
-    height: 1.1rem;
-    border: 2px solid var(--color-border);
-    border-top-color: var(--color-primary);
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.assistant-thinking {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-3);
-    margin-top: var(--space-4);
-}
-.assistant-thinking[hidden] { display: none; }
-.assistant-thinking p { margin: 0; }
-.is-stale { opacity: .45; transition: opacity .2s; }
-
 /* Error under a form field (e.g. an invoice number already used). */
 .field-error {
     color: var(--color-danger);
