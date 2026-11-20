@@ -1,5 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Assistant{% endblock %}
+{% block head %}
+{# This page's own styles; the core stylesheet knows nothing of the assistant. #}
+<style>
+.assistant-spinner {
+    display: inline-block;
+    flex: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: assistant-spin .8s linear infinite;
+}
+@keyframes assistant-spin { to { transform: rotate(360deg); } }
+.assistant-thinking {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+}
+.assistant-thinking[hidden] { display: none; }
+.assistant-thinking p { margin: 0; }
+.assistant-stale { opacity: .45; transition: opacity .2s; }
+</style>
+{% endblock %}
 {% block content %}
 <div class="page-header">
     <h1>💬 Ledger Assistant</h1>
@@ -15,17 +40,26 @@
 <div class="note note-warning" role="alert">⚠ {{ missing }}</div>
 {% endif %}
 
-<form method="POST" action="{{ url_for('ledger_assistant.assistant_ask') }}" class="card">
+<form method="POST" action="{{ url_for('ledger_assistant.assistant_ask') }}" class="card" id="assistant-form">
     <div class="card-body">
         <div class="form-group">
             <label for="question">Your question</label>
             <textarea id="question" name="question" rows="3" maxlength="500" required
                       {% if missing %}disabled{% endif %}>{{ result.question if result else '' }}</textarea>
         </div>
-        <button type="submit" class="btn btn-primary" {% if missing %}disabled{% endif %}>Ask</button>
+        <button type="submit" class="btn btn-primary" id="assistant-ask" {% if missing %}disabled{% endif %}>Ask</button>
+        {# Shown while the answer is prepared; the request can take a while. #}
+        <div id="assistant-thinking" class="note note-info assistant-thinking" hidden>
+            <span class="assistant-spinner" aria-hidden="true"></span>
+            <div>
+                <p role="status" aria-live="polite" id="assistant-thinking-text"></p>
+                <p class="fine-print" aria-hidden="true">Waiting <span id="assistant-elapsed">0</span> s</p>
+            </div>
+        </div>
     </div>
 </form>
 
+<div id="assistant-result">
 {% if result %}
     {% for e in result.errors %}<div class="note note-warning">⚠ {{ e }}</div>{% endfor %}
     {% if result.answer %}
@@ -89,4 +123,56 @@
     </details>
     {% endif %}
 {% endif %}
+</div>
+
+<script>
+(function () {
+    // A question takes two calls to the AI provider (which records to read,
+    // then the answer), so the page can wait from seconds to minutes. Say so.
+    const form = document.getElementById('assistant-form');
+    const button = document.getElementById('assistant-ask');
+    const box = document.getElementById('assistant-thinking');
+    const text = document.getElementById('assistant-thinking-text');
+    const elapsed = document.getElementById('assistant-elapsed');
+    const previous = document.getElementById('assistant-result');
+    const question = document.getElementById('question');
+    if (!form || !button || !box) return;
+    let timer = null;
+
+    function reset() {
+        clearInterval(timer);
+        box.hidden = true;
+        button.disabled = false;
+        button.textContent = 'Ask';
+        question.readOnly = false;
+        previous.classList.remove('assistant-stale');
+        previous.removeAttribute('aria-busy');
+    }
+
+    form.addEventListener('submit', function (event) {
+        if (button.disabled) { event.preventDefault(); return; }   // no second request
+        const started = Date.now();
+        button.disabled = true;
+        button.textContent = 'Thinking…';
+        question.readOnly = true;
+        previous.classList.add('assistant-stale');
+        previous.setAttribute('aria-busy', 'true');
+        text.textContent = 'Thinking… The assistant is looking up your records and ' +
+            'asking the AI provider. This usually takes from a few seconds to a minute.';
+        elapsed.textContent = '0';
+        box.hidden = false;
+        timer = setInterval(function () {
+            const seconds = Math.round((Date.now() - started) / 1000);
+            elapsed.textContent = String(seconds);
+            if (seconds === 60) {
+                text.textContent = 'Still working. A CLI agent can take a few minutes; ' +
+                    'the answer appears here when it is ready.';
+            }
+        }, 1000);
+    });
+
+    // Back/forward cache: the page comes back as it was left, still "thinking".
+    window.addEventListener('pageshow', function (event) { if (event.persisted) reset(); });
+})();
+</script>
 {% endblock %}
