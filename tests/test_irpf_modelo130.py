@@ -174,7 +174,7 @@ def test_draft_130_page_shows_the_breakdown(year_2026, loaded_modules, client):
     with client.session_transaction() as sess:
         sess['authenticated'] = True
     html = client.get('/tax-forms-draft/130/2026/3').get_data(as_text=True)
-    assert 'How boxes 02 and 05 are made up' in html
+    assert 'How boxes 01, 02 and 05 are made up' in html
     assert 'Depreciation:' in html and 'payments recorded in Tax Management' in html
     assert 'estimated by the app' in html and 'no boxes read from a filed 1T Modelo 130' in html
     assert 'Read filed boxes' in html
@@ -204,4 +204,35 @@ def test_breakdown_parts_are_cents_and_add_up_exactly(year_2026):
     finally:
         profile.apply_dificil_justif_m130 = False
         db.session.delete(extra)
+        db.session.commit()
+
+
+def test_breakdown_lists_the_invoices_of_box_01(year_2026, loaded_modules, client):
+    """Box 01 by invoice: amount in its own currency, the stored rate and the
+    EUR value in cents; the lines add up to box 01, retentions to box 06."""
+    from app import Invoice, db
+    usd = Invoice(invoice_number='T-USD', client_name='Dollar Synthetic Inc.',
+                  amount_usd=1000.0, amount_eur=909.7525473, exchange_rate=0.9097525473,
+                  currency='USD', invoice_date=date(2026, 9, 10), status='issued',
+                  irpf_retention_pct=15.0)
+    db.session.add(usd)
+    db.session.commit()
+    try:
+        boxes, _ = year_2026.modelo130_boxes(2026, 3)
+        lines = year_2026.modelo130_breakdown(2026, 3, boxes)['income']
+        assert [l['number'] for l in lines] == ['T-1', 'T-2', 'T-3', 'T-USD', 'T-4']  # by date
+        line = next(l for l in lines if l['number'] == 'T-USD')
+        assert (line['currency'], line['amount'], line['eur'], line['retention']) == \
+            ('USD', 1000.0, 909.75, 136.46)
+        assert line['rate'] == pytest.approx(0.9097525473)
+        assert next(l for l in lines if l['number'] == 'T-1')['rate'] is None   # EUR invoice
+        assert round(sum(l['eur'] for l in lines), 2) == boxes['01']
+        assert round(sum(l['retention'] for l in lines), 2) == boxes['06']
+        with client.session_transaction() as sess:
+            sess['authenticated'] = True
+        html = client.get('/tax-forms-draft/130/2026/3').get_data(as_text=True)
+        assert 'Box 01, income' in html and 'T-USD' in html
+        assert '1000.00 USD × 0.909753 = 909.75 EUR' in html and 'retention 136.46 (box 06)' in html
+    finally:
+        db.session.delete(usd)
         db.session.commit()
