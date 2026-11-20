@@ -48,14 +48,6 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   instead of dashboard panels.
 
 ### Added
-- **How Modelo 130 boxes 02 and 05 are made up**: the Modelo 130 draft page
-  shows box 02 by expense category (each category opens to its expenses:
-  date, supplier, description, amount without VAT), each asset's
-  depreciation of the year, Social Security with its source (payments
-  recorded, or the Settings monthly amount × months) and the 5 % difícil
-  justificación when it is applied; and box 05 by earlier quarter, from the
-  filed return or estimated by the app, saying which return to upload. It
-  makes a comparison with the gestor's expense ledger line by line.
 - **Message center**: a 🔔 bell in the top bar (right) shows the number of unread
   messages; opened, it lists them, each with **Mark as read**, which hides it
   without leaving the page. The **Messages** page (System → Messages) keeps the history:
@@ -179,6 +171,14 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 - **Verifactu and e-invoicing dates** (#134): obligation dates with their BOE
   source on the Verifactu page; the October 2028 date is shown as announced,
   not yet in force.
+- **How Modelo 130 boxes 02 and 05 are made up**: the Modelo 130 draft page
+  shows box 02 by expense category (each category opens to its expenses:
+  date, supplier, description, amount without VAT), each asset's
+  depreciation of the year, Social Security with its source (payments
+  recorded, or the Settings monthly amount × months) and the 5 % difícil
+  justificación when it is applied; and box 05 by earlier quarter, from the
+  filed return or estimated by the app, saying which return to upload. It
+  makes a comparison with the gestor's expense ledger line by line.
 
 ### Changed
 - **Invoice designer blocks through the registry**: the Invoice Designer reads
