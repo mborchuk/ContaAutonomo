@@ -7,15 +7,24 @@ derive the VAT from the customer's tax type and the current rate. Pure
 functions, no database queries: the tax modules and Reports pass invoices in.
 """
 import json
+from decimal import ROUND_HALF_UP, Decimal
+
+
+def to_cents(amount):
+    """`amount` rounded to the cent, half up — as the books record it. A
+    converted invoice stores its EUR amount with many decimals (for example 45.1234567);
+    tax figures add the per-invoice cents, never the raw values."""
+    return float(Decimal(str(amount or 0.0)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
 
 def invoice_base_eur(invoice):
     """Taxable base of an invoice in EUR.
 
     In this app the stored invoice amount IS the taxable base (VAT is derived,
-    never added to the total), and amount_eur is always populated.
+    never added to the total), and amount_eur is always populated. Rounded to
+    the cent (`to_cents`).
     """
-    return invoice.amount_eur or 0.0
+    return to_cents(invoice.amount_eur)
 
 
 def customer_tax_type(invoice):
@@ -47,14 +56,13 @@ def invoice_output_vat(invoice, vat_rate):
         # Issued invoice with a frozen snapshot.
         if snap_rate and snap_rate > 0:
             base = getattr(invoice, 'snap_taxable_base', None)
-            if base is None:
-                base = invoice_base_eur(invoice)
-            return base, (getattr(invoice, 'snap_vat_amount', None) or 0.0)
+            base = invoice_base_eur(invoice) if base is None else to_cents(base)
+            return base, to_cents(getattr(invoice, 'snap_vat_amount', None))
         return 0.0, 0.0
     # Legacy / draft: derive from tax_type.
     if customer_tax_type(invoice) == 'standard':
         base = invoice_base_eur(invoice)
-        return base, base * vat_rate
+        return base, to_cents(base * vat_rate)
     return 0.0, 0.0
 
 

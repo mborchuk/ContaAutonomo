@@ -1280,7 +1280,9 @@ write its records there with these columns filled: `expense_date`, `amount`,
 
 No module imports another module's code; a test fails if one does. Shared
 rules on core data live in the core: `invoice_vat.py` (output VAT of one
-invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
+invoice, from its issue snapshot; every amount rounded to the cent, half up,
+so tax figures add per-invoice cents as the books do) is used by Spanish Tax
+Forms, Reports and the IRPF Estimator.
 `ApiError` is in the core (`from api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 

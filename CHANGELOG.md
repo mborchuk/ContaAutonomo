@@ -251,6 +251,12 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   the API key can use ("Refresh list", from the vendors' `/v1/models`). OpenAI
   requests send `max_completion_tokens` and no `temperature`, which current
   models require. Provider errors say what to fix (model, key, rate limit).
+- **Tax figures add each invoice in cents**: an invoice converted from
+  another currency stores its EUR amount with many decimals, and the tax
+  figures added the raw values, so Modelo 130 box 01 came out one cent above
+  the books. `invoice_vat` now rounds every invoice amount to the cent (half
+  up) before it is added: Modelo 303, 130, 390, 347, Reports and the IRPF
+  Estimator.
 
 ## [1.7.0] - 2026-11-12
 

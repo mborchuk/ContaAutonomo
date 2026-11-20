@@ -25,6 +25,7 @@ from flask import Blueprint, render_template, request
 
 from constants import NON_INCOME_INVOICE_STATUSES
 from module_manager import BaseModule
+from invoice_vat import invoice_base_eur, to_cents
 
 from .engine import (
     IrpfEngine,
@@ -250,16 +251,17 @@ class TaxEsIrpfModule(BaseModule):
             self.Invoice.invoice_date >= start_dt,
             self.Invoice.invoice_date <= end_dt,
         ).all()
-        income = sum((inv.amount_eur or 0.0) for inv in invoices)
+        # Each invoice in cents, as in the books (invoice_vat.invoice_base_eur).
+        income = sum(invoice_base_eur(inv) for inv in invoices)
         retenciones = 0.0
         for inv in invoices:
             amount = getattr(inv, 'irpf_retention_amount', None)
             pct = getattr(inv, 'irpf_retention_pct', None)
             if amount:
-                retenciones += amount
+                retenciones += to_cents(amount)
             elif pct:
-                retenciones += (inv.amount_eur or 0.0) * (pct / 100.0)
-        return income, retenciones
+                retenciones += to_cents(invoice_base_eur(inv) * (pct / 100.0))
+        return round(income, 2), round(retenciones, 2)
 
     def _equipment_rule(self, profile):
         """(depreciate?, annual rate %, threshold EUR, category names)."""
