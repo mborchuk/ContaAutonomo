@@ -56,6 +56,14 @@
 </div>
 
 <!-- Tax Forms Table -->
+{% if unread_forms %}
+<div class="note note-warning" role="status">
+    ⚠ {{ unread_forms | length }} uploaded return(s) have no boxes read yet:
+    {% for f in unread_forms %}Modelo {{ f.form_type }} {% if f.quarter %}{{ f.quarter }}T {% endif %}{{ f.year }}{% if not loop.last %}, {% endif %}{% endfor %}.
+    Until they are read, the drafts estimate what was filed (Modelo 130 box 05, Modelo 303
+    box 110). Press <strong>Read filed boxes</strong>.
+</div>
+{% endif %}
 <div class="card">
     <div class="card-header">Uploaded Tax Forms
         <form method="POST" action="{{ url_for('tax_management.tax_forms_read_boxes') }}" style="display: inline; float: right;"

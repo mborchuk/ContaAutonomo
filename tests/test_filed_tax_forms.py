@@ -99,8 +99,11 @@ def test_read_boxes_of_earlier_uploads(tax_forms, client, monkeypatch):
     db.session.commit()
     monkeypatch.setattr(tax_forms.core.storage, 'get',
                         lambda key: (pdf, '303-Q1.pdf'))
+    page = client.get('/tax-forms/').get_data(as_text=True)
+    assert 'have no boxes read yet' in page and 'Modelo 303 1T 2026' in page
     client.post('/tax-forms/read-boxes')
     assert tax_forms.filed_boxes('303', 2026, 1) == {'29': 53.35, '71': -53.35}
+    assert 'have no boxes read yet' not in client.get('/tax-forms/').get_data(as_text=True)
 
 
 def test_upload_for_another_period_stores_no_boxes(tax_forms, client):

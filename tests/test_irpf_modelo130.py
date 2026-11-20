@@ -176,4 +176,5 @@ def test_draft_130_page_shows_the_breakdown(year_2026, loaded_modules, client):
     html = client.get('/tax-forms-draft/130/2026/3').get_data(as_text=True)
     assert 'How boxes 02 and 05 are made up' in html
     assert 'Depreciation:' in html and 'payments recorded in Tax Management' in html
-    assert 'estimated by the app' in html and 'upload the filed 1T Modelo 130' in html
+    assert 'estimated by the app' in html and 'no boxes read from a filed 1T Modelo 130' in html
+    assert 'Read filed boxes' in html

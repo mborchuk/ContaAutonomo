@@ -110,7 +110,7 @@
             {% for p in bd.prior_payments %}
             <tr><td>{{ p.quarter }}T {{ draft.year }} —
                 {% if p.source == 'filed' %}box 07 of the filed Modelo 130 (Tax Forms)
-                {% else %}<strong>estimated by the app</strong>: upload the filed {{ p.quarter }}T Modelo 130 in Tax Forms and read its boxes{% endif %}</td>
+                {% else %}<strong>estimated by the app</strong>: no boxes read from a filed {{ p.quarter }}T Modelo 130 — in Tax Forms, upload it, or press <em>Read filed boxes</em> if it is already there{% endif %}</td>
                 <td class="text-right">{{ "%.2f"|format(p.amount) }}</td></tr>
             {% endfor %}
             </tbody>

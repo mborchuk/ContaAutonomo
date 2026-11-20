@@ -177,8 +177,11 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   depreciation of the year, Social Security with its source (payments
   recorded, or the Settings monthly amount × months) and the 5 % difícil
   justificación when it is applied; and box 05 by earlier quarter, from the
-  filed return or estimated by the app, saying which return to upload. It
-  makes a comparison with the gestor's expense ledger line by line.
+  filed return or estimated by the app, saying what to do in Tax Forms. It
+  makes a comparison with the gestor's expense ledger line by line. Tax
+  Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
+  (uploads made before boxes were read on upload) and names them; Read filed
+  boxes reads them.
 
 ### Changed
 - **Invoice designer blocks through the registry**: the Invoice Designer reads
