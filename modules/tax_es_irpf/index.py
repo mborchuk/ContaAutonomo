@@ -318,6 +318,7 @@ class TaxEsIrpfModule(BaseModule):
                 amount, extra = net_eur, {'kind': 'expense'}
             else:
                 continue
+            amount = to_cents(amount)        # each line in cents, as the books do
             if not amount:
                 continue
             contractor = getattr(exp, 'contractor', None)
@@ -352,7 +353,7 @@ class TaxEsIrpfModule(BaseModule):
             cap = self._params(year)['reta'].get('mutualidad_deduction_cap')
             if cap is not None and reta > cap:
                 reta, detail['capped'] = cap, True
-        detail['amount'] = reta
+        detail['amount'] = to_cents(reta)
         return detail
 
     def _to_eur(self, amount, currency, when):

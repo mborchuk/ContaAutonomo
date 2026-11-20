@@ -299,6 +299,12 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   the books. `invoice_vat` now rounds every invoice amount to the cent (half
   up) before it is added: Modelo 303, 130, 390, 347, Reports and the IRPF
   Estimator.
+- **Modelo 130 breakdown on narrow screens and in print**: the amounts
+  column of "How boxes 02 and 05 are made up" was cut off and long lines lost
+  their ends when the page was narrow or printed; lines now wrap and the
+  amounts stay in view. Each expense line and the Social Security total are
+  in cents, so the parts add up to box 02 exactly (a capped difícil
+  justificación showed 2000.01).
 
 ## [1.7.0] - 2026-11-12
 
