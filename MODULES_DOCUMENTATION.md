@@ -234,6 +234,8 @@ Every module receives `self.core` — a `CoreServices` instance.
 | `get_settings()` | Get `Settings` model instance |
 | `get_upload_path(subfolder)` | Get/create upload directory, returns absolute path |
 | `flash(message, category)` | Flash a message to the user |
+| `deployment_key(env_var, purpose, file_name)` | A per-deployment secret that must outlive `SECRET_KEY` rotation: the `env_var` environment variable, else `instance/<file_name>` created on first use (mode `0600`; `<env_var>_FILE` moves it). The module names its key and file — the core keeps no module's key settings. Verifactu (`VERIFACTU_KEY`, `verifactu.key`) and Backup (`BACKUP_KEY`, `backup.key`) use it |
+| `deployment_key_path(env_var, file_name)` | Where that key file is |
 | `login_required(f)` | Decorator to protect routes |
 | `save_file(file_data, subfolder, filename)` | Save file via storage backend |
 | `delete_file(storage_key)` | Delete file via storage backend |

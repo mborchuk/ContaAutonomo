@@ -49,7 +49,7 @@ FILE_FOLDERS = ['expenses_files', 'documents_files', 'tax_forms', 'invoices_pdf'
                 'invoice_logos', 'pdf_signature_files']
 
 # Encryption methods: 'key' (default) — the deployment's backup key, from the
-# BACKUP_KEY environment variable or the key file app.config['BACKUP_KEY_FILE'];
+# BACKUP_KEY environment variable or the key file instance/backup.key (BACKUP_KEY_FILE);
 # 'custom' — a password stored in backup_config; 'none'. The legacy
 # 'app_password' (key derived from the login password, only available inside
 # a logged-in request) is migrated to 'key' because unattended backups could
@@ -291,7 +291,7 @@ class BackupModule(BaseModule):
     def _backup_key(self):
         """The deployment's backup key: BACKUP_KEY, else the key file
         (created on first use, readable by the owner only)."""
-        return self.core.deployment_key('BACKUP_KEY', 'BACKUP_KEY_FILE', 'backup')
+        return self.core.deployment_key('BACKUP_KEY', 'backup', 'backup.key')
 
     def _encryption_password(self, cfg):
         """Password used to encrypt a new backup (None = unencrypted)."""
@@ -356,7 +356,7 @@ class BackupModule(BaseModule):
         """Where the backup key comes from, for the settings page (never the key)."""
         if os.environ.get('BACKUP_KEY', '').strip():
             return 'the BACKUP_KEY environment variable'
-        return f"the key file {self.core.app.config['BACKUP_KEY_FILE']}"
+        return f"the key file {self.core.deployment_key_path('BACKUP_KEY', 'backup.key')}"
 
     def save_settings(self, settings, form):
         # Only update auto_backup if the field was actually in the form

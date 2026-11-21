@@ -36,7 +36,7 @@
                 <label>Status</label>
                 <input type="text" value="{{ invoice.status.upper() }}" readonly style="background: var(--color-border);">
                 {% if legacy_settled %}
-                <small class="helper-text">Legacy invoice, never issued through the app: it has no sequential number, fiscal snapshot or Verifactu record.</small>
+                <small class="helper-text">Legacy invoice, never issued through the app: it has no sequential number, no fiscal snapshot and nothing that modules record when an invoice is issued.</small>
                 {% endif %}
             </div>
 

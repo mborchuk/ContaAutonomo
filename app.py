@@ -93,15 +93,10 @@ app.config['SCHEDULER_LOCK_PATH'] = os.environ.get(
 # Start-up lock: worker processes initialise the database one at a time.
 app.config['INIT_LOCK_PATH'] = os.path.join(
     os.path.dirname(app.config['SCHEDULER_LOCK_PATH']), 'init.lock')
-# Backup encryption key file, used when BACKUP_KEY is not set (backup module).
+# Key file for stored credentials (secret_box.py), used when CREDENTIALS_KEY is
+# not set. Modules name their own key files through core.deployment_key().
 app.config['CREDENTIALS_KEY_FILE'] = os.environ.get(
     'CREDENTIALS_KEY_FILE', os.path.join(app.instance_path, 'credentials.key'))
-app.config['BACKUP_KEY_FILE'] = os.environ.get(
-    'BACKUP_KEY_FILE', os.path.join(app.instance_path, 'backup.key'))
-# Verifactu signing key file, used when VERIFACTU_KEY is not set. Separate
-# from SECRET_KEY so rotating the session key never breaks the record chain.
-app.config['VERIFACTU_KEY_FILE'] = os.environ.get(
-    'VERIFACTU_KEY_FILE', os.path.join(app.instance_path, 'verifactu.key'))
 
 from constants import (
     INITIAL_INVOICE_STATUS,

@@ -226,11 +226,30 @@ def test_deployment_key_prefers_env_then_creates_private_file(loaded_modules,
     monkeypatch.setitem(core.app.config, 'VERIFACTU_KEY_FILE', str(key_file))
 
     monkeypatch.setenv('VERIFACTU_KEY', 'from-env')
-    assert core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test') == 'from-env'
+    assert core.deployment_key('VERIFACTU_KEY', 'test', 'verifactu.key') == 'from-env'
     assert not key_file.exists()
 
     monkeypatch.delenv('VERIFACTU_KEY')
-    first = core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test')
+    first = core.deployment_key('VERIFACTU_KEY', 'test', 'verifactu.key')
     assert len(first) >= 32
     assert stat.S_IMODE(os.stat(key_file).st_mode) == 0o600
-    assert core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE', 'test') == first
+    assert core.deployment_key('VERIFACTU_KEY', 'test', 'verifactu.key') == first
+
+
+def test_key_file_is_named_by_the_module_not_the_core(loaded_modules, monkeypatch, tmp_path):
+    """The core keeps no module's key settings: a module names its key file,
+    the core puts it under instance/ unless <VAR>_FILE moves it."""
+    import os
+    from pathlib import Path
+    core = loaded_modules.modules['verifactu'].core
+    monkeypatch.delenv('ZZ_SYNTHETIC_KEY_FILE', raising=False)
+    monkeypatch.delitem(core.app.config, 'ZZ_SYNTHETIC_KEY_FILE', raising=False)
+    assert core.deployment_key_path('ZZ_SYNTHETIC_KEY', 'zz.key') == \
+        os.path.join(core.app.instance_path, 'zz.key')
+    monkeypatch.setitem(core.app.config, 'ZZ_SYNTHETIC_KEY_FILE', str(tmp_path / 'cfg.key'))
+    assert core.deployment_key_path('ZZ_SYNTHETIC_KEY', 'zz.key') == str(tmp_path / 'cfg.key')
+    monkeypatch.setenv('ZZ_SYNTHETIC_KEY_FILE', str(tmp_path / 'env.key'))
+    assert core.deployment_key_path('ZZ_SYNTHETIC_KEY', 'zz.key') == str(tmp_path / 'env.key')
+    app_source = (Path(__file__).resolve().parent.parent / 'app.py').read_text()
+    assert 'VERIFACTU_KEY' not in app_source
+    assert 'BACKUP_KEY' not in app_source

@@ -34,6 +34,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 These make 2.0.0 a major version; a module written for 1.x needs them:
 
+- `core.deployment_key(env_var, purpose, file_name)` takes the key file's
+  name (under `instance/`, moved with `<env_var>_FILE`) instead of an
+  `app.config` key: the core no longer defines `VERIFACTU_KEY_FILE` or
+  `BACKUP_KEY_FILE`. The environment variables work as before.
 - Modules do not import each other or reach into another module: they call
   registry functions (`self.core.functions.call(name, ...)`) and declare their
   own in `get_functions()`. The test suite refuses new imports.
