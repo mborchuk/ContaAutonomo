@@ -111,8 +111,9 @@ class VerifactuModule(BaseModule):
 
     def _secret(self):
         """The signing key: VERIFACTU_KEY, else instance/verifactu.key."""
-        return self.core.deployment_key('VERIFACTU_KEY', 'VERIFACTU_KEY_FILE',
-                                        'Verifactu signing')
+        # Separate from SECRET_KEY, so rotating the session key never breaks
+        # the record chain.
+        return self.core.deployment_key('VERIFACTU_KEY', 'Verifactu signing', 'verifactu.key')
 
     def _legacy_secret(self):
         """Key of records signed before VERIFACTU_KEY existed."""

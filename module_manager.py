@@ -1233,10 +1233,19 @@ class CoreServices:
         os.makedirs(path, exist_ok=True)
         return path
 
-    def deployment_key(self, env_var, file_config_key, purpose):
+    def deployment_key_path(self, env_var, file_name):
+        """Where the key file of `env_var` lives: `<env_var>_FILE` from the
+        environment or app.config when set, else `instance/<file_name>`."""
+        override = f'{env_var}_FILE'
+        return (os.environ.get(override, '').strip() or self.app.config.get(override)
+                or os.path.join(self.app.instance_path, file_name))
+
+    def deployment_key(self, env_var, purpose, file_name):
         """A per-deployment secret: the `env_var` environment variable, else a
-        key file (path in app.config[file_config_key]) created on first use,
-        readable by the owner only.
+        key file created on first use, readable by the owner only. The module
+        that needs the key names it and its file (`file_name` under
+        `instance/`, moved with `<env_var>_FILE`); the core knows no module's
+        keys.
 
         Used for keys that must outlive `SECRET_KEY` rotation (backup
         encryption, Verifactu signatures). `purpose` names the key in the
@@ -1245,7 +1254,7 @@ class CoreServices:
         key = os.environ.get(env_var, '').strip()
         if key:
             return key
-        path = self.app.config[file_config_key]
+        path = self.deployment_key_path(env_var, file_name)
         if not os.path.exists(path):
             import secrets
             os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
