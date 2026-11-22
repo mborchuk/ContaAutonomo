@@ -196,6 +196,15 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
   (uploads made before boxes were read on upload) and names them; Read filed
   boxes reads them.
+- **Yearly tax tables explain how to check them**: when a page uses an
+  earlier year's table (*"Figures for 2027 use the 2026 table"*), the warning
+  opens to what the table holds, numbered steps, links to the official AEAT,
+  BOE and Seguridad Social pages and what to change once checked. For
+  Modelo 303, 130 and 390 the app compares its box numbers with the official
+  AEAT record layouts it ships and shows the result; a test does the same on
+  every run. Modelo 390 and 347 have 2026 tables (390 checked against the
+  2026 layout, 347 against RD 1065/2007 art. 33). CONTRIBUTING.md → Annual
+  Tax Data Update is a step-by-step guide.
 
 ### Changed
 

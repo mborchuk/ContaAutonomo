@@ -8,9 +8,7 @@
     <span class="fine-print">Bracket table version: {{ version }}</span>
 </div>
 
-{% if table_note %}
-<div class="note note-warning">⚠ {{ table_note }}</div>
-{% endif %}
+{% set notice = table_notice %}{% include '_year_table_notice.html' %}
 
 <div class="note note-info">
     <strong>Estimate, not advice.</strong> Projection from your invoices/expenses,

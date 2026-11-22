@@ -77,9 +77,10 @@ def test_draft_page_renders_fallback_banner(loaded_modules, client):
         sess['authenticated'] = True
     year = max(BOX_TABLES) + 2
     html = client.get(f'/tax-forms-draft/303/{year}/1').get_data(as_text=True)
-    assert f'Figures use the {max(BOX_TABLES)} table' in html
+    assert f'Figures for {year} use the {max(BOX_TABLES)} table' in html
+    assert 'How to check the Modelo 303 and 130 boxes' in html
     html = client.get(f'/tax-forms-draft/303/{min(BOX_TABLES)}/1').get_data(as_text=True)
-    assert 'Figures use the' not in html
+    assert 'use the' not in html or 'table — check that the official values' not in html
 
 
 # --- RETA brackets ----------------------------------------------------------------

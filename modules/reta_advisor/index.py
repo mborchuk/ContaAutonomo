@@ -23,7 +23,9 @@ from module_manager import BaseModule
 from .brackets import (BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year,
                        contribution_rate_for_year)
 from .engine import project
-from year_tables import fallback_note
+from year_tables import fallback_note, fallback_notice
+
+from .table_checks import CHECK_RETA
 
 
 class RetaAdvisorModule(BaseModule):
@@ -221,8 +223,9 @@ class RetaAdvisorModule(BaseModule):
             return render_template('reta_advisor.html',
                                    proj=proj,
                                    brackets=brackets,
-                                   table_note=(fallback_note(proj['table_year'])
-                                               if proj['table_fallback'] else ''),
+                                   table_notice=(fallback_notice(date.today().year,
+                                                                 proj['table_year'], CHECK_RETA)
+                                                 if proj['table_fallback'] else None),
                                    version=BRACKET_TABLE_VERSION,
                                    config=module._get_config(),
                                    current_year=datetime.now().year)

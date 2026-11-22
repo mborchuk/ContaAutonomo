@@ -736,6 +736,15 @@ fraccionado), computed from data already in the app. Estimate only — every pag
 carries a non-dismissible "not tax advice" banner.
 Invoice amounts are added in cents (`invoice_vat.to_cents`, half up), each
 invoice rounded first, as the books do; the IRPF Estimator does the same.
+Box, casilla and threshold tables are keyed by year (`year_tables.resolve`).
+A year without its own table uses the latest earlier one, and the page shows
+a warning built by `year_tables.fallback_notice` from the module's
+`TableCheck` (`table_checks.py`): what the table holds, the steps, the
+official links, what to change, and an automatic comparison of the 303 / 130
+/ 390 box numbers with the AEAT record layouts in `aeat_layouts/`. Any module
+with a yearly table can describe it the same way and include
+`_year_table_notice.html`. Yearly checklist: `CONTRIBUTING.md` → *Annual Tax
+Data Update*.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;

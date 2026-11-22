@@ -140,6 +140,9 @@ MODELO_390_OUT_OF_SCOPE = [
 
 MODELO_390_TABLES = {
     2025: MODELO_390_BOXES,
+    # 2026: every casilla checked against the official record layout dr390e2026
+    # (2026-11-22, table_checks.CHECK_390; test_year_table_checks.py).
+    2026: MODELO_390_BOXES,
 }
 
 
@@ -159,12 +162,16 @@ def modelo_390_boxes_for_year(year):
 #     instructions (Orden EHA/3012/2008, amended by Orden HAC/1431/2025).
 #   - DGT V0766-23 / V0923-23: invoices with an IRPF retention are not
 #     declared (the payer declares them on Modelo 190).
+_MODELO_347_RULES_2025 = {
+    "threshold": 3005.06,
+    "source": ("RD 1065/2007, art. 33; AEAT Modelo 347 instructions "
+               "(Orden EHA/3012/2008, amended by Orden HAC/1431/2025)"),
+}
 MODELO_347_TABLES = {
-    2025: {
-        "threshold": 3005.06,
-        "source": ("RD 1065/2007, art. 33; AEAT Modelo 347 instructions "
-                   "(Orden EHA/3012/2008, amended by Orden HAC/1431/2025)"),
-    },
+    2025: _MODELO_347_RULES_2025,
+    # 2026: RD 1065/2007 art. 33.1 still says 3.005,06 euros (BOE consolidated
+    # text, checked 2026-11-22; table_checks.CHECK_347).
+    2026: _MODELO_347_RULES_2025,
 }
 
 # Wording of each exclusion on the 347 page: (title, rule).

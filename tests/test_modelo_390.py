@@ -67,7 +67,8 @@ def test_every_casilla_has_a_label_and_position():
 def test_table_year_fallback():
     own = min(MODELO_390_TABLES)
     assert modelo_390_boxes_for_year(own)[2] is False
-    assert modelo_390_boxes_for_year(own + 1)[2] is True
+    assert modelo_390_boxes_for_year(2026)[2] is False          # checked, see table_checks
+    assert modelo_390_boxes_for_year(max(MODELO_390_TABLES) + 1)[2] is True
 
 
 # --- module integration -----------------------------------------------------------

@@ -16,6 +16,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, abort
 
 from module_manager import BaseModule
+from year_tables import fallback_notice
 from supplier_region import reverse_charge_problem
 
 from .boxes import (
@@ -28,6 +29,7 @@ from .boxes import (
     modelo_390_boxes_for_year,
     modelo_347_rules_for_year,
 )
+from .table_checks import CHECK_303_130, CHECK_347, CHECK_390
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
@@ -311,6 +313,7 @@ class TaxEsFormsModule(BaseModule):
             'quarters': [{'quarter': q['quarter'], 'boxes': q['boxes']} for q in quarters],
             'table_year': table_year, 'table_fallback': fallback,
             'table_note': fallback_note(table_year) if fallback else '',
+            'table_notice': fallback_notice(year, table_year, CHECK_390) if fallback else None,
             'meta': {'checks': checks, 'basis': 'sum of quarterly 303 drafts'},
         })
         return result
@@ -344,6 +347,7 @@ class TaxEsFormsModule(BaseModule):
             'deadline': deadline,
             'table_year': table_year, 'table_fallback': fallback,
             'table_note': fallback_note(table_year) if fallback else '',
+            'table_notice': fallback_notice(year, table_year, CHECK_347) if fallback else None,
         })
         return result
 
@@ -406,7 +410,9 @@ class TaxEsFormsModule(BaseModule):
         table_year, _tables, fallback = boxes_for_year(year)
         return {'table_version': BOX_TABLE_VERSION, 'table_year': table_year,
                 'table_fallback': fallback,
-                'table_note': fallback_note(table_year) if fallback else ''}
+                'table_note': fallback_note(table_year) if fallback else '',
+                'table_notice': (fallback_notice(year, table_year, CHECK_303_130)
+                                 if fallback else None)}
 
     def _available_years(self):
         return self.core.data_years()
