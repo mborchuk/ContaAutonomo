@@ -190,50 +190,95 @@ See [MODULES_DOCUMENTATION.md](MODULES_DOCUMENTATION.md) for the full API refere
 
 ## Writing a Country Tax Module
 
-The module system supports country-specific tax overrides. Here's a minimal example:
+A country tax module replaces the dashboard's tax estimates (income tax, VAT,
+the Tax Obligations panel) with another country's rules. It files nothing and
+does not change the Spanish forms: for another country, also turn off the
+Spanish modules in Settings → Modules (Spanish Tax Forms, IRPF Estimator, RETA
+Advisor, Tax Provision, Fiscal Calendar, Verifactu, E-invoice). A minimal
+example:
 
 ```python
 # modules/tax_mycountry/index.py
+from invoice_vat import customer_tax_type
 from module_manager import BaseModule
 
+VAT_RATE = 20.0  # standard VAT of the country, %
+
+
 class TaxMyCountryModule(BaseModule):
-    @property
-    def module_id(self): return 'tax_mycountry'
+    """Dashboard tax estimates for MyCountry."""
 
     @property
-    def name(self): return 'Tax MyCountry'
+    def module_id(self):
+        return 'tax_mycountry'
 
     @property
-    def settings_tab(self): return 'general'
+    def name(self):
+        return 'Tax MyCountry'
+
+    @property
+    def description(self):
+        return 'MyCountry income tax and VAT on the dashboard.'
 
     def on_enable(self):
-        """Set VAT rate when module is enabled."""
-        from app import Settings
-        s = Settings.query.first()
-        if s:
-            s.default_vat_rate = 20.0  # your country's VAT
-            self._db.session.commit()
+        """Use the country's VAT rate for new invoices."""
+        settings = self.core.get_settings()
+        if settings:
+            settings.default_vat_rate = VAT_RATE
+            self.core.db.session.commit()
 
     def calculate_income_tax(self, context):
-        """Override income tax calculation."""
-        taxable = context.get('taxable_income', 0)
-        tax = taxable * 0.20  # flat 20%
+        """Replace the built-in income tax estimate: a flat 20 %."""
+        taxable = context['taxable_income']
+        tax = round(max(0.0, taxable) * 0.20, 2)
         return {
             'income_tax': tax,
-            'irpf_breakdown': [{'bracket': 'Flat 20%', 'rate': 20, 'amount': taxable, 'tax': tax, 'active': True}],
+            'irpf_breakdown': [{'bracket': 'Flat 20%', 'rate': 20, 'amount': taxable,
+                                'tax': tax, 'active': True}],
             'label': 'Income Tax (20%)',
         }
 
     def calculate_vat(self, context):
-        """Override VAT calculation."""
-        invoices = context.get('invoices', [])
-        rate = 0.20
-        vat = sum(inv.amount_base * rate for inv in invoices
-                  if inv.customer and inv.customer.tax_type == 'standard')
-        return {'vat_collected': vat, 'vat_rate': rate, 'label': 'VAT'}
+        """Replace the VAT estimate: VAT on invoices to customers who pay it.
+        customer_tax_type() reads the customer saved when the invoice was
+        issued, so later edits to the customer do not change past invoices."""
+        rate = VAT_RATE / 100
+        vat = sum(inv.amount_base * rate for inv in context['invoices']
+                  if customer_tax_type(inv) == 'standard')
+        return {'vat_collected': round(vat, 2), 'vat_rate': rate, 'label': 'VAT'}
+
+    def get_tax_obligations(self, context):
+        """Add a social contribution to the Tax Obligations panel."""
+        yearly = 12 * 250.0  # for example 250 a month
+        return {
+            'summary_columns': [{'label': 'Social contribution', 'value': yearly}],
+            'breakdown_rows': [{'label': 'Social contribution (250 × 12)', 'amount': yearly}],
+            'notes': ['Estimate, not tax advice.'],
+            'deductions': yearly,  # subtracted from income before income tax
+            'tax_total': yearly,
+        }
+
+    def get_field_labels(self):
+        """Settings field names in the country's terms."""
+        return {'vat_number': 'VAT number', 'default_irpf_rate': 'Income tax advance (%)'}
 ```
 
-See `modules/tax_poland/` for a complete real-world example with progressive brackets, health insurance, and ZUS contributions.
+The hooks a tax module uses (full list: [MODULES_DOCUMENTATION.md](MODULES_DOCUMENTATION.md)):
+
+| Hook | What the core does with it | Context |
+|---|---|---|
+| `calculate_income_tax(context)` | Dashboard income tax; the first module that returns a result replaces the built-in Spanish brackets | `taxable_income` (income minus the modules' `deductions`), `settings`, `base_currency`, `currency_symbol` |
+| `calculate_vat(context)` | Dashboard VAT; the first module that returns a result is used | `invoices`: every invoice dated this year except cancelled ones, each with `amount_base` in the base currency; `settings`, `base_currency` |
+| `get_tax_obligations(context)` | Adds summary columns, breakdown rows and notes to the Tax Obligations panel; `deductions` are subtracted from income before income tax, `tax_total` is added to the taxes | `current_year`, `base_currency`, `exchange_rates`, `settings`, `vat_collected`, `currency_symbol` |
+| `get_field_labels()` | Renames Settings fields | — |
+| `on_enable()` | One-time setup when the module is switched on | — |
+| `nav_items`, `register_routes(app)` | Pages of the module; put the menu item in the Taxes group: `{'label', 'endpoint', 'icon', 'group': 'Taxes', 'order'}` | — |
+| `get_functions()` | Figures other modules can use by name, as the Spanish modules offer `tax.*` | — |
+
+Rules: use the core through `self.core` (`get_settings()`, `db`, `functions`,
+`storage`) rather than importing `app`; never import another module (a test
+fails on that); keep the module's styles in its own templates. `modules/tax_poland/` is a complete
+example with progressive brackets, health insurance and ZUS contributions.
 
 ## Production Deployment
 

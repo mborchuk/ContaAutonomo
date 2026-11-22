@@ -119,11 +119,10 @@ class TaxPolandModule(BaseModule):
     def on_enable(self):
         """Set default VAT rate to 23% when module is enabled."""
         try:
-            from app import Settings
-            settings = Settings.query.first()
+            settings = self.core.get_settings()
             if settings:
                 settings.default_vat_rate = VAT_RATE_PL
-                self._db.session.commit()
+                self.core.db.session.commit()
                 self.logger.info('Tax Poland: set VAT rate to %.1f%%', VAT_RATE_PL)
         except Exception as e:
             self.logger.error('Tax Poland: failed to set VAT rate: %s', e)

@@ -311,6 +311,14 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   amounts stay in view. Each expense line and the Social Security total are
   in cents, so the parts add up to box 02 exactly (a capped difícil
   justificación showed 2000.01).
+- **"Writing a Country Tax Module" in the README**: the example failed when
+  the module was enabled (it used `self._db`, which only a module with
+  `register_models` has) and imported `app`. It now uses `self.core`, reads
+  the customer saved at issue (`invoice_vat.customer_tax_type`), shows
+  `get_tax_obligations` and `get_field_labels`, lists the hooks with what the
+  dashboard passes to them, and says which Spanish modules to turn off. A
+  test runs the example from the README. The Polish module's `on_enable` uses
+  the core the same way.
 
 ## [1.7.0] - 2026-11-12
 

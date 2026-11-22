@@ -302,8 +302,8 @@ class BaseModule(ABC):
     def get_tax_obligations(self, context):
         """
         Contribute to the Tax Obligations panel on the dashboard.
-        Called with context dict containing: current_year, income, base_currency,
-        exchange_rates, settings.
+        Called with context dict containing: current_year, base_currency,
+        exchange_rates, settings, vat_collected, currency_symbol.
 
         Returns:
             dict or None with keys:
@@ -350,7 +350,8 @@ class BaseModule(ABC):
 
         Args:
             context: dict with keys:
-                - invoices: list of paid invoices for current year
+                - invoices: every invoice dated this year except cancelled
+                  ones, each with `amount_base` (amount in the base currency)
                 - settings: Settings model instance
                 - base_currency: str
 
