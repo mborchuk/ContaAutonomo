@@ -66,7 +66,8 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   (EU) or 12/13 (non-EU) and deducted in 36/37 or 38/39 (EU) or 28/29 or
   30/31 (non-EU) when deductible — net effect zero. The page lists, under its
   checks, expenses whose reverse-charge region does not match the supplier's
-  country or VAT number (`supplier_region.py`), and expenses without Spanish
+  country or VAT number (`supplier_region.py`, also offered to other modules
+  as `vat.reverse_charge_check`), and expenses without Spanish
   VAT that are not marked reverse charge.
 - *Box 59 / 120*: taxable base of invoices to EU business customers
   (`eu_b2b`) and to customers outside the EU (`non_eu`).
