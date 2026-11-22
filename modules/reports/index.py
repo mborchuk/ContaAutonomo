@@ -5,7 +5,6 @@ Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
 from module_manager import BaseModule
-from invoice_vat import invoice_vat_line
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
@@ -320,6 +319,20 @@ class ReportsModule(BaseModule):
             flash('Error generating PDF. Check server logs.', 'danger')
             return redirect(url_for('reports.reports_index'))
 
+    def _invoice_vat_lines(self, start_date, end_date):
+        """Output VAT of each invoice in the period, keyed by invoice id as
+        text — from the tax module that owns `vat.invoice_lines`. Without
+        one, the report leaves the IVA columns blank ('–')."""
+        functions = self.core.functions
+        if not functions.available('vat.invoice_lines'):
+            return {}
+        try:
+            return functions.call('vat.invoice_lines', date_from=start_date,
+                                  date_to=end_date).get('lines') or {}
+        except Exception as e:  # never break a report over its IVA columns
+            self.logger.warning('vat.invoice_lines failed: %s', e)
+            return {}
+
     def _build_report(self, *, selected_sections, year, period_type, quarters,
                       include_cancelled=False, currency_mode='base',
                       file_ids=None, include_files_sids=None):
@@ -354,8 +367,8 @@ class ReportsModule(BaseModule):
         base_currency = settings.base_currency if settings and settings.base_currency else 'EUR'
 
         if 'income' in selected_sections:
-            vat_rate = (getattr(settings, 'default_vat_rate', None) or 21.0) / 100.0
             invoices = invoice_repo.get_by_date_range(start_date, end_date, include_cancelled)
+            vat_lines = self._invoice_vat_lines(start_date, end_date)
             for inv in invoices:
                 if currency_mode == 'original':
                     # Show amount in the invoice's own currency
@@ -370,7 +383,7 @@ class ReportsModule(BaseModule):
                     display_amount = inv.amount_eur if base_currency == 'EUR' else inv.amount_usd
                     display_currency = base_currency
 
-                vat = invoice_vat_line(inv, vat_rate)
+                vat = vat_lines.get(str(inv.id), {})
                 income_data.append({
                     'invoice_number': inv.invoice_number,
                     'invoice_date': inv.invoice_date.strftime('%d/%m/%Y'),
@@ -379,9 +392,9 @@ class ReportsModule(BaseModule):
                     'currency': display_currency,
                     'amount_eur': inv.amount_eur,
                     'status': inv.status,
-                    'vat_rate_pct': vat['vat_rate_pct'],
-                    'vat_eur': vat['vat_eur'],
-                    'reverse_charge': vat['reverse_charge'],
+                    'vat_rate_pct': vat.get('vat_rate_pct'),
+                    'vat_eur': vat.get('vat_eur'),
+                    'reverse_charge': bool(vat.get('reverse_charge')),
                 })
 
         # Collect data from enabled modules for selected sections

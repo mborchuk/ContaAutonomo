@@ -2,12 +2,13 @@
 import importlib.util
 import io
 import os
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 import pytest
 from pypdf import PdfReader
 
-from invoice_vat import invoice_vat_line
+from modules.tax_es_forms.output_vat import invoice_vat_line
 
 TEMPLATE = os.path.join(os.path.dirname(__file__), '..', 'modules', 'reports',
                         'report_templates', 'official_template.py')
@@ -106,3 +107,44 @@ def test_vat_line_eu_b2b_is_reverse_charge():
     line = invoice_vat_line(_inv(snap_vat_rate=0.0, snap_vat_amount=0.0,
                                  snap_customer='{"tax_type": "eu_b2b"}'), 0.21)
     assert line == {'vat_rate_pct': 0.0, 'vat_eur': 0.0, 'reverse_charge': True}
+
+
+# --- vat.invoice_lines: Reports reads the IVA columns from the tax module ---
+
+def _two_invoices():
+    from app import Customer, Invoice, db
+    local = Customer(name='Synthetic Local SL', tax_type='standard')
+    eu = Customer(name='Synthetic EU GmbH', tax_type='eu_b2b')
+    db.session.add_all([local, eu])
+    db.session.flush()
+    made = []
+    for number, customer, day in (('V-1', local, 10), ('V-2', eu, 11), ('V-3', local, 40)):
+        inv = Invoice(invoice_number=number, client_name=customer.name,
+                      customer_id=customer.id, amount_usd=100.0, amount_eur=100.0,
+                      exchange_rate=1.0, currency='EUR', status='pending',
+                      invoice_date=date(2026, 1, 1) + timedelta(days=day))
+        db.session.add(inv)
+        made.append(inv)
+    db.session.commit()
+    return made
+
+
+def test_invoice_lines_function_gives_each_invoice_of_the_period(app, loaded_modules):
+    local, eu, outside = _two_invoices()
+    lines = loaded_modules.functions.call(
+        'vat.invoice_lines', date_from='2026-01-01', date_to='2026-01-31')['lines']
+    assert set(lines) == {str(local.id), str(eu.id)}       # V-3 is in February
+    assert lines[str(local.id)]['vat_eur'] == pytest.approx(21.0)
+    assert lines[str(eu.id)] == {'vat_rate_pct': 0.0, 'vat_eur': 0.0,
+                                 'reverse_charge': True}
+
+
+def test_report_leaves_iva_blank_without_a_tax_module(app, loaded_modules, monkeypatch):
+    local, _eu, _outside = _two_invoices()
+    reports = loaded_modules.modules['reports']
+    lines = reports._invoice_vat_lines(date(2026, 1, 1), date(2026, 1, 31))
+    assert lines[str(local.id)]['vat_rate_pct'] == pytest.approx(21.0)
+
+    monkeypatch.setattr(loaded_modules.functions, 'available',
+                        lambda name: name != 'vat.invoice_lines')
+    assert reports._invoice_vat_lines(date(2026, 1, 1), date(2026, 1, 31)) == {}

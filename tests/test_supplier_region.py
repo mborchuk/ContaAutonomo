@@ -1,4 +1,6 @@
-"""Reverse charge must match where the supplier is (supplier_region.py): a
+"""Reverse charge must match where the supplier is (Spanish Tax Forms,
+modules/tax_es_forms/supplier_region.py, registry function
+vat.reverse_charge_check): a
 notice on the expense (deduction checks) and a check on the Modelo 303
 draft. Synthetic suppliers only."""
 from datetime import date
@@ -7,7 +9,8 @@ from types import SimpleNamespace
 import pytest
 
 from modules.expenses import deduction_rules
-from supplier_region import EU, NON_EU, SPAIN, region_of, reverse_charge_problem
+from modules.tax_es_forms.supplier_region import (EU, NON_EU, SPAIN, region_of,
+                                                  reverse_charge_problem)
 
 
 @pytest.mark.parametrize('country, vat, region', [
@@ -58,11 +61,31 @@ def test_matching_or_unknown_is_not_flagged(expense):
 
 
 def test_deduction_check_notice():
-    found = deduction_rules.check_expenses([_expense('eu', country='USA')])
+    found = deduction_rules.check_expenses([_expense('eu', country='USA')],
+                                           region_check=reverse_charge_problem)
     (notice,) = found[1]
     assert notice['rule_id'] == 'reverse_charge_region' and notice['severity'] == 'check'
     assert 'LIVA' in notice['source'] and 'outside the EU' in notice['message']
-    assert deduction_rules.check_expenses([_expense('non_eu', country='USA')]) == {}
+    assert deduction_rules.check_expenses([_expense('non_eu', country='USA')],
+                                          region_check=reverse_charge_problem) == {}
+    # Without a region check (Spanish Tax Forms off) the rule says nothing.
+    assert deduction_rules.check_expenses([_expense('eu', country='USA')]) == {}
+
+
+def test_registry_function_takes_plain_values(loaded_modules):
+    functions = loaded_modules.functions
+    assert functions.provider('vat.reverse_charge_check') == 'tax_es_forms'
+    out = functions.call('vat.reverse_charge_check', mark='eu', country='United States',
+                         vat_number='', supplier='Synthetic Cloud Inc.')
+    assert 'outside the EU (United States)' in out['problem']
+    assert functions.call('vat.reverse_charge_check', mark='non_eu',
+                          country='United States')['problem'] is None
+
+
+def test_expenses_have_no_region_notice_without_the_function(loaded_modules, monkeypatch):
+    expenses = loaded_modules.modules['expenses']
+    monkeypatch.setattr(loaded_modules.functions, 'available', lambda name: False)
+    assert expenses._region_check() is None
 
 
 def test_303_draft_and_expense_page_list_the_mismatch(loaded_modules):

@@ -1,11 +1,11 @@
 """
 Where an expense's supplier is — Spain, another EU country or outside the
-EU — and whether the expense's reverse-charge setting agrees.
+EU — and whether the expense's reverse-charge setting agrees (Spanish VAT:
+LIVA arts. 15, 69 and 84.Uno.2º).
 
-Rules on core data (Expense, Contractor) shared by several modules live in
-the core (see invoice_vat.py): the Expenses module shows a notice on the
-expense, the Spanish Tax Forms module lists the mismatches on the Modelo 303
-draft. Pure: no Flask, no database; only attributes are read.
+Part of Spanish Tax Forms. The Modelo 303 draft uses it directly; other
+modules ask through the registry function `vat.reverse_charge_check` (the
+Expenses deduction checks do). Pure: no Flask, no database.
 
 The region comes from the supplier's country when it is recognised, else
 from the prefix of its VAT number (`IE…` is EU; `EU…` is a non-EU company
@@ -91,21 +91,27 @@ def region_of(country=None, vat_number=None):
 
 
 def reverse_charge_problem(expense):
-    """A sentence when the expense's reverse-charge region disagrees with
-    where its supplier is, else None. Only expenses marked reverse charge
-    ('eu' or 'non_eu') with a supplier whose region is known are checked."""
-    marked = getattr(expense, 'reverse_charge', None) or ''
-    if marked not in (EU, NON_EU):
-        return None
+    """reverse_charge_check() for an expense and its contractor."""
     supplier = getattr(expense, 'contractor', None)
     if supplier is None:
         return None
-    country = getattr(supplier, 'country', None)
-    vat_number = getattr(supplier, 'vat_number', None)
+    return reverse_charge_check(getattr(expense, 'reverse_charge', None) or '',
+                                getattr(supplier, 'country', None),
+                                getattr(supplier, 'vat_number', None),
+                                getattr(supplier, 'name', None))
+
+
+def reverse_charge_check(marked, country=None, vat_number=None, supplier=None):
+    """A sentence when a reverse-charge mark ('eu' or 'non_eu') disagrees
+    with where the supplier is, else None (also when the region is unknown).
+    Plain values in, plain value out: the registry function
+    `vat.reverse_charge_check` calls it."""
+    if marked not in (EU, NON_EU):
+        return None
     region = region_of(country, vat_number)
     if region is None or region == marked:
         return None
-    name = getattr(supplier, 'name', None) or 'The supplier'
+    name = supplier or 'The supplier'
     where = (country or '').strip() or f'VAT number {(vat_number or "").strip()}'
     if region == SPAIN:
         return (f'Marked as reverse charge from {LABELS[marked]}, but {name} is in '

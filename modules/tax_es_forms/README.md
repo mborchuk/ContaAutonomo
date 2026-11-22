@@ -52,7 +52,10 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   customer's `tax_type` and the configured VAT rate; `eu_b2b` and `non_eu`
   customers carry no output VAT. It goes to boxes **07/09**, the 21 %
   line of the official form ([01]–[03] are 4 %, [04]–[06] 10 %); the draft
-  uses the official box numbers throughout.
+  uses the official box numbers throughout. The rule is in `output_vat.py`;
+  other modules read each invoice's output VAT through
+  `vat.invoice_lines(date_from, date_to)` (Reports fills its IVA columns
+  from it).
 - *IVA soportado (input VAT)*: per-expense `vat_amount` × `deductible_pct`,
   skipping non-deductible expenses. Legacy expenses without VAT data are
   excluded and counted — the page shows how many, so the user knows the
@@ -66,7 +69,8 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   (EU) or 12/13 (non-EU) and deducted in 36/37 or 38/39 (EU) or 28/29 or
   30/31 (non-EU) when deductible — net effect zero. The page lists, under its
   checks, expenses whose reverse-charge region does not match the supplier's
-  country or VAT number (`supplier_region.py`), and expenses without Spanish
+  country or VAT number (`supplier_region.py`, also offered to other modules
+  as `vat.reverse_charge_check`), and expenses without Spanish
   VAT that are not marked reverse charge.
 - *Box 59 / 120*: taxable base of invoices to EU business customers
   (`eu_b2b`) and to customers outside the EU (`non_eu`).
