@@ -98,16 +98,12 @@ class BackupModule(BaseModule):
             encrypt_method = db.Column(db.String(20), default=DEFAULT_ENCRYPT_METHOD)
             custom_password = db.Column(EncryptedString(500), default='')
             use_external_storage = db.Column(db.Boolean, default=True)
+            # Before 2.0.0 these two were columns of the core Settings table.
+            auto_backup_enabled = db.Column(db.Boolean, default=True)
+            daily_backup_retention_count = db.Column(db.Integer, default=4)
             updated_at = db.Column(db.DateTime, default=utcnow)
 
-        # We only need Settings reference for auto_backup_enabled check
-        class Settings(db.Model):
-            __tablename__ = 'settings'
-            __table_args__ = {'extend_existing': True}
-            id = db.Column(db.Integer, primary_key=True)
-
         self.BackupConfig = BackupConfig
-        self.Settings = Settings
         return {'BackupConfig': BackupConfig}
 
     # ── routes ──────────────────────────────────────────────────────
@@ -225,20 +221,35 @@ class BackupModule(BaseModule):
         app.register_blueprint(bp)
 
     def on_enable(self):
+        self._migrate()
+        self._start_backups()
+
+    def _migrate(self):
+        """Bring an older backup_config up to date (runs on every start)."""
         encrypt_existing(self._db, 'backup_config', ['custom_password'])
-        # Migrate: add use_external_storage column if missing
+        # Add the columns an older backup_config table lacks. The
+        # automatic-backup switch and retention were columns of the core
+        # Settings table before 2.0.0: copy them over once, when added.
+        added = []
         try:
             from sqlalchemy import inspect as sa_inspect, text
             inspector = sa_inspect(self._db.engine)
             cols = [c['name'] for c in inspector.get_columns('backup_config')]
-            if 'use_external_storage' not in cols:
-                with self._db.engine.connect() as conn:
-                    conn.execute(text(
-                        'ALTER TABLE backup_config '
-                        'ADD COLUMN use_external_storage BOOLEAN DEFAULT 1'))
-                    conn.commit()
+            with self._db.engine.connect() as conn:
+                for name, ddl in (('use_external_storage', 'BOOLEAN DEFAULT 1'),
+                                  ('auto_backup_enabled', 'BOOLEAN DEFAULT 1'),
+                                  ('daily_backup_retention_count', 'INTEGER DEFAULT 4')):
+                    if name not in cols:
+                        conn.execute(text(f'ALTER TABLE backup_config ADD COLUMN {name} {ddl}'))
+                        added.append(name)
+                conn.commit()
         except Exception as e:
             logger.debug('backup_config migration: %s', e)  # table may not exist yet
+        if 'auto_backup_enabled' in added:
+            existing = self.BackupConfig.query.first()
+            if existing is not None:
+                self._copy_legacy_settings(existing)
+                self._db.session.commit()
 
         # Legacy 'app_password' cannot encrypt unattended backups: use the key.
         cfg = self._get_config()
@@ -249,6 +260,8 @@ class BackupModule(BaseModule):
                         'backup key; earlier backups still restore with the '
                         'login password')
 
+    def _start_backups(self):
+        """The deferred startup backup and the daily backup job."""
         # Defer the startup backup ~60s instead of running it inline: a large
         # DB + many files could otherwise delay the app becoming available.
         import threading
@@ -283,10 +296,29 @@ class BackupModule(BaseModule):
         if not cfg:
             cfg = self.BackupConfig(
                 backup_path='', encrypt_method=DEFAULT_ENCRYPT_METHOD,
-                use_external_storage=True)
+                use_external_storage=True, auto_backup_enabled=True,
+                daily_backup_retention_count=4)
+            self._copy_legacy_settings(cfg)
             self._db.session.add(cfg)
             self._db.session.commit()
         return cfg
+
+    def _copy_legacy_settings(self, cfg):
+        """Take the automatic-backup switch and retention from the core
+        Settings table, where they were before 2.0.0 (the old columns stay in
+        an upgraded database; a new one does not have them)."""
+        from sqlalchemy import text
+        try:
+            row = self._db.session.execute(text('SELECT * FROM settings LIMIT 1')).mappings().first()
+        except Exception as e:
+            logger.debug('legacy backup settings: %s', e)
+            return
+        if not row:
+            return
+        if row.get('auto_backup_enabled') is not None:
+            cfg.auto_backup_enabled = bool(row['auto_backup_enabled'])
+        if row.get('daily_backup_retention_count'):
+            cfg.daily_backup_retention_count = int(row['daily_backup_retention_count'])
 
     def _backup_key(self):
         """The deployment's backup key: BACKUP_KEY, else the key file
@@ -346,7 +378,7 @@ class BackupModule(BaseModule):
         return self.render_settings_template(
             'backup_settings_panel.html',
             cfg=cfg, method=method,
-            auto_backup=bool(settings and settings.auto_backup_enabled),
+            auto_backup=bool(cfg.auto_backup_enabled),
             ext_ok=self._is_external_storage_enabled(),
             key_source=self._key_source(),
             demo_available=(Path(self.core.app_path) / 'demo_data.json').exists(),
@@ -362,13 +394,13 @@ class BackupModule(BaseModule):
         # Only update auto_backup if the field was actually in the form
         # (i.e. submitted from the Security tab, not General Settings)
         if 'bk_encrypt_method' in form:
-            settings.auto_backup_enabled = form.get('auto_backup_enabled') == 'on'
-            try:
-                settings.daily_backup_retention_count = int(
-                    form.get('daily_backup_retention_count', '4'))
-            except ValueError:
-                settings.daily_backup_retention_count = 4
             cfg = self._get_config()
+            cfg.auto_backup_enabled = form.get('auto_backup_enabled') == 'on'
+            try:
+                cfg.daily_backup_retention_count = max(1, int(
+                    form.get('daily_backup_retention_count', '4')))
+            except ValueError:
+                cfg.daily_backup_retention_count = 4
             cfg.backup_path = form.get('bk_backup_path', '').strip()
             method = form.get('bk_encrypt_method', DEFAULT_ENCRYPT_METHOD)
             cfg.encrypt_method = (method if method in ('key', 'custom', 'none')
@@ -790,13 +822,12 @@ class BackupModule(BaseModule):
 
     def _perform_startup_backup(self):
         try:
-            settings = self.Settings.query.first()
-            if not settings or not settings.auto_backup_enabled:
+            cfg = self._get_config()
+            if not cfg.auto_backup_enabled:
                 return
             if not self._should_create_backup():
                 logger.info('Daily backup already exists, skipping...')
                 return
-            cfg = self._get_config()
             password = self._encryption_password(cfg)
             if not password and cfg.encrypt_method != 'none':
                 logger.warning('Automatic backup skipped: no password available')
@@ -804,7 +835,7 @@ class BackupModule(BaseModule):
             logger.info('Automatic Full Backup (Daily)')
             ok, result = self._create_full_backup(password=password)
             if ok:
-                ret = settings.daily_backup_retention_count or 4
+                ret = cfg.daily_backup_retention_count or 4
                 self._cleanup_old_backups(ret)
                 logger.info('Keeping %d most recent daily backups', ret)
             else:
@@ -815,12 +846,11 @@ class BackupModule(BaseModule):
     def _scheduled_backup(self):
         """Called by the core scheduler for daily automatic backups."""
         try:
-            settings = self.Settings.query.first()
-            if not settings or not settings.auto_backup_enabled:
+            cfg = self._get_config()
+            if not cfg.auto_backup_enabled:
                 return
             if not self._should_create_backup():
                 return
-            cfg = self._get_config()
             password = self._encryption_password(cfg)
             if not password and cfg.encrypt_method != 'none':
                 logger.warning('Scheduled backup skipped: no password available')
@@ -828,7 +858,7 @@ class BackupModule(BaseModule):
             logger.info('Running scheduled daily backup...')
             ok, result = self._create_full_backup(password=password)
             if ok:
-                ret = settings.daily_backup_retention_count or 4
+                ret = cfg.daily_backup_retention_count or 4
                 self._cleanup_old_backups(ret)
             else:
                 logger.error('Scheduled backup failed: %s', result)

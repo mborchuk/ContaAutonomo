@@ -169,18 +169,6 @@
         </div>
 
         <div class="form-group">
-            <label for="report_template">Report Template</label>
-            <select id="report_template" name="report_template">
-                <option value="official_template" {% if not settings or settings.report_template == 'official_template' %}selected{% endif %}>
-                    Official Template (Default)
-                </option>
-            </select>
-            <small style="display: block; margin-top: 5px; color: var(--color-text-muted);">
-                Select the template to use for generating financial reports. Custom templates go in modules/reports/report_templates/.
-            </small>
-        </div>
-
-        <div class="form-group">
             <label for="invoice_template">Invoice PDF Template</label>
             <select id="invoice_template" name="invoice_template">
                 {% set current_template = settings.invoice_template if settings and settings.invoice_template else 'default_template' %}
@@ -411,7 +399,6 @@
         <input type="hidden" name="default_currency" value="{{ (settings.default_currency or 'USD') if settings else 'USD' }}">
         <input type="hidden" name="tracked_currencies" value="{{ (settings.tracked_currencies or 'USD,EUR,GBP,CZK') if settings else 'USD,EUR,GBP,CZK' }}">
         <input type="hidden" name="base_currency" value="{{ (settings.base_currency or 'EUR') if settings else 'EUR' }}">
-        <input type="hidden" name="report_template" value="{{ (settings.report_template or 'official_template') if settings else 'official_template' }}">
         <input type="hidden" name="invoice_template" value="{{ (settings.invoice_template or 'default_template') if settings else 'default_template' }}">
         <input type="hidden" name="social_security_monthly" value="{{ settings.social_security_monthly if settings and settings.social_security_monthly else '0' }}">
         <input type="hidden" name="payment_methods" value="{{ (settings.payment_methods or 'Bank Transfer,PayPal,Credit Card,Cash,Crypto') if settings else 'Bank Transfer,PayPal,Credit Card,Cash,Crypto' }}">

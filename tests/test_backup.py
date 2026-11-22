@@ -62,11 +62,9 @@ def test_disabling_a_default_enabled_module_persists(loaded_modules):
 
 
 def test_defaults_encrypt_with_backup_key_and_auto_backup_on(bk):
-    from app import Settings
-
-    assert bk._get_config().encrypt_method == 'key'
-    assert Settings().auto_backup_enabled is not False  # column default
-    assert Settings.query.first().auto_backup_enabled is True
+    cfg = bk._get_config()
+    assert cfg.encrypt_method == 'key'
+    assert cfg.auto_backup_enabled is True and cfg.daily_backup_retention_count == 4
 
 
 def test_scheduled_backup_runs_with_defaults(bk, tmp_path):

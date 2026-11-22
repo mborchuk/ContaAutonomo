@@ -22,6 +22,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   answer; when first enabled, the AI Agent copies the AI Parser's provider
   settings and keys once. CLI agents run only with `AI_AGENT_ALLOW_CLI=1` or
   `AI_PARSER_ALLOW_CLI=1`.
+- **Settings**: the report template moved from Settings → General to its own
+  tab, Settings → Reports. The automatic-backup switch and retention stay in
+  Settings → Backup. Both keep their values on upgrade.
 - **Dashboard**: the Document Alerts and Fiscal Deadlines panels are gone; their
   alerts and deadlines are messages in the 🔔 bell (top right).
 - **Not yet validated against the official systems**: the AEAT import files
@@ -51,6 +54,11 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   can add a top-bar widget with `get_header_widgets()`.
 - Alerts for the owner go to the message center through `messages.post`
   instead of dashboard panels.
+- The core `Settings` model no longer has `report_template` (now Reports'
+  `reports_config`), `auto_backup_enabled` and `daily_backup_retention_count`
+  (now Backup's `backup_config`) or the unused `backup_retention_count`. An
+  upgraded database keeps the old columns; the modules copy their values once.
+  The report template is chosen in Settings → Reports.
 
 ### Added
 - **Reverse charge must match the supplier's country**: an expense marked

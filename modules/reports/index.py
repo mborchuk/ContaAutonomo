@@ -14,6 +14,9 @@ import os
 import importlib.util
 
 
+DEFAULT_TEMPLATE = 'official_template'
+
+
 class ReportsModule(BaseModule):
 
     @property
@@ -56,9 +59,63 @@ class ReportsModule(BaseModule):
             __table_args__ = {'extend_existing': True}
             id = db.Column(db.Integer, primary_key=True)
 
+        class ReportsConfig(db.Model):
+            """The report template (before 2.0.0 a column of the core Settings)."""
+            __tablename__ = 'reports_config'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            report_template = db.Column(db.String(100), default=DEFAULT_TEMPLATE)
+
         self.Invoice = Invoice
         self.Settings = Settings
-        return {}
+        self.ReportsConfig = ReportsConfig
+        return {'ReportsConfig': ReportsConfig}
+
+    # --- Settings → Reports ------------------------------------------------ #
+
+    @property
+    def settings_tab(self):
+        return {'id': 'reports', 'label': 'Reports'}
+
+    def get_settings_html(self, settings):
+        return self.render_settings_template(
+            'reports_settings_panel.html', templates=self._report_templates(),
+            current=self._report_template())
+
+    def save_settings(self, settings, form):
+        name = form.get('report_template')
+        if name in self._report_templates():
+            self._get_config().report_template = name
+
+    @staticmethod
+    def _report_templates():
+        """The report templates in report_templates/ (file names without .py)."""
+        folder = os.path.join(os.path.dirname(__file__), 'report_templates')
+        return sorted(f[:-3] for f in os.listdir(folder)
+                      if f.endswith('.py') and not f.startswith('_'))
+
+    def _report_template(self):
+        """The chosen template, or the default when it is not available."""
+        name = self._get_config().report_template
+        return name if name in self._report_templates() else DEFAULT_TEMPLATE
+
+    def _get_config(self):
+        cfg = self.ReportsConfig.query.first()
+        if cfg is None:
+            cfg = self.ReportsConfig(report_template=self._legacy_template() or DEFAULT_TEMPLATE)
+            self._db.session.add(cfg)
+            self._db.session.commit()
+        return cfg
+
+    def _legacy_template(self):
+        """The template chosen in the core Settings table before 2.0.0 (the
+        old column stays in an upgraded database; a new one does not have it)."""
+        from sqlalchemy import text
+        try:
+            row = self._db.session.execute(text('SELECT * FROM settings LIMIT 1')).mappings().first()
+        except Exception:
+            return None
+        return (row or {}).get('report_template')
 
     def _get_available_sections(self):
         """Collect available report sections from enabled modules."""
@@ -454,7 +511,7 @@ class ReportsModule(BaseModule):
         }
 
         # Load report template
-        template_name = settings.report_template if settings and settings.report_template else 'official_template'
+        template_name = self._report_template()
         template_path = os.path.join(os.path.dirname(__file__), 'report_templates', f'{template_name}.py')
 
         spec = importlib.util.spec_from_file_location(template_name, template_path)

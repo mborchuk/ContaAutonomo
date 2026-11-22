@@ -1,0 +1,10 @@
+<h3>Reports</h3>
+<div class="form-group">
+    <label for="report_template">Report template</label>
+    <select id="report_template" name="report_template">
+        {% for name in templates %}
+        <option value="{{ name }}"{% if name == current %} selected{% endif %}>{{ name.replace('_', ' ')|capitalize }}{% if name == 'official_template' %} (default){% endif %}</option>
+        {% endfor %}
+    </select>
+    <small class="helper-text">The layout of the financial report PDF. Custom templates go in modules/reports/report_templates/.</small>
+</div>
