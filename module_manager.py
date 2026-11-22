@@ -317,11 +317,12 @@ class BaseModule(ABC):
 
     def calculate_income_tax(self, context):
         """
-        Override the default income tax (IRPF) calculation.
+        The dashboard's income tax for the year.
 
-        If a module returns a non-None result, it completely replaces the
-        built-in Spanish IRPF progressive brackets. Only the first module
-        that returns a result is used.
+        The core has no income tax scale: the country's tax module provides
+        it. Only the first module that returns a result is used; when none
+        does, the dashboard shows no income tax and says that no income tax
+        module is enabled.
 
         Args:
             context: dict with keys:
@@ -337,7 +338,7 @@ class BaseModule(ABC):
                     bracket (str), rate (number), amount (float),
                     tax (float), active (bool)
                 - label: str — name for the tax (e.g. 'Income Tax (PIT)')
-            Return None to use the default calculation.
+            Return None when this module does not calculate it.
         """
         return None
 

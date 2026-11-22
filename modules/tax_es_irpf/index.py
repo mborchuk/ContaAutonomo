@@ -844,7 +844,7 @@ class TaxEsIrpfModule(BaseModule):
         }
 
     def calculate_income_tax(self, context):
-        """Replace default IRPF with the Modelo 100 annual estimate."""
+        """The dashboard's income tax: the Modelo 100 annual estimate."""
         year = date.today().year
         try:
             profile = self._get_profile()

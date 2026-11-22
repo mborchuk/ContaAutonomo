@@ -267,7 +267,7 @@ The hooks a tax module uses (full list: [MODULES_DOCUMENTATION.md](MODULES_DOCUM
 
 | Hook | What the core does with it | Context |
 |---|---|---|
-| `calculate_income_tax(context)` | Dashboard income tax; the first module that returns a result replaces the built-in Spanish brackets | `taxable_income` (income minus the modules' `deductions`), `settings`, `base_currency`, `currency_symbol` |
+| `calculate_income_tax(context)` | Dashboard income tax; the first module that returns a result is used; without one the dashboard shows no income tax | `taxable_income` (income minus the modules' `deductions`), `settings`, `base_currency`, `currency_symbol` |
 | `calculate_vat(context)` | Dashboard VAT; the first module that returns a result is used | `invoices`: every invoice dated this year except cancelled ones, each with `amount_base` in the base currency; `settings`, `base_currency` |
 | `get_tax_obligations(context)` | Adds summary columns, breakdown rows and notes to the Tax Obligations panel; `deductions` are subtracted from income before income tax, `tax_total` is added to the taxes | `current_year`, `base_currency`, `exchange_rates`, `settings`, `vat_collected`, `currency_symbol` |
 | `get_field_labels()` | Renames Settings fields | — |

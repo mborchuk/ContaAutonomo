@@ -1113,7 +1113,7 @@ bell's script posts with `Accept: application/json` and updates the count in pla
 | `get_invoice_templates()` | Invoice PDF templates provided by this module: `id`, `name` and a template file `path` or a `render(invoice, customer, settings)` callable returning PDF bytes (None: template gone, default used). The core lists them through `invoice.list_pdf_templates` and builds with them in `invoice.render_pdf`; only a listed id is used |
 | `get_invoice_blocks()` | Blocks for invoice designer layouts (id, label, help, required, slots, default_slot, options, render). The core collects them from every module and gives them out through `invoice.list_blocks` |
 | `get_tax_obligations(context)` | Tax panel contributions |
-| `calculate_income_tax(context)` | Override income tax calculation (first non-None wins) |
+| `calculate_income_tax(context)` | The dashboard's income tax (first non-None wins). The core has no scale of its own: without a module, the dashboard shows no income tax and says no income tax module is enabled |
 | `calculate_vat(context)` | Override VAT collection calculation (first non-None wins) |
 | `get_auth_providers()` | Return `AuthProvider` instances for pluggable auth |
 | `get_capabilities()` | Declare capabilities for cross-module discovery |
