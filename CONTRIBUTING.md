@@ -92,69 +92,75 @@ blocked, and history is kept linear.
 
 Some tax data is valid for one year: box numbers of the forms, the Modelo 347
 threshold, the RETA brackets, the IRPF scales and the filing calendar. Every
-January, check them for the new year. Most years nothing changes and the
-update is one line per table.
+January, check them for the new year. Most years nothing changes.
 
-### How the app tells you
+### In the app — Taxes → Tax Data (no code)
 
-- **On the page.** A draft or advisor page for a year without its own table
-  uses the latest earlier table and shows a warning: *"Figures for 2027 use
-  the 2026 table — check that the official values did not change for 2027."*
-  Open **How to check …** under it: what the table holds, the steps, links to
-  the official pages and what to change once checked.
+The **Tax Data** module (on by default) lists every yearly table the enabled
+modules use, for the year you pick:
+
+- **Status.** *"2027 table in the app"*, *"Uses the 2026 table — not
+  confirmed"* or *"Confirmed 20/01/2027"*. A page that shows 2027 with an
+  unconfirmed 2026 table warns: *"Figures for 2027 use the 2026 table — check
+  that the official values did not change for 2027, then confirm it or enter
+  the new values in Tax Data."*
+- **How to check it.** What the table holds, numbered steps and links to the
+  official AEAT, BOE and Seguridad Social pages.
 - **Checked automatically.** For Modelo 303, 130 and 390 the app compares the
   box numbers it uses with the official AEAT record layouts it ships
-  (`modules/tax_es_forms/aeat_layouts/`) and shows the result in the same
-  warning (✓ or ⚠). The test `tests/test_year_table_checks.py` does the same
-  on every test run, so a renumbered box fails the build.
+  (`modules/tax_es_forms/aeat_layouts/`) and shows ✓ or ⚠.
+  `tests/test_year_table_checks.py` does the same on every test run, so a
+  renumbered box fails the build.
+- **Confirm or change.** *Confirm unchanged for 2027* (box tables), or edit
+  the values and *Save for 2027* (Modelo 347 threshold; RETA rate, bracket
+  limits and monthly quotas). The pages use the saved values for that year and
+  stop warning. *Remove the confirmation* undoes it.
 
-### Step 1 — check (no code)
+Box numbers cannot be edited: a renumbered box changes the calculation and
+needs an app update (below). The same holds for a RETA table with a different
+number of brackets.
 
-| Data | Where you see it in the app | What to compare | Official source |
-|------|-----------------------------|-----------------|-----------------|
-| Modelo 303 and 130 boxes | Tax Drafts → 303 / 130, Box column | Each box number and its meaning (21 % VAT line [07]/[09]; result [71] / [19]) | [AEAT Modelo 303](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G414.shtml), [AEAT Modelo 130](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G601.shtml) → Ayuda → Instrucciones |
-| Modelo 390 casillas | Tax Drafts → 390, "390 casilla" column | Each casilla number and its meaning | [AEAT Modelo 390](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G412.shtml) → Ayuda → Instrucciones |
-| Modelo 347 threshold | Tax Drafts → 347 (the threshold is in the note at the top) | 3.005,06 euros a year | [Real Decreto 1065/2007, art. 33](https://www.boe.es/buscar/act.php?id=BOE-A-2007-15984#a33), paragraph 1; [AEAT Modelo 347](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/GI27.shtml) |
-| AEAT record layouts (import files) | The ⬇ AEAT file buttons | A new "Diseño de registro" for the year | [Models 300–399](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-300-399.html), [models 100–199](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-100-199.html) |
-| RETA brackets and rate | RETA Advisor → bracket table | Each tramo (net income from / to, base mínima / máxima), the contribution rate, the cotización order | [Seguridad Social: bases y tipos de cotización](https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537), self-employed section |
-| IRPF scales and deductions | IRPF Estimator | State and regional scales, minimums, deductions | AEAT *Manual práctico de Renta* of the year, regional laws |
-| Filing calendar | Fiscal Calendar (dates marked *verify*) | Each filing window of the year | AEAT Sede, *Calendario del contribuyente* of the year |
+| Table | Official source |
+|-------|-----------------|
+| Modelo 303 and 130 boxes | [AEAT Modelo 303](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G414.shtml), [AEAT Modelo 130](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G601.shtml) → Ayuda → Instrucciones |
+| Modelo 390 casillas | [AEAT Modelo 390](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G412.shtml) → Ayuda → Instrucciones |
+| Modelo 347 threshold | [Real Decreto 1065/2007, art. 33](https://www.boe.es/buscar/act.php?id=BOE-A-2007-15984#a33), paragraph 1; [AEAT Modelo 347](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/GI27.shtml) |
+| RETA brackets and rate | [Seguridad Social: bases y tipos de cotización](https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537), self-employed section |
 
-### Step 2 — record the result
+Not in Tax Data yet (check them by hand, and update the code below):
 
-**Nothing changed** (the usual case): add the year to the table with the
-same values, and say what you checked. For example, for Modelo 390 in
-`modules/tax_es_forms/boxes.py`:
+| Data | Where you see it in the app | Official source |
+|------|-----------------------------|-----------------|
+| AEAT record layouts (import files) | The ⬇ AEAT file buttons | [Models 300–399](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-300-399.html), [models 100–199](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-100-199.html) |
+| IRPF scales and deductions | IRPF Estimator | AEAT *Manual práctico de Renta* of the year, regional laws |
+| Filing calendar | Fiscal Calendar (dates marked *verify*) | AEAT Sede, *Calendario del contribuyente* of the year |
 
-```python
-MODELO_390_TABLES = {
-    2025: MODELO_390_BOXES,
-    2026: MODELO_390_BOXES,
-    # 2027: checked against the AEAT Modelo 390 instructions for 2027 on 2027-01-20.
-    2027: MODELO_390_BOXES,
-}
-```
+### In the code — a release ships the new year
+
+A confirmation in Tax Data is kept in the owner's database. A release adds
+the checked year to the tables, so new installations do not warn:
 
 | Data | File | Line to add |
 |------|------|-------------|
 | Modelo 303 and 130 boxes | `modules/tax_es_forms/boxes.py` | `2027: {"303": MODELO_303_BOXES, "130": MODELO_130_BOXES},` in `BOX_TABLES`; bump `BOX_TABLE_VERSION` |
 | Modelo 390 casillas | `modules/tax_es_forms/boxes.py` | `2027: MODELO_390_BOXES,` in `MODELO_390_TABLES` |
-| Modelo 347 threshold | `modules/tax_es_forms/boxes.py` | `2027: _MODELO_347_RULES_2025,` in `MODELO_347_TABLES` |
+| Modelo 347 threshold | `modules/tax_es_forms/boxes.py` | `2027: _MODELO_347_RULES_2025,` in `MODELO_347_TABLES` (a new rules dict if the amount changed) |
 | RETA brackets and rate | `modules/reta_advisor/brackets.py` | The year in `BRACKET_TABLES` and `CONTRIBUTION_RATES`; bump `BRACKET_TABLE_VERSION` |
 | IRPF scales | `modules/tax_es_irpf/params/` | Copy `es_irpf_2026.json` to `es_irpf_2027.json` and correct what changed |
 | Filing calendar | `modules/fiscal_calendar/calendar_data.py` | The year in `VERIFIED_YEARS`, `WINDOW_OVERRIDES` for moved dates; bump `CALENDAR_VERSION` |
 
-Then run the checks and open one pull request, *"data: 2027 tax tables"*:
+Say in a comment what was checked and when, run the checks and open one pull
+request, *"data: 2027 tax tables"*:
 
 ```bash
 python -m pytest tests/test_year_table_checks.py tests/test_year_keyed_tables.py
 ```
 
-**Something changed:** open an issue with the link and what changed (for
-example "Modelo 390 casilla 108 renamed …"). Changed box numbers need the
-labels, the calculation and the tests updated, not only a new line.
+**Box numbers changed:** open an issue with the link and what changed (for
+example "Modelo 390 casilla 108 renamed …"). The labels, the calculation and
+the tests need updating, not only a new line.
 
-### Step 3 — a new AEAT record layout
+### A new AEAT record layout
 
 When the AEAT publishes a new "Diseño de registro" for 303, 130 or 390:
 download the spreadsheet from the record layouts page above, rebuild the JSON
@@ -164,9 +170,15 @@ exercise and run `python -m pytest tests/test_aeat_files.py
 tests/test_year_table_checks.py`. The tests check positions, constants (each
 "Tipo %" casilla's fixed rate) and every box the drafts use.
 
-`year_tables.resolve()` implements the fallback; `year_tables.TableCheck`
-describes how a page explains a table, and each module keeps its own checks
-(`modules/tax_es_forms/table_checks.py`, `modules/reta_advisor/table_checks.py`).
+### For module authors
+
+A module with a yearly table declares a `year_table` capability (contract in
+`modules/tax_data/index.py`): how to check the table, its values for a year
+as fields, an optional automatic check and validation. It reads the owner's
+confirmation with `taxdata.year_values` and shows `taxdata.year_notice` on
+its pages; without the Tax Data module it shows a short warning. Examples:
+`modules/tax_es_forms/yearly.py` and `table_checks.py`,
+`modules/reta_advisor/yearly.py` and `brackets.py`.
 
 ## Reporting Bugs and Requesting Features
 

@@ -13,7 +13,7 @@
 </div>
 
 {% if draft.table_fallback %}
-{% set notice = draft.table_notice %}{% include '_year_table_notice.html' %}
+{% if table_notice %}{{ table_notice|safe }}{% else %}<div class="note note-warning" role="note">⚠ {{ draft.table_note }}</div>{% endif %}
 {% endif %}
 <!-- Non-dismissible estimate banner -->
 <div class="note note-info">

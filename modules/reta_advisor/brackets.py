@@ -15,10 +15,12 @@ Sources to check on annual update:
 Each bracket: (monthly net yield lower bound exclusive, upper bound inclusive,
 monthly quota EUR). Upper bound None = no limit.
 
-Annual update (each January): add the new year to BRACKET_TABLES from the BOE
-orden de cotización. Years without a table use the latest earlier one and the
-advisor shows a "verify" note.
+Annual update (each January): the owner checks the new year in Taxes → Tax
+Data and confirms the table or enters the new brackets and rate (`apply_values`
+below). Years without a table use the latest earlier one and the advisor shows
+a "verify" note until then. A release adds the year here.
 """
+from .yearly import resolve
 
 BRACKET_TABLE_VERSION = "2026.2"
 
@@ -64,13 +66,11 @@ CONTRIBUTION_RATES = {
 
 def contribution_rate_for_year(year):
     """Return (table_year, rate_pct, is_fallback)."""
-    from year_tables import resolve
     return resolve(CONTRIBUTION_RATES, year)
 
 
 def brackets_for_year(year):
     """Return (table_year, brackets, is_fallback)."""
-    from year_tables import resolve
     return resolve(BRACKET_TABLES, year)
 
 
@@ -90,3 +90,46 @@ def bracket_for(monthly_net_yield, brackets=None):
     idx = len(brackets) - 1
     lo, hi, quota = brackets[idx]
     return idx, lo, hi, quota
+
+
+# --- Values the owner can change in Tax Data ---------------------------------- #
+
+def fields(brackets, rate_pct):
+    """The RETA table as Tax Data fields: the rate, and for each bracket its
+    upper limit (not the last: no limit) and its monthly quota."""
+    out = [{'key': 'rate', 'label': 'Contribution rate (%)', 'kind': 'percent',
+            'value': rate_pct}]
+    for i, (_lo, hi, quota) in enumerate(brackets):
+        row = f'Bracket {i + 1}'
+        if hi is not None:
+            out.append({'key': f'upper_{i}', 'label': f'{row}: up to (EUR a month)',
+                        'kind': 'money', 'value': hi, 'row': row,
+                        'col': 'Net income up to (EUR a month)'})
+        out.append({'key': f'quota_{i}', 'label': f'{row}: monthly quota (EUR)',
+                    'kind': 'money', 'value': quota, 'row': row,
+                    'col': 'Monthly quota (EUR)'})
+    return out
+
+
+def apply_values(brackets, rate_pct, values):
+    """(brackets, rate_pct) with the values entered in Tax Data. Each lower
+    limit is the upper limit of the bracket before it."""
+    out, lower = [], 0.0
+    for i, (_lo, hi, quota) in enumerate(brackets):
+        upper = values.get(f'upper_{i}', hi) if hi is not None else None
+        out.append((lower, upper, values.get(f'quota_{i}', quota)))
+        lower = upper
+    return out, values.get('rate', rate_pct)
+
+
+def validate(brackets, values):
+    """A sentence when the entered values cannot be a bracket table, else None."""
+    new, rate = apply_values(brackets, 0.0, values)
+    if 'rate' in values and not 0 < values['rate'] < 100:
+        return 'The contribution rate must be between 0 and 100 %.'
+    uppers = [hi for _lo, hi, _q in new if hi is not None]
+    if any(b <= a for a, b in zip(uppers, uppers[1:])) or (uppers and uppers[0] <= 0):
+        return 'Each bracket must end above the one before it.'
+    if any(q <= 0 for _lo, _hi, q in new):
+        return 'Every monthly quota must be above zero.'
+    return None

@@ -1,4 +1,4 @@
-"""Yearly tax tables say how to check them (year_tables.TableCheck), and the
+"""Yearly tax tables say how to check them (the Tax Data module shows it), and the
 box numbers the drafts use are compared with the official AEAT record layouts
 the app ships — automatically, every test run."""
 import pytest
@@ -9,7 +9,6 @@ from modules.tax_es_forms.boxes import (BOX_TABLES, MODELO_130_BOXES, MODELO_303
                                         MODELO_390_BOXES, MODELO_390_TABLES,
                                         MODELO_347_TABLES)
 from modules.reta_advisor.table_checks import CHECK_RETA
-from year_tables import fallback_notice
 
 
 @pytest.mark.parametrize('model, boxes', [('303', MODELO_303_BOXES),
@@ -45,38 +44,24 @@ def test_no_layout_for_the_year_says_so():
 
 @pytest.mark.parametrize('check', [tc.CHECK_303_130, tc.CHECK_390, tc.CHECK_347, CHECK_RETA])
 def test_each_check_tells_a_person_what_to_do(check):
-    notice = fallback_notice(2099, 2026, check)
-    assert notice['text'].startswith('Figures for 2099 use the 2026 table')
-    assert notice['steps'] and notice['holds'] and notice['after_check']
-    assert notice['links'] and all(l['url'].startswith('https://') for l in notice['links'])
+    assert check['id'].startswith('es.') and check['name']
+    assert check['steps'] and check['holds'] and check['after_check']
+    assert check['links'] and all(url.startswith('https://') for _label, url in check['links'])
 
 
-def test_notice_shows_the_automatic_result():
+def test_the_automatic_check_compares_with_the_newest_layout():
     year = max(BOX_TABLES)
-    notice = fallback_notice(year, year - 1, tc.CHECK_303_130)
-    assert notice['auto']['ok'] is True and 'Checked automatically' in notice['auto']['message']
-    notice = fallback_notice(2099, 2026, tc.CHECK_390)
-    message = notice['auto']['message']   # no 2099 layout: says which one it compared with
+    ok, message = tc.CHECK_303_130['auto'](year)
+    assert ok is True and 'Checked automatically' in message
+    ok, message = tc.CHECK_390['auto'](2099)   # no 2099 layout: says which one it used
     assert 'newest official AEAT record layout the app has (from 2026)' in message
     assert 'newer layout for 2099' in message
 
 
 def test_a_failing_automatic_check_never_breaks_the_page():
-    from year_tables import TableCheck
+    from modules.tax_es_forms.index import _auto
 
     def broken(year):
         raise RuntimeError('boom')
-    notice = fallback_notice(2099, 2026, TableCheck('x', 'y', ('z',), auto=broken))
-    assert notice['auto']['ok'] is None and 'could not run' in notice['auto']['message']
-
-
-def test_draft_pages_render_the_steps_and_links(loaded_modules, client):
-    with client.session_transaction() as sess:
-        sess['authenticated'] = True
-    html = client.get('/tax-forms-draft/347/2099').get_data(as_text=True)
-    assert 'How to check the Modelo 347 threshold' in html
-    assert 'https://www.boe.es/buscar/act.php?id=BOE-A-2007-15984#a33' in html
-    assert 'rel="noopener noreferrer"' in html
-    assert 'Unchanged: add the year to MODELO_347_TABLES' in html and 'built-in method' not in html
-    html = client.get('/tax-forms-draft/347/2026').get_data(as_text=True)
-    assert 'How to check the Modelo 347 threshold' not in html      # 2026 has its table
+    ok, message = _auto({'auto': broken}, 2099)
+    assert ok is None and 'could not run (RuntimeError)' in message

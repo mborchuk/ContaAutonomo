@@ -1,13 +1,14 @@
-"""How a person checks this module's yearly tables (year_tables.TableCheck),
-and the automatic part: the box numbers the drafts use, compared with the
-official AEAT record layouts the app ships (`aeat_layouts/`).
+"""How a person checks this module's yearly tables, and the automatic part:
+the box numbers the drafts use, compared with the official AEAT record layouts
+the app ships (`aeat_layouts/`). The Tax Data module (Taxes → Tax Data) shows
+these to the owner, who confirms each table for a new year or enters its new
+values; `index.py` declares them as `year_table` capabilities.
 
 Links checked on 22 November 2026.
 """
-from year_tables import TableCheck, resolve
-
 from .aeat_files import LAYOUT_FILES, UnsupportedYear, load_layout
 from .boxes import MODELO_130_BOXES, MODELO_303_BOXES, MODELO_390_BOXES
+from .yearly import resolve
 
 AEAT_LAYOUTS_300 = ('AEAT record layouts, models 300–399',
                     'https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-300-399.html')
@@ -20,7 +21,6 @@ AEAT_347 = ('AEAT Modelo 347', 'https://sede.agenciatributaria.gob.es/Sede/proce
 RD_1065_ART_33 = ('Real Decreto 1065/2007, art. 33 (BOE)',
                   'https://www.boe.es/buscar/act.php?id=BOE-A-2007-15984#a33')
 
-GUIDE = 'CONTRIBUTING.md → Annual Tax Data Update'
 
 
 def layout_boxes(model, year):
@@ -55,8 +55,9 @@ def boxes_in_layout(model, boxes, year):
                   f'{which}.{later} Check the labels as below.')
 
 
-CHECK_303_130 = TableCheck(
-    title='the Modelo 303 and 130 boxes',
+CHECK_303_130 = dict(
+    id='es.boxes_303_130',
+    name='Modelo 303 and 130 boxes',
     holds=('The box numbers and labels on the Modelo 303 and 130 draft pages. They change '
            'only when the AEAT changes the form.'),
     steps=(
@@ -68,8 +69,8 @@ CHECK_303_130 = TableCheck(
         'listed on the record layouts pages below.',
     ),
     links=(AEAT_303, AEAT_130, AEAT_LAYOUTS_300, AEAT_LAYOUTS_100),
-    update=(f'Unchanged: add the year to BOX_TABLES in modules/tax_es_forms/boxes.py with the '
-            f'same tables. Changed: the boxes and the code using them need updating. See {GUIDE}.'),
+    after_check=('Same numbers and meanings: confirm the year. A renumbered box needs an app '
+                 'update — do not file from the drafts until then.'),
     auto=lambda year: _both(year),
 )
 
@@ -86,8 +87,9 @@ def _both(year):
     return None, ' '.join(message for _, message in results)
 
 
-CHECK_390 = TableCheck(
-    title='the Modelo 390 casillas',
+CHECK_390 = dict(
+    id='es.casillas_390',
+    name='Modelo 390 casillas',
     holds=('The casilla numbers and labels of the annual VAT summary. Each casilla is the sum '
            'of the four quarterly Modelo 303 drafts; the AEAT can add or renumber casillas.'),
     steps=(
@@ -100,13 +102,14 @@ CHECK_390 = TableCheck(
         'casilla by number; the app compares with it automatically when it has that layout.',
     ),
     links=(AEAT_390, AEAT_LAYOUTS_300),
-    update=(f'Unchanged: add the year to MODELO_390_TABLES in modules/tax_es_forms/boxes.py with '
-            f'the same table. See {GUIDE}.'),
+    after_check=('Same casillas: confirm the year. A new or renumbered casilla needs an app '
+                 'update — do not file from the draft until then.'),
     auto=lambda year: boxes_in_layout('390', MODELO_390_BOXES, year),
 )
 
-CHECK_347 = TableCheck(
-    title='the Modelo 347 threshold',
+CHECK_347 = dict(
+    id='es.threshold_347',
+    name='Modelo 347 threshold',
     holds=('The amount above which a customer or supplier must be declared: 3.005,06 euros a '
            'year, VAT included. It is set by Real Decreto 1065/2007, article 33.'),
     steps=(
@@ -116,6 +119,6 @@ CHECK_347 = TableCheck(
         'other change (keys, exclusions).',
     ),
     links=(RD_1065_ART_33, AEAT_347),
-    update=(f'Unchanged: add the year to MODELO_347_TABLES in modules/tax_es_forms/boxes.py with '
-            f'the same threshold. See {GUIDE}.'),
+    after_check=('Same amount: confirm the year. A new amount: enter it below and save — the '
+                 'Modelo 347 check of that year uses it.'),
 )

@@ -25,6 +25,8 @@ Scope of this calculator (v1) — out of scope regimes listed in the UI fine pri
   - intra-EU acquisitions / inversión del sujeto pasivo detail boxes
 """
 
+from .yearly import resolve
+
 # Bump when box definitions are reviewed / changed.
 BOX_TABLE_VERSION = "2026.1"
 
@@ -77,7 +79,6 @@ BOX_TABLES = {
 
 def boxes_for_year(year):
     """Return (table_year, {"303": ..., "130": ...}, is_fallback)."""
-    from year_tables import resolve
     return resolve(BOX_TABLES, year)
 
 
@@ -148,7 +149,6 @@ MODELO_390_TABLES = {
 
 def modelo_390_boxes_for_year(year):
     """Return (table_year, labels, is_fallback) for the 390 casillas."""
-    from year_tables import resolve
     return resolve(MODELO_390_TABLES, year)
 
 
@@ -201,5 +201,4 @@ MODELO_347_OUT_OF_SCOPE = [
 
 def modelo_347_rules_for_year(year):
     """Return (table_year, {'threshold', 'source'}, is_fallback)."""
-    from year_tables import resolve
     return resolve(MODELO_347_TABLES, year)

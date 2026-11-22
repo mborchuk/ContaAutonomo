@@ -1,0 +1,9 @@
+{# What a table holds, the steps to check it and the official sources. Context: cap. #}
+<p>{{ cap['holds'] }}</p>
+<ol>{% for step in cap['steps'] %}<li>{{ step }}</li>{% endfor %}</ol>
+{% if cap['links'] %}
+<p>Official sources:
+    {% for label, url in cap['links'] %}<a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ label }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+</p>
+{% endif %}
+{% if cap['after_check'] %}<p class="fine-print">{{ cap['after_check'] }}</p>{% endif %}

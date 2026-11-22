@@ -20,10 +20,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash
 from constants import counts_as_income
 from module_manager import BaseModule
 
-from .brackets import (BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT, brackets_for_year,
-                       contribution_rate_for_year)
+from .brackets import (BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT,
+                       apply_values, brackets_for_year, contribution_rate_for_year,
+                       fields as table_fields, validate as validate_table)
 from .engine import project
-from year_tables import fallback_note, fallback_notice
+from .yearly import confirmed_values, fallback_note, notice_html
 
 from .table_checks import CHECK_RETA
 
@@ -189,11 +190,52 @@ class RetaAdvisorModule(BaseModule):
             current_monthly_quota=current_quota,
             paid_ytd=self._paid_ytd(today.year),
             deduction_pct=float(cfg.get('deduction_pct', GENERIC_DEDUCTION_PCT)),
-            year=today.year)
-        rate_year, rate_pct, rate_fallback = contribution_rate_for_year(today.year)
+            year=today.year, table=self._brackets(today.year))
+        rate_year, rate_pct, rate_fallback = self._rate(today.year)
         result.update(contribution_rate_pct=rate_pct, contribution_rate_year=rate_year,
                       contribution_rate_fallback=rate_fallback)
         return result
+
+    # --- Yearly tables and the Tax Data module ------------------------------ #
+
+    def _table(self, year):
+        """(table_year, brackets, rate_pct, is_fallback): the year's tables,
+        with the values the owner confirmed for it in Tax Data. A confirmed
+        year is not a fallback."""
+        table_year, brackets, fallback = brackets_for_year(year)
+        _rate_year, rate, rate_fallback = contribution_rate_for_year(year)
+        status = confirmed_values(getattr(self.core, 'functions', None), CHECK_RETA['id'], year)
+        if status is None:
+            return table_year, brackets, rate, fallback or rate_fallback
+        brackets, rate = apply_values(brackets, rate, status.get('values') or {})
+        return table_year, brackets, rate, False
+
+    def _brackets(self, year):
+        table_year, brackets, _rate, fallback = self._table(year)
+        return table_year, brackets, fallback
+
+    def _rate(self, year):
+        rate_year, _rate, _fallback = contribution_rate_for_year(year)
+        _ty, _brackets, rate, fallback = self._table(year)
+        return rate_year, rate, fallback
+
+    def get_capabilities(self):
+        """The RETA table of a year, for the Tax Data module (`year_table`):
+        the owner confirms it for a new year or enters the new values."""
+        def action(year):
+            table_year, brackets, fallback = brackets_for_year(year)
+            _ry, rate, _rf = contribution_rate_for_year(year)
+            return {'table_year': table_year, 'built_in': not fallback,
+                    'fields': table_fields(brackets, rate), 'auto': None}
+
+        def validate(year, values):
+            _ty, brackets, _f = brackets_for_year(year)
+            return validate_table(brackets, values)
+
+        return [{'type': 'year_table', 'id': CHECK_RETA['id'], 'name': CHECK_RETA['name'],
+                 'holds': CHECK_RETA['holds'], 'steps': CHECK_RETA['steps'],
+                 'links': CHECK_RETA['links'], 'after_check': CHECK_RETA['after_check'],
+                 'action': action, 'validate': validate}]
 
     # --- Routes ------------------------------------------------------------- #
 
@@ -219,13 +261,17 @@ class RetaAdvisorModule(BaseModule):
                 return redirect(url_for('reta_advisor.reta_index'))
 
             proj = module._projection()
-            _table_year, brackets, _fallback = brackets_for_year(date.today().year)
+            year = date.today().year
+            _table_year, brackets, _fallback = module._brackets(year)
+            notice = (notice_html(getattr(module.core, 'functions', None), CHECK_RETA['id'],
+                                  year, proj['table_year'])
+                      if proj['table_fallback'] else '')
             return render_template('reta_advisor.html',
                                    proj=proj,
                                    brackets=brackets,
-                                   table_notice=(fallback_notice(date.today().year,
-                                                                 proj['table_year'], CHECK_RETA)
-                                                 if proj['table_fallback'] else None),
+                                   table_note=(fallback_note(proj['table_year'])
+                                               if proj['table_fallback'] else ''),
+                                   table_notice=notice,
                                    version=BRACKET_TABLE_VERSION,
                                    config=module._get_config(),
                                    current_year=datetime.now().year)

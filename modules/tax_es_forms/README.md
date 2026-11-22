@@ -105,8 +105,9 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
 
 `compute_modelo_390()` adds up the four quarterly 303 drafts of a year, so
 every casilla agrees with the quarterly figures by construction. Casillas were
-checked against the official AEAT *Instrucciones modelo 390 — 2025*; a later
-fiscal year uses that table and shows a "verify" banner until it is reviewed.
+checked against the official AEAT *Instrucciones modelo 390 — 2025* and the
+2026 record layout; a later fiscal year uses the 2026 table and shows a
+"verify" banner until the owner confirms it in Taxes → Tax Data.
 
 | 390 casilla | From the 303 boxes (sum of Q1–Q4) |
 |-------------|-----------------------------------|
@@ -139,7 +140,9 @@ next year (Fiscal Calendar, form `347`).
 Sources, checked on 16 November 2026: RD 1065/2007 (RGAT) arts. 31–33; AEAT
 *Manual de actividades económicas* 8.2 and the Modelo 347 instructions (Orden
 EHA/3012/2008, amended by Orden HAC/1431/2025); DGT V0766-23 and V0923-23.
-The threshold is year-keyed (`MODELO_347_TABLES` in `boxes.py`).
+The threshold is year-keyed (`MODELO_347_TABLES` in `boxes.py`); for a year
+without its own table, the owner confirms it or enters the new amount in
+Taxes → Tax Data.
 
 | Operation | Treatment | Rule |
 |-----------|-----------|------|

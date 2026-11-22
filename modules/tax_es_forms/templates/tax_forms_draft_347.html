@@ -18,7 +18,7 @@
     {% if draft.deadline %}Filing window: {{ draft.deadline.window_start.strftime('%d/%m/%Y') }}–{{ draft.deadline.window_end.strftime('%d/%m/%Y') }}.{% endif %}
 </div>
 {% if draft.table_fallback %}
-{% set notice = draft.table_notice %}{% include '_year_table_notice.html' %}
+{% if table_notice %}{{ table_notice|safe }}{% else %}<div class="note note-warning" role="note">⚠ {{ draft.table_note }}</div>{% endif %}
 {% endif %}
 {% for warning in draft.meta.warnings %}
 <div class="note note-warning">⚠ {{ warning }}</div>
