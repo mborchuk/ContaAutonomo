@@ -1,45 +1,15 @@
 """
-Output VAT (IVA repercutido) of one invoice — core rules on core data.
+Output VAT (IVA repercutido) of one invoice, under the Spanish rules.
 
 An issued invoice carries the fiscal snapshot frozen at issue (snap_vat_rate,
 snap_taxable_base, snap_vat_amount, snap_customer); legacy and draft invoices
-derive the VAT from the customer's tax type and the current rate. Pure
-functions, no database queries: the tax modules and Reports pass invoices in.
+derive the VAT from the customer's tax type and the current rate: only
+`standard` customers carry output VAT; `eu_b2b` is an intra-EU reverse charge
+and `non_eu` an export. Pure functions, no database queries: the module passes
+invoices in. Other modules read these figures through the registry function
+`vat.invoice_lines` (Reports shows them in its income section).
 """
-import json
-from decimal import ROUND_HALF_UP, Decimal
-
-
-def to_cents(amount):
-    """`amount` rounded to the cent, half up — as the books record it. A
-    converted invoice stores its EUR amount with many decimals (for example 45.1234567);
-    tax figures add the per-invoice cents, never the raw values."""
-    return float(Decimal(str(amount or 0.0)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
-
-
-def invoice_base_eur(invoice):
-    """Taxable base of an invoice in EUR.
-
-    In this app the stored invoice amount IS the taxable base (VAT is derived,
-    never added to the total), and amount_eur is always populated. Rounded to
-    the cent (`to_cents`).
-    """
-    return to_cents(invoice.amount_eur)
-
-
-def customer_tax_type(invoice):
-    """VAT treatment of the invoice's customer: the snapshot frozen at issue,
-    else the customer's current setting."""
-    snap = getattr(invoice, 'snap_customer', None)
-    if snap:
-        try:
-            tax_type = json.loads(snap).get('tax_type')
-            if tax_type:
-                return tax_type
-        except (ValueError, AttributeError):
-            pass  # malformed snapshot: fall back to the customer
-    customer = getattr(invoice, 'customer', None)
-    return getattr(customer, 'tax_type', None) if customer else None
+from invoice_amounts import customer_tax_type, invoice_base_eur, to_cents
 
 
 def invoice_output_vat(invoice, vat_rate):

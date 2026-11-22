@@ -473,7 +473,7 @@ PDF financial reports collecting data dynamically from all enabled modules.
   - PDF signing checkboxes (when pdf_signature module enabled)
   - Collects data via `module_manager.get_report_sections()`
   - Known section types (`expenses`, `ss_payments`) have dedicated rendering; unknown sections render as generic tables
-  - Income and expenses tables include **IVA %** and **IVA (EUR)** columns with totals. Issued invoices use the fiscal snapshot; legacy and draft invoices use the derived value. Reverse-charge rows (intra-EU B2B customers, expenses with `reverse_charge`) show `ISP`, and the note "Inversión del sujeto pasivo – Artículo 194 Directiva 2006/112/EC" is printed under the table
+  - Income and expenses tables include **IVA %** and **IVA (EUR)** columns with totals. The invoice figures come from `vat.invoice_lines` (Spanish Tax Forms): issued invoices use the fiscal snapshot, legacy and draft invoices the derived value; without that function the income IVA cells show `–`. Reverse-charge rows (intra-EU B2B customers, expenses with `reverse_charge`) show `ISP`, and the note "Inversión del sujeto pasivo – Artículo 194 Directiva 2006/112/EC" is printed under the table
   - Modules provide section metadata: `id`, `title`, `description`, `query_fn`, optional `columns`, `total_field`, and for file attachments `has_files`, `files_fn`, `list_fn`
 
 ### External Storage (`external_storage`)
@@ -736,7 +736,7 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
 Box-level quarterly drafts of Modelo 303 (IVA) and Modelo 130 (IRPF pago
 fraccionado), computed from data already in the app. Estimate only — every page
 carries a non-dismissible "not tax advice" banner.
-Invoice amounts are added in cents (`invoice_vat.to_cents`, half up), each
+Invoice amounts are added in cents (`invoice_amounts.to_cents`, half up), each
 invoice rounded first, as the books do; the IRPF Estimator does the same.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
@@ -1207,6 +1207,7 @@ Functions today:
 | `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
+| `vat.invoice_lines` | `tax_es_forms` | `date_from`, `date_to` → `{lines: {"<invoice id>": {vat_rate_pct, vat_eur, reverse_charge}}}`: output VAT of each invoice of the period (issue snapshot; drafts at the Settings rate). Reports fills its IVA columns from it; without it they show '–' |
 | `vat.reverse_charge_check` | `tax_es_forms` | `mark` (`eu`/`non_eu`), `country?`, `vat_number?`, `supplier?` → `{problem}`: a sentence when the mark does not match where the supplier is, else null. Expenses calls it for its deduction-check notice |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
 | `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
@@ -1292,12 +1293,13 @@ write its records there with these columns filled: `expense_date`, `amount`,
 `deductible_pct`, `category`, `reverse_charge` (`''`, `'eu'`, `'non_eu'`),
 `description`. A test fails if one of these columns disappears.
 
-No module imports another module's code; a test fails if one does. Shared
-rules on core data live in the core: `invoice_vat.py` (output VAT of one
-invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
-A rule one module owns and another needs is a registry function, not core
-code: the reverse-charge region check is Spanish Tax Forms'
-`vat.reverse_charge_check`, which Expenses calls.
+No module imports another module's code; a test fails if one does. The core
+reads its own data for modules: `invoice_amounts.py` gives an invoice's amount
+in EUR rounded to the cent and its customer's tax type saved at issue. It holds
+no tax rule. A rule one module owns and another needs is a registry function,
+not core code: the reverse-charge region check is Spanish Tax Forms'
+`vat.reverse_charge_check`, which Expenses calls, and the output VAT of each
+invoice is its `vat.invoice_lines`, which Reports calls.
 `ApiError` is in the core (`from api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 

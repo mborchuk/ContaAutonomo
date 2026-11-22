@@ -28,6 +28,7 @@ from .boxes import (
     modelo_347_rules_for_year,
 )
 from .supplier_region import reverse_charge_check, reverse_charge_problem
+from .output_vat import invoice_vat_line
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
@@ -510,11 +511,31 @@ class TaxEsFormsModule(BaseModule):
                      'Modelo 130 (IRPF) draft boxes for one quarter. Needs year and quarter (1-4).',
                      returns='{"form": "130", "year": int, "quarter": int, '
                              '"boxes": {box: amount}, ...}', **draft),
+            Function('vat.invoice_lines', self.invoice_vat_lines,
+                     'Output VAT (IVA repercutido) of each invoice dated in a '
+                     'period, cancelled ones included: rate, amount and whether '
+                     'the customer accounts for it (intra-EU reverse charge).',
+                     params=(Param('date_from', 'date', 'First invoice date', required=True),
+                             Param('date_to', 'date', 'Last invoice date', required=True)),
+                     returns='{"lines": {"<invoice id>": {"vat_rate_pct": float, '
+                             '"vat_eur": float, "reverse_charge": bool}}}'),
         ]
 
     @staticmethod
     def _reverse_charge_check(mark, country=None, vat_number=None, supplier=None):
         return {'problem': reverse_charge_check(mark, country, vat_number, supplier)}
+
+    def invoice_vat_lines(self, date_from, date_to):
+        """Output VAT of each invoice dated date_from..date_to, keyed by the
+        invoice id as text. Issued invoices use the snapshot frozen at issue;
+        drafts and legacy invoices the current rate (Settings)."""
+        vat_rate, _irpf = self._rates()
+        lines = {}
+        for inv in self._all_invoices():
+            d = inv.invoice_date
+            if d and date_from <= d <= date_to:
+                lines[str(inv.id)] = invoice_vat_line(inv, vat_rate)
+        return {'lines': lines}
 
     def draft_130(self, year, quarter):
         """Modelo 130 draft for one quarter, as shown on its page."""
