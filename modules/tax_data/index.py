@@ -111,7 +111,7 @@ class TaxDataModule(BaseModule):
         try:
             info = cap['action'](year)
         except Exception:
-            logger.exception('year_table %s failed for %s', cap.get('id'), year)
+            logger.exception('year_table %s failed for %s', _for_log(cap.get('id')), _for_log(year))
             return None
         auto = info.get('auto')
         info['auto'] = {'ok': auto[0], 'message': auto[1]} if auto and auto[1] else None
@@ -204,7 +204,7 @@ class TaxDataModule(BaseModule):
                 try:
                     problem = cap['validate'](year, values)
                 except Exception:
-                    logger.exception('year_table %s validate failed', table_id)
+                    logger.exception('year_table %s validate failed', _for_log(table_id))
                     problem = 'These values could not be checked.'
             if problem:
                 flash(f"{cap['name']}: {problem} Nothing was saved.", 'danger')
@@ -243,6 +243,11 @@ class TaxDataModule(BaseModule):
 
 
 # --- Helpers ---------------------------------------------------------------- #
+
+def _for_log(value):
+    """A value for a log line: line breaks removed (no forged entries)."""
+    return str(value).replace('\r', ' ').replace('\n', ' ')[:100]
+
 
 def _anchor(table_id):
     return 'table-' + table_id.replace('.', '-')

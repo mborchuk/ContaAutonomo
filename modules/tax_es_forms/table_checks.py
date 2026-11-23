@@ -55,6 +55,18 @@ def boxes_in_layout(model, boxes, year):
                   f'{which}.{later} Check the labels as below.')
 
 
+def _both(year):
+    """303 and 130 together: the first problem, else both confirmations."""
+    results = [boxes_in_layout('303', MODELO_303_BOXES, year),
+               boxes_in_layout('130', MODELO_130_BOXES, year)]
+    for ok, message in results:
+        if ok is False:
+            return ok, message
+    if all(ok for ok, _ in results):
+        return True, ' '.join(message for _, message in results)
+    return None, ' '.join(message for _, message in results)
+
+
 CHECK_303_130 = dict(
     id='es.boxes_303_130',
     name='Modelo 303 and 130 boxes',
@@ -71,20 +83,8 @@ CHECK_303_130 = dict(
     links=(AEAT_303, AEAT_130, AEAT_LAYOUTS_300, AEAT_LAYOUTS_100),
     after_check=('Same numbers and meanings: confirm the year. A renumbered box needs an app '
                  'update — do not file from the drafts until then.'),
-    auto=lambda year: _both(year),
+    auto=_both,
 )
-
-
-def _both(year):
-    """303 and 130 together: the first problem, else both confirmations."""
-    results = [boxes_in_layout('303', MODELO_303_BOXES, year),
-               boxes_in_layout('130', MODELO_130_BOXES, year)]
-    for ok, message in results:
-        if ok is False:
-            return ok, message
-    if all(ok for ok, _ in results):
-        return True, ' '.join(message for _, message in results)
-    return None, ' '.join(message for _, message in results)
 
 
 CHECK_390 = dict(

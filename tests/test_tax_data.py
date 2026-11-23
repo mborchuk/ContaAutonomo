@@ -115,3 +115,9 @@ def test_without_tax_data_the_pages_keep_the_short_warning(owner, loaded_modules
 def test_amounts_are_read_with_either_decimal_separator(text, number):
     from modules.tax_data.index import _number
     assert _number(text) == number
+
+
+def test_log_lines_cannot_be_forged_from_the_url():
+    from modules.tax_data.index import _for_log
+    assert _for_log('es.x\r\nINFO forged entry') == 'es.x  INFO forged entry'
+    assert len(_for_log('x' * 500)) == 100
