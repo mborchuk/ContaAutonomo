@@ -6,7 +6,7 @@
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h1 style="margin: 0;">{{ doc.name }}</h1>
     <div style="display: flex; gap: 8px;">
-        <a href="{{ url_for('documents.documents_edit', id=doc.id) }}" class="btn btn-primary">✏️ Edit</a>
+        {% if not is_record %}<a href="{{ url_for('documents.documents_edit', id=doc.id) }}" class="btn btn-primary">✏️ Edit</a>{% endif %}
         <form method="POST" action="{{ url_for('documents.documents_duplicate', id=doc.id) }}" style="margin:0;">
             <button type="submit" class="btn btn-secondary">📋 Duplicate</button>
         </form>
@@ -152,6 +152,7 @@
                 <div style="display: flex; gap: 6px;">
                     <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary btn-sm">👁 Preview</a>
                     <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success btn-sm">📥 Download</a>
+                    {% if not is_record %}
                     <form method="POST" action="{{ url_for('documents.file_replace', file_id=df.id) }}" enctype="multipart/form-data" style="margin:0;"
                           title="Upload a new version; this one is kept">
                         <label class="btn btn-secondary btn-sm" style="margin:0; cursor:pointer;">⟳ Replace
@@ -165,6 +166,7 @@
                             <button type="submit" class="btn btn-primary btn-sm">✍️ {{ cap.name }}</button>
                         </form>
                         {% endfor %}
+                    {% endif %}
                     {% endif %}
                 </div>
             </div>
@@ -231,6 +233,36 @@
 
     <!-- Right: Meta + History -->
     <div>
+        <!-- Record (ISO 15489) -->
+        <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
+            <h3 style="margin: 0 0 10px 0; font-size: 15px; color: var(--color-text-muted);">🗄️ Record</h3>
+            {% if is_record %}
+            <p style="margin: 0 0 6px;"><span class="status-badge status-active">Record</span>
+                since {{ doc.record_declared_at.strftime('%d/%m/%Y') }}</p>
+            <p style="margin: 0 0 6px;">Kept until <strong>{{ doc.retain_until.strftime('%d/%m/%Y') if doc.retain_until else '—' }}</strong>
+                {% if retention_due %}<span class="status-badge status-warning">due for review</span>{% endif %}</p>
+            <p class="fine-print" style="margin: 0 0 10px;">Its details and files cannot be changed or deleted; notes can be added.
+                {% if retention_due %}Review it on the <a href="{{ url_for('documents.retention_index') }}">Retention</a> page.{% endif %}</p>
+            <details>
+                <summary class="fine-print">Remove the record status</summary>
+                <form method="POST" action="{{ url_for('documents.documents_undeclare', id=doc.id) }}" style="margin-top: 6px;">
+                    <input type="text" name="reason" required maxlength="300" placeholder="Why (kept in the history)" class="form-control" style="margin-bottom: 6px;">
+                    <button type="submit" class="btn btn-secondary btn-sm">Remove</button>
+                </form>
+            </details>
+            {% else %}
+            <p class="fine-print" style="margin: 0 0 8px;">A record is fixed: its details and files can no longer be changed or deleted until its retention period ends.</p>
+            <form method="POST" action="{{ url_for('documents.documents_declare', id=doc.id) }}" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;"
+                  onsubmit="return confirm('Declare this document a record? It can no longer be edited or deleted.');">
+                <label for="retention_years" class="fine-print">Keep</label>
+                <input type="number" id="retention_years" name="retention_years" min="1" max="50" style="width: 70px;"
+                       value="{{ category_retention or '' }}" {% if not category_retention %}required{% endif %}>
+                <span class="fine-print">years{% if category_retention %} ({{ doc.category }}){% endif %}</span>
+                <button type="submit" class="btn btn-primary btn-sm">Declare as record</button>
+            </form>
+            {% endif %}
+        </div>
+
         <!-- Meta -->
         <div style="background: var(--color-surface-2); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 20px; font-size: 13px;">
             <div style="color: var(--color-text-faint); margin-bottom: 6px;">Created</div>
@@ -249,7 +281,7 @@
                 {% for h in history %}
                 <div style="padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %} font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄', 'file_replaced': '⟳', 'integrity_checked': '🛡'} %}
+                        {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄', 'file_replaced': '⟳', 'integrity_checked': '🛡', 'declared_record': '🗄', 'record_released': '🔓', 'retention_extended': '⏳'} %}
                         <span style="font-weight: 500;">{{ action_icons.get(h.action, '•') }} {{ h.action|replace('_', ' ')|capitalize }}</span>
                         <span style="color: var(--color-text-faint);">{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                     </div>

@@ -117,6 +117,7 @@
                     {{ doc.name }}
                     </a>
                     {% if doc.identifier %}<span style="font-size: 11px; color: var(--color-text-faint); margin-left: 6px;">{{ doc.identifier }}</span>{% endif %}
+                    {% if doc.record_declared_at %}<span class="status-badge status-active" style="margin-left: 6px;" title="Record: kept until {{ doc.retain_until.strftime('%d/%m/%Y') if doc.retain_until else '—' }}">Record</span>{% endif %}
                     {% if doc.expiry_date %}
                     <br><span style="font-size: 11px; color: {{ 'var(--color-danger)' if doc.expiry_date < today else 'var(--color-text-faint)' }};">
                         {{ 'Expired' if doc.expiry_date < today else 'Expires' }}: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
@@ -158,15 +159,19 @@
                                 {% endfor %}
                                 <hr style="margin:4px 0; border:none; border-top:1px solid var(--color-surface-3);">
                             {% endif %}
+                            {% if not doc.record_declared_at %}
                             <a href="{{ url_for('documents.documents_edit', id=doc.id) }}"
                                style="display:block; padding:6px 14px; font-size:13px; color:var(--color-text); text-decoration:none;">✏️ Edit</a>
+                            {% endif %}
                             <form method="POST" action="{{ url_for('documents.documents_duplicate', id=doc.id) }}" style="margin:0;">
                                 <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:var(--color-text); background:none; border:none; cursor:pointer;">📋 Duplicate</button>
                             </form>
+                            {% if not doc.record_declared_at %}
                             <hr style="margin:4px 0; border:none; border-top:1px solid var(--color-surface-3);">
                             <form method="POST" action="{{ url_for('documents.documents_delete', id=doc.id) }}" style="margin:0;" onsubmit="return confirm('Delete this document?');">
                                 <button type="submit" style="display:block; width:100%; text-align:left; padding:6px 14px; font-size:13px; color:var(--color-danger); background:none; border:none; cursor:pointer;">🗑 Delete</button>
                             </form>
+                            {% endif %}
                         </div>
                     </div>
                 </td>

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Retention{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Retention</h1>
+    <a href="{{ url_for('documents.documents_index') }}" class="btn btn-secondary">← Documents</a>
+</div>
+
+<div class="note note-info">
+    A document declared a <strong>record</strong> is kept unchanged until its retention date
+    (ISO 15489). Then review it: keep it longer, or dispose of it — the document and its files are
+    deleted and the log below keeps what it was. {{ record_count }} record(s) in all.
+    {% if without_period %}Categories without a retention period:
+    {{ without_period|join(', ') }} (<a href="{{ url_for('documents.categories_index') }}">set them</a>).{% endif %}
+</div>
+
+<h2 style="font-size: var(--fs-md);">Due for review ({{ due|length }})</h2>
+{% if due %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Identifier</th><th>Name</th><th>Category</th><th>Date</th><th>Kept until</th><th>Review</th></tr></thead>
+    <tbody>
+    {% for d in due %}
+    <tr>
+        <td>{{ d.identifier }}</td>
+        <td><a href="{{ url_for('documents.documents_view', id=d.id) }}">{{ d.name }}</a></td>
+        <td>{{ d.category or '—' }}</td>
+        <td>{{ d.document_date.strftime('%d/%m/%Y') if d.document_date else '—' }}</td>
+        <td>{{ d.retain_until.strftime('%d/%m/%Y') }}</td>
+        <td>
+            <div class="page-actions">
+                <form method="POST" action="{{ url_for('documents.retention_keep', id=d.id) }}" style="display: flex; gap: 4px; margin: 0;">
+                    <input type="number" name="years" value="1" min="1" max="50" style="width: 60px;" aria-label="More years">
+                    <button type="submit" class="btn btn-secondary btn-sm">Keep longer</button>
+                </form>
+                <form method="POST" action="{{ url_for('documents.retention_dispose', id=d.id) }}" style="margin: 0;"
+                      onsubmit="return confirm('Dispose of {{ d.identifier }}? The document and its files are deleted; this cannot be undone.');">
+                    <input type="hidden" name="reason" value="Retention period ended">
+                    <button type="submit" class="btn btn-danger btn-sm">Dispose</button>
+                </form>
+            </div>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">No record is past its retention date.</p>
+{% endif %}
+
+<h2 style="font-size: var(--fs-md); margin-top: var(--space-6);">Due in the next 12 months ({{ upcoming|length }})</h2>
+{% if upcoming %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Identifier</th><th>Name</th><th>Category</th><th>Kept until</th></tr></thead>
+    <tbody>
+    {% for d in upcoming %}
+    <tr><td>{{ d.identifier }}</td><td><a href="{{ url_for('documents.documents_view', id=d.id) }}">{{ d.name }}</a></td>
+        <td>{{ d.category or '—' }}</td><td>{{ d.retain_until.strftime('%d/%m/%Y') }}</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">None.</p>
+{% endif %}
+
+<h2 style="font-size: var(--fs-md); margin-top: var(--space-6);">Deletion and disposal log</h2>
+<p class="fine-print">Every deleted or disposed document, kept after it is gone: what it was, when, why, and its files with their SHA-256 fingerprints.</p>
+{% if log %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>When</th><th>Action</th><th>Identifier</th><th>Name</th><th>Category</th><th>Record</th><th>Reason</th><th>Files</th></tr></thead>
+    <tbody>
+    {% for e in log %}
+    <tr>
+        <td class="nowrap">{{ e.created_at.strftime('%d/%m/%Y %H:%M') if e.created_at else '' }}</td>
+        <td>{{ e.action|capitalize }}</td>
+        <td>{{ e.identifier or '—' }}</td>
+        <td>{{ e.name }}</td>
+        <td>{{ e.category or '—' }}</td>
+        <td>{% if e.was_record %}kept until {{ e.retain_until.strftime('%d/%m/%Y') if e.retain_until else '—' }}{% else %}—{% endif %}</td>
+        <td>{{ e.reason or '—' }}</td>
+        <td style="font-size: 11px; white-space: pre-line; word-break: break-all;">{{ e.files or '—' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">Nothing deleted yet.</p>
+{% endif %}
+{% endblock %}
