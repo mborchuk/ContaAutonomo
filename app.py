@@ -498,15 +498,10 @@ class Settings(db.Model):
     default_currency = db.Column(db.String(10), default='USD')
     tracked_currencies = db.Column(db.Text, default='USD,EUR,GBP,CZK')  # Comma-separated list
     base_currency = db.Column(db.String(10), default='EUR')  # Base currency for conversions and display
-    report_template = db.Column(db.String(100), default='official_template')  # Report template name
     invoice_template = db.Column(db.String(100), default='default_template')  # Invoice PDF template name
     # Dashboard settings
     show_currency_panel = db.Column(db.Boolean, default=True)  # Show currency/holidays panel on dashboard
     show_tax_panel = db.Column(db.Boolean, default=True)  # Show tax obligations panel on dashboard
-    # Backup settings
-    auto_backup_enabled = db.Column(db.Boolean, default=True)  # Enable automatic backup on startup
-    backup_retention_count = db.Column(db.Integer, default=5)  # Number of backups to keep (deprecated, use daily_backup_retention_count)
-    daily_backup_retention_count = db.Column(db.Integer, default=4)  # Number of daily backups to keep
     # Social Security settings
     social_security_monthly = db.Column(db.Float, default=0.0)  # Monthly SS quota (cuota autónomo)
     # Logging settings
@@ -1979,7 +1974,6 @@ def settings():
                 'default_currency': 'default_currency',
                 'tracked_currencies': 'tracked_currencies',
                 'base_currency': 'base_currency',
-                'report_template': 'report_template',
                 'invoice_template': 'invoice_template',
                 'currency_provider': 'currency_provider',
                 'payment_methods': 'payment_methods',

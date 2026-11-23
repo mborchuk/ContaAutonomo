@@ -451,8 +451,8 @@ Document management system with categories, tags, multi-file attachments, and ch
 Full encrypted backups including DB dump (all tables via SQLAlchemy inspector) and uploaded files.
 
 - Routes: `/backup/`, create, download, restore, delete, upload-restore, load-demo
-- Models: `BackupConfig`
-- Features: AES-256-CBC encryption (none/app password/custom), custom backup directory, external storage upload, daily auto-backup via scheduler, configurable retention (daily_backup_retention_count)
+- Models: `BackupConfig` (also `auto_backup_enabled` and `daily_backup_retention_count`, columns of the core `Settings` before 2.0.0; copied once from there on upgrade)
+- Features: AES-256-CBC encryption (none/app password/custom), custom backup directory, external storage upload, daily auto-backup via scheduler, configurable retention (`daily_backup_retention_count`)
 - Settings: backup options in Security tab
 - Scheduler: registers `backup.daily` job at 03:00
 - All dynamic form buttons include CSRF tokens for security
@@ -463,6 +463,7 @@ PDF financial reports collecting data dynamically from all enabled modules.
 
 - Routes: `/reports/`, generate
 - Nav: Reports
+- Settings → Reports: the report template, one of the files in `report_templates/` (table `reports_config`; a column of the core `Settings` before 2.0.0, copied once on upgrade). A template that is not there is never loaded; the default is `official_template`
 - Features:
   - User selects which sections to include via checkboxes
   - Income section always available from core; other sections from enabled modules
