@@ -16,7 +16,6 @@ from datetime import datetime
 from flask import Blueprint, render_template, abort
 
 from module_manager import BaseModule
-from supplier_region import reverse_charge_problem
 
 from .boxes import (
     BOX_TABLE_VERSION,
@@ -28,6 +27,7 @@ from .boxes import (
     modelo_390_boxes_for_year,
     modelo_347_rules_for_year,
 )
+from .supplier_region import reverse_charge_check, reverse_charge_problem
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
@@ -491,6 +491,17 @@ class TaxEsFormsModule(BaseModule):
         draft = dict(params=quarter, assistant=True, record_kind='draft',
                      assistant_fields=('form', 'year', 'quarter', 'boxes'))
         return [
+            Function('vat.reverse_charge_check', self._reverse_charge_check,
+                     'Whether a reverse-charge mark ("eu": supplier in another EU country, '
+                     '"non_eu": outside the EU) matches where the supplier is, from its '
+                     'country or VAT number prefix. "problem" is a sentence for the owner, '
+                     'or null when it matches or the region is unknown.',
+                     params=(Param('mark', 'str', 'Reverse-charge mark', required=True,
+                                   choices=('eu', 'non_eu')),
+                             Param('country', 'str', "Supplier's country"),
+                             Param('vat_number', 'str', "Supplier's VAT number", max_length=40),
+                             Param('supplier', 'str', "Supplier's name")),
+                     returns='{"problem": str or null}'),
             Function('tax.draft_303', self.draft_303,
                      'Modelo 303 (IVA) draft boxes for one quarter. Needs year and quarter (1-4).',
                      returns='{"form": "303", "year": int, "quarter": int, '
@@ -500,6 +511,10 @@ class TaxEsFormsModule(BaseModule):
                      returns='{"form": "130", "year": int, "quarter": int, '
                              '"boxes": {box: amount}, ...}', **draft),
         ]
+
+    @staticmethod
+    def _reverse_charge_check(mark, country=None, vat_number=None, supplier=None):
+        return {'problem': reverse_charge_check(mark, country, vat_number, supplier)}
 
     def draft_130(self, year, quarter):
         """Modelo 130 draft for one quarter, as shown on its page."""

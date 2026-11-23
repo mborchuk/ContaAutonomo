@@ -215,6 +215,27 @@ class ExpensesModule(BaseModule):
             out.setdefault(row.expense_id, set()).add(row.rule_id)
         return out
 
+    def _region_check(self):
+        """expense -> problem sentence, through `vat.reverse_charge_check`
+        (Spanish Tax Forms); None when nothing provides it."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('vat.reverse_charge_check'):
+            return None
+
+        def check(expense):
+            supplier = getattr(expense, 'contractor', None)
+            if supplier is None or (expense.reverse_charge or '') not in ('eu', 'non_eu'):
+                return None
+            try:
+                return functions.call('vat.reverse_charge_check', mark=expense.reverse_charge,
+                                      country=supplier.country or '',
+                                      vat_number=supplier.vat_number or '',
+                                      supplier=supplier.name or '')['problem']
+            except Exception:
+                self.logger.warning('vat.reverse_charge_check failed', exc_info=True)
+                return None
+        return check
+
     def deduction_notices(self, expenses):
         """({expense_id: [active notice]}, {expense_id: [dismissed notice]}).
 
@@ -229,7 +250,7 @@ class ExpensesModule(BaseModule):
                 pool.setdefault(e.id, e)
         found = deduction_rules.check_expenses(
             pool.values(), home_office_area_pct=self.home_office_area_pct(),
-            to_eur=self._expense_eur)
+            to_eur=self._expense_eur, region_check=self._region_check())
         wanted = {e.id for e in expenses}
         dismissed = self._dismissed(wanted & set(found))
         active, done = {}, {}

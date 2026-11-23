@@ -30,7 +30,6 @@ owner decides.
 
 from collections import defaultdict
 
-from supplier_region import reverse_charge_problem
 
 RULES_VERSION = "2026.2"
 CHECKED_ON = "2026-11-20"
@@ -194,10 +193,12 @@ def check_vehicle(expense):
     return []
 
 
-def check_reverse_charge_region(expense):
-    """The reverse-charge mark disagrees with the supplier's region
-    (supplier_region.py): EU marked for a US supplier, and so on."""
-    problem = reverse_charge_problem(expense)
+def check_reverse_charge_region(expense, region_check=None):
+    """The reverse-charge mark disagrees with the supplier's region (EU marked
+    for a US supplier, and so on). `region_check(expense)` gives the sentence;
+    the Expenses module passes one built on the registry function
+    `vat.reverse_charge_check` (Spanish Tax Forms), else there is no check."""
+    problem = region_check(expense) if region_check else None
     return [_notice('reverse_charge_region', CHECK, problem, expense)] if problem else []
 
 
@@ -219,7 +220,7 @@ def _is_abroad(expense):
     return (getattr(expense, 'currency', None) or 'EUR').upper() != 'EUR'
 
 
-def check_expenses(expenses, home_office_area_pct=None, to_eur=None):
+def check_expenses(expenses, home_office_area_pct=None, to_eur=None, region_check=None):
     """{expense_id: [notice, ...]} for every expense with a notice.
 
     `expenses` must include every meal expense of the days being checked, so
@@ -234,7 +235,7 @@ def check_expenses(expenses, home_office_area_pct=None, to_eur=None):
         notices = []
         notices += check_home_supplies(exp, home_office_area_pct)
         notices += check_vehicle(exp)
-        notices += check_reverse_charge_region(exp)
+        notices += check_reverse_charge_region(exp, region_check)
         if _category(exp) in MEAL_CATEGORIES and _claimed_pct(exp) > 0 \
                 and getattr(exp, 'expense_date', None) is not None:
             notices += check_meal_day(day_totals[(exp.expense_date, _is_abroad(exp))],

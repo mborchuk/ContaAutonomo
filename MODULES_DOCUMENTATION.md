@@ -390,9 +390,11 @@ a full VAT breakdown.
     reverse charge for another EU country whose supplier is outside the EU,
     the opposite, or either for a supplier in Spain (LIVA arts. 15, 69,
     84.Uno.2º). The supplier's region comes from its country or, without a
-    recognised country, its VAT number prefix (`supplier_region.py` in the
-    core; `EU…` one-stop-shop numbers are outside the EU); unknown means no
-    notice. The Modelo 303 draft lists the same mismatches under its checks.
+    recognised country, its VAT number prefix (`EU…` one-stop-shop numbers
+    are outside the EU); unknown means no notice. The rule is Spanish Tax
+    Forms' (`modules/tax_es_forms/supplier_region.py`); Expenses asks it
+    through `vat.reverse_charge_check`, and without that function the notice
+    is not shown. The Modelo 303 draft lists the same mismatches.
 
   Notices ("Breaks a rule", "Check", "Looks under-claimed") show as badges in
   the list and as notes on the edit form. They never change the expense. A
@@ -1205,6 +1207,7 @@ Functions today:
 | `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
+| `vat.reverse_charge_check` | `tax_es_forms` | `mark` (`eu`/`non_eu`), `country?`, `vat_number?`, `supplier?` → `{problem}`: a sentence when the mark does not match where the supplier is, else null. Expenses calls it for its deduction-check notice |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
 | `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
 | `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the 5 % difícil justificación; box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
@@ -1291,9 +1294,10 @@ write its records there with these columns filled: `expense_date`, `amount`,
 
 No module imports another module's code; a test fails if one does. Shared
 rules on core data live in the core: `invoice_vat.py` (output VAT of one
-invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports;
-`supplier_region.py` (an expense supplier's region and whether its reverse
-charge matches) by Expenses and Spanish Tax Forms.
+invoice, from its issue snapshot) is used by Spanish Tax Forms and Reports.
+A rule one module owns and another needs is a registry function, not core
+code: the reverse-charge region check is Spanish Tax Forms'
+`vat.reverse_charge_check`, which Expenses calls.
 `ApiError` is in the core (`from api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 

@@ -34,6 +34,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 These make 2.0.0 a major version; a module written for 1.x needs them:
 
+- Rules one module owns and another needs are registry functions, not core
+  code: the reverse-charge region check moved from the core
+  (`supplier_region.py`) to Spanish Tax Forms (`vat.reverse_charge_check`).
 - `core.deployment_key(env_var, purpose, file_name)` takes the key file's
   name (under `instance/`, moved with `<env_var>_FILE`) instead of an
   `app.config` key: the core no longer defines `VERIFACTU_KEY_FILE` or
