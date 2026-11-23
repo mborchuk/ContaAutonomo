@@ -13,6 +13,8 @@ import os
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
+from . import dublin_core
+
 
 class DocumentsModule(BaseModule):
 
@@ -30,7 +32,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.5.0'
+        return '0.6.0'
 
     @property
     def nav_items(self):
@@ -63,6 +65,11 @@ class DocumentsModule(BaseModule):
             original_filename = db.Column(db.String(300))
             file_size = db.Column(db.Integer)
             file_format = db.Column(db.String(10))
+            # Dublin Core (ISO 15836): see dublin_core.py for the mapping.
+            identifier = db.Column(db.String(30), unique=True)   # DOC-2026-0001
+            creator = db.Column(db.String(200))                  # who issued or wrote it
+            language = db.Column(db.String(10))                  # ISO 639-1
+            rights = db.Column(db.String(100))
             created_at = db.Column(db.DateTime, default=utcnow)
             updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
@@ -138,6 +145,10 @@ class DocumentsModule(BaseModule):
                     ('counterparty', "VARCHAR(200)"),
                     ('status', "VARCHAR(20) DEFAULT 'active'"),
                     ('updated_at', "DATETIME"),
+                    ('identifier', "VARCHAR(30)"),
+                    ('creator', "VARCHAR(200)"),
+                    ('language', "VARCHAR(10)"),
+                    ('rights', "VARCHAR(100)"),
                 ]
                 for col, typedef in migrations:
                     if col not in cols:
@@ -145,6 +156,11 @@ class DocumentsModule(BaseModule):
                             conn.execute(text(
                                 f'ALTER TABLE document ADD COLUMN {col} {typedef}'))
                             conn.commit()
+                with self._db.engine.connect() as conn:
+                    conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS '
+                                      'ix_document_identifier ON document (identifier)'))
+                    conn.commit()
+                self._backfill_identifiers()
 
             # Create document_file table if not exists
             if 'document_file' not in inspector.get_table_names():
@@ -181,6 +197,25 @@ class DocumentsModule(BaseModule):
                 timeout=120)
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register the expiry-messages job: %s', e)
+
+    def _backfill_identifiers(self):
+        """Give every document without one an identifier, oldest first, in
+        the year it was added (once; new documents get one when created)."""
+        docs = self.Document.query.filter(self.Document.identifier.is_(None)).order_by(
+            self.Document.created_at, self.Document.id).all()
+        for doc in docs:
+            doc.identifier = self._new_identifier(doc.created_at)
+            self._db.session.flush()
+        if docs:
+            self._db.session.commit()
+
+    def _new_identifier(self, when=None):
+        """The next free identifier of the year of `when` (default: now)."""
+        year = (when or datetime.now()).year
+        prefix = f'{dublin_core.IDENTIFIER_PREFIX}-{year}-'
+        existing = [i for (i,) in self._db.session.query(self.Document.identifier).filter(
+            self.Document.identifier.like(prefix + '%')).all()]
+        return dublin_core.next_identifier(year, existing)
 
     def _migrate_files_to_multi(self):
         """Move file_path from Document rows into DocumentFile table (one-time migration)."""
@@ -228,6 +263,11 @@ class DocumentsModule(BaseModule):
         @login_required
         def documents_view(id):
             return module._view_document(id)
+
+        @bp.route('/view/<int:id>/dublin-core.xml')
+        @login_required
+        def documents_dublin_core(id):
+            return module._dublin_core_xml(id)
 
         @bp.route('/delete/<int:id>', methods=['POST'])
         @login_required
@@ -326,11 +366,15 @@ class DocumentsModule(BaseModule):
              'summary': 'List documents (filters: category, status, page, per_page)'},
             {'path': 'documents/<int:doc_id>', 'methods': ['GET'],
              'handler': self._api_get_document, 'summary': 'Get one document'},
+            {'path': 'documents/<int:doc_id>/dublin-core', 'methods': ['GET'],
+             'handler': self._api_dublin_core,
+             'summary': 'Dublin Core (ISO 15836) metadata of one document'},
         ]
 
     def _api_serialize_document(self, d):
         return {
             'id': d.id,
+            'identifier': d.identifier,
             'name': d.name,
             'category': d.category,
             'status': d.status,
@@ -340,6 +384,9 @@ class DocumentsModule(BaseModule):
             'amount': d.amount,
             'reference_number': d.reference_number,
             'counterparty': d.counterparty,
+            'creator': d.creator,
+            'language': d.language,
+            'rights': d.rights,
             'original_filename': d.original_filename,
         }
 
@@ -372,6 +419,35 @@ class DocumentsModule(BaseModule):
         if not doc:
             raise ApiError(404, 'not_found', f'Document #{doc_id} not found')
         return self._api_serialize_document(doc), 200
+
+    def _api_dublin_core(self, request, doc_id=None):
+        from api_errors import ApiError
+        doc = db_get(self.Document, doc_id)
+        if not doc:
+            raise ApiError(404, 'not_found', f'Document #{doc_id} not found')
+        return dublin_core.as_dict(self._dc_record(doc)), 200
+
+    # ---- Dublin Core (ISO 15836) ----
+
+    def _dc_record(self, doc):
+        formats = [f.file_format for f in self.DocumentFile.query.filter_by(
+            document_id=doc.id).order_by(self.DocumentFile.created_at).all()]
+        return dublin_core.record(doc, formats)
+
+    def _dublin_core_xml(self, id):
+        from flask import Response
+        doc = db_get_or_404(self.Document, id)
+        xml = dublin_core.to_xml(self._dc_record(doc))
+        name = (doc.identifier or f'document-{doc.id}') + '-dc.xml'
+        return Response(xml, mimetype='application/xml',
+                        headers={'Content-Disposition': f'attachment; filename="{name}"'})
+
+    def _metadata_from_form(self, form):
+        """creator, language, rights from the form (language: ISO 639-1 or none)."""
+        rights = form.get('rights', '').strip()
+        return {'creator': form.get('creator', '').strip()[:200] or None,
+                'language': dublin_core.clean_language(form.get('language')),
+                'rights': rights[:100] or None}
 
     # ---- helpers ----
 
@@ -450,6 +526,7 @@ class DocumentsModule(BaseModule):
             'name': 'Name', 'category': 'Category', 'tags': 'Tags',
             'description': 'Description', 'reference_number': 'Reference',
             'counterparty': 'Counterparty', 'status': 'Status',
+            'creator': 'Creator', 'language': 'Language', 'rights': 'Rights',
         }
         for field, label in field_map.items():
             old = getattr(doc, field, '') or ''
@@ -495,7 +572,9 @@ class DocumentsModule(BaseModule):
             query = query.filter(
                 self.Document.name.ilike(like) |
                 self.Document.description.ilike(like) |
-                self.Document.tags.ilike(like)
+                self.Document.tags.ilike(like) |
+                self.Document.identifier.ilike(like) |
+                self.Document.reference_number.ilike(like)
             )
 
         cat = request.args.get('category', '').strip()
@@ -596,6 +675,8 @@ class DocumentsModule(BaseModule):
                     reference_number=request.form.get('reference_number', '').strip() or None,
                     counterparty=request.form.get('counterparty', '').strip() or None,
                     status=request.form.get('status', 'active').strip(),
+                    identifier=self._new_identifier(),
+                    **self._metadata_from_form(request.form),
                     file_path='_multi_',
                     original_filename=first.filename,
                     file_size=first_size,
@@ -609,7 +690,8 @@ class DocumentsModule(BaseModule):
                         continue
                     self._save_document_file(doc.id, f)
 
-                self._log_history(doc.id, 'created', f'Document "{doc.name}" created')
+                self._log_history(doc.id, 'created',
+                                  f'Document "{doc.name}" created as {doc.identifier}')
                 self._db.session.commit()
 
                 # Auto-sign PDF files if requested
@@ -634,7 +716,8 @@ class DocumentsModule(BaseModule):
         categories = self._get_all_categories()
         return render_template('document_form.html', document=None,
                                categories=categories, doc_files=[],
-                               all_tags=self._get_all_tags())
+                               all_tags=self._get_all_tags(),
+                               languages=dublin_core.LANGUAGES, rights=dublin_core.RIGHTS)
 
     def _edit_document(self, id):
         doc = db_get_or_404(self.Document, id)
@@ -665,6 +748,8 @@ class DocumentsModule(BaseModule):
                 doc.reference_number = request.form.get('reference_number', '').strip() or None
                 doc.counterparty = request.form.get('counterparty', '').strip() or None
                 doc.status = request.form.get('status', 'active').strip()
+                for field, value in self._metadata_from_form(request.form).items():
+                    setattr(doc, field, value)
                 doc.updated_at = utcnow()
 
                 # Add new files
@@ -707,7 +792,8 @@ class DocumentsModule(BaseModule):
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
         return render_template('document_form.html', document=doc,
                                categories=categories, doc_files=doc_files,
-                               all_tags=self._get_all_tags())
+                               all_tags=self._get_all_tags(),
+                               languages=dublin_core.LANGUAGES, rights=dublin_core.RIGHTS)
 
     def _storage_delete_quiet(self, storage_key):
         """Delete a stored file, tolerating missing/unresolvable keys.
@@ -964,6 +1050,10 @@ class DocumentsModule(BaseModule):
             reference_number=doc.reference_number,
             counterparty=doc.counterparty,
             status='active',
+            identifier=self._new_identifier(),
+            creator=doc.creator,
+            language=doc.language,
+            rights=doc.rights,
             file_path='_multi_',
             original_filename=doc.original_filename,
             file_size=doc.file_size,

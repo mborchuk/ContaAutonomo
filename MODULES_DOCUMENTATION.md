@@ -425,13 +425,14 @@ Spanish tax forms, Social Security payments, and the filing workflow.
 
 Document management system with categories, tags, multi-file attachments, and change history.
 
-- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/categories`
+- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/view/<id>/dublin-core.xml`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/categories`
 - Models: `Document`, `DocumentCategory`, `DocumentFile`, `DocumentConfig`, `DocumentHistory`
 - Nav: All Documents, Categories (grouped under Documents dropdown)
 - Features:
   - Multi-file attachments per document (PDF, JPG, PNG, DOC, XLSX)
   - Document detail page with full info, files, and change history timeline
   - New fields: reference number, counterparty, status (Active/Pending/Archived/Expired)
+  - Dublin Core metadata (ISO 15836, `dublin_core.py`): an identifier assigned once (`DOC-<year>-<nnnn>`, unique index; existing documents numbered on enable, oldest first), Creator, Language (ISO 639-1) and Rights. The fifteen elements map from the document's fields (title ← name, subject ← category and tags, contributor ← counterparty, type and format ← the files' media types, identifier ← identifier and reference number, coverage ← date/expiry); empty ones are left out. Exported as `oai_dc` XML from the document page and as `{element: [values]}` from `GET /api/v1/m/documents/documents/<id>/dublin-core`
   - Change history: automatic tracking of all field changes, file additions/removals
   - Categories with custom colors, auto-add on first use
   - Tags: comma-separated, clickable for quick filtering (in list and detail views)

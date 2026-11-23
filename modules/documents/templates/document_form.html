@@ -91,9 +91,43 @@
             </div>
 
             <div class="form-group">
+                <label for="creator">Creator</label>
+                <input type="text" id="creator" name="creator" maxlength="200"
+                       value="{{ document.creator if document and document.creator else '' }}"
+                       placeholder="Who issued or wrote it, e.g. the insurer">
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="form-group">
+                    <label for="language">Language</label>
+                    {% set current_language = document.language if document else 'es' %}
+                    <select id="language" name="language" class="form-control">
+                        <option value="">—</option>
+                        {% for code, label in languages %}
+                        <option value="{{ code }}" {{ 'selected' if current_language == code }}>{{ label }} ({{ code }})</option>
+                        {% endfor %}
+                        {% if current_language and current_language not in languages|map('first') %}
+                        <option value="{{ current_language }}" selected>{{ current_language }}</option>
+                        {% endif %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="rights">Rights</label>
+                    <input type="text" id="rights" name="rights" maxlength="100" list="rights-suggestions"
+                           value="{{ document.rights if document and document.rights else '' }}"
+                           placeholder="e.g. Confidential">
+                    <datalist id="rights-suggestions">
+                        {% for r in rights %}<option value="{{ r }}">{% endfor %}
+                    </datalist>
+                </div>
+            </div>
+            {% if document and document.identifier %}
+            <p style="font-size: 12px; color: var(--color-text-faint); margin-top: -6px;">Identifier: <strong>{{ document.identifier }}</strong> (assigned by the app, does not change)</p>
+            {% endif %}
+
+            <div class="form-group">
                 <label for="description">Description</label>
                 <textarea id="description" name="description" rows="3"
-                          placeholder="Brief description of the document">{{ document.description if document else '' }}</textarea>
+                          placeholder="Brief description of the document">{{ document.description if document and document.description else '' }}</textarea>
             </div>
 
             <!-- Existing files (edit mode) -->

@@ -14,7 +14,7 @@
         <div class="form-grid-3">
             <div>
                 <label style="display: block; margin-bottom: 5px; font-size: 14px;">Search</label>
-                <input type="text" name="q" class="form-control" placeholder="Name, description, tags..."
+                <input type="text" name="q" class="form-control" placeholder="Name, identifier, reference, tags..."
                        value="{{ request.args.get('q', '') }}">
             </div>
             <div>
@@ -116,6 +116,7 @@
                     <a href="{{ url_for('documents.documents_view', id=doc.id) }}" style="text-decoration: none; color: var(--color-text);">
                     {{ doc.name }}
                     </a>
+                    {% if doc.identifier %}<span style="font-size: 11px; color: var(--color-text-faint); margin-left: 6px;">{{ doc.identifier }}</span>{% endif %}
                     {% if doc.expiry_date %}
                     <br><span style="font-size: 11px; color: {{ 'var(--color-danger)' if doc.expiry_date < today else 'var(--color-text-faint)' }};">
                         {{ 'Expired' if doc.expiry_date < today else 'Expires' }}: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>

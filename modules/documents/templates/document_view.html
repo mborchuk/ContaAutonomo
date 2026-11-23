@@ -10,6 +10,8 @@
         <form method="POST" action="{{ url_for('documents.documents_duplicate', id=doc.id) }}" style="margin:0;">
             <button type="submit" class="btn btn-secondary">📋 Duplicate</button>
         </form>
+        <a href="{{ url_for('documents.documents_dublin_core', id=doc.id) }}" class="btn btn-secondary"
+           title="Dublin Core metadata (ISO 15836), oai_dc XML">⬇ Dublin Core</a>
         <a href="{{ url_for('documents.documents_index') }}" class="btn btn-secondary">← Back</a>
     </div>
 </div>
@@ -22,7 +24,11 @@
             <h3 style="margin: 0 0 15px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">Document Details</h3>
             <table style="width: 100%; font-size: 14px;">
                 <tr>
-                    <td style="padding: 6px 0; color: var(--color-text-faint); width: 140px;">Status</td>
+                    <td style="padding: 6px 0; color: var(--color-text-faint); width: 140px;">Identifier</td>
+                    <td style="padding: 6px 0;"><strong>{{ doc.identifier or '—' }}</strong></td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Status</td>
                     <td style="padding: 6px 0;">
                         {% set status_colors = {'active': 'var(--color-success)', 'pending': 'var(--amber-400)', 'archived': 'var(--color-text-muted)', 'expired': 'var(--color-danger)'} %}
                         <span style="padding: 2px 10px; border-radius: 12px; font-size: 12px; color: var(--color-surface); background: {{ status_colors.get(doc.status or 'active', 'var(--color-text-muted)') }};">
@@ -64,6 +70,18 @@
                 <tr>
                     <td style="padding: 6px 0; color: var(--color-text-faint);">Counterparty</td>
                     <td style="padding: 6px 0;">{{ doc.counterparty or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Creator</td>
+                    <td style="padding: 6px 0;">{{ doc.creator or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Language</td>
+                    <td style="padding: 6px 0;">{{ doc.language or '—' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Rights</td>
+                    <td style="padding: 6px 0;">{{ doc.rights or '—' }}</td>
                 </tr>
                 <tr>
                     <td style="padding: 6px 0; color: var(--color-text-faint);">Tags</td>
@@ -189,8 +207,8 @@
             <div style="margin-bottom: 12px;">{{ doc.created_at.strftime('%d/%m/%Y %H:%M') if doc.created_at else '—' }}</div>
             <div style="color: var(--color-text-faint); margin-bottom: 6px;">Last Updated</div>
             <div style="margin-bottom: 12px;">{{ doc.updated_at.strftime('%d/%m/%Y %H:%M') if doc.updated_at else '—' }}</div>
-            <div style="color: var(--color-text-faint); margin-bottom: 6px;">ID</div>
-            <div>#{{ doc.id }}</div>
+            <div style="color: var(--color-text-faint); margin-bottom: 6px;">Identifier</div>
+            <div>{{ doc.identifier or ('#' ~ doc.id) }}</div>
         </div>
 
         <!-- History -->
