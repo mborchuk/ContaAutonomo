@@ -13,7 +13,7 @@ import os
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
-from . import dublin_core, integrity
+from . import dublin_core, integrity, retention
 
 
 class DocumentsModule(BaseModule):
@@ -32,7 +32,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.7.0'
+        return '0.8.0'
 
     @property
     def nav_items(self):
@@ -40,6 +40,8 @@ class DocumentsModule(BaseModule):
             {'label': 'All Documents', 'endpoint': 'documents.documents_index', 'icon': '📁',
              'group': 'Documents'},
             {'label': 'Categories', 'endpoint': 'documents.categories_index', 'icon': '🏷️',
+             'group': 'Documents'},
+            {'label': 'Retention', 'endpoint': 'documents.retention_index', 'icon': '🗄️',
              'group': 'Documents'},
         ]
 
@@ -70,6 +72,9 @@ class DocumentsModule(BaseModule):
             creator = db.Column(db.String(200))                  # who issued or wrote it
             language = db.Column(db.String(10))                  # ISO 639-1
             rights = db.Column(db.String(100))
+            # Records (retention.py): declared as a record, kept until.
+            record_declared_at = db.Column(db.DateTime)
+            retain_until = db.Column(db.Date)
             created_at = db.Column(db.DateTime, default=utcnow)
             updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
@@ -79,6 +84,7 @@ class DocumentsModule(BaseModule):
             id = db.Column(db.Integer, primary_key=True)
             name = db.Column(db.String(100), unique=True, nullable=False)
             color = db.Column(db.String(7), default='#e2e3e5')
+            retention_years = db.Column(db.Integer)   # None: no period set
 
         class DocumentFile(db.Model):
             __tablename__ = 'document_file'
@@ -108,6 +114,22 @@ class DocumentsModule(BaseModule):
             file_size = db.Column(db.Integer)
             sha256 = db.Column(db.String(64))
             reason = db.Column(db.String(30))        # replaced, signed
+            created_at = db.Column(db.DateTime, default=utcnow)
+
+        class DocumentDisposal(db.Model):
+            """A deleted or disposed document, kept after it is gone (ISO 15489)."""
+            __tablename__ = 'document_disposal'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            identifier = db.Column(db.String(30))
+            name = db.Column(db.String(300))
+            category = db.Column(db.String(100))
+            document_date = db.Column(db.Date)
+            was_record = db.Column(db.Boolean, default=False)
+            retain_until = db.Column(db.Date)
+            action = db.Column(db.String(20), nullable=False)    # deleted, disposed
+            reason = db.Column(db.String(300))
+            files = db.Column(db.Text)       # "name (SHA-256)" per file, one per line
             created_at = db.Column(db.DateTime, default=utcnow)
 
         class DocumentConfig(db.Model):
@@ -140,10 +162,11 @@ class DocumentsModule(BaseModule):
         self.DocumentFile = DocumentFile
         self.DocumentFileVersion = DocumentFileVersion
         self.DocumentConfig = DocumentConfig
+        self.DocumentDisposal = DocumentDisposal
         self.DocumentHistory = DocumentHistory
         self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
-                'DocumentFileVersion': DocumentFileVersion,
+                'DocumentFileVersion': DocumentFileVersion, 'DocumentDisposal': DocumentDisposal,
                 'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
                 'DocumentNote': DocumentNote}
 
@@ -170,6 +193,8 @@ class DocumentsModule(BaseModule):
                     ('creator', "VARCHAR(200)"),
                     ('language', "VARCHAR(10)"),
                     ('rights', "VARCHAR(100)"),
+                    ('record_declared_at', "DATETIME"),
+                    ('retain_until', "DATE"),
                 ]
                 for col, typedef in migrations:
                     if col not in cols:
@@ -197,6 +222,15 @@ class DocumentsModule(BaseModule):
                             conn.commit()
             if 'document_file_version' not in inspector.get_table_names():
                 self.DocumentFileVersion.__table__.create(self._db.engine)
+            if 'document_disposal' not in inspector.get_table_names():
+                self.DocumentDisposal.__table__.create(self._db.engine)
+            if 'document_category' in inspector.get_table_names():
+                cat_cols = [c['name'] for c in inspector.get_columns('document_category')]
+                if 'retention_years' not in cat_cols:
+                    with self._db.engine.connect() as conn:
+                        conn.execute(text('ALTER TABLE document_category '
+                                          'ADD COLUMN retention_years INTEGER'))
+                        conn.commit()
 
             # Create document_history table if not exists
             if 'document_history' not in inspector.get_table_names():
@@ -223,9 +257,10 @@ class DocumentsModule(BaseModule):
             self.logger.debug('document migration: %s', e)
         try:
             self.core.scheduler.add_job(
-                job_id='documents.expiry_messages', func=self.post_expiry_messages,
+                job_id='documents.expiry_messages', func=self._daily_messages,
                 job_type='daily', time_str='07:30',
-                description='Messages for documents about to expire or just expired',
+                description='Messages for documents about to expire or just expired, '
+                            'and records past their retention date',
                 timeout=120)
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register the expiry-messages job: %s', e)
@@ -335,6 +370,36 @@ class DocumentsModule(BaseModule):
         @login_required
         def file_version_download(version_id):
             return module._download_version(version_id)
+
+        @bp.route('/view/<int:id>/declare', methods=['POST'])
+        @login_required
+        def documents_declare(id):
+            return module._declare_record(id)
+
+        @bp.route('/view/<int:id>/undeclare', methods=['POST'])
+        @login_required
+        def documents_undeclare(id):
+            return module._undeclare_record(id)
+
+        @bp.route('/retention')
+        @login_required
+        def retention_index():
+            return module._retention_index()
+
+        @bp.route('/retention/<int:id>/keep', methods=['POST'])
+        @login_required
+        def retention_keep(id):
+            return module._retention_keep(id)
+
+        @bp.route('/retention/<int:id>/dispose', methods=['POST'])
+        @login_required
+        def retention_dispose(id):
+            return module._retention_dispose(id)
+
+        @bp.route('/categories/<int:id>/retention', methods=['POST'])
+        @login_required
+        def categories_update_retention(id):
+            return module._update_category_retention(id)
 
         @bp.route('/view/<int:id>/verify', methods=['POST'])
         @login_required
@@ -613,6 +678,9 @@ class DocumentsModule(BaseModule):
         category_colors = self._get_category_colors()
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
                                versions=versions, short=integrity.short,
+                               is_record=self._is_record(doc),
+                               retention_due=retention.is_due(doc),
+                               category_retention=self._category_retention(doc.category),
                                history=history, notes=notes,
                                category_colors=category_colors,
                                today=date.today())
@@ -775,6 +843,9 @@ class DocumentsModule(BaseModule):
 
     def _edit_document(self, id):
         doc = db_get_or_404(self.Document, id)
+        refused = self._refuse_if_record(doc)
+        if refused:
+            return refused
         if request.method == 'POST':
             try:
                 # Track changes before applying
@@ -879,7 +950,11 @@ class DocumentsModule(BaseModule):
 
     def _delete_document(self, id):
         doc = db_get_or_404(self.Document, id)
+        refused = self._refuse_if_record(doc)
+        if refused:
+            return refused
         try:
+            self._log_disposal(doc, 'deleted')
             self._delete_document_children(doc)
             self._db.session.delete(doc)
             self._db.session.commit()
@@ -988,6 +1063,9 @@ class DocumentsModule(BaseModule):
     def _replace_file(self, file_id):
         """Upload a new content for a file; the earlier one stays as a version."""
         df = db_get_or_404(self.DocumentFile, file_id)
+        refused = self._refuse_if_record(db_get_or_404(self.Document, df.document_id))
+        if refused:
+            return refused
         upload = request.files.get('file')
         if not upload or not upload.filename:
             flash('Choose the new file.', 'danger')
@@ -1082,6 +1160,9 @@ class DocumentsModule(BaseModule):
         df = db_get_or_404(self.DocumentFile, file_id)
         doc_id = df.document_id
         fname = df.original_filename or 'file'
+        refused = self._refuse_if_record(db_get_or_404(self.Document, doc_id))
+        if refused:
+            return refused
         try:
             self._delete_file_and_versions(df)
             self._log_history(doc_id, 'file_removed', fname)
@@ -1125,6 +1206,9 @@ class DocumentsModule(BaseModule):
         """Sign a PDF file using a discovered capability."""
         df = db_get_or_404(self.DocumentFile, file_id)
         doc_id = df.document_id
+        refused = self._refuse_if_record(db_get_or_404(self.Document, doc_id))
+        if refused:
+            return refused
 
         fmt = (df.file_format or '').lower()
         if fmt != 'pdf':
@@ -1171,6 +1255,7 @@ class DocumentsModule(BaseModule):
                 counts[cat] = cnt
         return render_template('categories.html',
                                categories=managed, counts=counts,
+                               common_periods=retention.COMMON_PERIODS,
                                fill_row_color=(self._get_config('fill_row_color', '0') == '1'))
 
     def _add_category(self):
@@ -1260,9 +1345,15 @@ class DocumentsModule(BaseModule):
             return redirect(url_for('documents.documents_index'))
         ids = [int(i) for i in ids]
         docs = self.Document.query.filter(self.Document.id.in_(ids)).all()
+        records = [d for d in docs if self._is_record(d)]
+        if records:
+            docs = [d for d in docs if not self._is_record(d)]
+            flash(f'{len(records)} record(s) left unchanged: records cannot be changed or '
+                  'deleted.', 'warning')
 
         if action == 'delete':
             for doc in docs:
+                self._log_disposal(doc, 'deleted')
                 self._delete_document_children(doc)
                 self._db.session.delete(doc)
             self._db.session.commit()
@@ -1288,6 +1379,176 @@ class DocumentsModule(BaseModule):
                 flash(f'Tag "{tag}" added to {len(docs)} document(s).', 'success')
 
         return redirect(url_for('documents.documents_index'))
+
+    # ---- records and retention (ISO 15489, retention.py) ----
+
+    @staticmethod
+    def _is_record(doc):
+        return bool(doc.record_declared_at)
+
+    def _refuse_if_record(self, doc):
+        """A redirect with the reason when `doc` is a record, else None."""
+        if not self._is_record(doc):
+            return None
+        flash('This document is a record: its details and files cannot be changed or '
+              'deleted. Notes can still be added.', 'warning')
+        return redirect(url_for('documents.documents_view', id=doc.id))
+
+    def _category_retention(self, name):
+        if not name:
+            return None
+        cat = self.DocumentCategory.query.filter_by(name=name).first()
+        return cat.retention_years if cat else None
+
+    def _declare_record(self, id):
+        doc = db_get_or_404(self.Document, id)
+        if self._is_record(doc):
+            return redirect(url_for('documents.documents_view', id=doc.id))
+        years = (retention.clean_years(request.form.get('retention_years'))
+                 or self._category_retention(doc.category))
+        if not years:
+            flash('Set how many years to keep it (here or for its category).', 'danger')
+            return redirect(url_for('documents.documents_view', id=doc.id))
+        doc.record_declared_at = utcnow()
+        doc.retain_until = retention.retain_until(years, doc.document_date, date.today())
+        recorded = self._fingerprint_missing(doc)
+        self._log_history(doc.id, 'declared_record',
+                          f'Declared a record, kept until {doc.retain_until:%d/%m/%Y} '
+                          f'({years} years)' + (f'; fingerprints taken: {recorded}' if recorded else ''))
+        self._db.session.commit()
+        flash(f'Declared a record; kept until {doc.retain_until:%d/%m/%Y}.', 'success')
+        return redirect(url_for('documents.documents_view', id=doc.id))
+
+    def _fingerprint_missing(self, doc):
+        """Take the SHA-256 of files stored before fingerprints existed, so a
+        record's files can be verified. Returns how many were taken."""
+        taken = 0
+        for df in self.DocumentFile.query.filter_by(document_id=doc.id,
+                                                    sha256=None).all():
+            try:
+                result = self.core.storage.get(df.file_path)
+            except Exception:
+                result = None
+            if result:
+                df.sha256 = integrity.sha256(result[0])
+                taken += 1
+        return taken
+
+    def _undeclare_record(self, id):
+        doc = db_get_or_404(self.Document, id)
+        reason = request.form.get('reason', '').strip()[:300]
+        if not reason:
+            flash('Say why the record status is removed.', 'danger')
+            return redirect(url_for('documents.documents_view', id=doc.id))
+        if self._is_record(doc):
+            self._log_history(doc.id, 'record_released',
+                              f'Record status removed (was kept until '
+                              f'{doc.retain_until:%d/%m/%Y}): {reason}' if doc.retain_until
+                              else f'Record status removed: {reason}')
+            doc.record_declared_at = None
+            doc.retain_until = None
+            self._db.session.commit()
+            flash('The document is no longer a record.', 'success')
+        return redirect(url_for('documents.documents_view', id=doc.id))
+
+    def _retention_index(self):
+        today = date.today()
+        records = self.Document.query.filter(
+            self.Document.record_declared_at.isnot(None)).order_by(
+            self.Document.retain_until).all()
+        due = [d for d in records if retention.is_due(d, today)]
+        upcoming = [d for d in records if not retention.is_due(d, today)
+                    and d.retain_until and d.retain_until <= today + timedelta(days=365)]
+        without_period = [c.name for c in self.DocumentCategory.query.order_by(
+            self.DocumentCategory.name).all() if not c.retention_years]
+        log = self.DocumentDisposal.query.order_by(
+            self.DocumentDisposal.created_at.desc()).limit(200).all()
+        return render_template('retention.html', due=due, upcoming=upcoming,
+                               record_count=len(records), without_period=without_period,
+                               log=log, today=today)
+
+    def _retention_keep(self, id):
+        doc = db_get_or_404(self.Document, id)
+        years = retention.clean_years(request.form.get('years', '1')) or 1
+        if self._is_record(doc) and doc.retain_until:
+            old = doc.retain_until
+            doc.retain_until = date(max(old.year, date.today().year) + years, 12, 31)
+            self._log_history(doc.id, 'retention_extended',
+                              f'Kept until {doc.retain_until:%d/%m/%Y} (was {old:%d/%m/%Y})')
+            self._db.session.commit()
+            flash(f'"{doc.name}" is kept until {doc.retain_until:%d/%m/%Y}.', 'success')
+        return redirect(url_for('documents.retention_index'))
+
+    def _retention_dispose(self, id):
+        """Dispose of a record whose retention date has passed: the document
+        and its files are deleted; the disposal log keeps what it was."""
+        doc = db_get_or_404(self.Document, id)
+        if not retention.is_due(doc):
+            flash('Only a record past its retention date can be disposed of.', 'danger')
+            return redirect(url_for('documents.retention_index'))
+        try:
+            name = doc.name
+            self._log_disposal(doc, 'disposed', request.form.get('reason', '').strip()[:300]
+                               or 'Retention period ended')
+            self._delete_document_children(doc)
+            self._db.session.delete(doc)
+            self._db.session.commit()
+            flash(f'"{name}" was disposed of; the disposal log keeps its record.', 'success')
+        except Exception as e:
+            self._db.session.rollback()
+            self.logger.error('Error disposing of a document: %s', e)
+            flash('Error disposing of the document. Please try again.', 'danger')
+        return redirect(url_for('documents.retention_index'))
+
+    def _log_disposal(self, doc, action, reason=None):
+        """Write what is about to be deleted to the disposal log."""
+        files = self.DocumentFile.query.filter_by(document_id=doc.id).all()
+        self._db.session.add(self.DocumentDisposal(
+            identifier=doc.identifier, name=doc.name, category=doc.category,
+            document_date=doc.document_date, was_record=self._is_record(doc),
+            retain_until=doc.retain_until, action=action, reason=reason,
+            files='\n'.join(f'{f.original_filename or "file"} ({f.sha256 or "no fingerprint"})'
+                            for f in files) or None))
+
+    def _update_category_retention(self, id):
+        cat = db_get_or_404(self.DocumentCategory, id)
+        raw = request.form.get('retention_years', '').strip()
+        years = retention.clean_years(raw)
+        if raw and years is None:
+            flash(f'Enter whole years from 1 to {retention.MAX_YEARS}, or leave it empty.',
+                  'danger')
+        else:
+            cat.retention_years = years
+            self._db.session.commit()
+        return redirect(url_for('documents.categories_index'))
+
+    def post_retention_messages(self, today=None):
+        """A message for each record that reached its retention date
+        (`messages.post`, key per record and date, so once). Never raises."""
+        functions = self.core.functions
+        if not functions.available('messages.post'):
+            return 0
+        today = today or date.today()
+        created = 0
+        try:
+            for doc in self.Document.query.filter(
+                    self.Document.record_declared_at.isnot(None),
+                    self.Document.retain_until < today).all():
+                name = (doc.name or 'Untitled').replace('[', '(').replace(']', ')')
+                text = (f'🗄 Record "{name}" was kept until {doc.retain_until:%d/%m/%Y} — '
+                        '[review it](/documents/retention)')
+                result = functions.call('messages.post', source=self.module_id, text=text,
+                                        level='info',
+                                        key=f'retention-due:{doc.id}:{doc.retain_until.isoformat()}')
+                created += 1 if result.get('created') else 0
+        except Exception:
+            self._db.session.rollback()
+            self.logger.warning('Could not post the retention messages', exc_info=True)
+        return created
+
+    def _daily_messages(self):
+        self.post_expiry_messages()
+        self.post_retention_messages()
 
     # ---- notes ----
 
@@ -1327,7 +1588,7 @@ class DocumentsModule(BaseModule):
     def get_dashboard_panels(self):
         # No panel: the alerts are messages in the top-bar bell. Opening the
         # dashboard posts any new ones at once, besides the daily job.
-        self.post_expiry_messages()
+        self._daily_messages()
         return []
 
     def post_expiry_messages(self, today=None):

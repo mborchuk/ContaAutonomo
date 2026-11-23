@@ -23,6 +23,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   stays downloadable; signing a PDF also keeps the unsigned version instead
   of overwriting it. A PDF that declares PDF/A (ISO 19005, archival PDF) in
   its metadata shows its level, e.g. PDF/A-2B; the claim is not validated.
+- **Documents: records and retention (ISO 15489).** Each category can have a
+  retention period in years (Documents → Categories; the owner sets them, the
+  page lists common Spanish periods with their source). *Declare as record*
+  on a document fixes it: its details and files can no longer be changed or
+  deleted (notes can) until 31 December of the year of its date plus the
+  period. Documents → Retention lists the records past that date — keep one
+  longer or dispose of it — and those due in the next 12 months; a message
+  in the bell says when a record is due. Every deletion and disposal is kept
+  in a log on that page (identifier, name, reason, files with their SHA-256),
+  also after the document is gone. Removing the record status needs a
+  reason, kept in the history.
 
 ### Fixed
 - Documents: the edit form showed "None" in an empty description.

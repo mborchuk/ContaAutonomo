@@ -43,6 +43,7 @@
         <tr>
             <th>Category</th>
             <th>Documents</th>
+            <th>Keep records (years)</th>
             <th style="width: 100px;">Actions</th>
         </tr>
     </thead>
@@ -59,6 +60,13 @@
             </td>
             <td>{{ counts.get(cat.name, 0) }}</td>
             <td>
+                <form method="POST" action="{{ url_for('documents.categories_update_retention', id=cat.id) }}" style="display: flex; gap: 4px; margin: 0;">
+                    <input type="number" name="retention_years" min="1" max="50" value="{{ cat.retention_years or '' }}"
+                           placeholder="—" aria-label="Years to keep records of {{ cat.name }}" style="width: 70px;">
+                    <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+                </form>
+            </td>
+            <td>
                 <form method="POST" action="{{ url_for('documents.categories_delete', id=cat.id) }}"
                       style="display: inline;"
                       onsubmit="return confirm('Remove category «{{ cat.name }}» from the list? Documents with this category will not be affected.');">
@@ -72,6 +80,15 @@
 {% else %}
 <p style="text-align: center; color: var(--color-text-muted); padding: 40px;">No categories yet. Add one above.</p>
 {% endif %}
+
+<div class="note note-info" style="margin-top: 20px;">
+    <strong>Keep records (years)</strong> is used when a document of the category is declared a
+    record: it is kept until 31 December of the year of its date plus these years. You decide the
+    periods (ask your gestor). Common Spanish periods:
+    <ul style="margin: 6px 0 0;">
+        {% for period, what in common_periods %}<li>{{ period }}: {{ what }}</li>{% endfor %}
+    </ul>
+</div>
 
 <p style="margin-top: 20px; font-size: 13px; color: var(--color-text-faint);">
     💡 New categories are also auto-added when you type a new category name in the document form.
