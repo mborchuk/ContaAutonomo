@@ -52,7 +52,10 @@ The math lives in [`calculator.py`](calculator.py) as pure functions
   customer's `tax_type` and the configured VAT rate; `eu_b2b` and `non_eu`
   customers carry no output VAT. It goes to boxes **07/09**, the 21 %
   line of the official form ([01]–[03] are 4 %, [04]–[06] 10 %); the draft
-  uses the official box numbers throughout.
+  uses the official box numbers throughout. The rule is in `output_vat.py`;
+  other modules read each invoice's output VAT through
+  `vat.invoice_lines(date_from, date_to)` (Reports fills its IVA columns
+  from it).
 - *IVA soportado (input VAT)*: per-expense `vat_amount` × `deductible_pct`,
   skipping non-deductible expenses. Legacy expenses without VAT data are
   excluded and counted — the page shows how many, so the user knows the

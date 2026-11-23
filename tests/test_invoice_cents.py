@@ -6,7 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from invoice_vat import invoice_base_eur, invoice_output_vat, to_cents
+from invoice_amounts import invoice_base_eur, to_cents
+from modules.tax_es_forms.output_vat import invoice_output_vat
 from modules.tax_es_forms.calculator import compute_modelo_303
 
 
