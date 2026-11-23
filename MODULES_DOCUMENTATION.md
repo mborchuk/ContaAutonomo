@@ -425,11 +425,12 @@ Spanish tax forms, Social Security payments, and the filing workflow.
 
 Document management system with categories, tags, multi-file attachments, and change history.
 
-- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/view/<id>/dublin-core.xml`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/categories`
-- Models: `Document`, `DocumentCategory`, `DocumentFile`, `DocumentConfig`, `DocumentHistory`
+- Routes: `/documents/` (list), `/documents/create`, `/documents/edit/<id>`, `/documents/view/<id>`, `/documents/view/<id>/dublin-core.xml`, `/documents/delete/<id>`, `/documents/duplicate/<id>`, `/documents/bulk`, `/documents/download/<id>`, `/documents/preview/<id>`, `/documents/file/<id>/download`, `/documents/file/<id>/preview`, `/documents/file/<id>/delete`, `/documents/file/<id>/sign`, `/documents/file/<id>/replace`, `/documents/file-version/<id>/download`, `/documents/view/<id>/verify`, `/documents/categories`
+- Models: `Document`, `DocumentCategory`, `DocumentFile`, `DocumentFileVersion`, `DocumentConfig`, `DocumentHistory`
 - Nav: All Documents, Categories (grouped under Documents dropdown)
 - Features:
   - Multi-file attachments per document (PDF, JPG, PNG, DOC, XLSX)
+  - Integrity and versions (`integrity.py`): `DocumentFile.sha256` is taken on upload; *Verify integrity* (`POST /documents/view/<id>/verify`) reads each file and version back, compares, records a missing fingerprint, and logs `integrity_checked`. *Replace* and signing store the new content under a new key and keep the earlier one as a `DocumentFileVersion` (`version`, `reason` replaced/signed, its own fingerprint), downloadable. `DocumentFile.pdfa` holds the PDF/A level the PDF declares in its XMP metadata (shown, not validated). A stored file is deleted only when no file or version still uses it (duplicates share files)
   - Document detail page with full info, files, and change history timeline
   - New fields: reference number, counterparty, status (Active/Pending/Archived/Expired)
   - Dublin Core metadata (ISO 15836, `dublin_core.py`): an identifier assigned once (`DOC-<year>-<nnnn>`, unique index; existing documents numbered on enable, oldest first), Creator, Language (ISO 639-1) and Rights. The fifteen elements map from the document's fields (title ← name, subject ← category and tags, contributor ← counterparty, type and format ← the files' media types, identifier ← identifier and reference number, coverage ← date/expiry); empty ones are left out. Exported as `oai_dc` XML from the document page and as `{element: [values]}` from `GET /api/v1/m/documents/documents/<id>/dublin-core`

@@ -13,7 +13,7 @@ import os
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
-from . import dublin_core
+from . import dublin_core, integrity
 
 
 class DocumentsModule(BaseModule):
@@ -32,7 +32,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.6.0'
+        return '0.7.0'
 
     @property
     def nav_items(self):
@@ -89,6 +89,25 @@ class DocumentsModule(BaseModule):
             original_filename = db.Column(db.String(300))
             file_size = db.Column(db.Integer)
             file_format = db.Column(db.String(10))
+            # Integrity (integrity.py): fingerprint of the current content,
+            # its version number, and the PDF/A level the PDF declares.
+            sha256 = db.Column(db.String(64))
+            version = db.Column(db.Integer, default=1)
+            pdfa = db.Column(db.String(12))
+            created_at = db.Column(db.DateTime, default=utcnow)
+
+        class DocumentFileVersion(db.Model):
+            """An earlier content of a file, kept when it was replaced or signed."""
+            __tablename__ = 'document_file_version'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            file_id = db.Column(db.Integer, db.ForeignKey('document_file.id'), nullable=False)
+            version = db.Column(db.Integer, nullable=False)
+            file_path = db.Column(db.String(500), nullable=False)
+            original_filename = db.Column(db.String(300))
+            file_size = db.Column(db.Integer)
+            sha256 = db.Column(db.String(64))
+            reason = db.Column(db.String(30))        # replaced, signed
             created_at = db.Column(db.DateTime, default=utcnow)
 
         class DocumentConfig(db.Model):
@@ -119,10 +138,12 @@ class DocumentsModule(BaseModule):
         self.Document = Document
         self.DocumentCategory = DocumentCategory
         self.DocumentFile = DocumentFile
+        self.DocumentFileVersion = DocumentFileVersion
         self.DocumentConfig = DocumentConfig
         self.DocumentHistory = DocumentHistory
         self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
+                'DocumentFileVersion': DocumentFileVersion,
                 'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
                 'DocumentNote': DocumentNote}
 
@@ -165,6 +186,17 @@ class DocumentsModule(BaseModule):
             # Create document_file table if not exists
             if 'document_file' not in inspector.get_table_names():
                 self.DocumentFile.__table__.create(self._db.engine)
+            else:
+                file_cols = [c['name'] for c in inspector.get_columns('document_file')]
+                for col, typedef in (('sha256', 'VARCHAR(64)'), ('version', 'INTEGER DEFAULT 1'),
+                                     ('pdfa', 'VARCHAR(12)')):
+                    if col not in file_cols:
+                        with self._db.engine.connect() as conn:
+                            conn.execute(text(
+                                f'ALTER TABLE document_file ADD COLUMN {col} {typedef}'))
+                            conn.commit()
+            if 'document_file_version' not in inspector.get_table_names():
+                self.DocumentFileVersion.__table__.create(self._db.engine)
 
             # Create document_history table if not exists
             if 'document_history' not in inspector.get_table_names():
@@ -293,6 +325,21 @@ class DocumentsModule(BaseModule):
         @login_required
         def file_preview(file_id):
             return module._preview_file(file_id)
+
+        @bp.route('/file/<int:file_id>/replace', methods=['POST'])
+        @login_required
+        def file_replace(file_id):
+            return module._replace_file(file_id)
+
+        @bp.route('/file-version/<int:version_id>/download')
+        @login_required
+        def file_version_download(version_id):
+            return module._download_version(version_id)
+
+        @bp.route('/view/<int:id>/verify', methods=['POST'])
+        @login_required
+        def documents_verify(id):
+            return module._verify_document(id)
 
         @bp.route('/file/<int:file_id>/delete', methods=['POST'])
         @login_required
@@ -553,12 +600,19 @@ class DocumentsModule(BaseModule):
         doc = db_get_or_404(self.Document, id)
         doc_files = self.DocumentFile.query.filter_by(
             document_id=doc.id).order_by(self.DocumentFile.created_at).all()
+        versions = {}
+        if doc_files:
+            for v in self.DocumentFileVersion.query.filter(
+                    self.DocumentFileVersion.file_id.in_([f.id for f in doc_files])).order_by(
+                    self.DocumentFileVersion.version.desc()).all():
+                versions.setdefault(v.file_id, []).append(v)
         history = self.DocumentHistory.query.filter_by(
             document_id=doc.id).order_by(self.DocumentHistory.created_at.desc()).all()
         notes = self.DocumentNote.query.filter_by(
             document_id=doc.id).order_by(self.DocumentNote.created_at.desc()).all()
         category_colors = self._get_category_colors()
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
+                               versions=versions, short=integrity.short,
                                history=history, notes=notes,
                                category_colors=category_colors,
                                today=date.today())
@@ -815,8 +869,7 @@ class DocumentsModule(BaseModule):
         child row must go before the document itself can be deleted.
         """
         for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
-            self._storage_delete_quiet(df.file_path)
-            self._db.session.delete(df)
+            self._delete_file_and_versions(df)
         if doc.file_path and doc.file_path != '_multi_':
             self._storage_delete_quiet(doc.file_path)
         self.DocumentHistory.query.filter_by(document_id=doc.id).delete(
@@ -867,22 +920,144 @@ class DocumentsModule(BaseModule):
     # ---- individual file operations ----
 
     def _save_document_file(self, document_id, file):
-        """Save an uploaded file and create a DocumentFile record."""
+        """Save an uploaded file and create a DocumentFile record, with its
+        SHA-256 fingerprint and the PDF/A level it declares."""
         file_size, file_format = self._get_file_meta(file)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_name = file.filename.replace(' ', '_')
-        relative_path = os.path.join('documents_files',
-                                     f'{timestamp}_{safe_name}')
-        storage_key = self.core.storage.save(file, relative_path)
+        data = file.read()
+        file.seek(0)
+        storage_key = self.core.storage.save(file, self._storage_key(file.filename))
         df = self.DocumentFile(
             document_id=document_id,
             file_path=storage_key,
             original_filename=file.filename,
             file_size=file_size,
             file_format=file_format,
+            sha256=integrity.sha256(data),
+            version=1,
+            pdfa=integrity.pdfa_claim(data) if file_format == 'pdf' else None,
         )
         self._db.session.add(df)
         return df
+
+    @staticmethod
+    def _storage_key(filename, version=None):
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+        safe_name = (filename or 'file').replace(' ', '_').replace('/', '_').replace('\\', '_')
+        label = f'v{version}_' if version else ''
+        return os.path.join('documents_files', f'{timestamp}_{label}{safe_name}')
+
+    def _new_version(self, df, data, reason, filename=None):
+        """Make `data` the current content of `df`; the earlier content is
+        kept as a DocumentFileVersion (its stored file is not touched)."""
+        self._db.session.add(self.DocumentFileVersion(
+            file_id=df.id, version=df.version or 1, file_path=df.file_path,
+            original_filename=df.original_filename, file_size=df.file_size,
+            sha256=df.sha256, reason=reason))
+        new_version = (df.version or 1) + 1
+        if filename:
+            df.original_filename = filename
+            df.file_format = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        df.file_path = self.core.storage.save(
+            data, self._storage_key(df.original_filename, new_version))
+        df.file_size = len(data)
+        df.sha256 = integrity.sha256(data)
+        df.pdfa = integrity.pdfa_claim(data) if (df.file_format or '').lower() == 'pdf' else None
+        df.version = new_version
+        return new_version
+
+    def _key_in_use(self, key):
+        """Another file or version still points at this stored file (a
+        duplicated document shares its files)."""
+        return (self.DocumentFile.query.filter_by(file_path=key).count()
+                + self.DocumentFileVersion.query.filter_by(file_path=key).count()) > 0
+
+    def _delete_file_and_versions(self, df):
+        """Delete a file with its earlier versions; a stored file another
+        document still uses is kept."""
+        keys = [df.file_path] + [key for (key,) in self._db.session.query(
+            self.DocumentFileVersion.file_path).filter_by(file_id=df.id).all()]
+        # Versions first: they reference the file (foreign key).
+        self.DocumentFileVersion.query.filter_by(file_id=df.id).delete(
+            synchronize_session=False)
+        self._db.session.delete(df)
+        self._db.session.flush()
+        for key in dict.fromkeys(keys):
+            if key and not self._key_in_use(key):
+                self._storage_delete_quiet(key)
+
+    def _replace_file(self, file_id):
+        """Upload a new content for a file; the earlier one stays as a version."""
+        df = db_get_or_404(self.DocumentFile, file_id)
+        upload = request.files.get('file')
+        if not upload or not upload.filename:
+            flash('Choose the new file.', 'danger')
+            return redirect(url_for('documents.documents_view', id=df.document_id))
+        try:
+            data = upload.read()
+            old = df.original_filename or 'file'
+            version = self._new_version(df, data, 'replaced', filename=upload.filename)
+            self._log_history(df.document_id, 'file_replaced',
+                              f'{old} → {df.original_filename}: version {version}, '
+                              f'SHA-256 {integrity.short(df.sha256)}')
+            self._db.session.commit()
+            flash(f'File replaced; version {version - 1} is kept.', 'success')
+        except Exception as e:
+            self._db.session.rollback()
+            self.logger.error('Error replacing document file: %s', e)
+            flash('An error occurred. Please try again.', 'danger')
+        return redirect(url_for('documents.documents_view', id=df.document_id))
+
+    def _download_version(self, version_id):
+        v = db_get_or_404(self.DocumentFileVersion, version_id)
+        df = db_get_or_404(self.DocumentFile, v.file_id)
+        if not self.core.storage.exists(v.file_path):
+            flash('File not found.', 'danger')
+            return redirect(url_for('documents.documents_view', id=df.document_id))
+        name = v.original_filename or df.original_filename or 'file'
+        stem, dot, ext = name.rpartition('.')
+        return self.core.storage.send(
+            v.file_path, download_name=f'{stem}_v{v.version}{dot}{ext}' if dot else f'{name}_v{v.version}')
+
+    def _verify_document(self, id):
+        """Read every file and earlier version back and compare it with its
+        SHA-256 fingerprint. A file stored before fingerprints existed gets
+        one now (from then on it is checked)."""
+        doc = db_get_or_404(self.Document, id)
+        changed, missing, recorded, matched = [], [], [], 0
+        items = []
+        for df in self.DocumentFile.query.filter_by(document_id=doc.id).all():
+            items.append((df, df.original_filename or 'file'))
+            for v in self.DocumentFileVersion.query.filter_by(file_id=df.id).all():
+                items.append((v, f'{v.original_filename or df.original_filename or "file"} '
+                                 f'(version {v.version})'))
+        for item, label in items:
+            try:
+                result = self.core.storage.get(item.file_path)
+            except Exception:
+                result = None
+            if not result:
+                missing.append(label)
+                continue
+            fingerprint = integrity.sha256(result[0])
+            if not item.sha256:
+                item.sha256 = fingerprint
+                recorded.append(label)
+            elif item.sha256 != fingerprint:
+                changed.append(label)
+            else:
+                matched += 1
+        summary = f'{matched} of {len(items)} file(s) unchanged'
+        if changed:
+            summary += '; changed since stored: ' + ', '.join(changed)
+        if missing:
+            summary += '; missing: ' + ', '.join(missing)
+        if recorded:
+            summary += '; fingerprint recorded now: ' + ', '.join(recorded)
+        self._log_history(doc.id, 'integrity_checked', summary)
+        self._db.session.commit()
+        level = 'danger' if changed or missing else 'success'
+        flash(f'Integrity check: {summary}.', level)
+        return redirect(url_for('documents.documents_view', id=doc.id))
 
     def _download_file(self, file_id):
         """Download a single attached file."""
@@ -908,8 +1083,7 @@ class DocumentsModule(BaseModule):
         doc_id = df.document_id
         fname = df.original_filename or 'file'
         try:
-            self.core.storage.delete(df.file_path)
-            self._db.session.delete(df)
+            self._delete_file_and_versions(df)
             self._log_history(doc_id, 'file_removed', fname)
             self._db.session.commit()
             flash('File removed.', 'success')
@@ -939,7 +1113,7 @@ class DocumentsModule(BaseModule):
                 for idx in selected:
                     cap = signers[idx]
                     pdf_bytes = cap['action'](pdf_bytes)
-                self.core.storage.save(pdf_bytes, df.file_path)
+                self._new_version(df, pdf_bytes, 'signed')
                 names = [signers[i].get('name', '') for i in selected]
                 self._log_history(doc_id, 'updated',
                                   f'Auto-signed: {df.original_filename} ({", ".join(names)})')
@@ -972,7 +1146,7 @@ class DocumentsModule(BaseModule):
             pdf_bytes, _ = result
 
             signed = cap['action'](pdf_bytes)
-            self.core.storage.save(signed, df.file_path)
+            self._new_version(df, signed, 'signed')
             self._log_history(doc_id, 'updated',
                               f'File signed ({cap.get("name", "unknown")}): {df.original_filename}')
             self._db.session.commit()
@@ -1069,6 +1243,9 @@ class DocumentsModule(BaseModule):
                 original_filename=df.original_filename,
                 file_size=df.file_size,
                 file_format=df.file_format,
+                sha256=df.sha256,
+                version=df.version,
+                pdfa=df.pdfa,
             )
             self._db.session.add(new_df)
         self._db.session.commit()
