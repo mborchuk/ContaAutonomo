@@ -1,0 +1,17 @@
+{# The warning on a page that shows `year` with the `table_year` table
+   (taxdata.year_notice). `cap` is the year_table capability or None;
+   `info` its action(year) result. Keys are read as cap['…']. #}
+<div class="note note-warning" role="note">
+    <p style="margin: 0;">⚠ Figures for {{ year }} use the {{ table_year }} table — check that the
+        official values did not change for {{ year }}, then
+        <a href="{{ confirm_url }}">confirm it or enter the new values in Tax Data</a>.</p>
+    {% if info and info['auto'] %}
+    <p style="margin: var(--space-2) 0 0;">{{ '✓' if info['auto']['ok'] else '⚠' }} {{ info['auto']['message'] }}</p>
+    {% endif %}
+    {% if cap %}
+    <details style="margin-top: var(--space-2);">
+        <summary>How to check {{ cap['name'] }}</summary>
+        {% include 'tax_data_how_to.html' %}
+    </details>
+    {% endif %}
+</div>

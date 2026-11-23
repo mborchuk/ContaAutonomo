@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Tax Data {{ year }}{% endblock %}
+
+{% block head %}
+<style>
+.taxdata-years { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.taxdata-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: var(--space-3); }
+.taxdata-grid input { max-width: 10rem; }
+.taxdata-changed { font-weight: var(--fw-semibold); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Tax Data — {{ year }}</h1>
+    <div class="taxdata-years" role="navigation" aria-label="Year">
+        {% for y in years %}
+        <a href="{{ url_for('tax_data.tax_data_index', year=y) }}"
+           class="btn btn-sm {{ 'btn-primary' if y == year else 'btn-secondary' }}"
+           {% if y == year %}aria-current="page"{% endif %}>{{ y }}</a>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="note note-info">
+    The tax figures that change by year come with the app. When a year has no
+    table of its own, the app uses the latest earlier one and its pages warn.
+    For each table below: follow the steps, compare with the official source,
+    then <strong>confirm it unchanged</strong> for {{ year }} or enter the new
+    values and save. The pages that use it stop warning for {{ year }}.
+</div>
+
+{% if not rows %}
+<div class="empty-state">No enabled module declares yearly tax tables.</div>
+{% endif %}
+
+{% for row in rows %}
+{% set cap = row.cap %}{% set info = row.info %}{% set entry = row.entry %}
+<div class="card" id="{{ row.anchor }}">
+    <div class="card-header page-header">
+        <h3>{{ cap['name'] }} <span class="fine-print">({{ cap['module_name'] }})</span></h3>
+        {% if entry %}
+        <span class="status-badge status-paid">Confirmed {{ entry.confirmed_on.strftime('%d/%m/%Y') }}{% if row.changed %} · {{ row.changed }} changed{% endif %}</span>
+        {% elif info and info['built_in'] %}
+        <span class="status-badge status-active">{{ year }} table in the app</span>
+        {% elif info %}
+        <span class="status-badge status-warning">Uses the {{ info['table_year'] }} table — not confirmed</span>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if not info %}
+        <p class="muted">This table could not be read for {{ year }} (see the log).</p>
+        {% else %}
+        {% if info['auto'] %}
+        <p>{{ '✓' if info['auto']['ok'] else '⚠' }} {{ info['auto']['message'] }}</p>
+        {% endif %}
+        <details {% if not entry and not info['built_in'] %}open{% endif %}>
+            <summary>How to check it</summary>
+            {% include 'tax_data_how_to.html' %}
+        </details>
+
+        <form method="POST" action="{{ url_for('tax_data.tax_data_confirm', table_id=cap['id'], year=year) }}"
+              style="margin-top: var(--space-4);">
+            {% if row.plain %}
+            <div class="taxdata-fields">
+                {% for f in row.plain %}
+                <div class="form-group">
+                    <label for="{{ row.anchor }}-{{ f.key }}" {% if f.changed %}class="taxdata-changed"{% endif %}>{{ f.label }}</label>
+                    <input type="text" inputmode="decimal" id="{{ row.anchor }}-{{ f.key }}" name="v_{{ f.key }}"
+                           value="{{ '%.2f'|format(f.value) }}" class="form-control">
+                    {% if f.changed %}<span class="helper-text">In the app: {{ '%.2f'|format(f.built_in_value) }}</span>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if row.grid %}
+            <div class="table-wrap">
+            <table class="data-table taxdata-grid">
+                <thead><tr><th></th>{% for col in row.grid.cols %}<th>{{ col }}</th>{% endfor %}</tr></thead>
+                <tbody>
+                {% for label, cells in row.grid.rows %}
+                <tr>
+                    <th scope="row">{{ label }}</th>
+                    {% for col in row.grid.cols %}
+                    <td>
+                        {% set f = cells.get(col) %}
+                        {% if f %}
+                        <input type="text" inputmode="decimal" name="v_{{ f.key }}" aria-label="{{ f.label }}"
+                               value="{{ '%.2f'|format(f.value) }}" class="form-control{% if f.changed %} taxdata-changed{% endif %}">
+                        {% else %}<span class="muted">no limit</span>{% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+            {% endif %}
+            <div class="page-actions" style="margin-top: var(--space-3);">
+                <button type="submit" class="btn btn-primary">
+                    {% if row.plain or row.grid %}Save for {{ year }} (confirms the year){% else %}Confirm unchanged for {{ year }}{% endif %}
+                </button>
+                {% if row.plain or row.grid %}<span class="fine-print">Unchanged values: saving confirms them as they are.</span>{% endif %}
+            </div>
+        </form>
+        {% if entry %}
+        <form method="POST" action="{{ url_for('tax_data.tax_data_undo', table_id=cap['id'], year=year) }}"
+              style="margin-top: var(--space-2);">
+            <button type="submit" class="btn btn-secondary btn-sm">Remove the confirmation for {{ year }}</button>
+        </form>
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

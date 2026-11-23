@@ -22,6 +22,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   answer; when first enabled, the AI Agent copies the AI Parser's provider
   settings and keys once. CLI agents run only with `AI_AGENT_ALLOW_CLI=1` or
   `AI_PARSER_ALLOW_CLI=1`.
+- **Tax Data** (Taxes → Tax Data) is a new module that is on by default: the
+  yearly tax tables are checked and confirmed there, not in the code.
 - **Dashboard**: the Document Alerts and Fiscal Deadlines panels are gone; their
   alerts and deadlines are messages in the 🔔 bell (top right).
 - **Settings**: the report template moved from Settings → General to its own
@@ -37,6 +39,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 These make 2.0.0 a major version; a module written for 1.x needs them:
 
+- Yearly tax tables are the modules' own: the core's `year_tables.py`
+  (`resolve`, `fallback_note`) is gone. A module keeps its tables keyed by
+  year, declares them to Tax Data as `year_table` capabilities and reads the
+  owner's confirmation with `taxdata.year_values`
+  (`modules/tax_es_forms/yearly.py` is an example).
+- Rules one module owns and another needs are registry functions, not core
+  code: the reverse-charge region check moved from the core
+  (`supplier_region.py`) to Spanish Tax Forms (`vat.reverse_charge_check`),
+  and so did the output VAT of an invoice (`vat.invoice_lines`, which Reports
+  calls; without it the report's income IVA cells show '–'). The core's
+  `invoice_vat.py` is now `invoice_amounts.py` with only `to_cents`,
+  `invoice_base_eur` and `customer_tax_type`; `invoice_output_vat` and
+  `invoice_vat_line` are in `modules/tax_es_forms/output_vat.py`.
 - `core.deployment_key(env_var, purpose, file_name)` takes the key file's
   name (under `instance/`, moved with `<env_var>_FILE`) instead of an
   `app.config` key: the core no longer defines `VERIFACTU_KEY_FILE` or
@@ -116,8 +131,8 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   module.
 - **No module imports another module**: the API declares `api.check_token`,
   which Reports' API route uses instead of the module's `verify_token`; the
-  invoice output-VAT rule Reports shares with Spanish Tax Forms moved to the
-  core (`invoice_vat.py`). The OpenAPI document lists `/expenses` while
+  invoice output VAT Reports shows comes from Spanish Tax Forms through
+  `vat.invoice_lines`. The OpenAPI document lists `/expenses` while
   something provides `ledger.list_expenses`.
 - **PDF signing on the function registry**: PDF Signature declares
   `pdf.sign_invoice` and `pdf.signing_certificate`, PDF Verify
@@ -204,6 +219,18 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
   (uploads made before boxes were read on upload) and names them; Read filed
   boxes reads them.
+- **Tax Data module** (Taxes → Tax Data, on by default): the yearly tax
+  tables — Modelo 303 and 130 boxes, 390 casillas, the 347 threshold, the
+  RETA brackets and rate — with their state for a year, what each holds,
+  numbered steps and links to the official AEAT, BOE and Seguridad Social
+  pages. The owner confirms a table unchanged for a new year, or enters the
+  new 347 threshold or RETA values, in the app; the pages use them for that
+  year and stop warning (*"Figures for 2027 use the 2026 table"*, which now
+  links there). For Modelo 303, 130 and 390 the app compares its box numbers
+  with the official AEAT record layouts it ships and shows the result; a test
+  does the same on every run. Modelo 390 and 347 have 2026 tables (390
+  checked against the 2026 layout, 347 against RD 1065/2007 art. 33).
+  CONTRIBUTING.md → Annual Tax Data Update is a step-by-step guide.
 
 ### Changed
 
@@ -310,7 +337,7 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 - **Tax figures add each invoice in cents**: an invoice converted from
   another currency stores its EUR amount with many decimals, and the tax
   figures added the raw values, so Modelo 130 box 01 came out one cent above
-  the books. `invoice_vat` now rounds every invoice amount to the cent (half
+  the books. `invoice_amounts.to_cents` rounds every invoice amount to the cent (half
   up) before it is added: Modelo 303, 130, 390, 347, Reports and the IRPF
   Estimator.
 - **Modelo 130 breakdown on narrow screens and in print**: the amounts
@@ -322,7 +349,7 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
 - **"Writing a Country Tax Module" in the README**: the example failed when
   the module was enabled (it used `self._db`, which only a module with
   `register_models` has) and imported `app`. It now uses `self.core`, reads
-  the customer saved at issue (`invoice_vat.customer_tax_type`), shows
+  the customer saved at issue (`invoice_amounts.customer_tax_type`), shows
   `get_tax_obligations` and `get_field_labels`, lists the hooks with what the
   dashboard passes to them, and says which Spanish modules to turn off. A
   test runs the example from the README. The Polish module's `on_enable` uses

@@ -18,11 +18,12 @@ expenses with zero Spanish VAT are left out of the deductible base.
 from datetime import date
 
 from constants import counts_as_income
-from invoice_vat import (
+from invoice_amounts import (
     customer_tax_type as _customer_tax_type,
     invoice_base_eur as _invoice_base_eur,
-    invoice_output_vat as _invoice_output_vat,
 )
+
+from .output_vat import invoice_output_vat as _invoice_output_vat
 
 
 def quarter_of(d):

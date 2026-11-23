@@ -16,7 +16,7 @@ from .brackets import GENERIC_DEDUCTION_PCT, bracket_for, brackets_for_year
 
 def project(ytd_income, ytd_expenses, months_elapsed,
             current_monthly_quota=0.0, paid_ytd=None,
-            deduction_pct=GENERIC_DEDUCTION_PCT, year=None):
+            deduction_pct=GENERIC_DEDUCTION_PCT, year=None, table=None):
     """Project the RETA position from year-to-date figures.
 
     Args:
@@ -27,6 +27,8 @@ def project(ytd_income, ytd_expenses, months_elapsed,
         paid_ytd: total actually paid so far (None -> current quota × months).
         deduction_pct: generic deduction (7% general / 3% corporate).
         year: contribution year; picks the bracket table (None = 2026 table).
+        table: (table_year, brackets, is_fallback) already chosen for `year`
+            (the module passes the values the owner confirmed in Tax Data).
 
     Returns dict: monthly_net_yield, bracket (index/lo/hi/quota),
     projected_annual_quota, paid_projection, regularization_delta
@@ -36,7 +38,9 @@ def project(ytd_income, ytd_expenses, months_elapsed,
     net_yield_ytd = (ytd_income - ytd_expenses) * (1.0 - deduction_pct / 100.0)
     monthly_net = net_yield_ytd / months
 
-    if year is None:
+    if table is not None:
+        table_year, brackets, fallback = table
+    elif year is None:
         table_year, brackets, fallback = 2026, None, False
     else:
         table_year, brackets, fallback = brackets_for_year(year)
