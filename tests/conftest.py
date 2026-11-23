@@ -70,7 +70,7 @@ def _loaded_modules_session():
                       'recurring_invoices', 'reta_advisor', 'invoice_email',
                       'verifactu', 'tax_management', 'bank_import', 'einvoice',
                       'documents', 'reports', 'tax_es_irpf', 'api',
-                      'tax_provision', 'ledger_assistant'):
+                      'tax_provision', 'ledger_assistant', 'tax_data'):
         if not enabled_model.query.filter_by(module_id=module_id).first():
             _db.session.add(enabled_model(module_id=module_id, enabled=True))
     _db.session.commit()

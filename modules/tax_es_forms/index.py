@@ -16,18 +16,22 @@ from datetime import datetime
 from flask import Blueprint, render_template, abort
 
 from module_manager import BaseModule
-from supplier_region import reverse_charge_problem
 
 from .boxes import (
     BOX_TABLE_VERSION,
+    BOX_TABLES,
+    MODELO_347_TABLES,
+    MODELO_390_TABLES,
     MODELO_390_ORDER,
     MODELO_390_OUT_OF_SCOPE,
     MODELO_347_EXCLUSIONS,
     MODELO_347_OUT_OF_SCOPE,
     boxes_for_year,
-    modelo_390_boxes_for_year,
-    modelo_347_rules_for_year,
 )
+from .table_checks import CHECK_303_130, CHECK_347, CHECK_390
+from .yearly import fallback_note, notice_html, resolve, table_for_year
+from .supplier_region import reverse_charge_check, reverse_charge_problem
+from .output_vat import invoice_vat_line
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
@@ -287,10 +291,10 @@ class TaxEsFormsModule(BaseModule):
 
     def _draft_390(self, year):
         """Annual VAT summary: the four quarterly 303 drafts added up."""
-        from year_tables import fallback_note
         quarters = [self._draft_303(year, q) for q in (1, 2, 3, 4)]
         result = compute_modelo_390([q['boxes'] for q in quarters])
-        table_year, labels, fallback = modelo_390_boxes_for_year(year)
+        table_year, labels, fallback, confirmed_on = self._year_table(
+            CHECK_390['id'], MODELO_390_TABLES, year)
         checks = []
         other_rates = sorted({
             inv.snap_vat_rate for inv in self._invoices_in(year)
@@ -311,6 +315,7 @@ class TaxEsFormsModule(BaseModule):
             'quarters': [{'quarter': q['quarter'], 'boxes': q['boxes']} for q in quarters],
             'table_year': table_year, 'table_fallback': fallback,
             'table_note': fallback_note(table_year) if fallback else '',
+            'table_id': CHECK_390['id'], 'table_confirmed_on': confirmed_on,
             'meta': {'checks': checks, 'basis': 'sum of quarterly 303 drafts'},
         })
         return result
@@ -328,9 +333,9 @@ class TaxEsFormsModule(BaseModule):
 
     def _draft_347(self, year):
         """Annual operations with third parties above the threshold."""
-        from year_tables import fallback_note
         vat_rate, _ = self._rates()
-        table_year, rules, fallback = modelo_347_rules_for_year(year)
+        table_year, rules, fallback, confirmed_on = self._year_table(
+            CHECK_347['id'], MODELO_347_TABLES, year, apply=_apply_347)
         result = compute_modelo_347(
             self._invoices_in(year), self._expenses_in(year), vat_rate,
             rules['threshold'], convert_expense=self._convert_to_eur)
@@ -344,6 +349,7 @@ class TaxEsFormsModule(BaseModule):
             'deadline': deadline,
             'table_year': table_year, 'table_fallback': fallback,
             'table_note': fallback_note(table_year) if fallback else '',
+            'table_id': CHECK_347['id'], 'table_confirmed_on': confirmed_on,
         })
         return result
 
@@ -398,15 +404,42 @@ class TaxEsFormsModule(BaseModule):
         _table_year, tables, _fallback = boxes_for_year(year)
         return tables[form]
 
-    @staticmethod
-    def _table_info(year):
+    def _table_info(self, year):
         """Box table metadata for a draft: version, the table year used, and
-        whether it is a fallback from an earlier year (shown as a warning)."""
-        from year_tables import fallback_note
-        table_year, _tables, fallback = boxes_for_year(year)
+        whether it is a fallback from an earlier year the owner has not
+        confirmed in Tax Data (shown as a warning)."""
+        table_year, _tables, fallback, confirmed_on = self._year_table(
+            CHECK_303_130['id'], BOX_TABLES, year)
         return {'table_version': BOX_TABLE_VERSION, 'table_year': table_year,
                 'table_fallback': fallback,
-                'table_note': fallback_note(table_year) if fallback else ''}
+                'table_note': fallback_note(table_year) if fallback else '',
+                'table_id': CHECK_303_130['id'], 'table_confirmed_on': confirmed_on}
+
+    # --- Yearly tables and the Tax Data module ----------------------------- #
+
+    def _year_table(self, table_id, tables, year, apply=None):
+        """(table_year, table, is_fallback, confirmed_on) — see yearly.py."""
+        return table_for_year(getattr(self.core, 'functions', None), table_id, tables,
+                              year, apply)
+
+    def _table_notice(self, draft):
+        """The Tax Data module's warning (HTML) for a draft that uses an
+        earlier year's table, or '' (the page then shows `table_note`)."""
+        if not draft.get('table_fallback'):
+            return ''
+        return notice_html(getattr(self.core, 'functions', None), draft['table_id'],
+                           draft['year'], draft['table_year'])
+
+    def get_capabilities(self):
+        """The yearly tables the Tax Data module lets the owner confirm or
+        change (`year_table`): the 303/130 boxes and 390 casillas (confirm
+        only, with the automatic layout check) and the 347 threshold."""
+        return [
+            _year_table_capability(CHECK_303_130, BOX_TABLES, lambda tables: []),
+            _year_table_capability(CHECK_390, MODELO_390_TABLES, lambda table: []),
+            _year_table_capability(CHECK_347, MODELO_347_TABLES, _fields_347,
+                                   validate=_validate_347),
+        ]
 
     def _available_years(self):
         return self.core.data_years()
@@ -437,7 +470,8 @@ class TaxEsFormsModule(BaseModule):
             if quarter not in (1, 2, 3, 4):
                 abort(404)
             draft = module._draft_303(year, quarter)
-            return render_template('tax_forms_draft_303.html', draft=draft)
+            return render_template('tax_forms_draft_303.html', draft=draft,
+                                   table_notice=module._table_notice(draft))
 
         @bp.route('/130/<int:year>/<int:quarter>')
         @login_required
@@ -445,12 +479,15 @@ class TaxEsFormsModule(BaseModule):
             if quarter not in (1, 2, 3, 4):
                 abort(404)
             draft = module._draft_130(year, quarter)
-            return render_template('tax_forms_draft_130.html', draft=draft)
+            return render_template('tax_forms_draft_130.html', draft=draft,
+                                   table_notice=module._table_notice(draft))
 
         @bp.route('/390/<int:year>')
         @login_required
         def draft_390(year):
-            return render_template('tax_forms_draft_390.html', draft=module._draft_390(year))
+            draft = module._draft_390(year)
+            return render_template('tax_forms_draft_390.html', draft=draft,
+                                   table_notice=module._table_notice(draft))
 
         # G-5 — AEAT import files (not validated; see AEAT_FILES.md).
         @bp.route('/<form>/<int:year>/<int:quarter>/aeat-file')
@@ -470,7 +507,9 @@ class TaxEsFormsModule(BaseModule):
         @bp.route('/347/<int:year>')
         @login_required
         def draft_347(year):
-            return render_template('tax_forms_draft_347.html', draft=module._draft_347(year))
+            draft = module._draft_347(year)
+            return render_template('tax_forms_draft_347.html', draft=draft,
+                                   table_notice=module._table_notice(draft))
 
         @bp.route('/349/<int:year>/<int:quarter>')
         @login_required
@@ -491,6 +530,17 @@ class TaxEsFormsModule(BaseModule):
         draft = dict(params=quarter, assistant=True, record_kind='draft',
                      assistant_fields=('form', 'year', 'quarter', 'boxes'))
         return [
+            Function('vat.reverse_charge_check', self._reverse_charge_check,
+                     'Whether a reverse-charge mark ("eu": supplier in another EU country, '
+                     '"non_eu": outside the EU) matches where the supplier is, from its '
+                     'country or VAT number prefix. "problem" is a sentence for the owner, '
+                     'or null when it matches or the region is unknown.',
+                     params=(Param('mark', 'str', 'Reverse-charge mark', required=True,
+                                   choices=('eu', 'non_eu')),
+                             Param('country', 'str', "Supplier's country"),
+                             Param('vat_number', 'str', "Supplier's VAT number", max_length=40),
+                             Param('supplier', 'str', "Supplier's name")),
+                     returns='{"problem": str or null}'),
             Function('tax.draft_303', self.draft_303,
                      'Modelo 303 (IVA) draft boxes for one quarter. Needs year and quarter (1-4).',
                      returns='{"form": "303", "year": int, "quarter": int, '
@@ -499,7 +549,31 @@ class TaxEsFormsModule(BaseModule):
                      'Modelo 130 (IRPF) draft boxes for one quarter. Needs year and quarter (1-4).',
                      returns='{"form": "130", "year": int, "quarter": int, '
                              '"boxes": {box: amount}, ...}', **draft),
+            Function('vat.invoice_lines', self.invoice_vat_lines,
+                     'Output VAT (IVA repercutido) of each invoice dated in a '
+                     'period, cancelled ones included: rate, amount and whether '
+                     'the customer accounts for it (intra-EU reverse charge).',
+                     params=(Param('date_from', 'date', 'First invoice date', required=True),
+                             Param('date_to', 'date', 'Last invoice date', required=True)),
+                     returns='{"lines": {"<invoice id>": {"vat_rate_pct": float, '
+                             '"vat_eur": float, "reverse_charge": bool}}}'),
         ]
+
+    @staticmethod
+    def _reverse_charge_check(mark, country=None, vat_number=None, supplier=None):
+        return {'problem': reverse_charge_check(mark, country, vat_number, supplier)}
+
+    def invoice_vat_lines(self, date_from, date_to):
+        """Output VAT of each invoice dated date_from..date_to, keyed by the
+        invoice id as text. Issued invoices use the snapshot frozen at issue;
+        drafts and legacy invoices the current rate (Settings)."""
+        vat_rate, _irpf = self._rates()
+        lines = {}
+        for inv in self._all_invoices():
+            d = inv.invoice_date
+            if d and date_from <= d <= date_to:
+                lines[str(inv.id)] = invoice_vat_line(inv, vat_rate)
+        return {'lines': lines}
 
     def draft_130(self, year, quarter):
         """Modelo 130 draft for one quarter, as shown on its page."""
@@ -589,3 +663,51 @@ class TaxEsFormsModule(BaseModule):
             'deductions': 0,
             'tax_total': 0,
         }
+
+
+# --- Yearly tables offered to the Tax Data module ---------------------------- #
+
+def _year_table_capability(check, tables, fields, validate=None):
+    """A `year_table` capability: how to check the table (`check`), and
+    `action(year)` → {'table_year', 'built_in', 'fields', 'auto'} with the
+    values of the table the app has for that year."""
+    def action(year):
+        table_year, table, fallback = resolve(tables, year)
+        return {'table_year': table_year, 'built_in': not fallback,
+                'fields': fields(table), 'auto': _auto(check, year)}
+    cap = {'type': 'year_table', 'id': check['id'], 'name': check['name'],
+           'holds': check['holds'], 'steps': check['steps'], 'links': check['links'],
+           'after_check': check['after_check'], 'action': action}
+    if validate is not None:
+        cap['validate'] = validate
+    return cap
+
+
+def _auto(check, year):
+    """(ok, message) of the table's automatic check, or None without one.
+    A failing check never breaks the page."""
+    if not check.get('auto'):
+        return None
+    try:
+        return check['auto'](year)
+    except Exception as exc:
+        return None, f'The automatic check could not run ({type(exc).__name__}).'
+
+
+def _fields_347(rules):
+    return [{'key': 'threshold', 'label': 'Threshold (EUR a year, VAT included)',
+             'kind': 'money', 'value': rules['threshold']}]
+
+
+def _validate_347(_year, values):
+    if values.get('threshold', 1) <= 0:
+        return 'The threshold must be above zero.'
+    return None
+
+
+def _apply_347(rules, values):
+    """The 347 rules with the threshold the owner entered for the year."""
+    if 'threshold' not in values:
+        return rules
+    return {**rules, 'threshold': float(values['threshold']),
+            'source': rules['source'] + ' — threshold entered in Tax Data'}

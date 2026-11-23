@@ -199,7 +199,7 @@ example:
 
 ```python
 # modules/tax_mycountry/index.py
-from invoice_vat import customer_tax_type
+from invoice_amounts import customer_tax_type
 from module_manager import BaseModule
 
 VAT_RATE = 20.0  # standard VAT of the country, %

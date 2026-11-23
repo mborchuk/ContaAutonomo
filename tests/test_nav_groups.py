@@ -17,7 +17,7 @@ def _nav(loaded_modules):
 def test_tax_pages_are_grouped_under_taxes(loaded_modules):
     links, groups = _nav(loaded_modules)
     assert groups['Taxes'] == ['Tax Forms', 'Obligations', 'Tax Drafts',
-                               'IRPF Estimator', 'RETA Advisor', 'Fiscal Calendar']
+                               'IRPF Estimator', 'RETA Advisor', 'Fiscal Calendar', 'Tax Data']
     assert 'Tax Forms' not in links
 
 

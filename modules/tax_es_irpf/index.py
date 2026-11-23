@@ -25,7 +25,7 @@ from flask import Blueprint, render_template, request
 
 from constants import NON_INCOME_INVOICE_STATUSES
 from module_manager import BaseModule
-from invoice_vat import invoice_base_eur, to_cents
+from invoice_amounts import invoice_base_eur, to_cents
 
 from .engine import (
     IrpfEngine,
@@ -253,7 +253,7 @@ class TaxEsIrpfModule(BaseModule):
         """The invoices behind Modelo 130 box 01 (and box 06), one line each:
         every invoice dated from the year start to `end_dt` except cancelled
         ones, with its amount in its own currency, the stored rate, the EUR
-        value in cents (invoice_vat.invoice_base_eur, as in the books) and its
+        value in cents (invoice_amounts.invoice_base_eur, as in the books) and its
         IRPF retention. [{'date', 'number', 'customer', 'status', 'currency',
         'amount', 'rate' (None for EUR), 'eur', 'retention'}], by date."""
         start_dt = self._year_start(year, profile)
