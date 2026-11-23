@@ -74,6 +74,11 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   can add a top-bar widget with `get_header_widgets()`.
 - Alerts for the owner go to the message center through `messages.post`
   instead of dashboard panels.
+- `calculate_income_tax` has no Spanish fallback in the core any more: the
+  dashboard's built-in IRPF brackets are gone. Without a module that answers
+  (the IRPF Estimator for Spain), the dashboard shows no income tax and says
+  that no income tax module is enabled. The result keys are unchanged
+  (`income_tax`, `label`, `irpf_breakdown`).
 
 ### Added
 - **Reverse charge must match the supplier's country**: an expense marked

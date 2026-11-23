@@ -920,10 +920,11 @@ def dashboard():
     # Calculate taxable income (income - deductions from modules)
     taxable_income = current_year_income - module_deductions
 
-    # Income tax — let modules override, fallback to Spanish IRPF brackets
+    # Income tax comes from the country's tax module (calculate_income_tax);
+    # the core knows no country's scale. Without one, the dashboard says so.
     income_tax = 0
     irpf_breakdown = []
-    income_tax_label = 'Income Tax (IRPF)'
+    income_tax_label = None
 
     if module_manager:
         tax_override = module_manager.calculate_income_tax({
@@ -937,30 +938,7 @@ def dashboard():
             irpf_breakdown = tax_override.get('irpf_breakdown', [])
             income_tax_label = tax_override.get('label', 'Income Tax')
 
-    if not income_tax and not irpf_breakdown and taxable_income > 0:
-        # Default: Spanish IRPF progressive brackets
-        brackets = [
-            (12450, 0.19, '€0 - €12,450'),
-            (20200, 0.24, '€12,450 - €20,200'),
-            (35200, 0.30, '€20,200 - €35,200'),
-            (60000, 0.37, '€35,200 - €60,000'),
-            (float('inf'), 0.45, '€60,000+'),
-        ]
-        prev_limit = 0
-        for limit, rate, label in brackets:
-            if taxable_income <= prev_limit:
-                break
-            amount = min(taxable_income, limit) - prev_limit
-            tax = amount * rate
-            income_tax += tax
-            active = taxable_income <= limit
-            irpf_breakdown.append({
-                'bracket': label, 'rate': rate * 100,
-                'amount': amount, 'tax': tax, 'active': active,
-            })
-            prev_limit = limit
-
-    # Total tax obligations = IRPF + module contributions (VAT, SS, etc.)
+    # Total tax obligations = income tax + module contributions (VAT, SS, etc.)
     total_tax_obligations = income_tax + module_tax_total
 
     tax_breakdown = {
