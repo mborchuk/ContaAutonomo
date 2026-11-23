@@ -5,6 +5,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+- **Documents: Dublin Core metadata (ISO 15836).** Every document has an
+  identifier the app assigns and never changes (`DOC-2026-0001`, numbered
+  within the year it was added; existing documents get one on the first
+  start, oldest first), and new fields Creator, Language (ISO 639-1, Spanish
+  by default for new documents) and Rights. The document page downloads its
+  Dublin Core record as `oai_dc` XML; the API returns it at
+  `GET /api/v1/m/documents/documents/<id>/dublin-core`, and the document
+  endpoints include the new fields. Search also finds the identifier and the
+  reference number.
+
+### Fixed
+- Documents: the edit form showed "None" in an empty description.
+
 ## [2.0.0] - 2026-11-20
 
 ### Upgrading to 2.0.0

@@ -287,6 +287,7 @@ is enabled):
 | `tax_management` | `GET /api/v1/m/tax_management/ss-payments` | List Social Security payments |
 | `documents` | `GET /api/v1/m/documents/documents` | List documents (filters: `category`, `status`, `page`, `per_page`) |
 | `documents` | `GET /api/v1/m/documents/documents/{id}` | Get one document |
+| `documents` | `GET /api/v1/m/documents/documents/{id}/dublin-core` | Dublin Core (ISO 15836) metadata of one document: `{element: [values]}` |
 | `ai_parser` | `POST /api/v1/m/ai_parser/parse` | Parse an uploaded PDF or image (multipart `file` + optional `doc_type`) into fields; 422 for another file type or a file that is not an invoice or receipt |
 | `reports` | `GET /api/v1/m/reports/sections` | List available report sections |
 | `reports` | `POST /api/v1/reports/generate` | Generate a report PDF/ZIP — **dedicated route, 10/min** |
