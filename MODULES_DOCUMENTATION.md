@@ -738,6 +738,14 @@ fraccionado), computed from data already in the app. Estimate only — every pag
 carries a non-dismissible "not tax advice" banner.
 Invoice amounts are added in cents (`invoice_amounts.to_cents`, half up), each
 invoice rounded first, as the books do; the IRPF Estimator does the same.
+Box, casilla and threshold tables are keyed by year (`yearly.resolve`). A
+year without its own table uses the latest earlier one and the page warns,
+until the owner confirms the table for that year in Tax Data (or enters a new
+347 threshold). The tables are declared to Tax Data as `year_table`
+capabilities (`table_checks.py`: what each holds, the steps, the official
+links, and an automatic comparison of the 303 / 130 / 390 box numbers with the
+AEAT record layouts in `aeat_layouts/`). Yearly checklist: `CONTRIBUTING.md`
+→ *Annual Tax Data Update*.
 
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
@@ -778,11 +786,39 @@ the year-end regularization. Estimate only.
 - Engine (`engine.py`, pure): YTD income − expenses (net where known) − generic
   deduction (7%/3%), linear annualization, 15-bracket lookup, regularization
   delta vs. actual `SSPayment` totals or the configured quota
-- Bracket table in `brackets.py`, versioned — verify against Seguridad
-  Social/BOE sources annually
+- Bracket table and contribution rate in `brackets.py`, keyed by year and
+  versioned. The `year_table` `es.reta` lets the owner confirm them for a new
+  year in Tax Data or enter the new rate, bracket limits and quotas; the
+  projection uses them for that year
 - Tax panel contribution is display-only (`tax_total = 0`) — `tax_management`
   keeps owning the Social Security amount, so nothing is double-counted
 - Not modeled: tarifa plana, pluriactividad
+
+### Tax Data (`tax_data`)
+
+The owner checks the yearly tax tables of the other modules in the app and
+confirms them for a new year, or enters the new values. On by default.
+
+- Route: `/tax-data/?year=<year>` (Taxes → Tax Data): every `year_table` the
+  enabled modules declare, with its state for the year (*table in the app*,
+  *uses the <year> table — not confirmed*, *confirmed <date>*), how to check
+  it, the automatic check, and a form: *Confirm unchanged* for tables without
+  editable values, the values (money, percent; a grid for rows) and *Save*
+  otherwise. `POST /tax-data/<table>/<year>` confirms or saves;
+  `…/<year>/undo` removes the confirmation.
+- Table `tax_data_entry` (`table_id`, `year`, `values_json`, `confirmed_on`):
+  one row per confirmed table and year; `values_json` holds only the values
+  that differ from the table the app has.
+- Functions `taxdata.year_values` and `taxdata.year_notice` (below). Spanish
+  Tax Forms and the RETA Advisor call them; without this module their pages
+  keep the short warning *"Figures use the <year> table — verify"*.
+- A `year_table` capability (contract in `modules/tax_data/index.py`):
+  `id`, `name`, `holds`, `steps`, `links`, `after_check`, `action(year)` →
+  `{table_year, built_in, fields, auto}`, optional `validate(year, values)`.
+  Declared today: `es.boxes_303_130`, `es.casillas_390`, `es.threshold_347`
+  (`tax_es_forms`), `es.reta` (`reta_advisor`).
+- Not covered yet: the IRPF scales (`tax_es_irpf/params/`), the filing
+  calendar and the AEAT record layouts.
 
 ### IRPF Estimator (`tax_es_irpf`)
 
@@ -1213,6 +1249,8 @@ Functions today:
 | `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
 | `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the 5 % difícil justificación; box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
 | `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
+| `taxdata.year_values` | `tax_data` | `table`, `year` → `{confirmed, confirmed_on, values}`: whether the owner confirmed a yearly table for the year, and the values entered that differ from the app's table. Spanish Tax Forms and the RETA Advisor call it |
+| `taxdata.year_notice` | `tax_data` | `table`, `year`, `table_year` → `{html}`: the warning for a page showing `year` with the `table_year` table (how to check it, the automatic check, a link to confirm it) |
 | `reta.projection` | `reta_advisor` | `today?`, `income_delta?`, `expense_delta?`, `monthly_quota?` (`float`); the RETA projection. Tax Provision and the IRPF what-if simulator call it |
 | `api.check_token` | `api` | `token`; whether it is the API token (constant-time). Reports' `POST /api/v1/reports/generate` checks `X-API-Token` with it; without a provider the route answers 401 |
 | `pdf.sign_invoice` | `pdf_signature` | `invoice_id`; signs the stored PDF with the signatures chosen on the invoice form, `{signed, requested}`. The core calls it after generating an invoice PDF; the document form shows the signing hint when it exists |
@@ -1337,7 +1375,7 @@ for signer in signers:
     signed_pdf = signer['action'](pdf_bytes)
 ```
 
-Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`. Modules can define any custom types.
+Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`, `year_table` (a yearly tax table for Tax Data). Modules can define any custom types.
 
 See [modules/README.md](modules/README.md) for the full development guide with examples.
 

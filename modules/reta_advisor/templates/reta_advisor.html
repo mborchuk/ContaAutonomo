@@ -8,8 +8,8 @@
     <span class="fine-print">Bracket table version: {{ version }}</span>
 </div>
 
-{% if table_note %}
-<div class="note note-warning">⚠ {{ table_note }}</div>
+{% if table_notice %}{{ table_notice|safe }}{% elif table_note %}
+<div class="note note-warning" role="note">⚠ {{ table_note }}</div>
 {% endif %}
 
 <div class="note note-info">

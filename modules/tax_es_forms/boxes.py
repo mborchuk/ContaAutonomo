@@ -25,6 +25,8 @@ Scope of this calculator (v1) — out of scope regimes listed in the UI fine pri
   - intra-EU acquisitions / inversión del sujeto pasivo detail boxes
 """
 
+from .yearly import resolve
+
 # Bump when box definitions are reviewed / changed.
 BOX_TABLE_VERSION = "2026.1"
 
@@ -77,7 +79,6 @@ BOX_TABLES = {
 
 def boxes_for_year(year):
     """Return (table_year, {"303": ..., "130": ...}, is_fallback)."""
-    from year_tables import resolve
     return resolve(BOX_TABLES, year)
 
 
@@ -140,12 +141,14 @@ MODELO_390_OUT_OF_SCOPE = [
 
 MODELO_390_TABLES = {
     2025: MODELO_390_BOXES,
+    # 2026: every casilla checked against the official record layout dr390e2026
+    # (2026-11-22, table_checks.CHECK_390; test_year_table_checks.py).
+    2026: MODELO_390_BOXES,
 }
 
 
 def modelo_390_boxes_for_year(year):
     """Return (table_year, labels, is_fallback) for the 390 casillas."""
-    from year_tables import resolve
     return resolve(MODELO_390_TABLES, year)
 
 
@@ -159,12 +162,16 @@ def modelo_390_boxes_for_year(year):
 #     instructions (Orden EHA/3012/2008, amended by Orden HAC/1431/2025).
 #   - DGT V0766-23 / V0923-23: invoices with an IRPF retention are not
 #     declared (the payer declares them on Modelo 190).
+_MODELO_347_RULES_2025 = {
+    "threshold": 3005.06,
+    "source": ("RD 1065/2007, art. 33; AEAT Modelo 347 instructions "
+               "(Orden EHA/3012/2008, amended by Orden HAC/1431/2025)"),
+}
 MODELO_347_TABLES = {
-    2025: {
-        "threshold": 3005.06,
-        "source": ("RD 1065/2007, art. 33; AEAT Modelo 347 instructions "
-                   "(Orden EHA/3012/2008, amended by Orden HAC/1431/2025)"),
-    },
+    2025: _MODELO_347_RULES_2025,
+    # 2026: RD 1065/2007 art. 33.1 still says 3.005,06 euros (BOE consolidated
+    # text, checked 2026-11-22; table_checks.CHECK_347).
+    2026: _MODELO_347_RULES_2025,
 }
 
 # Wording of each exclusion on the 347 page: (title, rule).
@@ -194,5 +201,4 @@ MODELO_347_OUT_OF_SCOPE = [
 
 def modelo_347_rules_for_year(year):
     """Return (table_year, {'threshold', 'source'}, is_fallback)."""
-    from year_tables import resolve
     return resolve(MODELO_347_TABLES, year)

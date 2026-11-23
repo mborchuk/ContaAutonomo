@@ -22,6 +22,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   answer; when first enabled, the AI Agent copies the AI Parser's provider
   settings and keys once. CLI agents run only with `AI_AGENT_ALLOW_CLI=1` or
   `AI_PARSER_ALLOW_CLI=1`.
+- **Tax Data** (Taxes → Tax Data) is a new module that is on by default: the
+  yearly tax tables are checked and confirmed there, not in the code.
 - **Dashboard**: the Document Alerts and Fiscal Deadlines panels are gone; their
   alerts and deadlines are messages in the 🔔 bell (top right).
 - **Not yet validated against the official systems**: the AEAT import files
@@ -34,6 +36,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 These make 2.0.0 a major version; a module written for 1.x needs them:
 
+- Yearly tax tables are the modules' own: the core's `year_tables.py`
+  (`resolve`, `fallback_note`) is gone. A module keeps its tables keyed by
+  year, declares them to Tax Data as `year_table` capabilities and reads the
+  owner's confirmation with `taxdata.year_values`
+  (`modules/tax_es_forms/yearly.py` is an example).
 - Rules one module owns and another needs are registry functions, not core
   code: the reverse-charge region check moved from the core
   (`supplier_region.py`) to Spanish Tax Forms (`vat.reverse_charge_check`),
@@ -204,6 +211,18 @@ These make 2.0.0 a major version; a module written for 1.x needs them:
   Forms warns when uploaded Modelo 130/303/349 PDFs have no boxes read yet
   (uploads made before boxes were read on upload) and names them; Read filed
   boxes reads them.
+- **Tax Data module** (Taxes → Tax Data, on by default): the yearly tax
+  tables — Modelo 303 and 130 boxes, 390 casillas, the 347 threshold, the
+  RETA brackets and rate — with their state for a year, what each holds,
+  numbered steps and links to the official AEAT, BOE and Seguridad Social
+  pages. The owner confirms a table unchanged for a new year, or enters the
+  new 347 threshold or RETA values, in the app; the pages use them for that
+  year and stop warning (*"Figures for 2027 use the 2026 table"*, which now
+  links there). For Modelo 303, 130 and 390 the app compares its box numbers
+  with the official AEAT record layouts it ships and shows the result; a test
+  does the same on every run. Modelo 390 and 347 have 2026 tables (390
+  checked against the 2026 layout, 347 against RD 1065/2007 art. 33).
+  CONTRIBUTING.md → Annual Tax Data Update is a step-by-step guide.
 
 ### Changed
 

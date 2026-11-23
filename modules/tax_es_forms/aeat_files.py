@@ -27,7 +27,7 @@ import re
 import unicodedata
 from decimal import ROUND_HALF_UP, Decimal
 
-from year_tables import resolve
+from .yearly import resolve
 
 LAYOUT_DIR = os.path.join(os.path.dirname(__file__), 'aeat_layouts')
 
