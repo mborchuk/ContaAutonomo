@@ -103,9 +103,15 @@
 
         <!-- Files -->
         <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">
-                📎 Files ({{ doc_files|length }})
-            </h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px; margin-bottom: 15px;">
+                <h3 style="margin: 0; font-size: 15px; color: var(--color-text-muted);">📎 Files ({{ doc_files|length }})</h3>
+                {% if doc_files %}
+                <form method="POST" action="{{ url_for('documents.documents_verify', id=doc.id) }}" style="margin:0;">
+                    <button type="submit" class="btn btn-secondary btn-sm"
+                            title="Read every file back and compare it with its SHA-256 fingerprint">🛡 Verify integrity</button>
+                </form>
+                {% endif %}
+            </div>
             {% if doc_files %}
             {% for df in doc_files %}
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %}">
@@ -118,6 +124,24 @@
                     <span style="font-size: 10px; color: var(--color-text-faint); margin-left: 4px;">{{ df.file_format|upper }}</span>
                     {% endif %}
                     <span style="font-size: 11px; color: var(--color-border); margin-left: 8px;">{{ df.created_at.strftime('%d/%m/%Y %H:%M') if df.created_at else '' }}</span>
+                    {% if (df.version or 1) > 1 %}<span style="font-size: 11px; color: var(--color-text-faint); margin-left: 6px;">v{{ df.version }}</span>{% endif %}
+                    {% if df.pdfa %}<span class="status-badge status-active" style="margin-left: 6px;" title="The PDF declares this archival PDF/A level (ISO 19005) in its metadata; not validated">{{ df.pdfa }}</span>{% endif %}
+                    <div style="font-size: 11px; color: var(--color-text-faint); margin-top: 2px;">
+                        {% if df.sha256 %}SHA-256 <code title="{{ df.sha256 }}">{{ short(df.sha256) }}…</code>{% else %}No fingerprint yet — Verify integrity records one{% endif %}
+                    </div>
+                    {% set earlier = versions.get(df.id, []) %}
+                    {% if earlier %}
+                    <details style="font-size: 12px; margin-top: 4px;">
+                        <summary>Earlier versions ({{ earlier|length }})</summary>
+                        {% for v in earlier %}
+                        <div style="padding: 2px 0;">
+                            v{{ v.version }} · {{ v.original_filename or df.original_filename }} · {{ v.reason or 'replaced' }} {{ v.created_at.strftime('%d/%m/%Y %H:%M') if v.created_at else '' }}
+                            {% if v.sha256 %}· <code title="{{ v.sha256 }}">{{ short(v.sha256) }}…</code>{% endif %}
+                            · <a href="{{ url_for('documents.file_version_download', version_id=v.id) }}">Download</a>
+                        </div>
+                        {% endfor %}
+                    </details>
+                    {% endif %}
                     {# Render file badges from modules (e.g. signature verification) #}
                     {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
                         {% for badge in module_manager.find_capabilities('file_badge') %}
@@ -128,6 +152,12 @@
                 <div style="display: flex; gap: 6px;">
                     <a href="{{ url_for('documents.file_preview', file_id=df.id) }}" target="_blank" class="btn btn-secondary btn-sm">👁 Preview</a>
                     <a href="{{ url_for('documents.file_download', file_id=df.id) }}" class="btn btn-success btn-sm">📥 Download</a>
+                    <form method="POST" action="{{ url_for('documents.file_replace', file_id=df.id) }}" enctype="multipart/form-data" style="margin:0;"
+                          title="Upload a new version; this one is kept">
+                        <label class="btn btn-secondary btn-sm" style="margin:0; cursor:pointer;">⟳ Replace
+                            <input type="file" name="file" style="display:none;" onchange="if(this.files.length && confirm('Replace with ' + this.files[0].name + '? The current version is kept.')) this.form.submit();">
+                        </label>
+                    </form>
                     {% if df.file_format and df.file_format|lower == 'pdf' and module_manager %}
                         {% set signers = module_manager.find_capabilities('pdf_sign') %}
                         {% for cap in signers %}
@@ -219,7 +249,7 @@
                 {% for h in history %}
                 <div style="padding: 8px 0; {% if not loop.last %}border-bottom: 1px solid var(--color-surface-3);{% endif %} font-size: 12px;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
-                        {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄'} %}
+                        {% set action_icons = {'created': '🆕', 'updated': '✏️', 'file_added': '📎', 'file_removed': '🗑', 'status_changed': '🔄', 'file_replaced': '⟳', 'integrity_checked': '🛡'} %}
                         <span style="font-weight: 500;">{{ action_icons.get(h.action, '•') }} {{ h.action|replace('_', ' ')|capitalize }}</span>
                         <span style="color: var(--color-text-faint);">{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
                     </div>

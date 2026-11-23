@@ -15,9 +15,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   `GET /api/v1/m/documents/documents/<id>/dublin-core`, and the document
   endpoints include the new fields. Search also finds the identifier and the
   reference number.
+- **Documents: file integrity and versions.** Each file stores its SHA-256
+  fingerprint when it is uploaded; *Verify integrity* on the document page
+  reads every file and earlier version back, compares, and records the result
+  in the history (files stored before this get their fingerprint on the first
+  check). *Replace* uploads a new version and keeps the earlier one, which
+  stays downloadable; signing a PDF also keeps the unsigned version instead
+  of overwriting it. A PDF that declares PDF/A (ISO 19005, archival PDF) in
+  its metadata shows its level, e.g. PDF/A-2B; the claim is not validated.
 
 ### Fixed
 - Documents: the edit form showed "None" in an empty description.
+- Documents: deleting a document deleted the stored files its duplicate
+  still used; a stored file is now deleted only when nothing uses it.
 
 ## [2.0.0] - 2026-11-20
 
