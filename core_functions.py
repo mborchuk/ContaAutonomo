@@ -1,6 +1,7 @@
 """
 The core's own registry functions (functions.py): the data the core owns —
-invoices, customers, invoice PDFs and messages — declared and implemented here, like a module does in
+invoices, customers, invoice PDFs and messages — and the default text reader
+for PDFs, declared and implemented here, like a module does in
 `get_functions()`. The app passes its models in
 (`ModuleManager.register_core_functions`), so this file imports nothing from
 app.py.
@@ -93,10 +94,29 @@ def register(registry, core, Invoice, Customer, message_center=None, invoice_pdf
                 'tax_type, is_default',
         assistant=True, record_kind='customer',
         assistant_fields=('id', 'name', 'country', 'tax_type')))
+    register_pdf_text(registry)
     if message_center is not None:
         register_messages(registry, message_center)
     if invoice_pdf is not None:
         register_invoice_pdf(registry, core, invoice_pdf)
+
+
+def register_pdf_text(registry):
+    """`pdf.extract_text` (pdf_text.py), as a default: a module that declares
+    the same name (PyMuPDF, OCR) replaces it."""
+    import pdf_text
+
+    registry.register_core(Function(
+        'pdf.extract_text', pdf_text.extract,
+        "The text layer of a PDF, page by page (pypdf; no OCR). A scanned PDF has "
+        "no text layer: status no_text_layer, so the caller can send it to OCR.",
+        params=(Param('pdf_bytes', 'bytes', 'The PDF file', required=True),
+                Param('max_pages', 'int', f'Pages to read, default {pdf_text.DEFAULT_MAX_PAGES}',
+                      minimum=1, maximum=pdf_text.MAX_PAGES)),
+        returns='{"status": "ok" | "no_text_layer" | "encrypted" | "unreadable" | '
+                '"too_large", "text": str, "pages": [str], "page_count": int, '
+                '"empty_pages": [int], "truncated": bool, "method": str}'),
+        default=True)
 
 
 def register_invoice_pdf(registry, core, invoice_pdf):

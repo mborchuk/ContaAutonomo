@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **PDF text through the registry.** The core provides `pdf.extract_text`:
+  the text layer of a PDF, page by page, with pypdf (no OCR), and a status
+  that tells a scan (`no_text_layer`), an encrypted or broken file apart.
+  It is a *core default*: a module that declares the same function — a
+  PyMuPDF or OCR module — replaces it without a conflict, and its card in
+  Settings → Modules says so. The AI Parser's CLI agents read PDFs through
+  it.
 - **Documents: Dublin Core metadata (ISO 15836).** Every document has an
   identifier the app assigns and never changes (`DOC-2026-0001`, numbered
   within the year it was added; existing documents get one on the first

@@ -160,14 +160,24 @@ def test_pdf_text_extracts_a_real_pdf():
 def _fake_pdf_pages(monkeypatch, *texts):
     import pypdf
     pages = [SimpleNamespace(extract_text=lambda t=t: t) for t in texts]
-    monkeypatch.setattr(pypdf, 'PdfReader', lambda stream: SimpleNamespace(pages=pages))
+    monkeypatch.setattr(pypdf, 'PdfReader', lambda stream, strict=False: SimpleNamespace(
+        pages=pages, is_encrypted=False))
 
 
 def test_pdf_text_drops_nul_bytes(monkeypatch):
     # Fonts without a Unicode map extract as NUL; NUL cannot go into argv.
     _fake_pdf_pages(monkeypatch, 'Invoice\x00 0006\nTotal\x00 121,00 EUR\x07', 'Page 2\t\x00')
     text = cli_agents.pdf_text(b'%PDF')
-    assert text == 'Invoice 0006\nTotal 121,00 EUR\nPage 2'
+    assert text == 'Invoice 0006\nTotal 121,00 EUR\n\nPage 2'
+
+
+def test_kiro_uses_the_text_extractor_it_is_given(cli_env):
+    seen = []
+    runs = cli_env(stdout=json.dumps(REPLY))
+    extract = lambda data: seen.append(data) or 'FROM\x00 MODULE 9,99 EUR'  # noqa: E731
+    KiroCLIProvider({'extract_pdf_text': extract}).parse_document(b'%PDF-1.7 x', 'r.pdf')
+    assert seen == [b'%PDF-1.7 x']
+    assert 'FROM MODULE 9,99 EUR' in runs[0]['args'][-1]
 
 
 def test_pdf_text_mostly_unmapped_is_empty(monkeypatch):

@@ -85,8 +85,9 @@ agent to treat the document as data.
   --no-interactive --trust-tools=fs_read --wrap never [--model M] <prompt>`.
   The agent file written to the run directory gives it `fs_read` only (no
   shell, network or MCP servers). `fs_read` is not confined to the directory.
-  It reads images but not PDFs, so a PDF's text layer is extracted with
-  `pypdf` and sent in the prompt; a scanned PDF without text is refused (422).
+  It reads images but not PDFs, so a PDF's text layer is extracted with the
+  registry function `pdf.extract_text` (the core's pypdf default, or a module
+  that replaces it) and sent in the prompt; a PDF without text is refused (422).
   The v3 engine is not used: in a test on 2026-11-16 it ran a shell command
   although only `fs_read` was trusted. "Refresh list" runs
   `kiro-cli chat --list-models -f json`.

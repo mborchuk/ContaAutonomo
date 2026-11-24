@@ -632,6 +632,9 @@
                         {% if mod.functions %}
                         <div style="font-size: 12px; color: var(--color-text-muted);">Functions: {{ mod.functions|join(', ') }}</div>
                         {% endif %}
+                        {% if mod.function_replaces_core %}
+                        <div style="font-size: 12px; color: var(--color-text-muted);">Replaces the core's default: {{ mod.function_replaces_core|join(', ') }}</div>
+                        {% endif %}
                         {% for c in mod.function_conflicts %}
                         <div class="note note-warning" style="font-size: 12px; margin-top: 4px;" role="status">
                             ⚠ <code>{{ c.function }}</code> is already provided by <strong>{{ c.owner }}</strong>; this module's version is not used.

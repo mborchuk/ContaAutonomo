@@ -134,13 +134,23 @@ class AIParserModule(BaseModule):
             'kiro_cli_model': cfg.kiro_cli_model,
         }
 
+    def _extract_pdf_text(self, data):
+        """A PDF's text through `pdf.extract_text` (the core's pypdf default or
+        a module that replaces it); '' for a scan or when nothing provides it."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('pdf.extract_text'):
+            return ''
+        return functions.call('pdf.extract_text', pdf_bytes=data)['text']
+
     def _get_provider(self):
         """Get configured AI provider instance."""
         cfg = self._get_config()
         provider_cls = ALL_PROVIDERS.get(cfg.provider)
         if not provider_cls:
             return None
-        provider = provider_cls(self._provider_config(cfg))
+        config = self._provider_config(cfg)
+        config['extract_pdf_text'] = self._extract_pdf_text
+        provider = provider_cls(config)
         if not provider.is_configured():
             return None
         return provider

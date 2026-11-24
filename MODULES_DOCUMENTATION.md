@@ -1219,6 +1219,12 @@ new ones; nothing in the core has to change.
   Declarations that cannot be used (no summary, code that does not take the
   declared parameters, an unsafe assistant flag, …) are ignored and shown on
   the card the same way. A test fails if a bundled module has either.
+- **Core defaults**: a core function registered with
+  `register_core(fn, default=True)` (today `pdf.extract_text`) is used only
+  while no enabled module declares the name. A module that does owns it — no
+  conflict; its card says "Replaces the core's default" — and disabling the
+  module brings the core's version back. Two modules declaring it still
+  conflict with each other as above.
 - **Calling**: `self.core.functions.call('ledger.list_invoices', client='acme')`
   checks the arguments against the owner's declaration first
   (`InvalidArguments`, a message that names the parameter, never its value)
@@ -1242,6 +1248,7 @@ Functions today:
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `messages.post` | core | `source`, `text`, `level?`, `image?`, `key?` → `{id, created}`; shows a message in the bell and on the Messages page (*Message Center*). Not read-only |
 | `messages.unread_count` | core | Number of unread messages |
+| `pdf.extract_text` | core default (`pdf_text.py`, pypdf) | `pdf_bytes`, `max_pages?` (default 200, at most 2000) → `{status, text, pages, page_count, empty_pages, truncated, method}`. `status`: `ok`, `no_text_layer` (a scan: no OCR here), `encrypted`, `unreadable`, `too_large` (over the 50 MB upload limit); never raises for a bad file. A module declaring the name (PyMuPDF, OCR) replaces it. The AI Parser's CLI agents call it |
 | `invoice.render_pdf` | core | `invoice_id` → `{pdf, template, fallback}`: the PDF in the template chosen in Settings → General, after every module's `filter_invoice_pdf` (Verifactu QR); the default template when the chosen one is not available (`fallback` true). Builds only, does not store. The new-invoice PDF, `/generate-pdf/<id>` and `/preview-pdf/<id>` call it (`invoice_pdf.py`) |
 | `invoice.list_pdf_templates` | core | `{data: [{id, name, module_id}]}`: the core files in `invoice_templates/` (`module_id` `core`) and the templates of enabled modules. The Settings dropdown calls it |
 | `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
