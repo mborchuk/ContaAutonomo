@@ -1,12 +1,12 @@
 """Customer routes: list, create, view, edit, delete.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 
 from flask import (flash, redirect, render_template, request, url_for)
 
-from contaautonomo.app import (app, db, login_required)
+from contaautonomo.web import (app, db, login_required)
 from contaautonomo.models import (Customer, Settings)
 from contaautonomo.utils.currency_converter import get_currency_symbol
 

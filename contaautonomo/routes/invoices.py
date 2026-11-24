@@ -1,8 +1,8 @@
 """Invoice routes and the invoice lifecycle: list, create, edit, view, delete, issue, mark paid, annul, rectify, PDF.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 import hashlib
 import io
 import os
@@ -13,12 +13,13 @@ from flask import (Response, flash, jsonify, redirect, render_template, request,
 from sqlalchemy.exc import IntegrityError
 
 from contaautonomo import paths
-import contaautonomo.app as core_app
-from contaautonomo.app import (app, db, logger, login_required, log_activity)
+from contaautonomo import state
+from contaautonomo.web import (app, db, logger, login_required, log_activity)
 from contaautonomo.models import (Bank, Customer, Invoice, InvoiceItem, Settings, find_customer_by_name)
 from contaautonomo.utils.constants import (INITIAL_INVOICE_STATUS, LOCKED_INVOICE_STATUSES,
                                            invoice_locked, is_legacy_settled)
 from contaautonomo.utils.currency_converter import convert_usd_to_eur, get_currency_symbol
+from contaautonomo.utils.logsafe import clean
 from contaautonomo.utils.timeutil import utcnow
 
 
@@ -118,9 +119,9 @@ def _discard_generated_pdf(invoice):
     """
     if not getattr(invoice, 'pdf_generated', None) or not invoice.pdf_storage_key:
         return
-    if core_app.module_manager:
+    if state.module_manager:
         try:
-            core_app.module_manager.core.delete_file(invoice.pdf_storage_key)
+            state.module_manager.core.delete_file(invoice.pdf_storage_key)
         except OSError:
             logger.warning('Could not delete the old PDF of invoice %s', invoice.id,
                            exc_info=True)
@@ -180,8 +181,8 @@ def _issue_invoice(invoice, series=None, request_obj=None):
     _discard_generated_pdf(invoice)
 
     # Issue-blocking hooks (may veto). Runs before commit -> abort is clean.
-    if core_app.module_manager:
-        core_app.module_manager.on_invoice_issued(invoice, request_obj)
+    if state.module_manager:
+        state.module_manager.on_invoice_issued(invoice, request_obj)
 
     db.session.commit()
     return invoice
@@ -250,8 +251,8 @@ def annul_invoice(id):
     try:
         invoice.status = 'cancelled'
         db.session.flush()
-        if core_app.module_manager:
-            core_app.module_manager.on_invoice_annulled(invoice, request)
+        if state.module_manager:
+            state.module_manager.on_invoice_annulled(invoice, request)
         db.session.commit()
         log_activity('invoice_annulled', 'invoice', f'#{invoice.invoice_number}')
         flash('Invoice annulled — retained for audit, excluded from income.', 'success')
@@ -303,8 +304,8 @@ def rectify_invoice(id):
                 invoice_id=draft.id, description=item.description,
                 quantity=item.quantity, unit_price_usd=item.unit_price_usd,
                 subtotal_usd=item.subtotal_usd, vat_rate=item.vat_rate))
-        if core_app.module_manager:
-            core_app.module_manager.on_invoice_rectified(draft, original, request)
+        if state.module_manager:
+            state.module_manager.on_invoice_rectified(draft, original, request)
         db.session.commit()
         log_activity('invoice_rectified', 'invoice',
                      f'#{original.invoice_number} -> rectificative draft #{draft.id}')
@@ -341,10 +342,10 @@ def invoice_amounts(total, currency, date_str):
         if currency == 'EUR':
             return total * exchange_rate, total, exchange_rate
         return total, convert_usd_to_eur(total, exchange_rate), exchange_rate
-    if not core_app.module_manager:
+    if not state.module_manager:
         raise NoExchangeRate(f'No currency service to convert {currency}')
     try:
-        amount_eur, rate, _ = core_app.module_manager.core.currency_service.convert(
+        amount_eur, rate, _ = state.module_manager.core.currency_service.convert(
             total, currency, 'EUR', date_str)
     except Exception as e:
         raise NoExchangeRate(f'No {currency}->EUR rate for {date_str}') from e
@@ -542,24 +543,25 @@ def create_invoice():
 
         db.session.commit()
         logger.info('Invoice #%s created: %s, %s %s, %d items',
-                    invoice.invoice_number, client_name, currency, total_usd, len(items_data))
+                    clean(invoice.invoice_number), clean(client_name), clean(currency),
+                    total_usd, len(items_data))
         flash('Invoice created successfully!', 'success')
         log_activity('invoice_created', 'invoice',
                      f'#{invoice.invoice_number} for {client_name}')
 
         # Let modules process their custom fields
-        if core_app.module_manager:
-            core_app.module_manager.on_invoice_created(invoice, request)
+        if state.module_manager:
+            state.module_manager.on_invoice_created(invoice, request)
             # Refresh to pick up any PDF attached by modules (e.g. invoice_attachments)
             db.session.refresh(invoice)
 
         # Auto-generate PDF and save via core.storage (skip if module already attached a PDF)
-        if core_app.module_manager and not getattr(invoice, 'pdf_hash', None):
+        if state.module_manager and not getattr(invoice, 'pdf_hash', None):
             try:
                 pdf_content = _render_invoice_pdf(invoice)['pdf']
                 pdf_filename = f'invoice_{invoice.invoice_number}.pdf'
                 relative_path = os.path.join('invoices_pdf', pdf_filename)
-                new_key = core_app.module_manager.core.storage.save(pdf_content, relative_path)
+                new_key = state.module_manager.core.storage.save(pdf_content, relative_path)
                 invoice.pdf_storage_key = new_key
                 invoice.pdf_hash = hashlib.sha256(pdf_content).hexdigest()
                 invoice.pdf_generated = True
@@ -567,24 +569,24 @@ def create_invoice():
 
                 # Sign the new PDF if its form asked for it (pdf.sign_invoice).
                 try:
-                    if core_app.module_manager.functions.available('pdf.sign_invoice'):
-                        result = core_app.module_manager.functions.call('pdf.sign_invoice',
+                    if state.module_manager.functions.available('pdf.sign_invoice'):
+                        result = state.module_manager.functions.call('pdf.sign_invoice',
                                                                invoice_id=invoice.id)
                         if result['requested']:
                             app.logger.info('Auto-signed invoice #%s after PDF generation: %s',
-                                            invoice.invoice_number, result['signed'])
+                                            clean(invoice.invoice_number), result['signed'])
                 except Exception as sign_err:
                     app.logger.error(
                         'Auto-sign failed for invoice #%s: %s',
-                        invoice.invoice_number, type(sign_err).__name__,
+                        clean(invoice.invoice_number), type(sign_err).__name__,
                     )
             except Exception as e:
                 logger.error('PDF auto-generation failed for invoice #%s: %s',
-                             invoice.invoice_number, e, exc_info=True)
+                             clean(invoice.invoice_number), e, exc_info=True)
                 log_activity('invoice_pdf_autogen_failed', 'invoice',
                              f'#{invoice.invoice_number}: {e}')
 
-        logger.info('=== Invoice #%s done ===', invoice.invoice_number)
+        logger.info('=== Invoice #%s done ===', clean(invoice.invoice_number))
         return redirect(url_for('index'))
 
     # GET request - load customers and banks for dropdown
@@ -759,8 +761,8 @@ def edit_invoice(id):
         log_activity('invoice_updated', 'invoice', f'#{invoice.invoice_number}')
 
         # Let modules process their custom fields
-        if core_app.module_manager:
-            core_app.module_manager.on_invoice_updated(invoice, request)
+        if state.module_manager:
+            state.module_manager.on_invoice_updated(invoice, request)
 
         return redirect(url_for('index'))
 
@@ -790,8 +792,8 @@ def view_invoice(id):
 
     # Check if invoice is paid and has hash — verify integrity via storage
     hash_mismatch = False
-    if invoice.status == 'paid' and invoice.pdf_hash and core_app.module_manager:
-        svc = core_app.module_manager.core.invoice_service
+    if invoice.status == 'paid' and invoice.pdf_hash and state.module_manager:
+        svc = state.module_manager.core.invoice_service
         result = svc.get_pdf(invoice)
         if result:
             file_bytes, _ = result
@@ -820,14 +822,14 @@ def delete_invoice(id):
         return redirect(url_for('index'))
 
     # The PDF file is removed only after the database delete succeeds.
-    pdf_key = (core_app.module_manager.core.invoice_service._resolve_storage_key(invoice)
-               if core_app.module_manager else None)
+    pdf_key = (state.module_manager.core.invoice_service._resolve_storage_key(invoice)
+               if state.module_manager else None)
 
     from sqlalchemy.exc import IntegrityError
     number, invoice_id = invoice.invoice_number, invoice.id   # values from the database
     try:
-        if core_app.module_manager:
-            core_app.module_manager.on_invoice_deleted(invoice)   # module rows first
+        if state.module_manager:
+            state.module_manager.on_invoice_deleted(invoice)   # module rows first
         db.session.delete(invoice)
         db.session.commit()
     except IntegrityError:
@@ -838,10 +840,10 @@ def delete_invoice(id):
         return redirect(url_for('view_invoice', id=invoice_id))
     if pdf_key:
         try:
-            core_app.module_manager.core.storage.delete(pdf_key)
+            state.module_manager.core.storage.delete(pdf_key)
             log_activity('invoice_pdf_deleted', 'invoice', f'PDF deleted for #{number}')
         except Exception as e:  # the invoice is gone; a leftover file is only logged
-            logger.error('Failed to delete PDF for #%s: %s', number, e, exc_info=True)
+            logger.error('Failed to delete PDF for #%s: %s', clean(number), e, exc_info=True)
     log_activity('invoice_deleted', 'invoice', f'#{number}')
     flash('Invoice deleted successfully!', 'success')
     return redirect(url_for('index'))
@@ -852,9 +854,9 @@ def _render_invoice_pdf(invoice):
     """{'pdf', 'template', 'fallback'}: the invoice's PDF in the template chosen
     in Settings, through the registry function invoice.render_pdf
     (invoice_pdf.py)."""
-    if core_app.module_manager is None:
+    if state.module_manager is None:
         raise RuntimeError('Module manager not available')
-    return core_app.module_manager.functions.call('invoice.render_pdf', invoice_id=invoice.id)
+    return state.module_manager.functions.call('invoice.render_pdf', invoice_id=invoice.id)
 
 
 @app.route('/generate-pdf/<int:id>')
@@ -868,8 +870,8 @@ def generate_pdf(id):
     force_regenerate = request.args.get('force') == 'true'
 
     pdf_filename = f'invoice_{invoice.invoice_number}.pdf'
-    storage = core_app.module_manager.core.storage if core_app.module_manager else None
-    svc = core_app.module_manager.core.invoice_service if core_app.module_manager else None
+    storage = state.module_manager.core.storage if state.module_manager else None
+    svc = state.module_manager.core.invoice_service if state.module_manager else None
 
     # Check if PDF already exists in storage
     file_exists = False
@@ -905,7 +907,7 @@ def generate_pdf(id):
                 invoice.pdf_storage_key = new_key
             invoice.pdf_generated = True
         else:
-            # Fallback: direct write (no core_app.module_manager)
+            # Fallback: direct write (no state.module_manager)
             pdf_dir = os.path.join(paths.data_dir(), 'invoices_pdf')
             os.makedirs(pdf_dir, exist_ok=True)
             with open(os.path.join(pdf_dir, pdf_filename), 'wb') as f:
@@ -928,11 +930,11 @@ def preview_invoice_pdf(id):
     """Preview invoice PDF inline in the browser: the stored one, else one
     built on the fly (invoice.render_pdf), not stored."""
     invoice = db.get_or_404(Invoice, id)
-    if not core_app.module_manager:
+    if not state.module_manager:
         flash('Module manager not available.', 'danger')
         return redirect(url_for('index'))
 
-    result = core_app.module_manager.core.invoice_service.get_pdf(invoice)
+    result = state.module_manager.core.invoice_service.get_pdf(invoice)
     if result:
         file_bytes, _ = result
         return Response(file_bytes, mimetype='application/pdf',

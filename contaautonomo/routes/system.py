@@ -1,14 +1,14 @@
 """System routes: health probe, installable-app manifest and service worker, logs, scheduled tasks, module toggle.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 import os
 
 from flask import (flash, redirect, render_template, request, url_for)
 
-import contaautonomo.app as core_app
-from contaautonomo.app import (app, db, logger, login_required, log_activity)
+from contaautonomo import state
+from contaautonomo.web import (app, db, logger, login_required, log_activity)
 from contaautonomo.routes.messages import _message_log_link
 
 
@@ -25,8 +25,8 @@ def health_check():
         # Probe only: DB unreachable is reported via the 503 below, not raised.
         logger.warning('health: db probe failed: %s', e)
     try:
-        if core_app.module_manager is not None:
-            core_app.module_manager.core.storage.exists('__health_probe__')
+        if state.module_manager is not None:
+            state.module_manager.core.storage.exists('__health_probe__')
         checks['storage'] = True
     except Exception as e:
         # Probe only: storage backend unreachable is reported via the 503.
@@ -59,7 +59,7 @@ def web_manifest():
              'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'},
         ],
     }
-    if core_app.module_manager is not None and core_app.module_manager.provider_of('expenses') is not None:
+    if state.module_manager is not None and state.module_manager.provider_of('expenses') is not None:
         manifest['shortcuts'] = [{'name': 'Capture a receipt', 'url': '/expenses/capture',
                                   'icons': [manifest['icons'][0]]}]
         manifest['share_target'] = {
@@ -101,7 +101,7 @@ def system_logs():
     page = int(request.args.get('page', 1))
     per_page = 50
 
-    logger = core_app.module_manager.core.activity_logger if core_app.module_manager else None
+    logger = state.module_manager.core.activity_logger if state.module_manager else None
     entries = []
     categories = []
     if logger and hasattr(logger, 'get_entries'):
@@ -130,8 +130,8 @@ def system_logs():
 def scheduled_tasks():
     """View registered scheduled tasks"""
     jobs = []
-    if core_app.module_manager:
-        jobs = core_app.module_manager.core.scheduler.get_jobs()
+    if state.module_manager:
+        jobs = state.module_manager.core.scheduler.get_jobs()
     return render_template('scheduler.html', jobs=jobs)
 
 
@@ -143,24 +143,24 @@ def scheduled_tasks():
 @login_required
 def toggle_module(module_id):
     """Enable or disable a module"""
-    if not core_app.module_manager:
+    if not state.module_manager:
         flash('Module system not initialized', 'danger')
         return redirect(url_for('settings') + '#modules')
 
-    if module_id not in core_app.module_manager.discovered:
+    if module_id not in state.module_manager.discovered:
         flash('Unknown module.', 'danger')
         return redirect(url_for('settings') + '#modules')
 
     action = request.form.get('action', 'enable')
     if action == 'enable':
-        enabled = core_app.module_manager.enable_module(module_id)
+        enabled = state.module_manager.enable_module(module_id)
         for mid in enabled:
             log_activity('module_enabled', 'system', mid)
         also = [m for m in enabled if m != module_id]
         flash('Module enabled' + (f' together with the modules it needs: {", ".join(also)}' if also else '')
               + '. Please restart the application for changes to take effect.', 'success')
     else:
-        needed_by = core_app.module_manager.disable_module(module_id)
+        needed_by = state.module_manager.disable_module(module_id)
         if needed_by:
             flash(f'Not disabled: needed by {", ".join(needed_by)}. Disable those first.', 'warning')
         else:

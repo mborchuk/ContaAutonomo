@@ -21,9 +21,9 @@ ignore = ["E741"]
 [tool.ruff.lint.per-file-ignores]
 # These files configure logging / the environment before importing the rest
 # on purpose (baseline; revisit when app.py is split, task E-3).
-"app.py" = ["E402"]
-"auth_routes.py" = ["E402"]
-"module_manager.py" = ["E402"]
+"contaautonomo/web.py" = ["E402"]
+"contaautonomo/security/auth_routes.py" = ["E402"]
+"contaautonomo/core/module_manager.py" = ["E402"]
 
 [tool.coverage.run]
 source = ["."]

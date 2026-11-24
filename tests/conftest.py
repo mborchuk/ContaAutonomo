@@ -56,9 +56,7 @@ def _loaded_modules_session():
     needs loaded modules goes through this single instance. Enables the modules
     the suite exercises (expenses, tax_es_forms).
     """
-    import sys
     from contaautonomo.app import Bank, Customer, Invoice, Message, Settings
-    appmod = sys.modules['contaautonomo.app']
 
     ctx = flask_app.app_context()
     ctx.push()
@@ -81,7 +79,8 @@ def _loaded_modules_session():
     _db.session.commit()
     mm.load_enabled_modules()
 
-    appmod.module_manager = mm
+    from contaautonomo import state
+    state.module_manager = mm
     flask_app.jinja_env.globals['module_manager'] = mm
     flask_app.jinja_env.globals.setdefault('app_version', 'test')
 

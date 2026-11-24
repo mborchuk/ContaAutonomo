@@ -1,13 +1,13 @@
 """Settings routes: the tabbed settings page, bank accounts, the default customer.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 
 from flask import (flash, redirect, render_template, request, url_for)
 
-import contaautonomo.app as core_app
-from contaautonomo.app import (app, db, login_required, log_activity, _apply_log_settings, _apply_currency_provider)
+from contaautonomo import state
+from contaautonomo.web import (app, db, login_required, log_activity, _apply_log_settings, _apply_currency_provider)
 from contaautonomo.models import (Bank, Contractor, Customer, Invoice, Settings)
 
 
@@ -91,28 +91,28 @@ def settings():
 
 
         # Let modules handle their settings
-        if core_app.module_manager:
-            core_app.module_manager.save_settings(app_settings, request.form)
+        if state.module_manager:
+            state.module_manager.save_settings(app_settings, request.form)
 
         db.session.commit()
         flash('Settings saved successfully!', 'success')
         # Re-apply log settings BEFORE logging (so the correct logger is active)
-        if core_app.module_manager and 'log_retention_days' in request.form:
-            _apply_log_settings(app_settings, core_app.module_manager)
+        if state.module_manager and 'log_retention_days' in request.form:
+            _apply_log_settings(app_settings, state.module_manager)
         # Re-apply currency provider if changed
-        if core_app.module_manager and 'currency_provider' in request.form:
-            _apply_currency_provider(app_settings, core_app.module_manager)
+        if state.module_manager and 'currency_provider' in request.form:
+            _apply_currency_provider(app_settings, state.module_manager)
         log_activity('settings_updated', 'settings')
         return redirect(url_for('settings'))
 
     # Get module states for the Modules tab
-    module_states = core_app.module_manager.get_all_module_states() if core_app.module_manager else []
-    module_settings_panels = core_app.module_manager.get_settings_html(app_settings) if core_app.module_manager else []
-    field_labels = core_app.module_manager.get_field_labels() if core_app.module_manager else {}
+    module_states = state.module_manager.get_all_module_states() if state.module_manager else []
+    module_settings_panels = state.module_manager.get_settings_html(app_settings) if state.module_manager else []
+    field_labels = state.module_manager.get_field_labels() if state.module_manager else {}
 
     invoice_templates = []
-    if core_app.module_manager and core_app.module_manager.functions.available('invoice.list_pdf_templates'):
-        invoice_templates = core_app.module_manager.functions.call('invoice.list_pdf_templates')['data']
+    if state.module_manager and state.module_manager.functions.available('invoice.list_pdf_templates'):
+        invoice_templates = state.module_manager.functions.call('invoice.list_pdf_templates')['data']
     return render_template('settings.html', settings=app_settings, banks=banks, customers=customers, contractors=contractors, module_states=module_states, module_settings_panels=module_settings_panels, field_labels=field_labels,
                            invoice_templates=invoice_templates)
 

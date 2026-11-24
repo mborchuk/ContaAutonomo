@@ -168,9 +168,7 @@ def test_annul_marks_cancelled_and_retains(app, client):
 # --- F2-D5: issue-blocking hooks -------------------------------------------
 
 def test_issue_hook_veto_aborts(app, monkeypatch):
-    import sys
     from contaautonomo.app import db, Invoice, Customer, _issue_invoice
-    appmod = sys.modules['contaautonomo.app']
 
     class Vetoer:
         def on_invoice_issued(self, invoice, request):
@@ -180,7 +178,8 @@ def test_issue_hook_veto_aborts(app, monkeypatch):
         def on_invoice_issued(self, invoice, request):
             Vetoer().on_invoice_issued(invoice, request)
 
-    monkeypatch.setattr(appmod, 'module_manager', FakeManager())
+    from contaautonomo import state
+    monkeypatch.setattr(state, 'module_manager', FakeManager())
     inv = _draft(db, Invoice, Customer)
     with pytest.raises(ValueError):
         _issue_invoice(inv, request_obj=None)

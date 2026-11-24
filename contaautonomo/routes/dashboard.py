@@ -1,14 +1,14 @@
 """The dashboard: quarter and year totals, tax obligations from the modules, exchange rates, holidays, deadlines.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 from datetime import date, datetime
 
 from flask import (render_template)
 
-import contaautonomo.app as core_app
-from contaautonomo.app import (app, logger, login_required)
+from contaautonomo import state
+from contaautonomo.web import (app, logger, login_required)
 from contaautonomo.models import (Invoice, Settings)
 from contaautonomo.utils.constants import (counts_as_income)
 from contaautonomo.utils.currency_converter import get_currency_symbol
@@ -181,8 +181,8 @@ def dashboard():
     vat_rate = (app_settings.default_vat_rate or 21.0) / 100.0 if app_settings else 0.21
     vat_collected = 0
 
-    if core_app.module_manager:
-        vat_override = core_app.module_manager.calculate_vat({
+    if state.module_manager:
+        vat_override = state.module_manager.calculate_vat({
             'invoices': current_year_invoices,
             'settings': app_settings,
             'base_currency': base_currency,
@@ -203,7 +203,7 @@ def dashboard():
     module_breakdown_rows = []
     module_notes = []
 
-    if core_app.module_manager:
+    if state.module_manager:
         tax_context = {
             'current_year': current_year,
             'base_currency': base_currency,
@@ -213,7 +213,7 @@ def dashboard():
             'currency_symbol': base_currency_symbol
         }
 
-        for item in core_app.module_manager.get_tax_obligations(tax_context):
+        for item in state.module_manager.get_tax_obligations(tax_context):
             module_deductions += item.get('deductions', 0)
             module_tax_total += item.get('tax_total', 0)
             module_summary_columns.extend(item.get('summary_columns', []))
@@ -229,8 +229,8 @@ def dashboard():
     irpf_breakdown = []
     income_tax_label = None
 
-    if core_app.module_manager:
-        tax_override = core_app.module_manager.calculate_income_tax({
+    if state.module_manager:
+        tax_override = state.module_manager.calculate_income_tax({
             'taxable_income': taxable_income,
             'settings': app_settings,
             'base_currency': base_currency,
@@ -278,7 +278,7 @@ def dashboard():
     # Tax deadlines: whatever provides calendar.upcoming_deadlines. None = no
     # provider (the dashboard then shows a hint to enable the Fiscal Calendar).
     tax_deadlines = None
-    functions = core_app.module_manager.functions if core_app.module_manager else None
+    functions = state.module_manager.functions if state.module_manager else None
     if functions is not None and functions.available('calendar.upcoming_deadlines'):
         try:
             tax_deadlines = functions.call('calendar.upcoming_deadlines', limit=4)
@@ -288,8 +288,8 @@ def dashboard():
 
     # Collect module dashboard panels
     module_panels = []
-    if core_app.module_manager:
-        module_panels = core_app.module_manager.get_dashboard_panels()
+    if state.module_manager:
+        module_panels = state.module_manager.get_dashboard_panels()
         module_panels.sort(key=lambda p: p.get('order', 50))
 
     return render_template('dashboard.html',

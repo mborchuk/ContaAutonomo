@@ -82,3 +82,25 @@ def test_the_core_never_imports_the_app():
                      r'from contaautonomo import app\b)', path.read_text(), re.M):
             offenders.append(str(path.relative_to(ROOT)))
     assert offenders == []
+
+
+def test_routes_and_web_never_import_the_app_module():
+    """contaautonomo.app imports web, models and routes; none of them imports
+    it back, so there is no import cycle."""
+    import re
+    pattern = re.compile(r'^\s*(from contaautonomo\.app import|import contaautonomo\.app|'
+                         r'from contaautonomo import app\b)', re.M)
+    files = [ROOT / 'contaautonomo' / 'web.py', ROOT / 'contaautonomo' / 'models.py',
+             *ROOT.glob('contaautonomo/routes/*.py')]
+    assert [str(p.relative_to(ROOT)) for p in files if pattern.search(p.read_text())] == []
+
+
+def test_module_manager_is_read_through_state(app):
+    from contaautonomo import app as appmod, state
+    assert appmod.module_manager is state.module_manager
+
+
+def test_log_values_cannot_start_a_new_line():
+    from contaautonomo.utils.logsafe import clean
+    assert clean('INV-1\r\nINFO forged') == 'INV-1  INFO forged'
+    assert clean(None) == '' and len(clean('x' * 500)) == 200

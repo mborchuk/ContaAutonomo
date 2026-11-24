@@ -1,13 +1,13 @@
 """Message center pages: the top-bar bell (context processor), System → Messages, mark read or unread, delete.
 
 Routes register on the core app under their own endpoint names
-(`url_for('dashboard')`, …); `core_app.module_manager` is read when a request
-runs, so it is always the current one."""
+(`url_for('dashboard')`, …). They import from `contaautonomo.web`, never from
+`contaautonomo.app`, and read `state.module_manager` when a request runs."""
 
 from flask import (flash, redirect, render_template, request, session, url_for)
 
-import contaautonomo.app as core_app
-from contaautonomo.app import (app, db, logger, login_required)
+from contaautonomo import state
+from contaautonomo.web import (app, db, logger, login_required)
 
 
 # ============================================================================
@@ -15,7 +15,7 @@ from contaautonomo.app import (app, db, logger, login_required)
 # ============================================================================
 
 def _message_center():
-    return getattr(core_app.module_manager.core, 'message_center', None) if core_app.module_manager else None
+    return getattr(state.module_manager.core, 'message_center', None) if state.module_manager else None
 
 
 @app.context_processor

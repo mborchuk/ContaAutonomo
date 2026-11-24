@@ -105,7 +105,8 @@ def test_bootstrap_initialises_under_an_exclusive_start_up_lock(app, tmp_path, m
     from contaautonomo import app as appmod
     lock_path = str(tmp_path / 'init.lock')
     monkeypatch.setitem(app.config, 'INIT_LOCK_PATH', lock_path)
-    monkeypatch.setattr(appmod, 'module_manager', None)
+    from contaautonomo import state
+    monkeypatch.setattr(state, 'module_manager', None)
 
     class Probe(Exception):
         pass
