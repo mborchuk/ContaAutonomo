@@ -29,7 +29,7 @@ A self-hosted web application for freelancers and small businesses to manage inv
 | **Expenses** | Track business expenses with file uploads, categories, and contractor linking |
 | **Tax Management** | Spanish tax forms (Modelos 349, 303, 130, 390, 100) and Social Security payments |
 | **Tax Poland (IT)** | Polish tax rules for IT freelancers (JDG/B2B) — flat 19% or progressive 12%/32%, VAT 23%, ZUS |
-| **Documents** | General document storage and management |
+| **Documents** | Document storage with Dublin Core metadata, versions, records and retention, search in the text of PDFs, and opt-in AI suggestions for fields and tags (the owner picks the provider and the files sent) |
 | **Backup & Restore** | Full encrypted backups (DB + files), daily scheduling, S3 support |
 | **Reports** | PDF financial reports with dynamic section selection from enabled modules |
 | **External Storage** | Pluggable file storage: Local, AWS S3, Google Cloud Storage, Google Drive |
