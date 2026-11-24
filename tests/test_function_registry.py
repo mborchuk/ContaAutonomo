@@ -126,6 +126,7 @@ def test_first_registration_owns_the_name_and_later_claims_warn(caplog):
     assert reg.call('test.extra') == 'extra'           # its own new names still work
     assert reg.status('second_mod') == {
         'provides': ['test.extra()'],
+        'replaces_core': [],
         'conflicts': [{'function': 'test.echo', 'owner': 'first_mod'}],
         'problems': []}
     assert reg.status('first_mod')['provides'] == ['test.echo(text, times?)']
@@ -159,6 +160,30 @@ def test_the_core_registers_first():
         reg.register_core(echo())                       # twice
     with pytest.raises(ValueError):
         reg.register_core(echo(call=lambda: None, name='test.other'))   # bad declaration
+
+
+def test_a_module_replaces_a_core_default_without_a_conflict():
+    modules = {'alt': _module(echo(call=lambda text, times=1: 'alt'))}
+    reg = FunctionRegistry(SimpleNamespace(modules=modules))
+    reg.register_core(echo(call=lambda text, times=1: 'core'), default=True)
+    assert reg.is_core_default('test.echo') and reg.core_provides('test.echo')
+    assert reg.call('test.echo', text='x') == 'alt' and reg.provider('test.echo') == 'alt'
+    assert reg.status('alt')['replaces_core'] == ['test.echo']
+    assert reg.status('alt')['conflicts'] == []
+    assert reg.check_all() == ([], [])
+    modules.pop('alt')                                  # module disabled: default is back
+    assert reg.call('test.echo', text='x') == 'core' and reg.provider('test.echo') == CORE
+    assert [fn.name for fn in reg.find()] == ['test.echo']
+
+
+def test_two_modules_on_a_core_default_conflict_with_each_other():
+    reg = FunctionRegistry(_manager(first_mod=_module(echo(call=lambda text, times=1: '1')),
+                                    second_mod=_module(echo(call=lambda text, times=1: '2'))))
+    reg.register_core(echo(call=lambda text, times=1: 'core'), default=True)
+    assert reg.call('test.echo', text='x') == '1'
+    assert reg.status('second_mod')['conflicts'] == [{'function': 'test.echo',
+                                                      'owner': 'first_mod'}]
+    assert reg.status('second_mod')['replaces_core'] == []
 
 
 def test_bad_declarations_are_ignored_and_reported():

@@ -82,19 +82,11 @@ def valid_model(model):
 
 
 def pdf_text(data):
-    """The PDF's text layer, '' for a scan without one. Control characters are
-    dropped: fonts without a Unicode map extract as NUL bytes, which cannot go
-    into a command-line argument."""
-    import io
-    from pypdf import PdfReader
-    try:
-        reader = PdfReader(io.BytesIO(data))
-        text = '\n'.join((page.extract_text() or '') for page in reader.pages)
-    except Exception:
-        return ''
-    if len(_CONTROL_RE.findall(text)) > sum(c.isalnum() for c in text):
-        return ''  # mostly unmapped glyphs: no usable text
-    return _CONTROL_RE.sub('', text).strip()
+    """The PDF's text layer, '' for a scan without one, read by the core's
+    default (pdf_text.py) when no registry is at hand. Inside the app the
+    module passes `extract_pdf_text`, which calls `pdf.extract_text`."""
+    import pdf_text as core_pdf_text
+    return core_pdf_text.extract(data)['text']
 
 
 class CLIAgentProvider(BaseAIProvider):
@@ -205,9 +197,10 @@ class KiroCLIProvider(CLIAgentProvider):
     def prompt(self, doc_type, name, mime, file_data):
         if not media.is_pdf(mime):
             return super().prompt(doc_type, name, mime, file_data)
-        text = pdf_text(file_data)
+        text = (self.config.get('extract_pdf_text') or pdf_text)(file_data)
         if not text:
             raise ScannedPDF(SCANNED_PDF_MESSAGE)
+        text = _CONTROL_RE.sub('', text)   # whoever extracted it: no NUL in argv
         # The prompt is one argv entry; Linux caps a single argument at 128 KiB.
         text = text.encode('utf-8')[:_MAX_PDF_TEXT].decode('utf-8', 'ignore')
         return (f'{prompt_for(doc_type)}\n\nThe text of the document, extracted from a PDF, '

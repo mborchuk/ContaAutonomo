@@ -2027,8 +2027,9 @@ class ModuleManager:
             status = self.functions.status(module_id)
         else:  # not loaded: what it would declare
             status = {'provides': self.declared_functions(module_id),
-                      'conflicts': [], 'problems': []}
+                      'replaces_core': [], 'conflicts': [], 'problems': []}
         return {'functions': status['provides'],
+                'function_replaces_core': status['replaces_core'],
                 'function_conflicts': status['conflicts'],
                 'function_problems': status['problems']}
 

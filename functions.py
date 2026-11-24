@@ -15,6 +15,11 @@ not used for it; the registry records a warning that the Modules tab shows on
 that module's card, with the owner's name. When the owner is disabled, the
 next declaration in load order takes over.
 
+A core function registered as a *default* (`register_core(fn, default=True)`)
+is the exception: it is used only while no module declares the name. A module
+that does replaces it — no conflict, its card says so — and disabling that
+module brings the core's version back.
+
 Callers use `registry.call(name, ...)`, which checks the arguments against the
 owner's declaration before its code runs.
 """
@@ -182,18 +187,22 @@ class FunctionRegistry:
     def __init__(self, module_manager=None):
         self._mm = module_manager
         self._core = {}
+        self._defaults = set()      # core names any module may replace
         self._reported = set()
 
     # --- Registration ------------------------------------------------------ #
 
-    def register_core(self, function):
-        """Register one of the core's functions; refuses a bad declaration."""
+    def register_core(self, function, default=False):
+        """Register one of the core's functions; refuses a bad declaration.
+        With `default`, a module that declares the same name replaces it."""
         problem = function.problem() if isinstance(function, Function) else 'is not a Function'
         if problem:
             raise ValueError(f'core function {getattr(function, "name", function)!r} {problem}')
         if function.name in self._core:
             raise ValueError(f'core function {function.name!r} is registered twice')
         self._core[function.name] = function
+        if default:
+            self._defaults.add(function.name)
 
     @staticmethod
     def declarations(module):
@@ -220,11 +229,12 @@ class FunctionRegistry:
 
     def _resolve(self):
         """(owners {name: (provider, Function)}, conflicts, problems): the first
-        provider in registration order owns a name; later ones conflict."""
+        provider in registration order owns a name; later ones conflict. The
+        core's defaults come last, so any module declaring one owns it."""
         owners, conflicts, problems = {}, [], []
         for provider, module in self._providers():
             if module is None:
-                declared = list(self._core.values())
+                declared = [fn for name, fn in self._core.items() if name not in self._defaults]
             else:
                 declared, bad = self.declarations(module)
                 problems += [(provider, name, p) for name, p in bad]
@@ -238,6 +248,8 @@ class FunctionRegistry:
                     conflicts.append((provider, fn.name, owners[fn.name][0]))
                 else:
                     owners[fn.name] = (provider, fn)
+        for name in self._defaults:
+            owners.setdefault(name, (CORE, self._core[name]))
         return owners, conflicts, problems
 
     # --- Lookup ------------------------------------------------------------ #
@@ -257,6 +269,10 @@ class FunctionRegistry:
 
     def core_provides(self, name):
         return name in self._core
+
+    def is_core_default(self, name):
+        """Whether `name` is a core default that a module may replace."""
+        return name in self._defaults
 
     def route(self, name):
         fn = self.get(name)
@@ -285,11 +301,14 @@ class FunctionRegistry:
                 if all(getattr(fn, k) == v for k, v in flags.items())]
 
     def status(self, module_id):
-        """For a module's card: what it provides, what it declares but another
-        provider owns, and declarations that cannot be used."""
+        """For a module's card: what it provides, which of those replace a
+        core default, what it declares but another provider owns, and
+        declarations that cannot be used."""
         owners, conflicts, problems = self._resolve()
         return {
             'provides': sorted(fn.signature for p, fn in owners.values() if p == module_id),
+            'replaces_core': sorted(name for name, (p, _) in owners.items()
+                                    if p == module_id and name in self._defaults),
             'conflicts': sorted(({'function': name, 'owner': owner}
                                  for p, name, owner in conflicts if p == module_id),
                                 key=lambda c: c['function']),
