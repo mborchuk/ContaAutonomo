@@ -1,29 +1,27 @@
 name: Bug report
-description: Something does not work as expected.
-labels: [bug]
+description: Report a reproducible problem
+title: "[Bug]: "
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug. **Security vulnerabilities must not be
-        reported here** — follow the [Security Policy](https://github.com/mborchuk/ContaAutonomo/security/policy) instead.
-        Please remove any personal or financial data (names, NIF/NIE, IBANs,
-        amounts) from logs and screenshots before posting.
+        Do not include real invoices, customer information, credentials, API keys, or database files.
   - type: textarea
-    id: description
+    id: summary
     attributes:
       label: What happened?
-      description: A clear description of the bug.
+      description: Describe the problem clearly.
     validations:
       required: true
   - type: textarea
-    id: steps
+    id: reproduce
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Go to …
-        2. Click …
-        3. See error …
+        1. Go to ...
+        2. Click ...
+        3. Observe ...
     validations:
       required: true
   - type: textarea
@@ -33,29 +31,19 @@ body:
     validations:
       required: true
   - type: input
-    id: module
-    attributes:
-      label: Affected area or module
-      placeholder: e.g. invoices, expenses, reports, documents, backup
-  - type: dropdown
-    id: deployment
-    attributes:
-      label: How do you run the app?
-      options:
-        - Docker / docker-compose
-        - python app.py (development)
-        - gunicorn (production, no Docker)
-        - Other
-    validations:
-      required: true
-  - type: input
     id: version
     attributes:
       label: Version or commit
-      description: Commit hash of `main` or the image tag you run.
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Local development
+        - Other
   - type: textarea
     id: logs
     attributes:
-      label: Relevant log output
-      description: Redact personal and financial data before pasting.
-      render: shell
+      label: Relevant redacted logs
+      description: Remove secrets and personal/financial data before posting.

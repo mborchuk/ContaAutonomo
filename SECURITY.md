@@ -1,52 +1,31 @@
 # Security Policy
 
-ContaAutónomo is a self-hosted application that stores financial and personal
-data. Security reports are taken seriously and handled privately.
+ContaAutónomo may process sensitive financial and personal information. We appreciate responsible security research.
 
-## Supported Versions
+## Reporting a vulnerability
 
-Only the latest code on the `main` branch receives security fixes. If you run
-an older checkout or Docker image, update to the latest `main` before
-reporting.
+**Please do not disclose suspected vulnerabilities in public GitHub issues or discussions.**
 
-## Reporting a Vulnerability
+Use GitHub's **Report a vulnerability** action in the repository's Security tab (private vulnerability reporting), if available. Include:
 
-**Please do not open a public issue, discussion, or pull request for security
-problems.**
+- A concise description and potential impact.
+- The affected version, commit, or deployment configuration.
+- Reproduction steps or a proof of concept that does not expose real user data.
+- Any suggested mitigation, if known.
 
-Report vulnerabilities privately through GitHub:
+If private vulnerability reporting is not enabled, contact the maintainer privately through the contact method listed on the GitHub profile. Do not publish exploit details until a fix or mitigation has been coordinated.
 
-1. Go to the repository's **Security** tab.
-2. Click **Report a vulnerability**.
-3. Describe the issue, affected component, and steps to reproduce. A minimal
-   proof of concept helps.
+## What to expect
 
-This uses GitHub's private vulnerability reporting, so the report is visible
-only to the maintainers.
+The maintainer will make a reasonable effort to acknowledge the report, investigate it, and coordinate remediation and disclosure.
 
-## What to Expect
+## Safe testing
 
-- Acknowledgement of your report within **7 days**.
-- An assessment and, where confirmed, a fix or mitigation plan. Timelines
-  depend on severity and complexity; this is a volunteer-maintained project.
-- Credit in the release notes and the published advisory, unless you prefer to
-  remain anonymous.
+- Test only systems and data you own or have explicit permission to assess.
+- Do not access, modify, or retain other users' financial data.
+- Avoid denial-of-service testing, destructive actions, and social engineering.
+- Do not include real credentials, invoices, personal data, or customer records in reports.
 
-## Scope
+## Deployment guidance
 
-In scope: the application code in this repository (core app, modules, auth,
-file storage, backups, the REST API) and the provided `Dockerfile` /
-`docker-compose.yml`.
-
-Out of scope: vulnerabilities in your own deployment (reverse proxy, host,
-TLS configuration), third-party services you connect (cloud storage, AI
-providers, SMTP), and issues that require an already-authenticated
-administrator to act against their own installation.
-
-## Hardening Your Deployment
-
-- Always set a strong `SECRET_KEY` in production.
-- Serve the app over HTTPS and set `FORCE_HTTPS=1`.
-- Keep the `instance/` directory (database and auth config) and backups out of
-  any publicly reachable location.
-- Rotate the API token if it may have been exposed.
+Operators should use HTTPS, keep dependencies and the host system updated, protect `.env` and encryption keys, restrict access to backups, and maintain secure copies of critical keys. A database or backup may not be sufficient to recover encrypted information if its associated key is lost.
