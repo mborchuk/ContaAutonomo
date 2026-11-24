@@ -110,8 +110,8 @@ def test_docker_entrypoint_upgrades_release_schema(tmp_path, schema, workers):
     if workers:
         env['GUNICORN_WORKERS'] = workers
     result = subprocess.run(
-        [sys.executable, '-c', "import sys; sys.path.insert(0, 'deploy'); "
-         'import docker_entrypoint; docker_entrypoint.init()'],
+        [sys.executable, '-c',
+         "import sys; sys.path.insert(0, 'deploy'); import docker_entrypoint; docker_entrypoint.init()"],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr[-2000:]
     assert 'Auto-init failed' not in result.stderr

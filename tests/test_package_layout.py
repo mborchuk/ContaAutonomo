@@ -68,3 +68,17 @@ def test_routes_keep_their_endpoint_names(app):
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     assert {'dashboard', 'index', 'create_invoice', 'view_invoice', 'settings', 'customers',
             'messages_index', 'system_logs', 'health_check', 'toggle_module'} <= endpoints
+
+
+def test_the_core_never_imports_the_app():
+    """core/ and utils/ are below the app: the app imports them, never the
+    other way round (no import cycle). auth_routes reads the app at request
+    time through import_module, as a blueprint the app registers."""
+    import re
+    offenders = []
+    for path in [*ROOT.glob('contaautonomo/core/*.py'), *ROOT.glob('contaautonomo/utils/*.py'),
+                 *ROOT.glob('contaautonomo/security/*.py')]:
+        if re.search(r'^\s*(from contaautonomo\.app import|import contaautonomo\.app|'
+                     r'from contaautonomo import app\b)', path.read_text(), re.M):
+            offenders.append(str(path.relative_to(ROOT)))
+    assert offenders == []

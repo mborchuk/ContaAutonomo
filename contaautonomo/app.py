@@ -10,9 +10,8 @@ both are imported here, so `from contaautonomo.app import Invoice, db` keeps
 working. Start the development server with `python -m contaautonomo.app`.
 """
 
-from flask import Flask, request, redirect, url_for, flash, session
+from flask import Flask, request, redirect, url_for, flash
 from datetime import datetime
-from functools import wraps
 from contextlib import contextmanager
 import os
 import sys
@@ -279,15 +278,8 @@ def log_activity(action, category='system', details=None):
         module_manager.core.log_activity(action, category, details)
 
 
-# Login required decorator
-def login_required(f):
-    """Decorator to require login for routes"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('authenticated'):
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+# Login required decorator (security/login.py; modules use core.login_required)
+from contaautonomo.security.login import login_required  # noqa: E402,F401 — routes import it from here
 
 
 
