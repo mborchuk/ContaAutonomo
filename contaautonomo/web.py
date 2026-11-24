@@ -1,6 +1,7 @@
 """The Flask app object and what every route needs: configuration, security
 (CSRF, rate limits, headers, sessions, trusted proxies), error handlers,
-`db`, `login_required`, `log_activity` and the settings helpers.
+`db`, `log_activity` and the settings helpers. Routes take `login_required`
+from `contaautonomo.security.login`.
 
 It imports neither the models nor the routes: `contaautonomo.app` puts the
 app together (models, routes, start-up) on top of it, and the route files in
@@ -257,11 +258,6 @@ def log_activity(action, category='system', details=None):
     """Log user/system activity via core logger (safe to call before init)"""
     if state.module_manager:
         state.module_manager.core.log_activity(action, category, details)
-
-
-# Login required decorator (security/login.py; modules use core.login_required)
-from contaautonomo.security.login import login_required  # noqa: E402,F401 — routes import it from here
-
 
 
 # ============================================================================

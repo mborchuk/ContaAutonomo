@@ -8,7 +8,8 @@ from datetime import date, datetime
 from flask import (render_template)
 
 from contaautonomo import state
-from contaautonomo.web import (app, logger, login_required)
+from contaautonomo.web import (app, logger)
+from contaautonomo.security.login import login_required
 from contaautonomo.models import (Invoice, Settings)
 from contaautonomo.utils.constants import (counts_as_income)
 from contaautonomo.utils.currency_converter import get_currency_symbol

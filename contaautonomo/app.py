@@ -11,6 +11,7 @@ db` — so the names they use are re-exported (`__all__`). The module manager
 lives in `state.module_manager`; reading `contaautonomo.app.module_manager`
 still works.
 """
+import importlib
 import logging
 import os
 import sys
@@ -30,18 +31,19 @@ if __name__ == '__main__':
 from contaautonomo import state
 from contaautonomo.web import (  # noqa: F401 — re-exported
     APP_VERSION, _apply_currency_provider, _apply_log_settings, app, csrf, db, limiter,
-    log_activity, logger, login_required,
+    log_activity, logger,
 )
+from contaautonomo.security.login import login_required  # noqa: F401 — re-exported
 from contaautonomo.models import (  # noqa: F401 — re-exported
     Bank, Contractor, Customer, Document, Expense, Invoice, InvoiceItem, Message,
     Settings, SSPayment, TaxForm, find_customer_by_name,
 )
 from contaautonomo.security.secret_box import encrypt_existing
-from contaautonomo import routes  # noqa: F401 — registers the routes on app
-from contaautonomo.routes.invoices import (  # noqa: F401 — re-exported
+importlib.import_module('contaautonomo.routes')   # registers the routes on app
+from contaautonomo.routes.invoices import (  # noqa: E402,F401 — re-exported
     NoExchangeRate, _invoice_locked, _issue_invoice, _mark_invoice_paid, invoice_amounts,
 )
-from contaautonomo.routes.messages import _message_log_link  # noqa: F401 — re-exported
+from contaautonomo.routes.messages import _message_log_link  # noqa: E402,F401 — re-exported
 
 __all__ = [
     'app', 'db', 'csrf', 'limiter', 'logger', 'login_required', 'log_activity', 'APP_VERSION',

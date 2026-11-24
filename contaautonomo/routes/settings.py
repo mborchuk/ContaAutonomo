@@ -7,7 +7,8 @@ Routes register on the core app under their own endpoint names
 from flask import (flash, redirect, render_template, request, url_for)
 
 from contaautonomo import state
-from contaautonomo.web import (app, db, login_required, log_activity, _apply_log_settings, _apply_currency_provider)
+from contaautonomo.web import (app, db, log_activity, _apply_log_settings, _apply_currency_provider)
+from contaautonomo.security.login import login_required
 from contaautonomo.models import (Bank, Contractor, Customer, Invoice, Settings)
 
 

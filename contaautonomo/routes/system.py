@@ -8,7 +8,8 @@ import os
 from flask import (flash, redirect, render_template, request, url_for)
 
 from contaautonomo import state
-from contaautonomo.web import (app, db, logger, login_required, log_activity)
+from contaautonomo.web import (app, db, logger, log_activity)
+from contaautonomo.security.login import login_required
 from contaautonomo.routes.messages import _message_log_link
 
 

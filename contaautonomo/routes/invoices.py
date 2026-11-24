@@ -14,7 +14,8 @@ from sqlalchemy.exc import IntegrityError
 
 from contaautonomo import paths
 from contaautonomo import state
-from contaautonomo.web import (app, db, logger, login_required, log_activity)
+from contaautonomo.web import (app, db, logger, log_activity)
+from contaautonomo.security.login import login_required
 from contaautonomo.models import (Bank, Customer, Invoice, InvoiceItem, Settings, find_customer_by_name)
 from contaautonomo.utils.constants import (INITIAL_INVOICE_STATUS, LOCKED_INVOICE_STATUSES,
                                            invoice_locked, is_legacy_settled)
