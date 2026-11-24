@@ -15,10 +15,17 @@ from timeutil import utcnow
 
 from . import dublin_core, integrity, retention, text_index
 
-# Background reading of PDF text: how often, and how much per run.
-TEXT_JOB_INTERVAL = 300        # seconds
-TEXT_JOB_BATCH = 10            # files per run
+# Background reading of PDF text. The scheduler ticks every minute; the job
+# runs when the interval set in Settings → Documents has passed (stored in the
+# database, so every worker process sees the same setting).
+TEXT_JOB_TICK = 60             # seconds
+TEXT_JOB_DEFAULTS = {'enabled': True, 'interval': 5, 'batch': 10}
+TEXT_JOB_INTERVAL_RANGE = (1, 1440)   # minutes
+TEXT_JOB_BATCH_RANGE = (1, 100)       # files per run
+TEXT_JOB_BATCH = TEXT_JOB_DEFAULTS['batch']
 TEXT_JOB_MAX_ATTEMPTS = 3      # a file that keeps failing is left alone
+TEXT_JOB_BUDGET = 600          # seconds a scheduled run may read (job timeout 900)
+READ_NOW_BUDGET = 60           # seconds for "Read now" (gunicorn timeout is 120)
 TEXT_STATUS_LABELS = {
     'ok': 'Searchable',
     'no_text_layer': 'No text layer (a scan: needs OCR)',
@@ -314,10 +321,11 @@ class DocumentsModule(BaseModule):
             self.logger.error('Failed to register the expiry-messages job: %s', e)
         try:
             self.core.scheduler.add_job(
-                job_id='documents.read_text', func=self.read_pending_text,
-                job_type='interval', interval=TEXT_JOB_INTERVAL,
-                description='Read the text of new PDF files for search',
-                timeout=240)
+                job_id='documents.read_text', func=self.scheduled_read_text,
+                job_type='interval', interval=TEXT_JOB_TICK,
+                description='Read the text of new PDF files for search '
+                            '(how often and how many: Settings → Documents)',
+                timeout=900)
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register the read-text job: %s', e)
 
@@ -441,6 +449,11 @@ class DocumentsModule(BaseModule):
         @login_required
         def retention_index():
             return module._retention_index()
+
+        @bp.route('/text/read-now', methods=['POST'])
+        @login_required
+        def text_read_now():
+            return module._read_text_now()
 
         @bp.route('/retention/<int:id>/keep', methods=['POST'])
         @login_required
@@ -1122,17 +1135,21 @@ class DocumentsModule(BaseModule):
             text_index.rebuild(session)
             session.commit()
 
-    def _pending_text_files(self, limit):
-        """Stored PDF keys whose text has not been read, or failed and may be
-        tried again; oldest files first."""
+    def _pending_query(self):
+        """Stored PDFs whose text has not been read, or failed and may be
+        tried again."""
         DF, DT = self.DocumentFile, self.DocumentText
-        query = (self._db.session.query(DF.file_path)
-                 .outerjoin(DT, DT.storage_key == DF.file_path)
-                 .filter((self._db.func.lower(DF.file_format) == 'pdf')
-                         | DF.original_filename.ilike('%.pdf'))
-                 .filter((DT.id.is_(None))
-                         | ((DT.status == 'error') & (DT.attempts < TEXT_JOB_MAX_ATTEMPTS)))
-                 .order_by(DF.created_at, DF.id))
+        return (self._db.session.query(DF.file_path)
+                .outerjoin(DT, DT.storage_key == DF.file_path)
+                .filter((self._db.func.lower(DF.file_format) == 'pdf')
+                        | DF.original_filename.ilike('%.pdf'))
+                .filter((DT.id.is_(None))
+                        | ((DT.status == 'error') & (DT.attempts < TEXT_JOB_MAX_ATTEMPTS))))
+
+    def _pending_text_files(self, limit):
+        """Storage keys of the next `limit` PDFs to read, oldest files first."""
+        DF = self.DocumentFile
+        query = self._pending_query().order_by(DF.created_at, DF.id)
         return list(dict.fromkeys(key for (key,) in query.limit(limit * 3).all()))[:limit]
 
     def read_text(self, storage_key):
@@ -1180,16 +1197,115 @@ class DocumentsModule(BaseModule):
         session.commit()
         return row.status
 
-    def read_pending_text(self, limit=TEXT_JOB_BATCH):
-        """Scheduler job: read the text of PDFs not read yet. Returns
-        {storage key: status} for the files it read."""
+    def read_pending_text(self, limit=TEXT_JOB_BATCH, budget=None):
+        """Read the text of up to `limit` PDFs not read yet, stopping after
+        `budget` seconds (None: no limit). Returns {storage key: status} for
+        the files it read."""
+        import time
+        started = time.monotonic()
         done = {}
         for key in self._pending_text_files(limit):
+            if budget is not None and time.monotonic() - started > budget:
+                break
             status = self.read_text(key)
             if status is None:      # nothing provides pdf.extract_text
                 break
             done[key] = status
         return done
+
+    def text_job_config(self):
+        """{enabled, interval (minutes), batch (files)} from Settings → Documents."""
+        def number(key, default, bounds):
+            try:
+                value = int(self._get_config(key, default))
+            except (TypeError, ValueError):
+                return default
+            return min(max(value, bounds[0]), bounds[1])
+        d = TEXT_JOB_DEFAULTS
+        return {'enabled': self._get_config('text_job_enabled', '1') == '1',
+                'interval': number('text_job_interval', d['interval'], TEXT_JOB_INTERVAL_RANGE),
+                'batch': number('text_job_batch', d['batch'], TEXT_JOB_BATCH_RANGE)}
+
+    def _text_job_last_run(self):
+        try:
+            return datetime.fromisoformat(self._get_config('text_job_last_run', ''))
+        except ValueError:
+            return None
+
+    def scheduled_read_text(self, now=None):
+        """Scheduler tick: read a batch when the job is on and its interval
+        has passed since the last run. Returns what read_pending_text did, or
+        {} when it was not time."""
+        cfg = self.text_job_config()
+        if not cfg['enabled']:
+            return {}
+        now = now or datetime.now()
+        last = self._text_job_last_run()
+        if last and now - last < timedelta(minutes=cfg['interval']):
+            return {}
+        # Recorded first, so a run that fails is not repeated every minute.
+        self._set_config('text_job_last_run', now.isoformat(timespec='seconds'))
+        return self.read_pending_text(cfg['batch'], budget=TEXT_JOB_BUDGET)
+
+    def _text_counts(self):
+        """How far the stored PDFs have been read, for the settings panel."""
+        DT = self.DocumentText
+        by_status = dict(self._db.session.query(DT.status, self._db.func.count(DT.id))
+                         .group_by(DT.status).all())
+        return {'waiting': self._pending_query().distinct().count(),
+                'searchable': by_status.get('ok', 0),
+                'no_text_layer': by_status.get('no_text_layer', 0),
+                'failed': sum(n for s, n in by_status.items()
+                              if s not in ('ok', 'no_text_layer'))}
+
+    def _read_text_now(self):
+        """Read one batch now (Settings → Documents → Read now), within the
+        time a web request may take."""
+        done = self.read_pending_text(self.text_job_config()['batch'], budget=READ_NOW_BUDGET)
+        if not done and not self._pending_text_files(1):
+            flash('No PDF is waiting to be read.', 'info')
+        elif not done:
+            flash('Nothing provides pdf.extract_text: no PDF could be read.', 'warning')
+        else:
+            ok = sum(1 for s in done.values() if s == 'ok')
+            flash(f'{len(done)} PDF(s) read, {ok} searchable.', 'success')
+        self._set_config('text_job_last_run', datetime.now().isoformat(timespec='seconds'))
+        return redirect(url_for('settings') + '#mod_documents')
+
+    # ---- Settings → Documents ----
+
+    @property
+    def settings_tab(self):
+        return {'id': 'documents', 'label': 'Documents'}
+
+    def get_settings_html(self, settings):
+        cfg = self.text_job_config()
+        return self.render_settings_template(
+            'documents_settings_panel.html', cfg=cfg, counts=self._text_counts(),
+            last_run=self._text_job_last_run(),
+            interval_range=TEXT_JOB_INTERVAL_RANGE, batch_range=TEXT_JOB_BATCH_RANGE)
+
+    def save_settings(self, settings, form):
+        if 'documents_submitted' not in form:
+            return  # guard: another tab's form
+        values = {}
+        for key, field, bounds in (('text_job_interval', 'text_job_interval',
+                                    TEXT_JOB_INTERVAL_RANGE),
+                                   ('text_job_batch', 'text_job_batch', TEXT_JOB_BATCH_RANGE)):
+            try:
+                value = int(form.get(field, ''))
+            except (TypeError, ValueError):
+                self.core.flash('Text reading: enter whole numbers; nothing was changed.',
+                                'warning')
+                return
+            if not bounds[0] <= value <= bounds[1]:
+                self.core.flash(f'Text reading: values must be between {bounds[0]} and '
+                                f'{bounds[1]}; nothing was changed.', 'warning')
+                return
+            values[key] = str(value)
+        values['text_job_enabled'] = '1' if form.get('text_job_enabled') else '0'
+        for key, value in values.items():
+            self._set_config(key, value)
 
     def _indexed(self):
         return text_index.available(self._db.session)

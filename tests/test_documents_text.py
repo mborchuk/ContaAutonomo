@@ -201,7 +201,88 @@ def test_an_index_created_later_indexes_stored_texts(docs, client):
 
 def test_the_job_is_scheduled(docs, loaded_modules):
     job = loaded_modules.core.scheduler._jobs['documents.read_text']
-    assert job['type'] == 'interval' and job['func'] == docs.read_pending_text
+    assert job['type'] == 'interval' and job['interval'] == 60
+    assert job['func'] == docs.scheduled_read_text
+
+
+# --- Settings → Documents --------------------------------------------------- #
+
+def _save(client, **form):
+    data = {'_settings_tab': 'documents', 'documents_submitted': '1',
+            'text_job_interval': '5', 'text_job_batch': '10', 'text_job_enabled': '1'}
+    data.update(form)
+    return client.post('/settings', data={k: v for k, v in data.items() if v is not None},
+                       follow_redirects=True)
+
+
+@pytest.fixture
+def job_settings(docs):
+    yield docs
+    for key in ('text_job_enabled', 'text_job_interval', 'text_job_batch', 'text_job_last_run'):
+        row = docs._db.session.get(docs.DocumentConfig, key)
+        if row:
+            docs._db.session.delete(row)
+    docs._db.session.commit()
+
+
+def test_defaults(job_settings):
+    assert job_settings.text_job_config() == {'enabled': True, 'interval': 5, 'batch': 10}
+
+
+def test_settings_are_saved_and_validated(job_settings, client):
+    _save(client, text_job_interval='30', text_job_batch='25')
+    assert job_settings.text_job_config() == {'enabled': True, 'interval': 30, 'batch': 25}
+    _save(client, text_job_enabled=None)                  # unticked checkbox
+    assert job_settings.text_job_config()['enabled'] is False
+    for bad in ({'text_job_interval': '0'}, {'text_job_batch': '101'},
+                {'text_job_interval': 'often'}):
+        html = _save(client, **bad).get_data(as_text=True)
+        assert 'nothing was changed' in html
+    assert job_settings.text_job_config() == {'enabled': False, 'interval': 5, 'batch': 10}
+
+
+def test_the_job_follows_the_interval_and_batch(job_settings, client):
+    from datetime import datetime, timedelta
+    for i in range(3):
+        _create(client, _pdf(f'Factura {i}'), f'f{i}.pdf', name=f'Invoice {i}')
+    _save(client, text_job_interval='30', text_job_batch='2')
+    start = datetime(2026, 11, 24, 9, 0)
+    assert len(job_settings.scheduled_read_text(now=start)) == 2           # first run, batch 2
+    assert job_settings.scheduled_read_text(now=start + timedelta(minutes=29)) == {}
+    assert len(job_settings.scheduled_read_text(now=start + timedelta(minutes=30))) == 1
+    _create(client, _pdf('Factura 9'), 'f9.pdf', name='Invoice 9')
+    _save(client, text_job_enabled=None)
+    assert job_settings.scheduled_read_text(now=start + timedelta(days=1)) == {}
+
+
+def test_the_settings_panel_shows_the_counts(job_settings, client):
+    _create(client, _pdf('Recibo'), 'r.pdf', name='Receipt')
+    _create(client, _pdf(None), 's.pdf', name='Scan')
+    _create(client, _pdf('Otro'), 'o.pdf', name='Other')
+    job_settings.read_pending_text(limit=2)
+    assert job_settings._text_counts() == {'waiting': 1, 'searchable': 1,
+                                           'no_text_layer': 1, 'failed': 0}
+    html = client.get('/settings').get_data(as_text=True)
+    assert 'Reading the text of PDFs' in html and 'id="text-waiting">1<' in html
+
+
+def test_read_now(job_settings, client):
+    _create(client, _pdf('Contrato'), 'c.pdf', name='Contract')
+    resp = client.post('/documents/text/read-now')
+    assert resp.status_code == 302 and resp.headers['Location'].endswith('/settings#mod_documents')
+    assert job_settings.DocumentText.query.one().status == 'ok'
+    assert job_settings._text_job_last_run() is not None
+    html = client.post('/documents/text/read-now', follow_redirects=True).get_data(as_text=True)
+    assert 'No PDF is waiting to be read.' in html
+
+
+def test_a_run_stops_at_its_time_budget(job_settings, client, monkeypatch):
+    import time
+    for i in range(3):
+        _create(client, _pdf(f'Doc {i}'), f'd{i}.pdf', name=f'Doc {i}')
+    clock = iter([0, 0, 5, 11, 20])
+    monkeypatch.setattr(time, 'monotonic', lambda: next(clock))
+    assert len(job_settings.read_pending_text(limit=3, budget=10)) == 2
 
 
 def test_backup_leaves_out_the_index_and_restore_rebuilds_it(docs, client, loaded_modules):

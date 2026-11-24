@@ -7,13 +7,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 - **Documents: search in the text of PDFs.** A background job reads the
-  text of each stored PDF through `pdf.extract_text` (every 5 minutes, so
-  saving a document stays fast) and indexes it with SQLite FTS5. The
+  text of each stored PDF through `pdf.extract_text` — existing files too —
+  and indexes it with SQLite FTS5, so saving a document stays fast. The
   Documents search then also finds documents by words in their files —
   accents folded, words as prefixes — and shows where they matched. The
   document page says per PDF whether its text is searchable, still to be
-  read, or a scan that needs OCR. Backups leave the index out; a restore
-  drops it and the next start rebuilds it.
+  read, or a scan that needs OCR. Settings → Documents turns the job on or
+  off, sets how often it runs (default every 5 minutes) and how many PDFs it
+  reads per run (default 10), shows how many are waiting, and reads a batch
+  at once with *Read now*. Backups leave the index out; a restore drops it
+  and the next start rebuilds it.
 - **PDF text through the registry.** The core provides `pdf.extract_text`:
   the text layer of a PDF, page by page, with pypdf (no OCR), and a status
   that tells a scan (`no_text_layer`), an encrypted or broken file apart.
