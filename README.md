@@ -168,7 +168,9 @@ Toggle dashboard panels in Settings → General:
 ```
 ContaAutonomo/
 ├── contaautonomo/              # The core application package
-│   ├── app.py                  # Flask app: models, routes, settings
+│   ├── app.py                  # Flask app: configuration, security, start-up
+│   ├── models.py               # Core database models (Invoice, Customer, Settings, …)
+│   ├── routes/                 # Core routes, one file per area (invoices, dashboard, settings, …)
 │   ├── paths.py                # Where code and runtime data live
 │   ├── core/                   # Module system (BaseModule, CoreServices, ModuleManager),
 │   │                           # function registry, message center, invoice PDFs

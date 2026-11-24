@@ -21,7 +21,9 @@ The core is the `contaautonomo` package; plug-in modules stay in `modules/`.
 
 | Import | What it holds |
 |---|---|
-| `contaautonomo.app` | The Flask app, core models (`db`, `Invoice`, `Expense`, …), core routes, `bootstrap()` |
+| `contaautonomo.app` | The Flask app, `db`, `login_required`, `log_activity`, `bootstrap()`; re-exports the models |
+| `contaautonomo.models` | The core models: `Invoice`, `InvoiceItem`, `Customer`, `Bank`, `Settings`, `Contractor`, `Expense`, `TaxForm`, `Document`, `SSPayment`, `Message` |
+| `contaautonomo.routes.*` | The core routes, one file per area: `invoices` (with the lifecycle: issue, mark paid, annul, rectify), `dashboard`, `customers`, `contractors`, `settings`, `messages`, `system`. Endpoint names are unchanged (`url_for('dashboard')`) |
 | `contaautonomo.core.module_manager` | `BaseModule`, `CoreServices`, `ModuleManager`, storage backends, loggers, scheduler |
 | `contaautonomo.core.functions` | The function registry: `Function`, `Param`, `FunctionRegistry` |
 | `contaautonomo.core.*` | `core_functions`, `message_center`, `invoice_pdf`, `invoice_amounts`, `pdf_text`, `repositories`, `schema_migrations` |
@@ -41,7 +43,7 @@ in the image) unless `CONTAAUTONOMO_DATA_DIR` names another folder.
 templates are in the package (`contaautonomo/templates/`, `static/`,
 `invoice_templates/`).
 
-### Models (`contaautonomo/app.py`)
+### Models (`contaautonomo/models.py`)
 
 | Model | Table | Description |
 |-------|-------|-------------|

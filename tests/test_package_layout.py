@@ -53,6 +53,23 @@ def test_the_suite_keeps_its_data_out_of_the_checkout(loaded_modules):
     assert loaded_modules.core.app_path == paths.data_dir()
 
 
+def test_app_re_exports_the_models_and_lifecycle_helpers():
+    from contaautonomo import app as appmod, models
+    from contaautonomo.routes import invoices
+    for name in ('Invoice', 'InvoiceItem', 'Customer', 'Bank', 'Settings', 'Contractor',
+                 'Expense', 'TaxForm', 'Document', 'SSPayment', 'Message'):
+        assert getattr(appmod, name) is getattr(models, name)
+    for name in ('_issue_invoice', '_mark_invoice_paid', 'invoice_amounts', 'NoExchangeRate'):
+        assert getattr(appmod, name) is getattr(invoices, name)
+    assert appmod.db is models.db
+
+
+def test_routes_keep_their_endpoint_names(app):
+    endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
+    assert {'dashboard', 'index', 'create_invoice', 'view_invoice', 'settings', 'customers',
+            'messages_index', 'system_logs', 'health_check', 'toggle_module'} <= endpoints
+
+
 def test_the_core_never_imports_the_app():
     """core/ and utils/ are below the app: the app imports them, never the
     other way round (no import cycle). auth_routes reads the app at request
@@ -65,3 +82,25 @@ def test_the_core_never_imports_the_app():
                      r'from contaautonomo import app\b)', path.read_text(), re.M):
             offenders.append(str(path.relative_to(ROOT)))
     assert offenders == []
+
+
+def test_routes_and_web_never_import_the_app_module():
+    """contaautonomo.app imports web, models and routes; none of them imports
+    it back, so there is no import cycle."""
+    import re
+    pattern = re.compile(r'^\s*(from contaautonomo\.app import|import contaautonomo\.app|'
+                         r'from contaautonomo import app\b)', re.M)
+    files = [ROOT / 'contaautonomo' / 'web.py', ROOT / 'contaautonomo' / 'models.py',
+             *ROOT.glob('contaautonomo/routes/*.py')]
+    assert [str(p.relative_to(ROOT)) for p in files if pattern.search(p.read_text())] == []
+
+
+def test_module_manager_is_read_through_state(app):
+    from contaautonomo import app as appmod, state
+    assert appmod.module_manager is state.module_manager
+
+
+def test_log_values_cannot_start_a_new_line():
+    from contaautonomo.utils.logsafe import clean
+    assert clean('INV-1\r\nINFO forged') == 'INV-1  INFO forged'
+    assert clean(None) == '' and len(clean('x' * 500)) == 200
