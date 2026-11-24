@@ -138,6 +138,8 @@ class AIAgentModule(BaseModule):
     # --- Registry functions ------------------------------------------------- #
 
     def get_functions(self):
+        provider = Param('provider', 'str', 'Provider id (ai.list_providers); default: the '
+                         'one selected in Settings → AI Agent', choices=tuple(PROVIDER_NAMES))
         return [
             Function(
                 'ai.complete_text', self.complete_text,
@@ -145,20 +147,40 @@ class AIAgentModule(BaseModule):
                 params=(Param('system', 'str', 'Instruction', required=True, max_length=20_000),
                         Param('user', 'str', 'Message', required=True, max_length=400_000),
                         Param('max_tokens', 'int', 'Reply length limit', minimum=1,
-                              maximum=16_000)),
+                              maximum=16_000),
+                        provider),
                 returns='str', external=True),
             Function(
                 'ai.text_status', self.text_status,
                 'Whether text questions can be answered, by which provider, and what to '
                 'configure if not.',
+                params=(provider,),
                 returns='{"available": bool, "provider": str or null, "reason": str or null}'),
+            Function(
+                'ai.list_providers', self.list_providers,
+                'The AI providers a module may choose from, with whether each can answer '
+                'now; for a module that lets the owner pick where its data goes.',
+                returns='{"data": [{"id", "name", "kind": "api" | "cli", "model", '
+                        '"available": bool, "reason": str or null, "selected": bool}]}'),
         ]
 
-    def _selected(self):
-        """(provider id, settings row or None); read only, no row is created."""
+    def _selected(self, provider=None):
+        """(provider id, settings row or None): `provider` when given, else the
+        one selected in the settings; read only, no row is created."""
         cfg = self.AIAgentConfig.query.first()
-        provider = (cfg.provider if cfg else None) or DEFAULT_PROVIDER
+        provider = provider or (cfg.provider if cfg else None) or DEFAULT_PROVIDER
         return (provider if provider in PROVIDER_NAMES else DEFAULT_PROVIDER), cfg
+
+    def list_providers(self):
+        """Every provider with its model and whether it can answer now."""
+        selected, cfg = self._selected()
+        out = []
+        for p, name in PROVIDER_NAMES.items():
+            reason = self._reason(p, cfg)
+            out.append({'id': p, 'name': name, 'kind': 'api' if p in API_PROVIDERS else 'cli',
+                        'model': self._model(cfg, p), 'available': reason is None,
+                        'reason': reason, 'selected': p == selected})
+        return {'data': out}
 
     @staticmethod
     def _model(cfg, provider):
@@ -174,18 +196,19 @@ class AIAgentModule(BaseModule):
             return None
         return cli.AGENTS[provider]().unavailable_reason()
 
-    def text_status(self):
-        """Whether the selected provider can answer, and if not, why."""
-        provider, cfg = self._selected()
+    def text_status(self, provider=None):
+        """Whether the selected provider (or `provider`) can answer, and if not, why."""
+        provider, cfg = self._selected(provider)
         reason = self._reason(provider, cfg)
         return {'available': reason is None, 'provider': PROVIDER_NAMES[provider],
                 'reason': reason}
 
-    def complete_text(self, system, user, max_tokens=1500):
-        """The reply text of the selected provider; the API key never leaves
-        this module. `max_tokens` is not passed to a CLI agent (neither CLI
-        takes a reply limit)."""
-        provider, cfg = self._selected()
+    def complete_text(self, system, user, max_tokens=1500, provider=None):
+        """The reply text of the selected provider, or of `provider` when a
+        module lets the owner choose; the API key never leaves this module.
+        `max_tokens` is not passed to a CLI agent (neither CLI takes a reply
+        limit)."""
+        provider, cfg = self._selected(provider)
         reason = self._reason(provider, cfg)
         if reason:
             raise FunctionUnavailable(reason)

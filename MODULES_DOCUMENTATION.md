@@ -569,8 +569,11 @@ features of its own; modules that need AI (the Ledger Assistant) call
   short question to the saved provider)
 - Models: `AIAgentConfig` (`ai_agent_config`: provider, encrypted API keys,
   a model per provider, `models_cache`)
-- Functions: `ai.complete_text(system, user, max_tokens?)` (external) and
-  `ai.text_status()` — `{available, provider, reason}`
+- Functions: `ai.complete_text(system, user, max_tokens?, provider?)` (external),
+  `ai.text_status(provider?)` — `{available, provider, reason}` — and
+  `ai.list_providers()` — `{data: [{id, name, kind, model, available, reason, selected}]}`,
+  for a module that lets the owner choose where its data goes. Without `provider` the one
+  selected in Settings → AI Agent answers
 - Providers: OpenAI and Anthropic (API key), Claude Code CLI and Kiro CLI
   (programs on the server, run without any tool in an empty temporary
   directory; off unless the server sets `AI_AGENT_ALLOW_CLI=1`;
@@ -1271,7 +1274,8 @@ Functions today:
 | `calendar.upcoming_deadlines` | `fiscal_calendar` | `limit?`, `today?`; open and upcoming windows of the forms the user files. The dashboard calls it |
 | `calendar.deadline_for` | `fiscal_calendar` | `form`, `year`, `quarter?`; one filing window or None. Tax Provision and Modelo 347 call it |
 | `calendar.deadlines_for_year`, `calendar.selected_forms` | `fiscal_calendar` | Every window of a year; the forms the user files. Tax obligations call them |
-| `ai.text_status`, `ai.complete_text` | `ai_agent` | Text questions with the provider selected in Settings → AI Agent — OpenAI, Anthropic, Claude Code CLI or Kiro CLI; the key stays in the module |
+| `ai.text_status`, `ai.complete_text` | `ai_agent` | Text questions with the provider selected in Settings → AI Agent — OpenAI, Anthropic, Claude Code CLI or Kiro CLI — or the one a caller names in `provider?`; the key stays in the module |
+| `ai.list_providers` | `ai_agent` | `{data: [{id, name, kind, model, available, reason, selected}]}`; every provider and whether it can answer now, no key |
 | `ai.parse_document` | `ai_parser` | Route `/ai-parser/parse`; the expense form posts to the route of whatever provides it |
 
 Callers today: the Ledger Assistant (all but `ai.parse_document`), the
