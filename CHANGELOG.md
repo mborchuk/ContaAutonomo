@@ -86,6 +86,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   server with `python -m contaautonomo.app` and gunicorn with
   `gunicorn --config deploy/gunicorn.conf.py contaautonomo.app:app`; the
   Docker image does this itself.
+- **`contaautonomo/app.py` is split.** The models are in `models.py`, the
+  routes in `routes/` (invoices with their lifecycle, dashboard, customers,
+  contractors, settings, messages, system), `db` in `extensions.py`; `app.py`
+  keeps the configuration, security, the shared helpers and start-up
+  (2,664 → about 500 lines). URLs and endpoint names are unchanged, and
+  `from contaautonomo.app import Invoice, db` still works.
 - **For module authors:** import the core by its new names, e.g.
   `from contaautonomo.core.module_manager import BaseModule`,
   `from contaautonomo.core.functions import Function, Param`. The old names

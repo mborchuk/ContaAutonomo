@@ -465,7 +465,7 @@ def register_models(self, db):
 
 ### Using Core Models
 
-To query models defined in core (`contaautonomo/app.py`), use `extend_existing=True`
+To query models defined in core (`contaautonomo/models.py`), use `extend_existing=True`
 and define only the columns you need:
 
 ```python

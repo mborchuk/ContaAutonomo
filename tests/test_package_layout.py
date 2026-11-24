@@ -51,3 +51,20 @@ def test_data_folder_can_be_moved(monkeypatch, tmp_path):
 def test_the_suite_keeps_its_data_out_of_the_checkout(loaded_modules):
     assert not paths.data_dir().startswith(str(ROOT))
     assert loaded_modules.core.app_path == paths.data_dir()
+
+
+def test_app_re_exports_the_models_and_lifecycle_helpers():
+    from contaautonomo import app as appmod, models
+    from contaautonomo.routes import invoices
+    for name in ('Invoice', 'InvoiceItem', 'Customer', 'Bank', 'Settings', 'Contractor',
+                 'Expense', 'TaxForm', 'Document', 'SSPayment', 'Message'):
+        assert getattr(appmod, name) is getattr(models, name)
+    for name in ('_issue_invoice', '_mark_invoice_paid', 'invoice_amounts', 'NoExchangeRate'):
+        assert getattr(appmod, name) is getattr(invoices, name)
+    assert appmod.db is models.db
+
+
+def test_routes_keep_their_endpoint_names(app):
+    endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
+    assert {'dashboard', 'index', 'create_invoice', 'view_invoice', 'settings', 'customers',
+            'messages_index', 'system_logs', 'health_check', 'toggle_module'} <= endpoints
