@@ -51,16 +51,19 @@ def test_invoice_email_panel_escapes_and_hides_password(loaded_modules, request_
     assert mod._smtp_config()['password'] == SECRET
 
 
-def test_backup_panel_escapes_path_and_hides_password(loaded_modules, request_ctx):
+def test_backup_panel_escapes_path_and_hides_password(loaded_modules, request_ctx, tmp_path):
     from contaautonomo.app import Settings, db
     mod = loaded_modules.modules['backup']
     cfg = mod._get_config()
-    cfg.backup_path = XSS
+    # The panel lists the backups, which creates the folder: keep it under
+    # tmp_path, with the markup in its name, never in the working directory.
+    path = str(tmp_path / XSS)
+    cfg.backup_path = path
     cfg.encrypt_method = 'custom'
     cfg.custom_password = SECRET
     db.session.commit()
     html = mod.get_settings_html(Settings.query.first())
-    _assert_safe(html, (XSS, SECRET))
+    _assert_safe(html, (path, SECRET))
 
     if not Settings.query.first():
         db.session.add(Settings())
