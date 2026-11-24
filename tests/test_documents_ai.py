@@ -378,3 +378,23 @@ def test_the_request_really_runs_in_a_background_thread(docs, client, loaded_mod
         time.sleep(0.1)
     assert client.get(f'/documents/view/{doc.id}/ai-status').get_json() == {
         'running': False, 'status': 'new'}
+
+
+def test_a_table_from_the_first_version_gets_the_error_column(docs, client):
+    """A database where the table was created before the `error` column."""
+    from sqlalchemy import inspect as sa_inspect, text
+    engine = docs._db.engine
+    docs._db.session.commit()
+    with engine.begin() as conn:
+        conn.execute(text('DROP TABLE document_ai_suggestion'))
+        conn.execute(text(
+            'CREATE TABLE document_ai_suggestion (id INTEGER PRIMARY KEY, '
+            'document_id INTEGER NOT NULL REFERENCES document (id), provider VARCHAR(100), '
+            'model VARCHAR(100), file_ids VARCHAR(500), chars_sent INTEGER, fields TEXT, '
+            "status VARCHAR(12) DEFAULT 'new', created_at DATETIME, decided_at DATETIME)"))
+    docs.on_enable()
+    columns = {c['name'] for c in sa_inspect(engine).get_columns('document_ai_suggestion')}
+    assert 'error' in columns
+    doc = _document(docs, client)
+    assert client.get(f'/documents/view/{doc.id}').status_code == 200
+    docs.on_enable()                                     # idempotent

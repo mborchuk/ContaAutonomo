@@ -317,6 +317,14 @@ class DocumentsModule(BaseModule):
                 self.DocumentDisposal.__table__.create(self._db.engine)
             if 'document_ai_suggestion' not in inspector.get_table_names():
                 self.DocumentAISuggestion.__table__.create(self._db.engine)
+            else:
+                ai_cols = {c['name'] for c in inspector.get_columns('document_ai_suggestion')}
+                for col, typedef in (('error', 'VARCHAR(300)'),):
+                    if col not in ai_cols:
+                        with self._db.engine.connect() as conn:
+                            conn.execute(text(
+                                f'ALTER TABLE document_ai_suggestion ADD COLUMN {col} {typedef}'))
+                            conn.commit()
             if 'document_text' not in inspector.get_table_names():
                 self.DocumentText.__table__.create(self._db.engine)
             self._ensure_text_index()
