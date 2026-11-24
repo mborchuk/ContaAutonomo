@@ -51,3 +51,17 @@ def test_data_folder_can_be_moved(monkeypatch, tmp_path):
 def test_the_suite_keeps_its_data_out_of_the_checkout(loaded_modules):
     assert not paths.data_dir().startswith(str(ROOT))
     assert loaded_modules.core.app_path == paths.data_dir()
+
+
+def test_the_core_never_imports_the_app():
+    """core/ and utils/ are below the app: the app imports them, never the
+    other way round (no import cycle). auth_routes reads the app at request
+    time through import_module, as a blueprint the app registers."""
+    import re
+    offenders = []
+    for path in [*ROOT.glob('contaautonomo/core/*.py'), *ROOT.glob('contaautonomo/utils/*.py'),
+                 *ROOT.glob('contaautonomo/security/*.py')]:
+        if re.search(r'^\s*(from contaautonomo\.app import|import contaautonomo\.app|'
+                     r'from contaautonomo import app\b)', path.read_text(), re.M):
+            offenders.append(str(path.relative_to(ROOT)))
+    assert offenders == []

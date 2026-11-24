@@ -7,7 +7,6 @@ Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from functools import wraps
 import io
 from contextlib import contextmanager
 import os
@@ -355,15 +354,8 @@ def log_activity(action, category='system', details=None):
         module_manager.core.log_activity(action, category, details)
 
 
-# Login required decorator
-def login_required(f):
-    """Decorator to require login for routes"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('authenticated'):
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+# Login required decorator (security/login.py; modules use core.login_required)
+from contaautonomo.security.login import login_required  # noqa: E402
 
 
 

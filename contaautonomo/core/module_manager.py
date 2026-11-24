@@ -10,6 +10,7 @@ inheriting from BaseModule.
 import os
 
 from contaautonomo import paths
+from contaautonomo.security.login import login_required
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1180,6 +1181,7 @@ class CoreServices:
         self.app = app
         self.db = db
         self._settings_model = None
+        self._invoice_model = None   # set by ModuleManager.register_core_functions
         self._module_enabled_model = None
         self._module_manager = None
         # MessageCenter (message_center.py) and InvoicePdf (invoice_pdf.py),
@@ -1279,7 +1281,6 @@ class CoreServices:
 
     def login_required(self, f):
         """Decorator: require login for a route"""
-        from contaautonomo.app import login_required
         return login_required(f)
 
     # --- File Storage ---
@@ -1663,7 +1664,11 @@ class InvoiceService:
         self._core = core
 
     def _get_models(self):
-        from contaautonomo.app import Invoice
+        # The app hands the core its Invoice model (register_core_functions),
+        # so the core never imports the app.
+        Invoice = self._core._invoice_model
+        if Invoice is None:
+            raise RuntimeError('InvoiceService needs register_core_functions(Invoice=...) first')
         return Invoice, self._core.db
 
     def get(self, invoice_id):
@@ -1913,6 +1918,7 @@ class ModuleManager:
         `core.message_center` and its functions are registered. The invoice
         PDF builder (invoice_pdf.py) is `core.invoice_pdf`; `Bank` goes to the
         template files that take it."""
+        self.core._invoice_model = Invoice
         center = None
         if Message is not None:
             from contaautonomo.core.message_center import MessageCenter
