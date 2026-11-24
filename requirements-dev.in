@@ -2,6 +2,6 @@
 # requirements-dev.txt, constrained by the runtime lock.
 -c requirements.txt
 pytest>=9.2.0
-hypothesis>=6.170.15
+hypothesis>=6.170.17
 pytest-cov>=7.0.0
-ruff>=0.17.5
+ruff>=0.17.6

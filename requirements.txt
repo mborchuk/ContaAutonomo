@@ -181,9 +181,9 @@ annotated-types==0.8.0 \
     --hash=sha256:13b2beaad985e05e2d6407ee4c4f35590b11f8d693a258a561055cac8f64cab7 \
     --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
     # via pydantic
-anthropic==2.8.0 \
-    --hash=sha256:76ad332e2d500fc54d0112cf100544ad1a7605e71e092b98d9eb664d2b66e283 \
-    --hash=sha256:d34e389ba0544cd64e033eb7475f46cc1ac6f2a388cdcd472b33ad4ac29ef40c
+anthropic==2.12.0 \
+    --hash=sha256:571e6d250bcd6bbaf5fd5f3c764b8e11af9901ad2e44b025f8e773c6cc7a7173 \
+    --hash=sha256:8631e3880ee18b0f87ce61d5d08e67804200463cf27c4182024715e232c99ba6
     # via -r requirements.in
 anyio==4.15.1 \
     --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101 \
@@ -210,13 +210,13 @@ blinker==1.9.0 \
     # via
     #   flask
     #   sentry-sdk
-boto3==1.44.3 \
-    --hash=sha256:8c9c4844c7ce184494b102983696d6cdb09f5307ec7f238ca4ad5849fb14e26b \
-    --hash=sha256:bba566b5cba78db05c5f6c44d219c8f6fb2cd2b923106f767289e4cd0b87b093
+boto3==1.44.8 \
+    --hash=sha256:099caf21553bbbfef118904aa02fadb8776a534704cf00bede0ed9f29a4da88e \
+    --hash=sha256:32f646d28ea25820ec210cfa48e2409bf06a4a529c8b243013fd045716e99826
     # via -r requirements.in
-botocore==1.44.4 \
-    --hash=sha256:5a9303fc65e9a133bbc515fbb8d5c486787fb12108c37b2143c1c111c4a46525 \
-    --hash=sha256:9f01ec9c9bdd76dfb263bb4efe798229383dce32c942d26b9d9aeb062a979002
+botocore==1.44.10 \
+    --hash=sha256:6fc109eefd1b02899196499d798141be6df70ca257b399741adc9975569d41b6 \
+    --hash=sha256:d9c8602d24df40e366bbe80157c6f94155c91c367eaaabeceb26d47532f6baba
     # via
     #   boto3
     #   s3transfer
@@ -1581,9 +1581,9 @@ multidict==6.9.1 \
     # via
     #   aiohttp
     #   yarl
-openai==3.51.0 \
-    --hash=sha256:1cc9b80eb0f1dc15fa45fbc122ba2c99b7e5302548060c01db5719fa6181a6a9 \
-    --hash=sha256:802b7e8c6ff8cf4d59a2a163126c10ce472adf0409ac41fdaadd47c9b4ed091a
+openai==3.57.0 \
+    --hash=sha256:5a0a89d6a542efc85e2a8cec701ca9265b795d578c777828e10fafdf80e333b6 \
+    --hash=sha256:f97bc74024c06ced8428b56c4a3594066709d3082779bf9d0b4b6092fbf587a8
     # via -r requirements.in
 opentelemetry-api==1.45.2 \
     --hash=sha256:2cbd737377e710ee740d261c94e93fa0f08e6d037c18f17513cc0a2d94479a34 \
@@ -1993,9 +1993,9 @@ pydantic-core==2.46.5 \
     --hash=sha256:fc8515076c11f3cfdf4fb142dcca0fe384b1230a3b5415458ac84f3e0903ec13 \
     --hash=sha256:ff218293c9c806138dca139765e3b067621be52bcd93cdc14c7711be7ddc90a9
     # via pydantic
-pyhanko==0.38.1 \
-    --hash=sha256:27348b2bb5c6756402102a930b3404a1ccce4d1102f81e56399df268dd90f70d \
-    --hash=sha256:723fdf1a6e27be72d0d7fbf65deccf03aeaa6fafbdddc5c698b6b2eba06c543d
+pyhanko==0.38.2 \
+    --hash=sha256:041051105ddf3ace6571605ddccae0f3e444a6e99f0bd54ec88281684282ad41 \
+    --hash=sha256:2c18ab33367ee8df2df81637a2a321951d769ed7194d9c5aa04a5b5041c33d82
     # via -r requirements.in
 pyhanko-certvalidator==0.33.0 \
     --hash=sha256:72d3b830c0427a7aae45873ba7b4e34cb86caed451eff9dfb4394a69e93bb169 \
@@ -2005,9 +2005,9 @@ pyparsing==3.3.3 \
     --hash=sha256:928ae7e20211f3b6f3915a72f06a0cfd29ab9d24279dd6346b6b1a7146397d36 \
     --hash=sha256:ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4
     # via httplib2
-pypdf==7.1.0 \
-    --hash=sha256:47cca6b24bdcf4c4d65b5f7b8b972535c61710a061261e737688777cfd9a7bfb \
-    --hash=sha256:ca3fa902369e98a6d2cb7b56396de902b72ef9bb3c1e8706c1bfc7d8bd0cf0d7
+pypdf==7.1.1 \
+    --hash=sha256:04c5680d4b4cfa04ab505b09393fc949860c34a4dad6565284d11a2f5c3ce8b1 \
+    --hash=sha256:2eff4e2fc5fb22a6d6711e6f1166cdc9ab5765d90cd0d77dfea3f4aa91a27b1d
     # via -r requirements.in
 python-dateutil==2.9.0.post0 \
     --hash=sha256:37dd54208da7e1cd875388217d5e00ebd4179249f90fb72437e91a35459a0ad3 \
