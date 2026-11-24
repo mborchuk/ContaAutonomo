@@ -183,6 +183,68 @@
             {% endif %}
         </div>
 
+        <!-- AI suggestions -->
+        {% if ai.state != 'off' or ai.suggestion %}
+        <div id="ai-suggestions" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px; font-size: 13px;">
+            <h3 style="margin: 0 0 12px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">✨ AI suggestions</h3>
+            {% if ai.suggestion %}
+            <form method="POST" action="{{ url_for('documents.documents_ai_apply', id=doc.id) }}">
+                <input type="hidden" name="suggestion_id" value="{{ ai.suggestion.id }}">
+                <p class="fine-print" style="margin: 0 0 8px;">From {{ ai.suggestion.provider }}{% if ai.suggestion.model %} ({{ ai.suggestion.model }}){% endif %}, {{ ai.suggestion.created_at.strftime('%d/%m/%Y %H:%M') if ai.suggestion.created_at else '' }}. Check each value before applying it.</p>
+                <div class="table-wrap">
+                <table class="data-table">
+                    <thead><tr><th scope="col">Apply</th><th scope="col">Field</th><th scope="col">Now</th><th scope="col">Suggested</th></tr></thead>
+                    <tbody>
+                    {% for row in ai.suggestion.rows %}
+                    <tr>
+                        <td><input type="checkbox" name="apply_{{ row.field }}" value="1" id="apply_{{ row.field }}" aria-label="Apply {{ row.label }}"{% if row.checked %} checked{% endif %}></td>
+                        <td><label for="apply_{{ row.field }}">{{ row.label }}</label></td>
+                        <td>{% if row.current is none or row.current == '' %}<span style="color: var(--color-text-faint);">—</span>{% elif row.current.strftime is defined %}{{ row.current.strftime('%d/%m/%Y') }}{% else %}{{ row.current }}{% endif %}</td>
+                        <td>{% if row.field == 'tags' %}{{ row.value|join(', ') }} <span class="fine-print">(added to the current tags)</span>{% elif row.value.strftime is defined %}{{ row.value.strftime('%d/%m/%Y') }}{% else %}{{ row.value }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button type="submit" class="btn btn-primary btn-sm">Apply ticked</button>
+                    <button type="submit" class="btn btn-secondary btn-sm" formaction="{{ url_for('documents.documents_ai_discard', id=doc.id) }}">Discard</button>
+                </div>
+            </form>
+            {% endif %}
+
+            {% if ai.state == 'record' %}
+            <p style="margin: 8px 0 0; color: var(--color-text-muted);">A record cannot be changed, so nothing is sent for suggestions.</p>
+            {% elif ai.state == 'excluded' %}
+            <p style="margin: 8px 0 0; color: var(--color-text-muted);">Documents of the category <strong>{{ doc.category }}</strong> are never sent to AI (<a href="{{ url_for('settings') }}#mod_documents">Settings → Documents</a>).</p>
+            {% elif ai.state == 'no_text' %}
+            <p style="margin: 8px 0 0; color: var(--color-text-muted);">No PDF of this document has readable text yet: suggestions use the text read from PDFs (scans need OCR).</p>
+            {% elif ai.state == 'ready' %}
+            {% set dest = ai.destination %}
+            <form method="POST" action="{{ url_for('documents.documents_ai_suggest', id=doc.id) }}" style="margin-top: {{ '14px' if ai.suggestion else '0' }};">
+                <p style="margin: 0 0 6px;"><strong>Send for suggestions</strong> — tick the files whose text may leave the app:</p>
+                {% for f in ai.files %}
+                <label style="display: flex; align-items: center; gap: 6px; margin: 2px 0;">
+                    <input type="checkbox" name="ai_file" value="{{ f.id }}" checked>
+                    {{ f.name }} <span class="fine-print">({{ f.pages }} page(s), {{ '{:,}'.format(f.chars) }} characters)</span>
+                </label>
+                {% endfor %}
+                <p class="fine-print" style="margin: 8px 0;">
+                    Sent: the text read from the ticked PDFs (at most {{ '{:,}'.format(ai.max_chars) }} characters in all), and the names of your categories and tags to choose from. Not sent: the files themselves, their names, notes or other fields.
+                    {% if dest.available %}
+                    Goes to <strong>{{ dest.name }}</strong>{% if dest.model %} ({{ dest.model }}){% endif %}{% if dest.kind == 'cli' %}, a CLI on this server that sends it to its vendor{% endif %}.
+                    {% endif %}
+                    Chosen in <a href="{{ url_for('settings') }}#mod_documents">Settings → Documents</a>.
+                </p>
+                {% if dest.available %}
+                <button type="submit" class="btn btn-secondary btn-sm">✨ Ask {{ dest.name }} for suggestions</button>
+                {% else %}
+                <p class="note note-warning" role="status" style="margin: 0;">{{ dest.reason }}</p>
+                {% endif %}
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
         <!-- Notes -->
         <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px; margin-bottom: 15px;">

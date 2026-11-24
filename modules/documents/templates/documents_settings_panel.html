@@ -48,4 +48,60 @@
     Read now ({{ cfg.batch }} PDFs, at most one minute)
 </button>
 
+<h3 style="margin-top: 28px;">AI suggestions for fields and tags</h3>
+<p style="font-size: 13px; color: var(--color-text-muted);">
+    On a document's page, an AI provider can propose its name, category, dates, amount,
+    reference, counterparty, creator, language, description and tags from the text read
+    from its PDFs. Nothing is sent until you press the button on that page and pick the
+    files; nothing changes until you tick and apply a suggestion.
+</p>
+
+{% if not ai_available %}
+<p class="note note-warning" role="status">No AI module is enabled: enable the AI Agent in Settings → Modules first.</p>
+{% endif %}
+
+<div class="form-group" style="margin-bottom: 14px;">
+    <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+        <input type="checkbox" name="ai_enabled" value="1"{% if ai.enabled %} checked{% endif %}>
+        Allow sending the text of documents I choose to an AI provider
+    </label>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end;">
+    <div>
+        <label for="ai_provider" style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Provider</label>
+        <select id="ai_provider" name="ai_provider" class="form-control" style="min-width: 260px;">
+            {% set default = (ai_providers or [])|selectattr('selected')|list %}
+            <option value=""{% if not ai.provider %} selected{% endif %}>The AI Agent's choice{% if default %} (now {{ default[0].name }}){% endif %}</option>
+            {% for p in ai_providers or [] %}
+            <option value="{{ p.id }}"{% if ai.provider == p.id %} selected{% endif %}>{{ p.name }} · {{ p.model }}{% if not p.available %} (not set up){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="ai_max_chars" style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Characters sent per request, at most</label>
+        <input type="number" id="ai_max_chars" name="ai_max_chars" class="form-control"
+               min="{{ ai_max_range[0] }}" max="{{ ai_max_range[1] }}" step="1000"
+               value="{{ ai.max_chars }}" style="width: 140px;" required>
+    </div>
+</div>
+<p class="fine-print" style="margin-top: 6px;">
+    Every provider sends the text to its company: OpenAI and Anthropic over their API,
+    Claude Code CLI and Kiro CLI through the CLI installed on this server. Keys and models
+    are in Settings → AI Agent. When the chosen provider is not set up, nothing is sent:
+    the app never switches to another one.
+</p>
+
+{% if categories %}
+<fieldset style="margin-top: 12px; border: 1px solid var(--color-surface-3); border-radius: 6px; padding: 10px 12px;">
+    <legend style="font-size: 13px; font-weight: 600; padding: 0 4px;">Never send documents of these categories</legend>
+    {% for c in categories %}
+    <label style="display: inline-flex; align-items: center; gap: 6px; margin: 2px 14px 2px 0; font-size: 13px;">
+        <input type="checkbox" name="ai_excluded" value="{{ c }}"{% if c in ai.excluded %} checked{% endif %}> {{ c }}
+    </label>
+    {% endfor %}
+</fieldset>
+{% endif %}
+
+<input type="hidden" name="ai_submitted" value="1">
 <input type="hidden" name="documents_submitted" value="1">

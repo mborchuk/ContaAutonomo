@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Documents: AI suggestions for fields and tags.** Off until the owner
+  turns them on in Settings → Documents and chooses the provider (the AI
+  Agent's choice or a named one; nothing is sent when it is not set up),
+  the categories never sent and how many characters may go out. On a
+  document's page the owner ticks the PDFs whose text may be sent; only that
+  text and the category and tag names go to the AI. The checked suggestions
+  (name, category, dates, amount, reference, counterparty, creator,
+  language, description, tags) are applied one by one; every request is in
+  the activity log and the document history.
 - **AI Agent: a caller may choose the provider.** `ai.complete_text` and
   `ai.text_status` take an optional `provider`, and `ai.list_providers`
   lists every provider with its model and whether it can answer now, so a

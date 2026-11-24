@@ -9,11 +9,12 @@ from module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash)
 from datetime import datetime, date, timedelta
+import json
 import os
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
-from . import dublin_core, integrity, retention, text_index
+from . import ai_suggest, dublin_core, integrity, retention, text_index
 
 # Background reading of PDF text. The scheduler ticks every minute; the job
 # runs when the interval set in Settings → Documents has passed (stored in the
@@ -26,6 +27,10 @@ TEXT_JOB_BATCH = TEXT_JOB_DEFAULTS['batch']
 TEXT_JOB_MAX_ATTEMPTS = 3      # a file that keeps failing is left alone
 TEXT_JOB_BUDGET = 600          # seconds a scheduled run may read (job timeout 900)
 READ_NOW_BUDGET = 60           # seconds for "Read now" (gunicorn timeout is 120)
+# AI suggestions: off until the owner turns them on in Settings → Documents.
+AI_MAX_CHARS_DEFAULT = 20_000
+AI_MAX_CHARS_RANGE = (1_000, 100_000)
+AI_UNANSWERED = 'The AI provider did not answer. Check the server log.'
 TEXT_STATUS_LABELS = {
     'ok': 'Searchable',
     'no_text_layer': 'No text layer (a scan: needs OCR)',
@@ -74,7 +79,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.9.0'
+        return '0.10.0'
 
     @property
     def nav_items(self):
@@ -199,6 +204,21 @@ class DocumentsModule(BaseModule):
             created_at = db.Column(db.DateTime, default=utcnow)
             updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
+        class DocumentAISuggestion(db.Model):
+            """What an AI provider proposed for a document; the owner applies it."""
+            __tablename__ = 'document_ai_suggestion'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            document_id = db.Column(db.Integer, db.ForeignKey('document.id'), nullable=False)
+            provider = db.Column(db.String(100))      # name shown to the owner
+            model = db.Column(db.String(100))
+            file_ids = db.Column(db.String(500))      # files whose text was sent
+            chars_sent = db.Column(db.Integer)
+            fields = db.Column(db.Text)               # JSON {field: value}, checked
+            status = db.Column(db.String(12), default='new')  # new, applied, discarded
+            created_at = db.Column(db.DateTime, default=utcnow)
+            decided_at = db.Column(db.DateTime)
+
         class DocumentText(db.Model):
             """Text read from one stored PDF (pdf.extract_text), for search."""
             __tablename__ = 'document_text'
@@ -223,6 +243,7 @@ class DocumentsModule(BaseModule):
 
         self.Document = Document
         self.DocumentText = DocumentText
+        self.DocumentAISuggestion = DocumentAISuggestion
         self.DocumentCategory = DocumentCategory
         self.DocumentFile = DocumentFile
         self.DocumentFileVersion = DocumentFileVersion
@@ -231,7 +252,7 @@ class DocumentsModule(BaseModule):
         self.DocumentHistory = DocumentHistory
         self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
-                'DocumentText': DocumentText,
+                'DocumentText': DocumentText, 'DocumentAISuggestion': DocumentAISuggestion,
                 'DocumentFileVersion': DocumentFileVersion, 'DocumentDisposal': DocumentDisposal,
                 'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
                 'DocumentNote': DocumentNote}
@@ -290,6 +311,8 @@ class DocumentsModule(BaseModule):
                 self.DocumentFileVersion.__table__.create(self._db.engine)
             if 'document_disposal' not in inspector.get_table_names():
                 self.DocumentDisposal.__table__.create(self._db.engine)
+            if 'document_ai_suggestion' not in inspector.get_table_names():
+                self.DocumentAISuggestion.__table__.create(self._db.engine)
             if 'document_text' not in inspector.get_table_names():
                 self.DocumentText.__table__.create(self._db.engine)
             self._ensure_text_index()
@@ -463,6 +486,21 @@ class DocumentsModule(BaseModule):
         @login_required
         def retention_index():
             return module._retention_index()
+
+        @bp.route('/view/<int:id>/ai-suggest', methods=['POST'])
+        @login_required
+        def documents_ai_suggest(id):
+            return module._ai_suggest(id)
+
+        @bp.route('/view/<int:id>/ai-apply', methods=['POST'])
+        @login_required
+        def documents_ai_apply(id):
+            return module._ai_apply(id)
+
+        @bp.route('/view/<int:id>/ai-discard', methods=['POST'])
+        @login_required
+        def documents_ai_discard(id):
+            return module._ai_discard(id)
 
         @bp.route('/text/read-now', methods=['POST'])
         @login_required
@@ -763,6 +801,7 @@ class DocumentsModule(BaseModule):
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
                                versions=versions, short=integrity.short,
                                text_states=file_states,
+                               ai=self._ai_panel(doc, doc_files),
                                text_badge=self._document_text_state(list(file_states.values())),
                                is_record=self._is_record(doc),
                                retention_due=retention.is_due(doc),
@@ -1039,6 +1078,8 @@ class DocumentsModule(BaseModule):
             synchronize_session=False)
         self.DocumentNote.query.filter_by(document_id=doc.id).delete(
             synchronize_session=False)
+        self.DocumentAISuggestion.query.filter_by(document_id=doc.id).delete(
+            synchronize_session=False)
 
     def _delete_document(self, id):
         doc = db_get_or_404(self.Document, id)
@@ -1300,29 +1341,260 @@ class DocumentsModule(BaseModule):
         return self.render_settings_template(
             'documents_settings_panel.html', cfg=cfg, counts=self._text_counts(),
             last_run=self._text_job_last_run(),
-            interval_range=TEXT_JOB_INTERVAL_RANGE, batch_range=TEXT_JOB_BATCH_RANGE)
+            interval_range=TEXT_JOB_INTERVAL_RANGE, batch_range=TEXT_JOB_BATCH_RANGE,
+            ai=self.ai_config(), ai_providers=self._ai_providers(),
+            ai_available=self._ai_functions() is not None,
+            ai_max_range=AI_MAX_CHARS_RANGE,
+            categories=self._get_all_categories())
 
     def save_settings(self, settings, form):
         if 'documents_submitted' not in form:
             return  # guard: another tab's form
         values = {}
-        for key, field, bounds in (('text_job_interval', 'text_job_interval',
-                                    TEXT_JOB_INTERVAL_RANGE),
-                                   ('text_job_batch', 'text_job_batch', TEXT_JOB_BATCH_RANGE)):
+        for key, bounds, what in (('text_job_interval', TEXT_JOB_INTERVAL_RANGE, 'Text reading'),
+                                  ('text_job_batch', TEXT_JOB_BATCH_RANGE, 'Text reading'),
+                                  ('ai_max_chars', AI_MAX_CHARS_RANGE, 'AI suggestions')):
+            if key == 'ai_max_chars' and key not in form:
+                continue
             try:
-                value = int(form.get(field, ''))
+                value = int(form.get(key, ''))
             except (TypeError, ValueError):
-                self.core.flash('Text reading: enter whole numbers; nothing was changed.',
+                self.core.flash(f'{what}: enter whole numbers; nothing was changed.',
                                 'warning')
                 return
             if not bounds[0] <= value <= bounds[1]:
-                self.core.flash(f'Text reading: values must be between {bounds[0]} and '
+                self.core.flash(f'{what}: values must be between {bounds[0]} and '
                                 f'{bounds[1]}; nothing was changed.', 'warning')
                 return
             values[key] = str(value)
         values['text_job_enabled'] = '1' if form.get('text_job_enabled') else '0'
+        if 'ai_submitted' in form:
+            values['ai_enabled'] = '1' if form.get('ai_enabled') else '0'
+            provider = (form.get('ai_provider') or '').strip()
+            known = {p['id'] for p in (self._ai_providers() or [])}
+            values['ai_provider'] = provider if provider in known else ''
+            names = set(self._get_all_categories())
+            excluded = [c for c in (form.getlist('ai_excluded') if hasattr(form, 'getlist')
+                                    else []) if c in names]
+            values['ai_excluded'] = json.dumps(sorted(excluded))[:200]
         for key, value in values.items():
             self._set_config(key, value)
+
+    # ---- AI suggestions for fields and tags ----
+
+    def ai_config(self):
+        """{enabled, provider ('' = the AI module's own choice), excluded
+        categories, max_chars} from Settings → Documents."""
+        try:
+            excluded = json.loads(self._get_config('ai_excluded', '[]'))
+        except ValueError:
+            excluded = []
+        try:
+            max_chars = int(self._get_config('ai_max_chars', AI_MAX_CHARS_DEFAULT))
+        except (TypeError, ValueError):
+            max_chars = AI_MAX_CHARS_DEFAULT
+        lo, hi = AI_MAX_CHARS_RANGE
+        return {'enabled': self._get_config('ai_enabled', '0') == '1',
+                'provider': self._get_config('ai_provider', ''),
+                'excluded': excluded if isinstance(excluded, list) else [],
+                'max_chars': min(max(max_chars, lo), hi)}
+
+    def _ai_functions(self):
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('ai.complete_text'):
+            return None
+        return functions
+
+    def _ai_providers(self):
+        """The providers the AI module offers (ai.list_providers), or None."""
+        functions = self._ai_functions()
+        if functions is None or not functions.available('ai.list_providers'):
+            return None
+        try:
+            return functions.call('ai.list_providers')['data']
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.warning('ai.list_providers failed: %s', type(e).__name__)
+            return None
+
+    def _ai_destination(self):
+        """Where a suggestion request goes: {available, name, model, kind,
+        reason, provider (passed to ai.complete_text, or None)}. Never falls
+        back to another provider than the one the owner chose."""
+        cfg = self.ai_config()
+        if self._ai_functions() is None:
+            return {'available': False, 'name': None, 'model': None, 'kind': None,
+                    'provider': None,
+                    'reason': 'No AI module is enabled: enable the AI Agent (Settings → Modules).'}
+        providers = self._ai_providers()
+        if cfg['provider']:
+            match = next((p for p in providers or [] if p['id'] == cfg['provider']), None)
+            if match is None:
+                return {'available': False, 'name': cfg['provider'], 'model': None,
+                        'kind': None, 'provider': cfg['provider'],
+                        'reason': 'The provider chosen in Settings → Documents is not offered '
+                                  'by the AI module now.'}
+            return {**{k: match[k] for k in ('name', 'model', 'kind', 'available', 'reason')},
+                    'provider': match['id']}
+        if providers:
+            match = next((p for p in providers if p['selected']), providers[0])
+            return {**{k: match[k] for k in ('name', 'model', 'kind', 'available', 'reason')},
+                    'provider': None}
+        status = self._ai_functions().call('ai.text_status') \
+            if self._ai_functions().available('ai.text_status') else {'available': True}
+        return {'available': bool(status.get('available')), 'name': status.get('provider'),
+                'model': None, 'kind': None, 'reason': status.get('reason'), 'provider': None}
+
+    def _readable_files(self, doc_files):
+        """[(file, text)] of the document's PDFs whose text has been read."""
+        rows = {r.storage_key: r for r in self.DocumentText.query.filter(
+            self.DocumentText.storage_key.in_([f.file_path for f in doc_files]),
+            self.DocumentText.status == 'ok').all()} if doc_files else {}
+        return [(f, rows[f.file_path]) for f in doc_files if f.file_path in rows]
+
+    def _ai_panel(self, doc, doc_files):
+        """What the document page shows for AI suggestions."""
+        cfg = self.ai_config()
+        panel = {'state': 'off', 'files': [], 'destination': None, 'suggestion': None,
+                 'max_chars': cfg['max_chars']}
+        latest = (self.DocumentAISuggestion.query.filter_by(document_id=doc.id, status='new')
+                  .order_by(self.DocumentAISuggestion.created_at.desc()).first())
+        if latest:
+            fields = ai_suggest.from_json(latest.fields)
+            panel['suggestion'] = {
+                'id': latest.id, 'provider': latest.provider, 'model': latest.model,
+                'created_at': latest.created_at,
+                'rows': [{'field': f, 'label': ai_suggest.FIELDS[f][0],
+                          'current': getattr(doc, f, None), 'value': fields[f],
+                          'checked': not getattr(doc, f, None) or f == 'tags'}
+                         for f in ai_suggest.FIELDS if f in fields]}
+        if not cfg['enabled']:
+            return panel
+        if self._is_record(doc):
+            panel['state'] = 'record'
+        elif doc.category and doc.category in cfg['excluded']:
+            panel['state'] = 'excluded'
+        else:
+            readable = self._readable_files(doc_files)
+            panel['files'] = [{'id': f.id, 'name': f.original_filename or 'file',
+                               'pages': row.page_count, 'chars': len(row.text or '')}
+                              for f, row in readable]
+            panel['state'] = 'ready' if readable else 'no_text'
+            panel['destination'] = self._ai_destination()
+        return panel
+
+    def _ai_suggest(self, id):
+        """Send the text of the ticked files to the chosen provider and keep
+        the checked reply as a suggestion."""
+        doc = db_get_or_404(self.Document, id)
+        back = redirect(url_for('documents.documents_view', id=doc.id) + '#ai-suggestions')
+        refused = self._refuse_if_record(doc)
+        if refused:
+            return refused
+        cfg = self.ai_config()
+        if not cfg['enabled']:
+            flash('AI suggestions are off. Turn them on in Settings → Documents.', 'warning')
+            return back
+        if doc.category and doc.category in cfg['excluded']:
+            flash(f'Documents of the category "{doc.category}" are never sent to AI '
+                  '(Settings → Documents).', 'warning')
+            return back
+        doc_files = self.DocumentFile.query.filter_by(document_id=doc.id).order_by(
+            self.DocumentFile.created_at).all()
+        ticked = set()
+        for raw in request.form.getlist('ai_file'):
+            try:
+                ticked.add(int(raw))
+            except ValueError:
+                continue
+        chosen = [(f, row) for f, row in self._readable_files(doc_files) if f.id in ticked]
+        if not chosen:
+            flash('Tick at least one file whose text may be sent.', 'warning')
+            return back
+        dest = self._ai_destination()
+        if not dest['available']:
+            flash(dest['reason'] or 'The AI provider is not available.', 'warning')
+            return back
+        texts = [row.text for _f, row in chosen]
+        categories = self._get_all_categories()
+        system, user = ai_suggest.build_prompt(texts, categories, self._get_all_tags(),
+                                               cfg['max_chars'])
+        arguments = {'system': system, 'user': user, 'max_tokens': ai_suggest.REPLY_TOKENS}
+        if dest['provider']:
+            arguments['provider'] = dest['provider']
+        sent = ai_suggest.characters_sent(texts, cfg['max_chars'])
+        self.core.log_activity('document_sent_to_ai', 'documents',
+                               f'{doc.identifier or doc.id}: text of {len(chosen)} file(s), '
+                               f'{sent} characters, to {dest["name"]}')
+        try:
+            reply = self._ai_functions().call('ai.complete_text', **arguments)
+        except Exception as e:
+            self.logger.warning('AI suggestion for a document failed: %s', type(e).__name__)
+            reason = str(e) if type(e).__name__ == 'FunctionUnavailable' else AI_UNANSWERED
+            flash(reason, 'warning')
+            return back
+        try:
+            fields = ai_suggest.clean(ai_suggest.parse_reply(reply), categories)
+        except ValueError:
+            flash('The AI reply could not be read as suggestions. Try again.', 'warning')
+            return back
+        if not fields:
+            flash('The AI found nothing to suggest for this document.', 'info')
+            return back
+        self.DocumentAISuggestion.query.filter_by(document_id=doc.id, status='new').update(
+            {'status': 'discarded', 'decided_at': utcnow()}, synchronize_session=False)
+        self._db.session.add(self.DocumentAISuggestion(
+            document_id=doc.id, provider=dest['name'], model=dest['model'],
+            file_ids=','.join(str(f.id) for f, _ in chosen), chars_sent=sent,
+            fields=ai_suggest.to_json(fields)))
+        self._log_history(doc.id, 'ai_suggested',
+                          f'{len(fields)} field(s) suggested by {dest["name"]}')
+        self._db.session.commit()
+        flash(f'{len(fields)} suggestion(s) from {dest["name"]}. Tick the ones to apply.',
+              'success')
+        return back
+
+    def _ai_apply(self, id):
+        """Apply the ticked suggested fields; tags are added to the existing ones."""
+        doc = db_get_or_404(self.Document, id)
+        back = redirect(url_for('documents.documents_view', id=doc.id))
+        refused = self._refuse_if_record(doc)
+        if refused:
+            return refused
+        suggestion = self.DocumentAISuggestion.query.filter_by(
+            id=request.form.get('suggestion_id', type=int), document_id=doc.id,
+            status='new').first()
+        if suggestion is None:
+            flash('That suggestion is no longer open.', 'warning')
+            return back
+        fields = ai_suggest.from_json(suggestion.fields)
+        applied = []
+        for field, value in fields.items():
+            if not request.form.get(f'apply_{field}'):
+                continue
+            if field == 'tags':
+                current = [t for t in (doc.tags or '').split(',') if t.strip()]
+                value = self._clean_tags(','.join(current + [t for t in value
+                                                             if t not in current]))
+            if field == 'category':
+                self._auto_add_category(value)
+            setattr(doc, field, value)
+            applied.append(ai_suggest.FIELDS[field][0])
+        suggestion.status, suggestion.decided_at = 'applied', utcnow()
+        if applied:
+            self._log_history(doc.id, 'ai_suggestion_applied',
+                              f'{", ".join(applied)} (suggested by {suggestion.provider})')
+        self._db.session.commit()
+        flash(f'Applied: {", ".join(applied)}.' if applied else 'Nothing was applied.',
+              'success' if applied else 'info')
+        return back
+
+    def _ai_discard(self, id):
+        doc = db_get_or_404(self.Document, id)
+        self.DocumentAISuggestion.query.filter_by(document_id=doc.id, status='new').update(
+            {'status': 'discarded', 'decided_at': utcnow()}, synchronize_session=False)
+        self._db.session.commit()
+        flash('Suggestion discarded.', 'info')
+        return redirect(url_for('documents.documents_view', id=doc.id))
 
     def _indexed(self):
         return text_index.available(self._db.session)
