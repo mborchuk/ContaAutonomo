@@ -108,7 +108,9 @@ def test_module_is_off_by_default_and_declares_only_the_text_functions(agent):
     assert getattr(type(agent), 'enabled_by_default', False) is False
     registry = FunctionRegistry(SimpleNamespace(modules={'ai_agent': agent}))
     assert registry.check_all() == ([], [])
-    assert {f.name for f in registry.find()} == {'ai.complete_text', 'ai.text_status'}
+    assert {f.name for f in registry.find()} == {'ai.complete_text', 'ai.text_status',
+                                                 'ai.list_providers'}
+    assert registry.get('ai.list_providers').external is False
     assert registry.get('ai.complete_text').external is True
     assert registry.get('ai.text_status').external is False
 
@@ -137,6 +139,33 @@ def test_api_provider_answers_with_its_stored_key(agent, sdks):
     assert (provider, key) == ('anthropic', SECRET + '-2')
     assert kw['system'] == 'Be brief.' and kw['max_tokens'] == 100
     assert kw['model'] == catalog.DEFAULT_MODELS['anthropic']
+
+
+def test_a_module_may_choose_the_provider(agent, sdks):
+    _configure(agent, provider='openai', openai_api_key=SECRET,
+               anthropic_api_key=SECRET + '-2', anthropic_model='claude-test')
+    registry = FunctionRegistry(SimpleNamespace(modules={'ai_agent': agent}))
+    assert registry.call('ai.complete_text', system='s', user='u',
+                         provider='anthropic') == 'anthropic reply'
+    assert sdks[-1][:2] == ('anthropic', SECRET + '-2')
+    assert registry.call('ai.complete_text', system='s', user='u') == 'openai reply'
+    assert registry.call('ai.text_status', provider='kiro_cli')['provider'] == 'Kiro CLI'
+    assert registry.problem_with('ai.complete_text', {'system': 's', 'user': 'u',
+                                                      'provider': 'other'}).startswith(
+        'provider must be one of')
+
+
+def test_list_providers_says_which_can_answer(agent, cli_env, monkeypatch):
+    monkeypatch.delenv(cli.ALLOW_ENV, raising=False)
+    _configure(agent, provider='anthropic', anthropic_api_key=SECRET, anthropic_model='claude-test')
+    listed = {p['id']: p for p in agent.list_providers()['data']}
+    assert list(listed) == list(catalog.PROVIDER_NAMES)
+    assert listed['anthropic'] == {'id': 'anthropic', 'name': 'Anthropic (Claude)', 'kind': 'api',
+                                   'model': 'claude-test', 'available': True, 'reason': None,
+                                   'selected': True}
+    assert listed['openai']['available'] is False and 'No API key' in listed['openai']['reason']
+    assert listed['kiro_cli']['kind'] == 'cli' and listed['kiro_cli']['available'] is False
+    assert SECRET not in json.dumps(listed)
 
 
 def test_calls_through_the_registry_never_return_the_key(agent, sdks):

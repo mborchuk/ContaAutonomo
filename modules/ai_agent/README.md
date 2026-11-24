@@ -36,8 +36,9 @@ Kiro as a program on the server.
 
 | Function | Method | Notes |
 |---|---|---|
-| `ai.complete_text` | `complete_text(system, user, max_tokens)` | The selected provider's reply text; `external=True` (the message leaves the app). `max_tokens` is not passed to a CLI |
-| `ai.text_status` | `text_status()` | `{'available', 'provider', 'reason'}`; the reason says what to configure |
+| `ai.complete_text` | `complete_text(system, user, max_tokens, provider=None)` | The selected provider's reply text, or the provider the caller names (a module that lets the owner choose); `external=True` (the message leaves the app). `max_tokens` is not passed to a CLI |
+| `ai.text_status` | `text_status(provider=None)` | `{'available', 'provider', 'reason'}`; the reason says what to configure |
+| `ai.list_providers` | `list_providers()` | `{'data': [{'id', 'name', 'kind' ('api' or 'cli'), 'model', 'available', 'reason', 'selected'}]}`; no key |
 
 A question that cannot be answered now (no key, CLI agents off, binary
 missing) raises `FunctionUnavailable` with that reason. The API key is read

@@ -6,6 +6,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **AI Agent: a caller may choose the provider.** `ai.complete_text` and
+  `ai.text_status` take an optional `provider`, and `ai.list_providers`
+  lists every provider with its model and whether it can answer now, so a
+  module can let the owner choose where its data goes. Without `provider`
+  nothing changes.
 - **Documents: search in the text of PDFs.** A background job reads the
   text of each stored PDF through `pdf.extract_text` — existing files too —
   and indexes it with SQLite FTS5, so saving a document stays fast. The
