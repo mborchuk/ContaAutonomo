@@ -128,6 +128,7 @@
                     {% if df.pdfa %}<span class="status-badge status-active" style="margin-left: 6px;" title="The PDF declares this archival PDF/A level (ISO 19005) in its metadata; not validated">{{ df.pdfa }}</span>{% endif %}
                     <div style="font-size: 11px; color: var(--color-text-faint); margin-top: 2px;">
                         {% if df.sha256 %}SHA-256 <code title="{{ df.sha256 }}">{{ short(df.sha256) }}…</code>{% else %}No fingerprint yet — Verify integrity records one{% endif %}
+                        {% if text_status.get(df.id) %} · {{ text_status[df.id] }}{% endif %}
                     </div>
                     {% set earlier = versions.get(df.id, []) %}
                     {% if earlier %}

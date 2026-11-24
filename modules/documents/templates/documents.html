@@ -14,7 +14,7 @@
         <div class="form-grid-3">
             <div>
                 <label style="display: block; margin-bottom: 5px; font-size: 14px;">Search</label>
-                <input type="text" name="q" class="form-control" placeholder="Name, identifier, reference, tags..."
+                <input type="text" name="q" class="form-control" placeholder="Name, identifier, reference, tags, words in PDFs..."
                        value="{{ request.args.get('q', '') }}">
             </div>
             <div>
@@ -121,6 +121,9 @@
                     {% if doc.expiry_date %}
                     <br><span style="font-size: 11px; color: {{ 'var(--color-danger)' if doc.expiry_date < today else 'var(--color-text-faint)' }};">
                         {{ 'Expired' if doc.expiry_date < today else 'Expires' }}: {{ doc.expiry_date.strftime('%d/%m/%Y') }}</span>
+                    {% endif %}
+                    {% if text_hits.get(doc.id) %}
+                    <br><span class="doc-text-hit" style="font-size: 11px; color: var(--color-text-muted); font-weight: normal;">In the file: {{ text_hits[doc.id] }}</span>
                     {% endif %}
                 </td>
                 <td>
