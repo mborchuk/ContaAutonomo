@@ -24,6 +24,23 @@ from timeutil import utcnow
 logger = logging.getLogger(__name__)
 
 
+_FTS_SHADOWS = ('_data', '_idx', '_content', '_docsize', '_config')
+
+
+def _search_indexes(connection):
+    """(virtual tables, all their table names) of SQLite full-text indexes.
+    They are derived data: never in a backup, dropped by a restore, and
+    rebuilt by the module that owns them when it starts."""
+    from sqlalchemy import text
+    if connection.dialect.name != 'sqlite':
+        return set(), set()
+    virtual = {name for (name,) in connection.execute(text(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND sql LIKE 'CREATE VIRTUAL TABLE%'"))}
+    names = set(virtual) | {v + s for v in virtual for s in _FTS_SHADOWS}
+    return virtual, names
+
+
 def _sanitize_for_log(value, max_length=200):
     """
     Sanitize potentially user-controlled values before logging.
@@ -468,6 +485,7 @@ class BackupModule(BaseModule):
                 'tables': {}}
         inspector = sa_inspect(self._db.engine)
         skip = {'backup_config'}  # don't backup our own config
+        skip |= _search_indexes(self._db.session.connection())[1]
         for table_name in inspector.get_table_names():
             if table_name in skip:
                 continue
@@ -552,6 +570,10 @@ class BackupModule(BaseModule):
             # Inspect through the session's own connection: an engine-level
             # inspector checks out (and on return rolls back) a connection,
             # which on a shared connection undoes the deletes below.
+            # Search indexes would no longer match the restored rows: drop
+            # them; their modules rebuild them at the restart.
+            for name in _search_indexes(db.session.connection())[0]:
+                db.session.execute(text(f'DROP TABLE IF EXISTS "{_check_name(name)}"'))
             inspector = sa_inspect(db.session.connection())
             existing = set(inspector.get_table_names())
             skip = {'backup_config', 'module_enabled'}

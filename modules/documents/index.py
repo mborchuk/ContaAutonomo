@@ -13,7 +13,49 @@ import os
 from db_helpers import db_get, db_get_or_404
 from timeutil import utcnow
 
-from . import dublin_core, integrity, retention
+from . import dublin_core, integrity, retention, text_index
+
+# Background reading of PDF text. The scheduler ticks every minute; the job
+# runs when the interval set in Settings → Documents has passed (stored in the
+# database, so every worker process sees the same setting).
+TEXT_JOB_TICK = 60             # seconds
+TEXT_JOB_DEFAULTS = {'enabled': True, 'interval': 5, 'batch': 10}
+TEXT_JOB_INTERVAL_RANGE = (1, 1440)   # minutes
+TEXT_JOB_BATCH_RANGE = (1, 100)       # files per run
+TEXT_JOB_BATCH = TEXT_JOB_DEFAULTS['batch']
+TEXT_JOB_MAX_ATTEMPTS = 3      # a file that keeps failing is left alone
+TEXT_JOB_BUDGET = 600          # seconds a scheduled run may read (job timeout 900)
+READ_NOW_BUDGET = 60           # seconds for "Read now" (gunicorn timeout is 120)
+TEXT_STATUS_LABELS = {
+    'ok': 'Searchable',
+    'no_text_layer': 'No text layer (a scan: needs OCR)',
+    'encrypted': 'Encrypted: text not readable',
+    'unreadable': 'Not a readable PDF',
+    'too_large': 'Too large to read',
+    'error': 'Could not be read',
+}
+# Document-level badge of how far its PDFs' text has been read (CSS class of
+# the shared status badges; the text says it too, never the colour alone).
+TEXT_BADGES = {
+    'searchable': {'label': 'Text read', 'css': 'status-paid',
+                   'title': 'The text of every PDF is read and searchable'},
+    'partly': {'label': 'Partly read', 'css': 'status-warning',
+               'title': 'Some PDFs are searchable; others are scans or cannot be read'},
+    'waiting': {'label': 'Text pending', 'css': 'status-closed',
+                'title': 'Waiting for the background job (Settings → Documents)'},
+    'scan': {'label': 'Scan: needs OCR', 'css': 'status-warning',
+             'title': 'No text layer: an OCR module is needed to read it'},
+    'failed': {'label': 'Text not readable', 'css': 'status-failed',
+               'title': 'Encrypted, broken, too large, or could not be fetched'},
+}
+
+
+def _create_text_index(target, connection, **kw):
+    text_index.create(connection)
+
+
+def _drop_text_index(target, connection, **kw):
+    text_index.drop(connection)
 
 
 class DocumentsModule(BaseModule):
@@ -32,7 +74,7 @@ class DocumentsModule(BaseModule):
 
     @property
     def version(self):
-        return '0.8.0'
+        return '0.9.0'
 
     @property
     def nav_items(self):
@@ -157,7 +199,30 @@ class DocumentsModule(BaseModule):
             created_at = db.Column(db.DateTime, default=utcnow)
             updated_at = db.Column(db.DateTime, default=utcnow, onupdate=utcnow)
 
+        class DocumentText(db.Model):
+            """Text read from one stored PDF (pdf.extract_text), for search."""
+            __tablename__ = 'document_text'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            storage_key = db.Column(db.String(500), unique=True, nullable=False)
+            sha256 = db.Column(db.String(64))
+            status = db.Column(db.String(20), nullable=False)  # pdf_text statuses, or error
+            method = db.Column(db.String(30))
+            page_count = db.Column(db.Integer)
+            empty_pages = db.Column(db.Integer)
+            text = db.Column(db.Text)
+            attempts = db.Column(db.Integer, default=1)
+            extracted_at = db.Column(db.DateTime, default=utcnow)
+
+        # The FTS5 index follows the table in create_all / drop_all.
+        from sqlalchemy import event
+        table = DocumentText.__table__
+        if not event.contains(table, 'after_create', _create_text_index):
+            event.listen(table, 'after_create', _create_text_index)
+            event.listen(table, 'before_drop', _drop_text_index)
+
         self.Document = Document
+        self.DocumentText = DocumentText
         self.DocumentCategory = DocumentCategory
         self.DocumentFile = DocumentFile
         self.DocumentFileVersion = DocumentFileVersion
@@ -166,6 +231,7 @@ class DocumentsModule(BaseModule):
         self.DocumentHistory = DocumentHistory
         self.DocumentNote = DocumentNote
         return {'DocumentCategory': DocumentCategory, 'DocumentFile': DocumentFile,
+                'DocumentText': DocumentText,
                 'DocumentFileVersion': DocumentFileVersion, 'DocumentDisposal': DocumentDisposal,
                 'DocumentConfig': DocumentConfig, 'DocumentHistory': DocumentHistory,
                 'DocumentNote': DocumentNote}
@@ -224,6 +290,9 @@ class DocumentsModule(BaseModule):
                 self.DocumentFileVersion.__table__.create(self._db.engine)
             if 'document_disposal' not in inspector.get_table_names():
                 self.DocumentDisposal.__table__.create(self._db.engine)
+            if 'document_text' not in inspector.get_table_names():
+                self.DocumentText.__table__.create(self._db.engine)
+            self._ensure_text_index()
             if 'document_category' in inspector.get_table_names():
                 cat_cols = [c['name'] for c in inspector.get_columns('document_category')]
                 if 'retention_years' not in cat_cols:
@@ -264,6 +333,15 @@ class DocumentsModule(BaseModule):
                 timeout=120)
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error('Failed to register the expiry-messages job: %s', e)
+        try:
+            self.core.scheduler.add_job(
+                job_id='documents.read_text', func=self.scheduled_read_text,
+                job_type='interval', interval=TEXT_JOB_TICK,
+                description='Read the text of new PDF files for search '
+                            '(how often and how many: Settings → Documents)',
+                timeout=900)
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.error('Failed to register the read-text job: %s', e)
 
     def _backfill_identifiers(self):
         """Give every document without one an identifier, oldest first, in
@@ -385,6 +463,11 @@ class DocumentsModule(BaseModule):
         @login_required
         def retention_index():
             return module._retention_index()
+
+        @bp.route('/text/read-now', methods=['POST'])
+        @login_required
+        def text_read_now():
+            return module._read_text_now()
 
         @bp.route('/retention/<int:id>/keep', methods=['POST'])
         @login_required
@@ -676,8 +759,11 @@ class DocumentsModule(BaseModule):
         notes = self.DocumentNote.query.filter_by(
             document_id=doc.id).order_by(self.DocumentNote.created_at.desc()).all()
         category_colors = self._get_category_colors()
+        file_states = self._file_text_states(doc_files)
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
                                versions=versions, short=integrity.short,
+                               text_states=file_states,
+                               text_badge=self._document_text_state(list(file_states.values())),
                                is_record=self._is_record(doc),
                                retention_due=retention.is_due(doc),
                                category_retention=self._category_retention(doc.category),
@@ -689,15 +775,18 @@ class DocumentsModule(BaseModule):
         query = self.Document.query
 
         q = request.args.get('q', '').strip()
+        text_hits = {}
         if q:
             like = f'%{q}%'
-            query = query.filter(
-                self.Document.name.ilike(like) |
-                self.Document.description.ilike(like) |
-                self.Document.tags.ilike(like) |
-                self.Document.identifier.ilike(like) |
-                self.Document.reference_number.ilike(like)
-            )
+            match = (self.Document.name.ilike(like) |
+                     self.Document.description.ilike(like) |
+                     self.Document.tags.ilike(like) |
+                     self.Document.identifier.ilike(like) |
+                     self.Document.reference_number.ilike(like))
+            text_hits = self._text_matches(q)    # words in the files' text
+            if text_hits:
+                match = match | self.Document.id.in_(list(text_hits))
+            query = query.filter(match)
 
         cat = request.args.get('category', '').strip()
         if cat:
@@ -754,6 +843,8 @@ class DocumentsModule(BaseModule):
                                years=sorted(years, reverse=True),
                                sort_by=sort_by, sort_dir=sort_dir,
                                page=page, total_pages=total_pages, total=total,
+                               text_hits=text_hits,
+                               text_badges=self._documents_text_states(files_by_doc),
                                today=date.today())
 
     def _create_document(self):
@@ -926,6 +1017,7 @@ class DocumentsModule(BaseModule):
         A file already gone from the backend (e.g. removed in Google Drive)
         must never block deleting the database record.
         """
+        self._forget_text(storage_key)
         try:
             self.core.storage.delete(storage_key)
         except Exception as e:
@@ -1045,6 +1137,278 @@ class DocumentsModule(BaseModule):
         duplicated document shares its files)."""
         return (self.DocumentFile.query.filter_by(file_path=key).count()
                 + self.DocumentFileVersion.query.filter_by(file_path=key).count()) > 0
+
+    # ---- text of stored PDFs, for search ----
+
+    def _ensure_text_index(self):
+        """Create the FTS5 index when it is missing (database from before it,
+        or SQLite gained FTS5) and index the stored texts."""
+        session = self._db.session
+        if text_index.available(session):
+            return
+        with self._db.engine.begin() as conn:
+            created = text_index.create(conn)
+        if created:
+            text_index.rebuild(session)
+            session.commit()
+
+    def _pending_query(self):
+        """Stored PDFs whose text has not been read, or failed and may be
+        tried again."""
+        DF, DT = self.DocumentFile, self.DocumentText
+        return (self._db.session.query(DF.file_path)
+                .outerjoin(DT, DT.storage_key == DF.file_path)
+                .filter((self._db.func.lower(DF.file_format) == 'pdf')
+                        | DF.original_filename.ilike('%.pdf'))
+                .filter((DT.id.is_(None))
+                        | ((DT.status == 'error') & (DT.attempts < TEXT_JOB_MAX_ATTEMPTS))))
+
+    def _pending_text_files(self, limit):
+        """Storage keys of the next `limit` PDFs to read, oldest files first."""
+        DF = self.DocumentFile
+        query = self._pending_query().order_by(DF.created_at, DF.id)
+        return list(dict.fromkeys(key for (key,) in query.limit(limit * 3).all()))[:limit]
+
+    def read_text(self, storage_key):
+        """Read one stored PDF through pdf.extract_text and keep the result.
+        Returns the status, or None when nothing provides the function."""
+        functions = getattr(self.core, 'functions', None)
+        if functions is None or not functions.available('pdf.extract_text'):
+            return None
+        session = self._db.session
+        row = self.DocumentText.query.filter_by(storage_key=storage_key).first()
+        try:
+            stored = self.core.storage.get(storage_key)
+            if not stored:
+                raise FileNotFoundError('stored file not found')
+            data = stored[0]
+            result = functions.call('pdf.extract_text', pdf_bytes=data)
+        except Exception as e:
+            # Storage (Google Drive) may be unreachable for a while: try later.
+            self.logger.warning('Reading text of a document file failed: %s',
+                                type(e).__name__)
+            if row is None:
+                row = self.DocumentText(storage_key=storage_key, attempts=0)
+                session.add(row)
+            row.status, row.attempts = 'error', (row.attempts or 0) + 1
+            row.extracted_at = utcnow()
+            session.commit()
+            return 'error'
+        if row is not None:
+            if self._indexed():
+                text_index.remove(session, row.id, row.text)
+        else:
+            row = self.DocumentText(storage_key=storage_key, attempts=0)
+            session.add(row)
+        row.status = result.get('status') or 'error'
+        row.method = result.get('method')
+        row.page_count = result.get('page_count')
+        row.empty_pages = len(result.get('empty_pages') or [])
+        row.text = result.get('text') or ''
+        row.sha256 = integrity.sha256(data)
+        row.attempts = (row.attempts or 0) + 1
+        row.extracted_at = utcnow()
+        session.flush()
+        if self._indexed():
+            text_index.add(session, row.id, row.text)
+        session.commit()
+        return row.status
+
+    def read_pending_text(self, limit=TEXT_JOB_BATCH, budget=None):
+        """Read the text of up to `limit` PDFs not read yet, stopping after
+        `budget` seconds (None: no limit). Returns {storage key: status} for
+        the files it read."""
+        import time
+        started = time.monotonic()
+        done = {}
+        for key in self._pending_text_files(limit):
+            if budget is not None and time.monotonic() - started > budget:
+                break
+            status = self.read_text(key)
+            if status is None:      # nothing provides pdf.extract_text
+                break
+            done[key] = status
+        return done
+
+    def text_job_config(self):
+        """{enabled, interval (minutes), batch (files)} from Settings → Documents."""
+        def number(key, default, bounds):
+            try:
+                value = int(self._get_config(key, default))
+            except (TypeError, ValueError):
+                return default
+            return min(max(value, bounds[0]), bounds[1])
+        d = TEXT_JOB_DEFAULTS
+        return {'enabled': self._get_config('text_job_enabled', '1') == '1',
+                'interval': number('text_job_interval', d['interval'], TEXT_JOB_INTERVAL_RANGE),
+                'batch': number('text_job_batch', d['batch'], TEXT_JOB_BATCH_RANGE)}
+
+    def _text_job_last_run(self):
+        try:
+            return datetime.fromisoformat(self._get_config('text_job_last_run', ''))
+        except ValueError:
+            return None
+
+    def scheduled_read_text(self, now=None):
+        """Scheduler tick: read a batch when the job is on and its interval
+        has passed since the last run. Returns what read_pending_text did, or
+        {} when it was not time."""
+        cfg = self.text_job_config()
+        if not cfg['enabled']:
+            return {}
+        now = now or datetime.now()
+        last = self._text_job_last_run()
+        if last and now - last < timedelta(minutes=cfg['interval']):
+            return {}
+        # Recorded first, so a run that fails is not repeated every minute.
+        self._set_config('text_job_last_run', now.isoformat(timespec='seconds'))
+        return self.read_pending_text(cfg['batch'], budget=TEXT_JOB_BUDGET)
+
+    def _text_counts(self):
+        """How far the stored PDFs have been read, for the settings panel."""
+        DT = self.DocumentText
+        by_status = dict(self._db.session.query(DT.status, self._db.func.count(DT.id))
+                         .group_by(DT.status).all())
+        return {'waiting': self._pending_query().distinct().count(),
+                'searchable': by_status.get('ok', 0),
+                'no_text_layer': by_status.get('no_text_layer', 0),
+                'failed': sum(n for s, n in by_status.items()
+                              if s not in ('ok', 'no_text_layer'))}
+
+    def _read_text_now(self):
+        """Read one batch now (Settings → Documents → Read now), within the
+        time a web request may take."""
+        done = self.read_pending_text(self.text_job_config()['batch'], budget=READ_NOW_BUDGET)
+        if not done and not self._pending_text_files(1):
+            flash('No PDF is waiting to be read.', 'info')
+        elif not done:
+            flash('Nothing provides pdf.extract_text: no PDF could be read.', 'warning')
+        else:
+            ok = sum(1 for s in done.values() if s == 'ok')
+            flash(f'{len(done)} PDF(s) read, {ok} searchable.', 'success')
+        self._set_config('text_job_last_run', datetime.now().isoformat(timespec='seconds'))
+        return redirect(url_for('settings') + '#mod_documents')
+
+    # ---- Settings → Documents ----
+
+    @property
+    def settings_tab(self):
+        return {'id': 'documents', 'label': 'Documents'}
+
+    def get_settings_html(self, settings):
+        cfg = self.text_job_config()
+        return self.render_settings_template(
+            'documents_settings_panel.html', cfg=cfg, counts=self._text_counts(),
+            last_run=self._text_job_last_run(),
+            interval_range=TEXT_JOB_INTERVAL_RANGE, batch_range=TEXT_JOB_BATCH_RANGE)
+
+    def save_settings(self, settings, form):
+        if 'documents_submitted' not in form:
+            return  # guard: another tab's form
+        values = {}
+        for key, field, bounds in (('text_job_interval', 'text_job_interval',
+                                    TEXT_JOB_INTERVAL_RANGE),
+                                   ('text_job_batch', 'text_job_batch', TEXT_JOB_BATCH_RANGE)):
+            try:
+                value = int(form.get(field, ''))
+            except (TypeError, ValueError):
+                self.core.flash('Text reading: enter whole numbers; nothing was changed.',
+                                'warning')
+                return
+            if not bounds[0] <= value <= bounds[1]:
+                self.core.flash(f'Text reading: values must be between {bounds[0]} and '
+                                f'{bounds[1]}; nothing was changed.', 'warning')
+                return
+            values[key] = str(value)
+        values['text_job_enabled'] = '1' if form.get('text_job_enabled') else '0'
+        for key, value in values.items():
+            self._set_config(key, value)
+
+    def _indexed(self):
+        return text_index.available(self._db.session)
+
+    def _forget_text(self, storage_key):
+        """Drop the text of a stored file that is being deleted."""
+        row = self.DocumentText.query.filter_by(storage_key=storage_key).first()
+        if row is None:
+            return
+        if self._indexed():
+            text_index.remove(self._db.session, row.id, row.text)
+        self._db.session.delete(row)
+
+    def _text_matches(self, query):
+        """{document id: snippet} of documents whose file text matches."""
+        snippets = text_index.search(self._db.session, query)
+        if not snippets:
+            return {}
+        found = {}
+        for doc_id, key in self._db.session.query(
+                self.DocumentFile.document_id, self.DocumentFile.file_path).filter(
+                self.DocumentFile.file_path.in_(list(snippets))).all():
+            found.setdefault(doc_id, snippets[key])
+        return found
+
+    @staticmethod
+    def _is_pdf(f):
+        return ((f.file_format or '').lower() == 'pdf'
+                or (f.original_filename or '').lower().endswith('.pdf'))
+
+    def _file_text_states(self, files):
+        """{file id: {state, label}} for the PDFs among `files`, one query.
+        state: waiting, searchable, scan or failed (TEXT_BADGES)."""
+        pdfs = [f for f in files if self._is_pdf(f)]
+        if not pdfs:
+            return {}
+        rows = {r.storage_key: r for r in self.DocumentText.query.filter(
+            self.DocumentText.storage_key.in_([f.file_path for f in pdfs])).all()}
+        out = {}
+        for f in pdfs:
+            row = rows.get(f.file_path)
+            if row is None:
+                state, label = 'waiting', 'Waiting to be read'
+            elif row.status == 'error' and (row.attempts or 0) < TEXT_JOB_MAX_ATTEMPTS:
+                state, label = 'waiting', 'Could not be fetched, will try again'
+            elif row.status == 'ok':
+                state = 'searchable'
+                label = f'Searchable, {row.page_count} page(s)' + (
+                    f', {row.empty_pages} without text' if row.empty_pages else '')
+            elif row.status == 'no_text_layer':
+                state, label = 'scan', TEXT_STATUS_LABELS['no_text_layer']
+            else:
+                state = 'failed'
+                label = TEXT_STATUS_LABELS.get(row.status, row.status)
+            out[f.id] = {'state': state, 'label': label}
+        return out
+
+    @staticmethod
+    def _document_text_state(states):
+        """One badge for a document from its PDFs' states, or None without PDFs:
+        waiting while any PDF is; searchable when all are; partly when some are."""
+        values = [s['state'] for s in states]
+        if not values:
+            return None
+        if 'waiting' in values:
+            key = 'waiting'
+        elif all(v == 'searchable' for v in values):
+            key = 'searchable'
+        elif 'searchable' in values:
+            key = 'partly'
+        elif all(v == 'scan' for v in values):
+            key = 'scan'
+        else:
+            key = 'failed'
+        return {'state': key, **TEXT_BADGES[key]}
+
+    def _documents_text_states(self, files_by_doc):
+        """{document id: badge} for the list page."""
+        files = [f for fs in files_by_doc.values() for f in fs]
+        per_file = self._file_text_states(files)
+        out = {}
+        for doc_id, fs in files_by_doc.items():
+            badge = self._document_text_state([per_file[f.id] for f in fs if f.id in per_file])
+            if badge:
+                out[doc_id] = badge
+        return out
 
     def _delete_file_and_versions(self, df):
         """Delete a file with its earlier versions; a stored file another

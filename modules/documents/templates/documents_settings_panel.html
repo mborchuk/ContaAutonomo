@@ -1,0 +1,51 @@
+<h3>Reading the text of PDFs</h3>
+<p style="font-size: 13px; color: var(--color-text-muted);">
+    A background job reads the text of stored PDFs (through <code>pdf.extract_text</code>)
+    so the Documents search finds words inside them. Scans have no text layer and
+    need an OCR module.
+</p>
+
+<div class="form-group" style="margin-bottom: 14px;">
+    <label style="display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+        <input type="checkbox" name="text_job_enabled" value="1"{% if cfg.enabled %} checked{% endif %}>
+        Read the text of new PDFs in the background
+    </label>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end;">
+    <div>
+        <label for="text_job_interval" style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">Run every (minutes)</label>
+        <input type="number" id="text_job_interval" name="text_job_interval" class="form-control"
+               min="{{ interval_range[0] }}" max="{{ interval_range[1] }}" step="1"
+               value="{{ cfg.interval }}" style="width: 120px;" required>
+    </div>
+    <div>
+        <label for="text_job_batch" style="display: block; font-weight: 600; font-size: 13px; margin-bottom: 4px;">PDFs per run</label>
+        <input type="number" id="text_job_batch" name="text_job_batch" class="form-control"
+               min="{{ batch_range[0] }}" max="{{ batch_range[1] }}" step="1"
+               value="{{ cfg.batch }}" style="width: 120px;" required>
+    </div>
+</div>
+<p class="fine-print" style="margin-top: 6px;">
+    {{ interval_range[0] }}–{{ interval_range[1] }} minutes, {{ batch_range[0] }}–{{ batch_range[1] }} PDFs.
+    A run stops after 10 minutes even if PDFs are left; the next run continues.
+</p>
+
+<div class="table-wrap" style="margin-top: 14px;">
+<table class="data-table" style="max-width: 520px;">
+    <tbody>
+        <tr><td>Waiting to be read</td><td class="text-right num" id="text-waiting">{{ counts.waiting }}</td></tr>
+        <tr><td>Searchable</td><td class="text-right num">{{ counts.searchable }}</td></tr>
+        <tr><td>Scans (no text layer)</td><td class="text-right num">{{ counts.no_text_layer }}</td></tr>
+        <tr><td>Could not be read</td><td class="text-right num">{{ counts.failed }}</td></tr>
+        <tr><td>Last run</td><td class="text-right">{{ last_run.strftime('%d/%m/%Y %H:%M') if last_run else 'not yet' }}</td></tr>
+    </tbody>
+</table>
+</div>
+
+<button type="submit" class="btn btn-secondary" style="margin-top: 12px;"
+        formaction="{{ url_for('documents.text_read_now') }}" formmethod="post" formnovalidate>
+    Read now ({{ cfg.batch }} PDFs, at most one minute)
+</button>
+
+<input type="hidden" name="documents_submitted" value="1">
