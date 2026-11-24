@@ -2,7 +2,7 @@
 
 
 def test_enable_while_serving_defers_load_without_error(loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
 
     mm = loaded_modules
     module_id = 'invoice_comments'  # has a blueprint; not enabled by the fixture
@@ -26,7 +26,7 @@ def test_enable_while_serving_defers_load_without_error(loaded_modules, client):
 
 
 def test_loaded_modules_are_not_marked_restart_required(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
 
     mm = loaded_modules
     model = mm._get_module_enabled_model()

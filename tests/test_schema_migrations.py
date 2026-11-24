@@ -19,7 +19,7 @@ RELEASE_SCHEMAS = ['schema_v1_0_0.sql', 'schema_v1_4_0.sql']
 
 
 def _core_tables():
-    from app import (Bank, Contractor, Customer, Document, Expense, Invoice,
+    from contaautonomo.app import (Bank, Contractor, Customer, Document, Expense, Invoice,
                      InvoiceItem, Settings, SSPayment, TaxForm)
     models = (Settings, Customer, Bank, Contractor, Invoice, InvoiceItem,
               Expense, TaxForm, Document, SSPayment)
@@ -54,8 +54,8 @@ def _assert_current_schema(db_path):
 
 @pytest.mark.parametrize('schema', RELEASE_SCHEMAS)
 def test_run_migrations_upgrades_release_schema(app, tmp_path, schema):
-    from app import db
-    from schema_migrations import run_migrations
+    from contaautonomo.app import db
+    from contaautonomo.core.schema_migrations import run_migrations
 
     db_path = _release_db(tmp_path, schema)
     engine = create_engine(f'sqlite:///{db_path}')
@@ -73,8 +73,8 @@ def test_run_migrations_upgrades_release_schema(app, tmp_path, schema):
 
 
 def test_run_migrations_fresh_database(app, tmp_path):
-    from app import db
-    from schema_migrations import run_migrations
+    from contaautonomo.app import db
+    from contaautonomo.core.schema_migrations import run_migrations
 
     db_path = tmp_path / 'fresh.db'
     engine = create_engine(f'sqlite:///{db_path}')
@@ -87,7 +87,7 @@ def test_run_migrations_fresh_database(app, tmp_path):
 
 def test_core_columns_cover_every_model_column_missing_from_oldest_release(app):
     """A new core model column must be listed in CORE_COLUMNS."""
-    from schema_migrations import CORE_COLUMNS
+    from contaautonomo.core.schema_migrations import CORE_COLUMNS
 
     oldest = sqlite3.connect(':memory:')
     oldest.executescript((FIXTURES / RELEASE_SCHEMAS[0]).read_text())
@@ -110,7 +110,8 @@ def test_docker_entrypoint_upgrades_release_schema(tmp_path, schema, workers):
     if workers:
         env['GUNICORN_WORKERS'] = workers
     result = subprocess.run(
-        [sys.executable, '-c', 'import docker_entrypoint; docker_entrypoint.init()'],
+        [sys.executable, '-c', "import sys; sys.path.insert(0, 'deploy'); "
+         'import docker_entrypoint; docker_entrypoint.init()'],
         cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr[-2000:]
     assert 'Auto-init failed' not in result.stderr

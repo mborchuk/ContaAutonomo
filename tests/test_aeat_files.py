@@ -288,7 +288,7 @@ def _auth(client):
 
 
 def test_download_routes(loaded_modules, app, client):
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     settings = Settings.query.first()
     if settings is None:
         settings = Settings()
@@ -330,7 +330,7 @@ def test_supported_models_are_documented():
 
 def test_347_page_warns_about_lines_the_file_cannot_complete(loaded_modules, app, client):
     from datetime import date
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
     cust = Customer(name='Sin Codigo Postal SL', vat_number='B76543210', tax_type='standard')
     db.session.add(cust)
     db.session.flush()

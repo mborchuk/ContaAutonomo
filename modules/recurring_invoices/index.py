@@ -16,11 +16,11 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .cadence import CADENCES, due_dates
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 class RecurringInvoicesModule(BaseModule):
@@ -127,7 +127,7 @@ class RecurringInvoicesModule(BaseModule):
 
     def _materialize(self, tpl, run_date):
         """Create one DRAFT invoice from a template for `run_date`."""
-        from app import Invoice, InvoiceItem, invoice_amounts
+        from contaautonomo.app import Invoice, InvoiceItem, invoice_amounts
 
         items = json.loads(tpl.items_json)
         total = sum(float(i['quantity']) * float(i['unit_price']) for i in items)
@@ -186,7 +186,7 @@ class RecurringInvoicesModule(BaseModule):
     # --- Dashboard nudge (F7-D3) ------------------------------------------- #
 
     def get_dashboard_panels(self):
-        from app import Invoice
+        from contaautonomo.app import Invoice
         gen_rows = self.RecurringGeneration.query.all()
         draft_ids = [g.invoice_id for g in gen_rows]
         pending = 0
@@ -223,7 +223,7 @@ class RecurringInvoicesModule(BaseModule):
         module = self
 
         def _form_ctx():
-            from app import Customer, Bank
+            from contaautonomo.app import Customer, Bank
             settings = module.core.get_settings()
             tracked = ['USD', 'EUR', 'GBP', 'CZK']
             if settings and settings.tracked_currencies:
@@ -336,7 +336,7 @@ class RecurringInvoicesModule(BaseModule):
         @bp.route('/from-invoice/<int:invoice_id>', methods=['POST'])
         @login_required
         def recurring_from_invoice(invoice_id):
-            from app import Invoice
+            from contaautonomo.app import Invoice
             inv = db_get_or_404(Invoice, invoice_id)
             items = [{'description': it.description, 'quantity': it.quantity,
                       'unit_price': it.unit_price_usd} for it in inv.items]

@@ -3,9 +3,9 @@ import io
 
 import pytest
 
-import pdf_text
-from functions import Function, Param
-from module_manager import BaseModule
+from contaautonomo.core import pdf_text
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule
 
 
 def _pdf(*pages):

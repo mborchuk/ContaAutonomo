@@ -20,7 +20,7 @@ def stored_expense(loaded_modules):
     Storage is the real local filesystem (only the DB is in-memory), so the
     file is removed afterwards.
     """
-    from app import db, Expense
+    from contaautonomo.app import db, Expense
 
     key = loaded_modules.core.save_file(io.BytesIO(b'\xff\xd8\xff fake jpg'),
                                         'expenses_files', 'rptatt_ticket.jpg')

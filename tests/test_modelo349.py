@@ -35,7 +35,7 @@ def test_missing_vat_number_is_flagged():
 
 
 def test_draft_page_matches_303_box_59(app, loaded_modules, client):
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
 
     customer = Customer(name='ACME Synthetic s.r.o.', tax_type='eu_b2b',
                         vat_number='CZ 123 45 678')

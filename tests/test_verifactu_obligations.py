@@ -43,7 +43,7 @@ def test_no_obligation_starts_in_2026():
 def test_documents_do_not_give_2026_as_the_verifactu_start():
     pattern = re.compile(r'verifactu[^\n]{0,80}\b(1 july|1 de julio|july|julio)\s*2026',
                          re.IGNORECASE)
-    for doc in ('README.md', 'MODULES_DOCUMENTATION.md', 'CHANGELOG.md',
+    for doc in ('README.md', 'docs/MODULES_DOCUMENTATION.md', 'CHANGELOG.md',
                 'modules/verifactu/README.md', 'modules/einvoice/README.md'):
         text = (ROOT / doc).read_text(encoding='utf-8')
         assert not pattern.search(text), doc

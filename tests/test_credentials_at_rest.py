@@ -4,8 +4,7 @@ import json
 import pytest
 from sqlalchemy import text
 
-import secret_box
-
+from contaautonomo.security import secret_box
 SECRET = 'plain-credential-value-123'
 
 
@@ -40,7 +39,7 @@ def test_key_file_created_private(tmp_path, monkeypatch):
 
 
 def test_core_currency_key_stored_encrypted_and_migrated(app):
-    from app import Settings, db, init_database
+    from contaautonomo.app import Settings, db, init_database
     s = Settings.query.first() or Settings()
     s.currency_provider_api_key = SECRET
     db.session.add(s)
@@ -61,7 +60,7 @@ def test_core_currency_key_stored_encrypted_and_migrated(app):
 
 
 def test_backup_password_encrypted_and_migrated(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     mod = loaded_modules.modules['backup']
     cfg = mod._get_config()
     cfg.custom_password = SECRET
@@ -79,7 +78,7 @@ def test_backup_password_encrypted_and_migrated(loaded_modules):
 
 
 def test_smtp_password_encrypted_in_json_and_migrated(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     mod = loaded_modules.modules['invoice_email']
     cfg = mod._smtp_config()
     cfg['password'] = SECRET
@@ -105,7 +104,7 @@ def test_smtp_password_encrypted_in_json_and_migrated(loaded_modules):
     ('pdf_signature', 'pdf_signature_config', 'certificate_password'),
 ])
 def test_module_credential_columns_encrypted(standalone_module, module_id, table, attr):
-    from app import db
+    from contaautonomo.app import db
     inst = standalone_module(module_id)
     cfg = inst._get_config()
     setattr(cfg, attr, SECRET)
@@ -118,7 +117,7 @@ def test_module_credential_columns_encrypted(standalone_module, module_id, table
 
 def test_database_dump_reveals_no_credential(loaded_modules):
     """The backup JSON (raw SQL dump) contains ciphertext only."""
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     s = Settings.query.first() or Settings()
     s.currency_provider_api_key = SECRET
     db.session.add(s)

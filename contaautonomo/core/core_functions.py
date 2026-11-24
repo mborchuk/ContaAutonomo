@@ -6,7 +6,7 @@ for PDFs, declared and implemented here, like a module does in
 (`ModuleManager.register_core_functions`), so this file imports nothing from
 app.py.
 """
-from functions import Function, InvalidArguments, Param
+from contaautonomo.core.functions import Function, InvalidArguments, Param
 
 DATE_FROM = Param('date_from', 'date', 'Earliest date, YYYY-MM-DD')
 DATE_TO = Param('date_to', 'date', 'Latest date, YYYY-MM-DD')
@@ -104,8 +104,7 @@ def register(registry, core, Invoice, Customer, message_center=None, invoice_pdf
 def register_pdf_text(registry):
     """`pdf.extract_text` (pdf_text.py), as a default: a module that declares
     the same name (PyMuPDF, OCR) replaces it."""
-    import pdf_text
-
+    from contaautonomo.core import pdf_text
     registry.register_core(Function(
         'pdf.extract_text', pdf_text.extract,
         "The text layer of a PDF, page by page (pypdf; no OCR). A scanned PDF has "
@@ -159,7 +158,7 @@ def register_invoice_pdf(registry, core, invoice_pdf):
 
 def register_messages(registry, center):
     """`messages.post` and `messages.unread_count` (message_center.py)."""
-    from message_center import IMAGE_MAX_PX, LEVELS, MAX_KEY, MAX_TEXT
+    from contaautonomo.core.message_center import IMAGE_MAX_PX, LEVELS, MAX_KEY, MAX_TEXT
 
     def post(source, text, level='info', image=None, key=None):
         msg, created = center.post(source, text, level=level, image=image, key=key)

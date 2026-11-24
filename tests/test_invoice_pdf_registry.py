@@ -7,8 +7,8 @@ from datetime import date
 import pytest
 from pypdf import PdfReader
 
-from functions import InvalidArguments
-from module_manager import BaseModule, LocalStorageBackend
+from contaautonomo.core.functions import InvalidArguments
+from contaautonomo.core.module_manager import BaseModule, LocalStorageBackend
 
 
 class Templates(BaseModule):
@@ -23,7 +23,7 @@ class Templates(BaseModule):
 
 @pytest.fixture
 def pdfs(loaded_modules, client, tmp_path, monkeypatch):
-    from app import Invoice, Settings, db
+    from contaautonomo.app import Invoice, Settings, db
     monkeypatch.setattr(loaded_modules.core, '_storage_backend', LocalStorageBackend(str(tmp_path)))
     monkeypatch.setitem(loaded_modules.modules, 'zz_pdf_templates', Templates(loaded_modules.core))
     settings = Settings.query.first() or Settings()
@@ -109,7 +109,7 @@ def test_download_says_when_the_default_template_was_used(pdfs):
 
 
 def test_new_invoice_pdf_uses_the_chosen_template(pdfs):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     functions, _, choose, client = pdfs
     choose('zz_plain')
     client.post('/create', data={

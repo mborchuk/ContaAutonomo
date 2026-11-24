@@ -17,7 +17,7 @@ def expenses_module(loaded_modules):
 
 
 def test_list_view_renders_contractor_name(expenses_module):
-    from app import app as flask_app, db
+    from contaautonomo.app import app as flask_app, db
 
     em = expenses_module
     contractor = em.Contractor(name='ACME Corp')
@@ -42,7 +42,7 @@ def test_list_view_renders_contractor_name(expenses_module):
 
 
 def test_list_view_handles_missing_contractor(expenses_module):
-    from app import app as flask_app, db
+    from contaautonomo.app import app as flask_app, db
 
     em = expenses_module
     db.session.add(em.Expense(

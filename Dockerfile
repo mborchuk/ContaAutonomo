@@ -20,14 +20,16 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt && \
 COPY . .
 
 # Writable dirs for runtime data
+# (the data folder is /app; the code is in /app/contaautonomo and /app/modules)
 RUN mkdir -p instance logs backups invoices_pdf expenses_files documents_files \
-    tax_forms invoice_logos pdf_signature_files static
+    tax_forms invoice_logos pdf_signature_files
 
 ENV FLASK_DEBUG=0
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
 VOLUME ["/app/instance", "/app/backups", "/app/logs"]
 
-ENTRYPOINT ["python", "docker_entrypoint.py"]
+ENTRYPOINT ["python", "deploy/docker_entrypoint.py"]

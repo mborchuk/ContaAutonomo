@@ -15,7 +15,7 @@ from datetime import date
 
 from flask import Blueprint, render_template
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .calendar_data import (
     CALENDAR_VERSION,
@@ -107,7 +107,7 @@ class FiscalCalendarModule(BaseModule):
     def _default_forms(self):
         """Smart default: distinct TaxForm.form_type values, else every form."""
         try:
-            from app import TaxForm
+            from contaautonomo.app import TaxForm
             rows = self._db.session.query(TaxForm.form_type).distinct().all()
             forms = {r[0] for r in rows if r[0]}
             # TaxForm.form_type may hold '303' etc; keep only known forms.
@@ -146,7 +146,7 @@ class FiscalCalendarModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         year = Param('year', 'int', 'Fiscal year', required=True, minimum=2000, maximum=2100)
         entry = ('{"form", "period", "period_label", "year", "quarter": 1-4 or None, '
                  '"window_start": date, "window_end": date, "verified": bool}')

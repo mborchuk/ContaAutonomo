@@ -157,7 +157,7 @@ def test_filing_window_is_february(year, end):
 # --- module + page ---------------------------------------------------------- #
 
 def test_draft_347_from_issued_invoices_and_page(loaded_modules, app, client):
-    from app import Contractor, Customer, Expense, Invoice, _issue_invoice, db
+    from contaautonomo.app import Contractor, Customer, Expense, Invoice, _issue_invoice, db
     cust = Customer(name='Cliente 347 SL', vat_number='B22222222', tax_type='standard')
     over = Contractor(name='Proveedor 347 SL', vat_number='B33333333')
     db.session.add_all([cust, over])

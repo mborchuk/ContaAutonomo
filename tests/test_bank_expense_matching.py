@@ -50,7 +50,7 @@ def bank(loaded_modules):
 
 
 def _seed(bank, tag, amount=42.42):
-    from app import Contractor, Expense, db
+    from contaautonomo.app import Contractor, Expense, db
     contractor = Contractor(name=f'Supplier {tag}')
     db.session.add(contractor)
     db.session.flush()
@@ -82,7 +82,7 @@ def test_module_suggests_and_link_requires_confirmation(bank, client):
 
 
 def test_linked_expense_is_not_suggested_again(bank):
-    from app import db
+    from contaautonomo.app import db
     exp, m = _seed(bank, 'D5B', amount=13.13)
     m.status, m.matched_type, m.matched_id = 'matched', 'expense', exp.id
     db.session.commit()

@@ -5,15 +5,15 @@ Handles expense tracking with file uploads, contractor relationships,
 multi-currency support, and category filtering.
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
-from repositories import ExpenseRepository, SettingsRepository
+from contaautonomo.core.repositories import ExpenseRepository, SettingsRepository
 import os
 import re
 from . import deduction_rules
-from db_helpers import db_get, db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get, db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 
@@ -381,7 +381,7 @@ class ExpensesModule(BaseModule):
 
         app.register_blueprint(bp)
 
-        from app import csrf
+        from contaautonomo.app import csrf
         if csrf:
             csrf.exempt(expenses_capture_share)
 
@@ -427,7 +427,7 @@ class ExpensesModule(BaseModule):
         }
 
     def _api_expenses(self, request):
-        from api_errors import ApiError  # lazy: only when API calls in
+        from contaautonomo.utils.api_errors import ApiError  # lazy: only when API calls in
         repo = self._get_repo()
 
         if request.method == 'POST':
@@ -496,8 +496,8 @@ class ExpensesModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        from core_functions import DATE_FROM, DATE_TO, PAGE, PAGED, PER_PAGE
-        from functions import Function, Param
+        from contaautonomo.core.core_functions import DATE_FROM, DATE_TO, PAGE, PAGED, PER_PAGE
+        from contaautonomo.core.functions import Function, Param
         return [Function(
             'ledger.list_expenses', self.list_expenses,
             'Business expenses, newest first. Filters: date_from/date_to (expense date), '
@@ -530,7 +530,7 @@ class ExpensesModule(BaseModule):
                 'page': page, 'per_page': per_page, 'total': total}
 
     def _api_get_expense(self, request, exp_id=None):
-        from api_errors import ApiError
+        from contaautonomo.utils.api_errors import ApiError
         exp = db_get(self.Expense, exp_id)
         if not exp:
             raise ApiError(404, 'not_found', f'Expense #{exp_id} not found')

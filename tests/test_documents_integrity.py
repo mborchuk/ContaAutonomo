@@ -55,7 +55,7 @@ class MemoryStorage:
 
 @pytest.fixture
 def docs(app, loaded_modules, client, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     module = loaded_modules.modules['documents']
     storage = MemoryStorage()
     for name in ('save', 'get', 'exists', 'delete', 'send'):
@@ -122,7 +122,7 @@ def test_signing_keeps_the_unsigned_file(docs, client, loaded_modules, monkeypat
 
 
 def test_verify_reports_unchanged_changed_missing_and_records_new(docs, client):
-    from app import db
+    from contaautonomo.app import db
     _create(client)
     df = docs.DocumentFile.query.one()
     resp = client.post(f'/documents/view/{df.document_id}/verify', follow_redirects=True)

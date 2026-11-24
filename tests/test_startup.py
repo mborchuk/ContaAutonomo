@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_only_one_scheduler_leads(app, tmp_path):
-    from module_manager import TaskScheduler
+    from contaautonomo.core.module_manager import TaskScheduler
 
     lock = str(tmp_path / 'scheduler.lock')
     first, second = TaskScheduler(app, lock), TaskScheduler(app, lock)
@@ -28,7 +28,7 @@ def test_only_one_scheduler_leads(app, tmp_path):
 
 @pytest.mark.parametrize('lead', [True, False])
 def test_scheduler_loop_runs_jobs_only_as_leader(app, tmp_path, monkeypatch, lead):
-    from module_manager import TaskScheduler
+    from contaautonomo.core.module_manager import TaskScheduler
 
     lock = str(tmp_path / 'scheduler.lock')
     other = TaskScheduler(app, lock)
@@ -68,7 +68,8 @@ def _serve(tmp_path, workers):
     log = tmp_path / 'gunicorn.log'
     with open(log, 'w') as out:
         proc = subprocess.Popen(
-            [sys.executable, '-m', 'gunicorn', 'app:app'], cwd=ROOT, env=env,
+            [sys.executable, '-m', 'gunicorn', '--config', 'deploy/gunicorn.conf.py',
+             'contaautonomo.app:app'], cwd=ROOT, env=env,
             stdout=out, stderr=subprocess.STDOUT)
     try:
         status = None
@@ -101,8 +102,7 @@ def test_gunicorn_initialises_workers_and_one_scheduler(tmp_path, workers, boote
 def test_bootstrap_initialises_under_an_exclusive_start_up_lock(app, tmp_path, monkeypatch):
     """Parallel workers must not run create_all/migrations at the same time."""
     import fcntl
-    import app as appmod
-
+    from contaautonomo import app as appmod
     lock_path = str(tmp_path / 'init.lock')
     monkeypatch.setitem(app.config, 'INIT_LOCK_PATH', lock_path)
     monkeypatch.setattr(appmod, 'module_manager', None)

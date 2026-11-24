@@ -42,7 +42,7 @@ def test_direction_words():
 
 @pytest.fixture
 def synthetic_year(loaded_modules, app):
-    from app import Customer, Expense, Invoice, db
+    from contaautonomo.app import Customer, Expense, Invoice, db
     cust = Customer(name='Provision Test SL', tax_type='standard')
     db.session.add(cust)
     db.session.flush()
@@ -83,7 +83,7 @@ def test_total_equals_the_four_engine_results(synthetic_year):
 
 
 def test_vat_credit_reduces_the_total(synthetic_year):
-    from app import Expense, db
+    from contaautonomo.app import Expense, db
     tp = synthetic_year.modules['tax_provision']
     before = tp.provision(TODAY)
     db.session.add(Expense(amount=12100.0, currency='EUR', category='Software',

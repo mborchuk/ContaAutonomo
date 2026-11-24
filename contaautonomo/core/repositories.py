@@ -4,8 +4,10 @@
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import os
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+
+from contaautonomo import paths
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 class BaseRepository:
@@ -139,10 +141,10 @@ class ExpenseRepository(BaseRepository):
             if storage:
                 file_path = storage.save_file(file, 'expenses_files', filename)
             else:
-                upload_folder = os.path.join(app.root_path, 'expenses_files')
+                upload_folder = os.path.join(paths.data_dir(), 'expenses_files')
                 os.makedirs(upload_folder, exist_ok=True)
                 file_path = os.path.join('expenses_files', filename)
-                file.save(os.path.join(app.root_path, file_path))
+                file.save(os.path.join(paths.data_dir(), file_path))
 
         kwargs['file_path'] = file_path
         return self.create(**kwargs)
@@ -162,10 +164,10 @@ class ExpenseRepository(BaseRepository):
                 if expense.file_path:
                     storage.delete_file(expense.file_path)
             else:
-                upload_folder = os.path.join(app.root_path, 'expenses_files')
+                upload_folder = os.path.join(paths.data_dir(), 'expenses_files')
                 os.makedirs(upload_folder, exist_ok=True)
                 new_path = os.path.join('expenses_files', filename)
-                file.save(os.path.join(app.root_path, new_path))
+                file.save(os.path.join(paths.data_dir(), new_path))
 
             expense.file_path = new_path
 
@@ -179,7 +181,7 @@ class ExpenseRepository(BaseRepository):
             if storage:
                 storage.delete_file(expense.file_path)
             else:
-                file_full_path = os.path.join(app.root_path, expense.file_path)
+                file_full_path = os.path.join(paths.data_dir(), expense.file_path)
                 if os.path.exists(file_full_path):
                     os.remove(file_full_path)
 

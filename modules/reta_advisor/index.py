@@ -17,8 +17,8 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from constants import counts_as_income
-from module_manager import BaseModule
+from contaautonomo.utils.constants import counts_as_income
+from contaautonomo.core.module_manager import BaseModule
 
 from .brackets import (BRACKET_TABLE_VERSION, GENERIC_DEDUCTION_PCT,
                        apply_values, brackets_for_year, contribution_rate_for_year,
@@ -57,7 +57,7 @@ class RetaAdvisorModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         return [Function(
             'reta.projection', self.projection,
             'RETA projection for the year of `today`: bracket, quota and the year-end '
@@ -115,7 +115,7 @@ class RetaAdvisorModule(BaseModule):
 
     def _ytd_figures(self, today=None):
         """(income_eur, expenses_eur, months_elapsed) for the current year."""
-        from app import Invoice, Expense
+        from contaautonomo.app import Invoice, Expense
         today = today or date.today()
         year = today.year
 

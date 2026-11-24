@@ -140,5 +140,5 @@ def test_manager_normalises_and_sorts_widgets(loaded_modules, widgets):
 
 
 def test_base_module_has_no_widgets_by_default():
-    from module_manager import BaseModule
+    from contaautonomo.core.module_manager import BaseModule
     assert BaseModule.get_header_widgets(object()) == []

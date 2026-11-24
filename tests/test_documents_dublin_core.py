@@ -64,7 +64,7 @@ def test_next_identifier_counts_within_the_year():
 
 @pytest.fixture
 def documents(app, loaded_modules, client, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     module = loaded_modules.modules['documents']
     saved = {}
 
@@ -118,7 +118,7 @@ def test_edit_and_duplicate_keep_identifiers_unique(documents, client):
 
 
 def test_existing_documents_get_identifiers_once(documents):
-    from app import db
+    from contaautonomo.app import db
     for year, name in ((2024, 'old'), (2025, 'older-added-later'), (2024, 'old-2')):
         db.session.add(documents.Document(name=name, file_path='_multi_',
                                           created_at=datetime(year, 3, 1)))

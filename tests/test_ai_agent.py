@@ -11,8 +11,8 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from werkzeug.datastructures import MultiDict
 
-import secret_box
-from functions import FunctionRegistry, FunctionUnavailable
+from contaautonomo.security import secret_box
+from contaautonomo.core.functions import FunctionRegistry, FunctionUnavailable
 from modules.ai_agent import catalog, cli, vendors
 
 SECRET = 'sk-synthetic-agent-key'
@@ -29,14 +29,14 @@ def agent(standalone_module, app):
 def _clear(model):
     """Delete every row and forget the loaded objects, so a new row with the
     same id does not meet a stale one in the session."""
-    from app import db
+    from contaautonomo.app import db
     model.query.delete()
     db.session.commit()
     db.session.expunge_all()
 
 
 def _configure(mod, **values):
-    from app import db
+    from contaautonomo.app import db
     cfg = mod._get_config()
     for key, value in values.items():
         setattr(cfg, key, value)
@@ -252,7 +252,7 @@ def test_cli_binary_from_the_environment(cli_env, monkeypatch):
 
 @pytest.fixture
 def parser_cfg(standalone_module, app):
-    from app import db
+    from contaautonomo.app import db
     parser = standalone_module('ai_parser')
     _clear(parser.AIParserConfig)
 
@@ -268,12 +268,12 @@ def parser_cfg(standalone_module, app):
 
 def _raw(sql):
     from sqlalchemy import text
-    from app import db
+    from contaautonomo.app import db
     return db.session.execute(text(sql)).scalar()
 
 
 def test_parser_settings_are_copied_once(agent, parser_cfg):
-    from app import db
+    from contaautonomo.app import db
     parser_cfg(provider='kiro_cli', openai_api_key=SECRET, openai_model='gpt-6-luna',
                anthropic_api_key='', kiro_cli_model='claude-sonnet-5-5')
     stored = _raw('SELECT openai_api_key FROM ai_parser_config')
@@ -305,7 +305,7 @@ def test_nothing_to_copy_without_parser_settings(agent, parser_cfg):
 
 def test_on_enable_copies_then_encrypts(agent, parser_cfg):
     from sqlalchemy import text
-    from app import db
+    from contaautonomo.app import db
     parser_cfg(provider='openai')
     # A key stored in plaintext by an old version is encrypted once copied.
     db.session.execute(text("UPDATE ai_parser_config SET openai_api_key = :k"), {'k': SECRET})

@@ -17,8 +17,8 @@ expenses with zero Spanish VAT are left out of the deductible base.
 
 from datetime import date
 
-from constants import counts_as_income
-from invoice_amounts import (
+from contaautonomo.utils.constants import counts_as_income
+from contaautonomo.core.invoice_amounts import (
     customer_tax_type as _customer_tax_type,
     invoice_base_eur as _invoice_base_eur,
 )

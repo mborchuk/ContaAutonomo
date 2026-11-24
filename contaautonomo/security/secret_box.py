@@ -19,6 +19,8 @@ import base64
 import hashlib
 import logging
 import os
+
+from contaautonomo import paths
 import secrets
 
 from sqlalchemy.types import String, TypeDecorator
@@ -43,7 +45,7 @@ def _key_file_path():
             return configured
         return os.path.join(current_app.instance_path, 'credentials.key')
     except RuntimeError:  # no app context (scripts)
-        return os.path.join('instance', 'credentials.key')
+        return os.path.join(paths.instance_dir(), 'credentials.key')
 
 
 def _load_key():

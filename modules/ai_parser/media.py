@@ -5,7 +5,7 @@ PDFs as documents, everything else as images.
 """
 import base64
 
-from file_validation import sniff_kind
+from contaautonomo.security.file_validation import sniff_kind
 
 PDF = 'application/pdf'
 IMAGE_TYPES = ('image/jpeg', 'image/png', 'image/gif', 'image/webp')

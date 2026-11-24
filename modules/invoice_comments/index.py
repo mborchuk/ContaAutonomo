@@ -3,10 +3,10 @@ Invoice Comments Module
 Internal comments/notes on invoices — not visible on PDF.
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, request, redirect, url_for, render_template_string
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 class InvoiceCommentsModule(BaseModule):

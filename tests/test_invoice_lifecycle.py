@@ -28,7 +28,7 @@ def _auth(client):
 # --- F2-D2 / F2-D4: issue assigns sequence + freezes snapshot ---------------
 
 def test_issue_assigns_series_sequence_and_snapshot(app):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -47,7 +47,7 @@ def test_issue_assigns_series_sequence_and_snapshot(app):
 
 
 def test_snapshot_survives_customer_change(app):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -59,7 +59,7 @@ def test_snapshot_survives_customer_change(app):
 
 
 def test_sequence_increments_per_series(app):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     a = _draft(db, Invoice, Customer, number='DRAFT-A')
     _issue_invoice(a, request_obj=None)
@@ -70,7 +70,7 @@ def test_sequence_increments_per_series(app):
 
 
 def test_non_standard_customer_has_zero_vat_snapshot(app):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer, tax_type='eu_b2b')
     _issue_invoice(inv, request_obj=None)
@@ -81,7 +81,7 @@ def test_non_standard_customer_has_zero_vat_snapshot(app):
 # --- F2-D1: lock enforcement -----------------------------------------------
 
 def test_locked_helper():
-    from app import _invoice_locked
+    from contaautonomo.app import _invoice_locked
     assert _invoice_locked(SimpleNamespace(status='issued')) is True
     assert _invoice_locked(SimpleNamespace(status='paid')) is True
     assert _invoice_locked(SimpleNamespace(status='draft')) is False
@@ -90,7 +90,7 @@ def test_locked_helper():
 
 
 def test_edit_route_blocks_issued_invoice(app, client):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -102,7 +102,7 @@ def test_edit_route_blocks_issued_invoice(app, client):
 
 
 def test_delete_route_blocks_issued_invoice(app, client):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -115,8 +115,8 @@ def test_delete_route_blocks_issued_invoice(app, client):
 
 
 def test_invoice_service_locks_issued(app):
-    from app import db, Invoice, Customer, _issue_invoice
-    from module_manager import InvoiceService
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.core.module_manager import InvoiceService
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -127,7 +127,7 @@ def test_invoice_service_locks_issued(app):
 # --- F2-D3: rectify + annul -------------------------------------------------
 
 def test_rectify_creates_linked_draft_without_mutating_original(app, client):
-    from app import db, Invoice, InvoiceItem, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, InvoiceItem, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     db.session.add(InvoiceItem(invoice_id=inv.id, description='Work', quantity=1,
@@ -152,7 +152,7 @@ def test_rectify_creates_linked_draft_without_mutating_original(app, client):
 
 
 def test_annul_marks_cancelled_and_retains(app, client):
-    from app import db, Invoice, Customer, _issue_invoice
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
 
     inv = _draft(db, Invoice, Customer)
     _issue_invoice(inv, request_obj=None)
@@ -169,8 +169,8 @@ def test_annul_marks_cancelled_and_retains(app, client):
 
 def test_issue_hook_veto_aborts(app, monkeypatch):
     import sys
-    from app import db, Invoice, Customer, _issue_invoice
-    appmod = sys.modules['app']
+    from contaautonomo.app import db, Invoice, Customer, _issue_invoice
+    appmod = sys.modules['contaautonomo.app']
 
     class Vetoer:
         def on_invoice_issued(self, invoice, request):

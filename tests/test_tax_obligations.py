@@ -12,7 +12,7 @@ def tax_mgmt(loaded_modules):
 def _pin_forms(loaded_modules, forms):
     """Pin fiscal_calendar's selected forms so rows are deterministic."""
     import json
-    from app import db
+    from contaautonomo.app import db
     fc = loaded_modules.modules['fiscal_calendar']
     row = fc.Config.query.filter_by(key='selected_forms').first()
     if not row:
@@ -23,7 +23,7 @@ def _pin_forms(loaded_modules, forms):
 
 
 def test_obligation_rows_cross_calendar_with_filings(tax_mgmt, loaded_modules):
-    from app import db
+    from contaautonomo.app import db
 
     _pin_forms(loaded_modules, ['303'])
     # Record a filed Q1 2026 303 with amount.
@@ -66,7 +66,7 @@ def test_record_filing_creates_and_updates(tax_mgmt, loaded_modules, client):
 
 
 def test_filings_report_section(tax_mgmt):
-    from app import db
+    from contaautonomo.app import db
 
     db.session.add(tax_mgmt.TaxForm(form_type='303', year=2026, quarter=3,
                                     file_path='', status='paid', amount=99.0))
@@ -79,7 +79,7 @@ def test_filings_report_section(tax_mgmt):
 
 
 def test_overdue_note_on_tax_panel(tax_mgmt, loaded_modules):
-    from app import db, Settings
+    from contaautonomo.app import db, Settings
 
     _pin_forms(loaded_modules, ['303'])
     settings = Settings.query.first()
@@ -102,8 +102,8 @@ def test_no_obligations_without_a_calendar(tax_mgmt, loaded_modules, client, mon
 
 
 def test_obligations_follow_the_calendar_function(tax_mgmt, loaded_modules, monkeypatch):
-    from functions import Function, Param
-    from module_manager import BaseModule
+    from contaautonomo.core.functions import Function, Param
+    from contaautonomo.core.module_manager import BaseModule
 
     def entry(form):
         return {'form': form, 'period': 'Q1', 'period_label': 'Q1 2031', 'year': 2031,

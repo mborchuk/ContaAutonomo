@@ -3,8 +3,8 @@ from datetime import date
 
 import pytest
 
-from functions import Function, Param
-from module_manager import BaseModule, LocalStorageBackend
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule, LocalStorageBackend
 
 
 def _replacement(mm, mid, *functions):
@@ -25,7 +25,7 @@ def pdf_signature(loaded_modules, standalone_module, monkeypatch):
 
 
 def _invoice(number):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     inv = Invoice(invoice_number=number, client_name='Sign Test SL', amount_usd=0.0,
                   amount_eur=100.0, exchange_rate=1.0, invoice_date=date(2026, 11, 12),
                   status='draft', currency='EUR')
@@ -42,7 +42,7 @@ def test_extract_signatures_function(loaded_modules, standalone_module, monkeypa
 
 def test_sign_invoice_signs_only_what_the_form_asked_for(loaded_modules, pdf_signature,
                                                          monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     calls = []
     monkeypatch.setattr(pdf_signature, '_sign_invoice_pdf',
                         lambda invoice, visual, digital: calls.append(
@@ -60,7 +60,7 @@ def test_sign_invoice_signs_only_what_the_form_asked_for(loaded_modules, pdf_sig
 
 def test_signing_certificate_feeds_the_facturae_signature(loaded_modules, pdf_signature,
                                                           monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     from modules.einvoice import xades
     einvoice = loaded_modules.modules['einvoice']
     monkeypatch.setattr(xades, 'available', lambda: True)
@@ -91,7 +91,7 @@ def test_invoice_badge_uses_any_signature_reader(loaded_modules, pdf_signature, 
 
 def test_new_invoice_pdf_is_signed_through_the_function(loaded_modules, client, tmp_path,
                                                         monkeypatch):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     seen = []
     signer = Function('pdf.sign_invoice',
                       lambda invoice_id: seen.append(invoice_id) or

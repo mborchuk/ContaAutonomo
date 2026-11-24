@@ -8,8 +8,8 @@ from datetime import date
 
 import pytest
 
-from functions import Function, Param
-from module_manager import BaseModule
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule
 from modules.documents import ai_suggest
 
 from test_documents_text import MemoryStorage, _pdf
@@ -56,7 +56,7 @@ REPLY = json.dumps({'name': 'Póliza hogar 2027', 'category': 'insurance',
 
 @pytest.fixture
 def docs(app, loaded_modules, client, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     module = loaded_modules.modules['documents']
     module._ensure_text_index()
     storage = MemoryStorage()
@@ -329,7 +329,7 @@ def test_the_page_shows_the_running_request_and_refuses_a_second(docs, client, a
 
 def test_a_request_cut_off_is_closed(docs, client, ai, loaded_modules, monkeypatch):
     from datetime import timedelta
-    from timeutil import utcnow
+    from contaautonomo.utils.timeutil import utcnow
     ai()
     monkeypatch.setattr(loaded_modules.modules['documents'], '_start_background', lambda w: None)
     doc = _document(docs, client)

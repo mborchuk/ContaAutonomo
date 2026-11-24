@@ -5,8 +5,8 @@ Full backup/restore: DB (JSON) + all uploaded files in a single ZIP archive.
 Supports optional AES encryption, custom backup path, and external storage integration.
 """
 
-from module_manager import BaseModule
-from settings_forms import secret_from_form
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.utils.settings_forms import secret_from_form
 from flask import (Blueprint, request, redirect, url_for,
                    flash, send_file, render_template)
 from datetime import datetime, date
@@ -18,8 +18,12 @@ import json
 import shutil
 import zipfile
 import logging
-from secret_box import EncryptedString, encrypt_existing
-from timeutil import utcnow
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
+from contaautonomo.utils.timeutil import utcnow
+
+
+# Synthetic demo dataset this module loads on request (Settings → Backup).
+DEMO_DATA = Path(__file__).resolve().parent / 'demo_data.json'
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +138,7 @@ class BackupModule(BaseModule):
         self._app = app
 
         # Rate-limit the resource-intensive backup/restore endpoints.
-        from app import limiter
+        from contaautonomo.app import limiter
 
         def _rl(rule):
             def deco(f):
@@ -218,7 +222,7 @@ class BackupModule(BaseModule):
         @_rl('10/minute')
         @login_required
         def load_demo():
-            demo_path = Path(module.core.app_path) / 'demo_data.json'
+            demo_path = DEMO_DATA
             if not demo_path.exists():
                 flash('demo_data.json not found.', 'danger')
                 return redirect(url_for('settings') + '#security')
@@ -362,7 +366,7 @@ class BackupModule(BaseModule):
         if typed_password:
             candidates.append(typed_password)
             try:
-                from auth import auth_manager
+                from contaautonomo.security.auth import auth_manager
                 key = auth_manager.get_encryption_key(typed_password)
                 candidates.append(key.decode('utf-8') if isinstance(key, bytes) else key)
             except Exception as e:  # no auth config (external login only)
@@ -398,7 +402,7 @@ class BackupModule(BaseModule):
             auto_backup=bool(cfg.auto_backup_enabled),
             ext_ok=self._is_external_storage_enabled(),
             key_source=self._key_source(),
-            demo_available=(Path(self.core.app_path) / 'demo_data.json').exists(),
+            demo_available=DEMO_DATA.exists(),
             backups=self._get_backup_list())
 
     def _key_source(self):
@@ -709,7 +713,7 @@ class BackupModule(BaseModule):
 
     def _encrypt_fallback(self, data, password):
         import tempfile
-        from auth import auth_manager
+        from contaautonomo.security.auth import auth_manager
         with tempfile.NamedTemporaryFile(delete=False, suffix='.dat') as tmp:
             tmp.write(data)
             tmp_path = tmp.name
@@ -723,7 +727,7 @@ class BackupModule(BaseModule):
 
     def _decrypt_fallback(self, data, password):
         import tempfile
-        from auth import auth_manager
+        from contaautonomo.security.auth import auth_manager
         with tempfile.NamedTemporaryFile(delete=False, suffix='.enc') as tmp:
             tmp.write(data)
             tmp_path = tmp.name

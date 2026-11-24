@@ -1,11 +1,16 @@
 """Pytest fixtures: a Flask app + in-memory SQLite DB.
 
-DATABASE_URL and FLASK_DEBUG are set *before* importing app so the app binds to
+DATABASE_URL, FLASK_DEBUG and CONTAAUTONOMO_DATA_DIR are set *before* importing
+the app so it binds to
 an in-memory database and boots in dev mode (no SECRET_KEY hard-fail).
 """
 import os
+import tempfile
 
 os.environ.setdefault('DATABASE_URL', 'sqlite:///:memory:')
+# Runtime data (logs, uploads, generated PDFs, instance/) goes to a temporary
+# folder, never into the checkout, which may hold the owner's real data.
+os.environ.setdefault('CONTAAUTONOMO_DATA_DIR', tempfile.mkdtemp(prefix='contaautonomo-tests-'))
 os.environ.setdefault('FLASK_DEBUG', '1')
 # Fixed Verifactu key so tests never create instance/verifactu.key in the checkout.
 os.environ.setdefault('VERIFACTU_KEY', 'test-verifactu-key')
@@ -14,8 +19,8 @@ os.environ.setdefault('CREDENTIALS_KEY', 'test-credentials-key')
 
 import pytest
 
-from app import app as flask_app, db as _db  # noqa: E402
-from module_manager import ModuleManager  # noqa: E402
+from contaautonomo.app import app as flask_app, db as _db  # noqa: E402
+from contaautonomo.core.module_manager import ModuleManager  # noqa: E402
 
 
 @pytest.fixture
@@ -52,8 +57,8 @@ def _loaded_modules_session():
     the suite exercises (expenses, tax_es_forms).
     """
     import sys
-    from app import Bank, Customer, Invoice, Message, Settings
-    appmod = sys.modules['app']
+    from contaautonomo.app import Bank, Customer, Invoice, Message, Settings
+    appmod = sys.modules['contaautonomo.app']
 
     ctx = flask_app.app_context()
     ctx.push()
@@ -92,7 +97,7 @@ def standalone_module(loaded_modules):
     hooks, so other tests are not affected. One instance per module for the
     whole session: declaring a module's models a second time makes
     SQLAlchemy warn and replaces the classes other tests hold."""
-    from app import db
+    from contaautonomo.app import db
     cache = loaded_modules.__dict__.setdefault('_standalone_cache', {})
 
     def make(module_id):

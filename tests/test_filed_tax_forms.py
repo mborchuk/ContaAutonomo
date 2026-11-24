@@ -90,7 +90,7 @@ def test_upload_stores_filed_boxes_and_amount(tax_forms, client):
 
 
 def test_read_boxes_of_earlier_uploads(tax_forms, client, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
 
     pdf = aeat_pdf('303', 2026, '1T', [('29', '53,35'), ('71', '-53,35')])
     db.session.add(tax_forms.TaxForm(form_type='303', year=2026, quarter=1,
@@ -114,7 +114,7 @@ def test_upload_for_another_period_stores_no_boxes(tax_forms, client):
 
 
 def test_box_05_uses_the_filed_result_of_earlier_quarters(year_2026, loaded_modules):  # noqa: F811
-    from app import db
+    from contaautonomo.app import db
 
     tm = loaded_modules.modules['tax_management']
     estimated_q2, _ = year_2026.modelo130_boxes(2026, 2)

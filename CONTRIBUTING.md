@@ -30,7 +30,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
 
-FLASK_DEBUG=1 python app.py      # http://127.0.0.1:5000
+FLASK_DEBUG=1 python -m contaautonomo.app      # http://127.0.0.1:5000
 ```
 
 Dependencies are locked with hashes. Add or change a dependency in
@@ -50,14 +50,14 @@ python -m pytest
 - **Build features as modules.** Most features live in `modules/<name>/` and
   plug into the core through hooks. See
   [`modules/README.md`](modules/README.md) and
-  [`MODULES_DOCUMENTATION.md`](MODULES_DOCUMENTATION.md) before changing
-  `app.py` or `module_manager.py`.
+  [`MODULES_DOCUMENTATION.md`](docs/MODULES_DOCUMENTATION.md) before changing
+  `contaautonomo/app.py` or `contaautonomo/core/module_manager.py`.
 - **Tests are required** for anything touching tax calculations, invoice
   lifecycle state, or data deletion. Bug fixes should include a regression
   test that fails without the fix.
 - **Schema changes** use the existing idempotent `ALTER TABLE` pattern — they
   must run safely on both a fresh and an existing database. A new column on a
-  core model goes into `CORE_COLUMNS` in `schema_migrations.py`, the one
+  core model goes into `CORE_COLUMNS` in `contaautonomo/core/schema_migrations.py`, the one
   routine every entry point runs; module columns go in the module's
   `on_enable()`.
 - **Tax logic** must state its scope and carry "estimate, not tax advice"
@@ -69,7 +69,7 @@ python -m pytest
   formatted as a whole yet, so do not reformat unrelated code.
 - `make coverage` runs the tests with a coverage report; CI publishes the
   coverage table in each run's summary.
-- Update the documentation (`README.md`, `MODULES_DOCUMENTATION.md`, module
+- Update the documentation (`README.md`, `docs/MODULES_DOCUMENTATION.md`, module
   READMEs, `CHANGELOG.md`) when behavior changes.
 
 ## Pull Request Process

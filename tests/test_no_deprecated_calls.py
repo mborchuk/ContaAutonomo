@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from timeutil import utcnow
+from contaautonomo.utils.timeutil import utcnow
 
 PATTERNS = {
     'datetime.utcnow': re.compile(r'\bdatetime\.utcnow\b'),

@@ -11,7 +11,7 @@ import io
 import logging
 import re
 
-from constants import MAX_CONTENT_LENGTH_BYTES
+from contaautonomo.utils.constants import MAX_CONTENT_LENGTH_BYTES
 
 METHOD = 'pypdf'
 DEFAULT_MAX_PAGES = 200

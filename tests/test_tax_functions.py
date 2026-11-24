@@ -5,8 +5,8 @@ from datetime import date
 
 import pytest
 
-from functions import Function, Param
-from module_manager import BaseModule
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule
 
 YEAR = 2034  # synthetic year, no other test writes it
 
@@ -27,7 +27,7 @@ def registry(loaded_modules):
 
 
 def test_filed_boxes_and_ss_payments(loaded_modules, registry):
-    from app import db
+    from contaautonomo.app import db
     tm = loaded_modules.modules['tax_management']
     db.session.add(tm.TaxForm(form_type='130', year=YEAR, quarter=1, file_path='',
                               status='filed', filed_boxes=json.dumps({'07': 210.5})))

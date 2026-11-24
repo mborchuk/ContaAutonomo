@@ -15,7 +15,7 @@ def expenses_module(loaded_modules):
 
 def test_expense_model_column_parity():
     """Core app.py Expense and the module mirror must expose the same columns."""
-    from app import Expense as CoreExpense
+    from contaautonomo.app import Expense as CoreExpense
     from sqlalchemy import inspect as sa_inspect
 
     core_cols = {c.key for c in sa_inspect(CoreExpense).columns}
@@ -26,7 +26,7 @@ def test_expense_model_column_parity():
 def test_module_expense_has_vat_columns(expenses_module):
     from sqlalchemy import inspect as sa_inspect
     mod_cols = {c.key for c in sa_inspect(expenses_module.Expense).columns}
-    from app import Expense as CoreExpense
+    from contaautonomo.app import Expense as CoreExpense
     core_cols = {c.key for c in sa_inspect(CoreExpense).columns}
     # Parity for the F4 fields across both declaration sites.
     for field in ('net_amount', 'vat_rate', 'vat_amount', 'deductible', 'deductible_pct'):
@@ -64,7 +64,7 @@ def test_parse_vat_no_rate_leaves_unknown():
 # --- F4-D4: tax obligations use real VAT, count missing --------------------
 
 def test_tax_obligations_uses_real_vat_and_counts_missing(expenses_module):
-    from app import db
+    from contaautonomo.app import db
 
     em = expenses_module
     # One expense with VAT data, one legacy (no VAT).

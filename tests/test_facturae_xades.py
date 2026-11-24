@@ -34,7 +34,7 @@ def _pfx(password=PASSWORD):
 
 @pytest.fixture
 def issued(loaded_modules):
-    from app import Customer, Invoice, Settings, _issue_invoice, db
+    from contaautonomo.app import Customer, Invoice, Settings, _issue_invoice, db
     # Other tests drop and recreate the tables; forget their rows so a new
     # Settings() does not clash with a stale one in the session.
     db.session.expunge_all()

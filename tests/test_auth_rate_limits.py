@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 @pytest.fixture
 def auth_client(loaded_modules, app, client, tmp_path, monkeypatch):
-    from auth import auth_manager
+    from contaautonomo.security.auth import auth_manager
 
     def reset_counters():
         for limiter in app.extensions.get('limiter', ()):
@@ -24,7 +24,7 @@ def auth_client(loaded_modules, app, client, tmp_path, monkeypatch):
 
 
 def test_login_post_limited_to_five_per_minute(auth_client):
-    from auth import auth_manager
+    from contaautonomo.security.auth import auth_manager
 
     auth_manager.setup_password('synthetic-login-pass')
     codes = [auth_client.post('/login', data={'password': 'wrong-synthetic'}).status_code
@@ -52,7 +52,7 @@ def test_limits_are_per_client_address(auth_client):
 def test_trusted_proxy_count_enables_proxy_fix(count, expected):
     env = dict(os.environ, TRUSTED_PROXY_COUNT=count, FLASK_DEBUG='1',
                DATABASE_URL='sqlite:///:memory:')
-    script = ('from werkzeug.middleware.proxy_fix import ProxyFix; import app; '
+    script = ('from werkzeug.middleware.proxy_fix import ProxyFix; from contaautonomo import app; '
               'print(isinstance(app.app.wsgi_app, ProxyFix))')
     out = subprocess.run(
         [sys.executable, '-c', script],

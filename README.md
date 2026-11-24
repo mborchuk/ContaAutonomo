@@ -117,7 +117,7 @@ cd ContaAutonomo
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-FLASK_DEBUG=1 python app.py
+FLASK_DEBUG=1 python -m contaautonomo.app
 ```
 
 Open [http://127.0.0.1:5000](http://127.0.0.1:5000). For tests and development dependencies, see the Makefile and `requirements-dev.txt`.
@@ -167,10 +167,15 @@ Toggle dashboard panels in Settings → General:
 
 ```
 ContaAutonomo/
-├── app.py                      # Core application (models, routes, settings)
-├── module_manager.py           # Module system (BaseModule, CoreServices, TaskScheduler)
-├── auth.py / auth_routes.py    # Authentication (pluggable providers)
-├── currency_converter.py       # ECB exchange rates + shared CURRENCY_SYMBOLS
+├── contaautonomo/              # The core application package
+│   ├── app.py                  # Flask app: models, routes, settings
+│   ├── paths.py                # Where code and runtime data live
+│   ├── core/                   # Module system (BaseModule, CoreServices, ModuleManager),
+│   │                           # function registry, message center, invoice PDFs
+│   ├── security/               # Authentication, stored secrets, rate limits, upload checks
+│   ├── utils/                  # Constants, currencies (ECB), time, database helpers
+│   ├── templates/  static/     # Core Jinja2 templates, CSS, JS, icons
+│   └── invoice_templates/      # Invoice PDF templates (pluggable)
 ├── modules/                    # Dynamic modules
 │   ├── ai_agent/               # Bridge between modules and AI providers
 │   ├── ai_parser/              # AI-powered invoice parsing
@@ -186,22 +191,26 @@ ContaAutonomo/
 │   ├── reports/                # Financial reports
 │   ├── tax_management/         # Spanish tax forms & SS payments
 │   └── tax_poland/             # Polish tax rules (JDG/B2B IT)
-├── invoice_templates/          # Invoice PDF templates (pluggable)
-├── templates/                  # Core Jinja2 templates
+├── deploy/                     # Docker entrypoint and gunicorn settings
+├── docs/                       # Core and module API reference
+├── tests/                      # pytest suite
 ├── instance/                   # SQLite DB + auth config (gitignored)
 ├── logs/                       # Activity log files (gitignored)
 └── backups/                    # Encrypted backups (gitignored)
 ```
 
+Runtime data (`instance/`, `logs/`, `backups/`, uploads) stays in the repository
+root, or `/app` in the image; set `CONTAAUTONOMO_DATA_DIR` to keep it elsewhere.
+
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                   Core (app.py)                       │
+│          Core (contaautonomo/app.py)                  │
 │  Models: Invoice, Customer, Bank, Settings, ...       │
 │  Routes: Dashboard, Invoices, Settings, Auth          │
 ├──────────────────────────────────────────────────────┤
-│           ModuleManager (module_manager.py)            │
+│   ModuleManager (contaautonomo/core/module_manager.py) │
 │  CoreServices: DB, Storage, Logger, Scheduler,        │
 │  InvoiceService, CurrencyService                      │
 ├──────────┬──────────┬──────────┬─────────────────────┤
@@ -216,7 +225,7 @@ Modules are discovered at startup from the `modules/` directory. Each module:
 - Can override tax calculations for different countries
 - Can register periodic tasks via the built-in scheduler
 
-See [MODULES_DOCUMENTATION.md](MODULES_DOCUMENTATION.md) for the full API reference and [modules/README.md](modules/README.md) for the module development guide.
+See [MODULES_DOCUMENTATION.md](docs/MODULES_DOCUMENTATION.md) for the full API reference and [modules/README.md](modules/README.md) for the module development guide.
 
 ## Writing a Country Tax Module
 
@@ -229,8 +238,8 @@ example:
 
 ```python
 # modules/tax_mycountry/index.py
-from invoice_amounts import customer_tax_type
-from module_manager import BaseModule
+from contaautonomo.core.invoice_amounts import customer_tax_type
+from contaautonomo.core.module_manager import BaseModule
 
 VAT_RATE = 20.0  # standard VAT of the country, %
 
@@ -293,7 +302,7 @@ class TaxMyCountryModule(BaseModule):
         return {'vat_number': 'VAT number', 'default_irpf_rate': 'Income tax advance (%)'}
 ```
 
-The hooks a tax module uses (full list: [MODULES_DOCUMENTATION.md](MODULES_DOCUMENTATION.md)):
+The hooks a tax module uses (full list: [MODULES_DOCUMENTATION.md](docs/MODULES_DOCUMENTATION.md)):
 
 | Hook | What the core does with it | Context |
 |---|---|---|
@@ -315,9 +324,9 @@ example with progressive brackets, health insurance and ZUS contributions.
 1. Set a strong `SECRET_KEY` environment variable
 2. Use Docker (`docker compose up -d`) or gunicorn behind a reverse proxy:
    ```bash
-   gunicorn app:app        # from the repository root; reads gunicorn.conf.py
+   gunicorn --config deploy/gunicorn.conf.py contaautonomo.app:app   # from the repository root
    ```
-   `gunicorn.conf.py` initialises each worker (migrations, modules, scheduler)
+   `deploy/gunicorn.conf.py` initialises each worker (migrations, modules, scheduler)
    and defaults to one worker with 4 threads (`GUNICORN_WORKERS`,
    `GUNICORN_THREADS`, `GUNICORN_BIND`). Only one process runs scheduled jobs
    (lock file `instance/scheduler.lock`, override with `SCHEDULER_LOCK_PATH`).

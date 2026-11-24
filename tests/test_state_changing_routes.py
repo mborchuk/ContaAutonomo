@@ -9,7 +9,7 @@ def _auth(client):
 
 @pytest.fixture
 def rows(app):
-    from app import Bank, Customer, db
+    from contaautonomo.app import Bank, Customer, db
 
     customers = [Customer(name='ACME Synthetic SL'), Customer(name='Beta Synthetic SL')]
     banks = [Bank(name='Synthetic Bank A', iban='XX00SYNTHETIC0001'),
@@ -28,7 +28,7 @@ ROUTES = [
 
 
 def _state(kind, row_id):
-    from app import Bank, Customer, db
+    from contaautonomo.app import Bank, Customer, db
 
     db.session.expire_all()
     obj = db.session.get(Customer if kind == 'customer' else Bank, row_id)

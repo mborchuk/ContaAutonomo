@@ -64,7 +64,7 @@ def _invoice(db, Invoice, Customer, due, status='issued', email='client@x.dev',
 
 
 def test_send_invoice_logs_and_renders_placeholders(email_module):
-    from app import db, Invoice, Customer
+    from contaautonomo.app import db, Invoice, Customer
 
     inv = _invoice(db, Invoice, Customer, due=date(2026, 3, 1))
     ok, err = email_module._send_invoice(
@@ -79,7 +79,7 @@ def test_send_invoice_logs_and_renders_placeholders(email_module):
 
 
 def test_send_failure_is_logged_not_raised(email_module):
-    from app import db, Invoice, Customer
+    from contaautonomo.app import db, Invoice, Customer
 
     inv = _invoice(db, Invoice, Customer, due=date(2026, 3, 2))
     FakeSMTP.fail = True
@@ -97,7 +97,7 @@ def test_unconfigured_smtp_raises(email_module):
 
 
 def test_overdue_reminder_fires_once_at_offset(email_module):
-    from app import db, Invoice, Customer
+    from contaautonomo.app import db, Invoice, Customer
 
     due = date(2026, 4, 10)
     inv = _invoice(db, Invoice, Customer, due=due)
@@ -109,7 +109,7 @@ def test_overdue_reminder_fires_once_at_offset(email_module):
 
 
 def test_reminders_respect_optin_and_paid_status(email_module):
-    from app import db, Invoice, Customer
+    from contaautonomo.app import db, Invoice, Customer
 
     _invoice(db, Invoice, Customer, due=date(2026, 5, 1), status='paid')
     assert email_module._run_overdue_reminders(today=date(2026, 5, 4)) == []

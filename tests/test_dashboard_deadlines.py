@@ -39,7 +39,7 @@ def _dashboard(app, client):
 
 
 def test_core_deadline_list_removed():
-    import app as appmod
+    from contaautonomo import app as appmod
     assert not hasattr(appmod, '_get_upcoming_tax_deadlines')
 
 
@@ -61,8 +61,8 @@ def test_dashboard_hint_when_fiscal_calendar_disabled(loaded_modules, app, clien
 
 def test_dashboard_uses_any_provider_of_the_function(loaded_modules, app, client,
                                                      no_network, monkeypatch):
-    from functions import Function, Param
-    from module_manager import BaseModule
+    from contaautonomo.core.functions import Function, Param
+    from contaautonomo.core.module_manager import BaseModule
 
     entry = {'form': '999', 'period_label': 'Q1 2026', 'window_start': date(2026, 4, 1),
              'window_end': date(2026, 4, 20), 'state': 'upcoming', 'days_to_end': 9,

@@ -10,6 +10,8 @@ Provides:
 """
 
 import os
+
+from contaautonomo import paths
 import json
 import hashlib
 import logging
@@ -262,7 +264,8 @@ class AuthManager:
         # hash off the source tree on bare-metal installs). Falls back to the
         # default under instance/.
         if config_file is None:
-            config_file = os.environ.get('AUTH_CONFIG_PATH', 'instance/auth_config.json')
+            config_file = os.environ.get('AUTH_CONFIG_PATH') or os.path.join(
+                paths.instance_dir(), 'auth_config.json')
         self.config_file = config_file
         self.config_dir = os.path.dirname(config_file)
         self.ensure_config_dir()

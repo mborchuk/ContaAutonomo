@@ -64,7 +64,7 @@ def test_upcoming_respects_lookahead_horizon():
 
 def _clear_messages():
     from sqlalchemy.exc import OperationalError
-    from app import Message, db
+    from contaautonomo.app import Message, db
     try:
         Message.query.filter_by(source='fiscal_calendar').delete()
         db.session.commit()
@@ -76,7 +76,7 @@ def _clear_messages():
 @pytest.fixture
 def fiscal_module(loaded_modules):
     import json
-    from app import db
+    from contaautonomo.app import db
     db.create_all()
     _clear_messages()
     fc = loaded_modules.modules['fiscal_calendar']
@@ -109,7 +109,7 @@ def test_reminders_fire_once_and_are_idempotent(fiscal_module):
 # --- message center ---------------------------------------------------------
 
 def _messages():
-    from app import Message
+    from contaautonomo.app import Message
     return Message.query.filter_by(source='fiscal_calendar').order_by(Message.id).all()
 
 

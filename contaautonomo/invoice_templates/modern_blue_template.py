@@ -8,7 +8,7 @@ import io
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from currency_converter import get_currency_symbol
+from contaautonomo.utils.currency_converter import get_currency_symbol
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 
 

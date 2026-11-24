@@ -7,8 +7,8 @@ from datetime import date
 
 import pytest
 
-from functions import Function, Param
-from module_manager import BaseModule
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule
 from modules.ledger_assistant import assistant as steps
 
 TODAY = date(2035, 11, 10)
@@ -61,7 +61,7 @@ def text_ai(loaded_modules, monkeypatch):
 
 @pytest.fixture
 def ledger(loaded_modules, app):
-    from app import Customer, Expense, Invoice, db
+    from contaautonomo.app import Customer, Expense, Invoice, db
     acme = Customer(name='ACME Synthetic SL', email='billing@example.invalid',
                     vat_number='B00000000', tax_type='standard')
     other = Customer(name='Other Synthetic SL', email='x@example.invalid',
@@ -157,7 +157,7 @@ def test_the_text_module_reason_is_shown(la, text_ai):
 # --- read only -------------------------------------------------------------- #
 
 def test_read_only_guard_refuses_writes(la, app):
-    from app import Customer, db
+    from contaautonomo.app import Customer, db
     # The module loader runs index.py under its own name, so match by class name.
     with pytest.raises(PermissionError) as err:
         with la.read_only():
@@ -177,7 +177,7 @@ def test_catalogue_holds_only_read_only_internal_functions(la, loaded_modules):
 
 
 def test_it_cannot_create_change_or_delete(la, ledger, text_ai, loaded_modules, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     text_ai(plan={'calls': [
         {'call': 'ledger.list_invoices', 'params': {}},
         {'call': 'ledger.list_expenses', 'params': {}},
@@ -190,7 +190,7 @@ def test_it_cannot_create_change_or_delete(la, ledger, text_ai, loaded_modules, 
     declared = loaded_modules.functions._core['ledger.list_customers']
 
     def writing_customers():
-        from app import Customer
+        from contaautonomo.app import Customer
         db.session.add(Customer(name='Injected Synthetic'))
         db.session.commit()
         return declared.call()
@@ -369,5 +369,5 @@ def test_page_shows_that_the_assistant_is_thinking(la, text_ai, client):
     # The page carries its own styles; the core stylesheet does not know the module.
     assert '.assistant-thinking {' in html
     from pathlib import Path
-    core_css = (Path(__file__).resolve().parent.parent / 'static' / 'css' / 'app.css').read_text()
+    core_css = (Path(__file__).resolve().parent.parent / 'contaautonomo' / 'static' / 'css' / 'app.css').read_text()
     assert 'assistant' not in core_css.lower()

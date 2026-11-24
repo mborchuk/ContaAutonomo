@@ -21,7 +21,7 @@ stop:
 
 # Local dev server.
 run:
-	FLASK_DEBUG=1 python3 app.py
+	FLASK_DEBUG=1 python3 -m contaautonomo.app
 
 # Install runtime + dev dependencies (hashed lock files).
 install:

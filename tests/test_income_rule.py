@@ -5,7 +5,7 @@ from datetime import date, datetime
 import pytest
 from flask import template_rendered
 
-from constants import counts_as_income
+from contaautonomo.utils.constants import counts_as_income
 
 
 class _Inv:
@@ -44,7 +44,7 @@ def no_network(monkeypatch):
 
 
 def _seed_year(db, year):
-    from app import Customer, Invoice
+    from contaautonomo.app import Customer, Invoice
     Invoice.query.delete()
     db.session.commit()
     cust = Customer(name='Income Rule SL', tax_type='standard')
@@ -66,7 +66,7 @@ def _seed_year(db, year):
 
 def test_dashboard_income_counts_unpaid_and_skips_cancelled(loaded_modules, app,
                                                             client, no_network):
-    from app import db
+    from contaautonomo.app import db
     year = date.today().year
     _seed_year(db, year)
     with client.session_transaction() as sess:

@@ -154,7 +154,7 @@ def test_google_helpers():
 
 @pytest.fixture
 def ai_module(standalone_module):
-    from app import db
+    from contaautonomo.app import db
     # Another test's `app` fixture may have dropped the tables while the
     # session still held their rows; forget them so a new row with the same
     # id does not meet a stale one (SQLAlchemy identity-map warning).
@@ -198,7 +198,7 @@ def test_api_parse_provider_failure_is_502(ai_module, monkeypatch, app):
 
 
 def test_get_provider_requires_configuration(ai_module):
-    from app import db
+    from contaautonomo.app import db
     cfg = ai_module._get_config()
     cfg.provider = 'openai'
     cfg.openai_api_key = ''
@@ -286,7 +286,7 @@ def test_describe_error(status, needle):
 
 
 def test_refresh_models_caches_the_list(ai_module, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     seen = _fake_model_lists(monkeypatch, anthropic_models=[('claude-new', 'New')])
     cfg = ai_module._get_config()
     cfg.anthropic_api_key = 'stored-key'
@@ -305,7 +305,7 @@ def test_refresh_models_caches_the_list(ai_module, monkeypatch):
 
 
 def test_refresh_models_errors(ai_module, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     cfg = ai_module._get_config()
     cfg.openai_api_key = ''
     db.session.commit()
@@ -318,7 +318,7 @@ def test_refresh_models_errors(ai_module, monkeypatch):
 
 
 def test_migrate_moves_retired_model_to_default(ai_module):
-    from app import db
+    from contaautonomo.app import db
     cfg = ai_module._get_config()
     cfg.anthropic_model = 'claude-sonnet-4-20250514'
     cfg.openai_model = 'gpt-custom'
@@ -445,7 +445,7 @@ def test_api_parse_rejected_file_is_422(ai_module, monkeypatch, app, exc, messag
 # --- registry functions -------------------------------------------------- #
 
 def test_ai_parser_implements_its_functions(ai_module, loaded_modules):
-    from functions import FunctionRegistry
+    from contaautonomo.core.functions import FunctionRegistry
     registry = FunctionRegistry(SimpleNamespace(modules={'ai_parser': ai_module}))
     assert registry.check_all() == ([], [])
     assert registry.route('ai.parse_document') == '/ai-parser/parse'
@@ -454,7 +454,7 @@ def test_ai_parser_implements_its_functions(ai_module, loaded_modules):
 
 
 def test_parse_file_without_a_provider_is_unavailable(ai_module, monkeypatch):
-    from functions import FunctionUnavailable
+    from contaautonomo.core.functions import FunctionUnavailable
     monkeypatch.setattr(ai_module, '_get_provider', lambda: None)
     with pytest.raises(FunctionUnavailable):
         ai_module.parse_file(PNG, 'r.png', 'expense')
@@ -466,14 +466,14 @@ def test_parse_file_without_a_provider_is_unavailable(ai_module, monkeypatch):
 def test_expense_form_uses_the_parse_function_route(loaded_modules, client, monkeypatch):
     """The expense form names no module: any module implementing
     ai.parse_document gives it the route to post to."""
-    from module_manager import BaseModule
+    from contaautonomo.core.module_manager import BaseModule
 
     class OtherParser(BaseModule):
         module_id = 'other_parser'
         name = 'Other parser'
 
         def get_functions(self):
-            from functions import Function, Param
+            from contaautonomo.core.functions import Function, Param
             return [Function('ai.parse_document',
                              lambda file_data, filename, doc_type='invoice': {},
                              'Read a document.',
@@ -533,7 +533,7 @@ def test_expense_form_knows_the_owner_tax_ids(loaded_modules, client):
     a ticket without NIF, or one issued to another tax ID, shows the warning;
     the owner's NIF, reverse charge or 0 % VAT do not; the checkbox never
     changes."""
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     s = Settings.query.first() or Settings()
     db.session.add(s)
     old = (s.vat_number, s.nie_number)
@@ -560,7 +560,7 @@ def test_expense_form_matches_the_parsed_supplier_to_a_contractor(loaded_modules
     España, S.A.U." picks "Telefonica"; a same-name contractor with another
     VAT number is not chosen; an unknown supplier is named next to the field
     and on its own line in Notes."""
-    from app import Contractor, db
+    from contaautonomo.app import Contractor, db
     c = Contractor(name='Synthetic Supplier SL', vat_number='ESB00000000')
     db.session.add(c)
     db.session.commit()

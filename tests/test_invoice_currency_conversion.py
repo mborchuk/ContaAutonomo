@@ -10,7 +10,7 @@ GBP_EUR = 1.17     # stubbed GBP->EUR rate
 @pytest.fixture
 def rates(loaded_modules, monkeypatch):
     """Offline rates: USD via currency_converter, GBP via a test provider."""
-    monkeypatch.setattr('currency_converter.get_exchange_rate', lambda d: (USD_EUR, d))
+    monkeypatch.setattr('contaautonomo.utils.currency_converter.get_exchange_rate', lambda d: (USD_EUR, d))
     svc = loaded_modules.core.currency_service
     previous = svc.active_provider
 
@@ -29,7 +29,7 @@ def rates(loaded_modules, monkeypatch):
 
 
 def test_gbp_uses_gbp_rate(rates):
-    from app import invoice_amounts
+    from contaautonomo.app import invoice_amounts
     amount_orig, amount_eur, rate = invoice_amounts(100.0, 'GBP', '2026-03-02')
     assert amount_orig == 100.0
     assert amount_eur == pytest.approx(117.0)
@@ -37,13 +37,13 @@ def test_gbp_uses_gbp_rate(rates):
 
 
 def test_eur_and_usd_unchanged(rates):
-    from app import invoice_amounts
+    from contaautonomo.app import invoice_amounts
     assert invoice_amounts(100.0, 'EUR', '2026-03-02') == (100.0 * USD_EUR, 100.0, USD_EUR)
     assert invoice_amounts(100.0, 'USD', '2026-03-02') == (100.0, 100.0 * USD_EUR, USD_EUR)
 
 
 def test_unknown_currency_raises(rates):
-    from app import NoExchangeRate, invoice_amounts
+    from contaautonomo.app import NoExchangeRate, invoice_amounts
     with pytest.raises(NoExchangeRate):
         invoice_amounts(100.0, 'XYZ', '2026-03-02')
 
@@ -58,7 +58,7 @@ def _form(number, currency):
 
 
 def test_create_route_stores_gbp_eur_amount(rates, client):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     with client.session_transaction() as sess:
         sess['authenticated'] = True
     client.post('/create', data=_form('A3-GBP', 'GBP'))
@@ -70,7 +70,7 @@ def test_create_route_stores_gbp_eur_amount(rates, client):
 
 
 def test_create_route_refuses_currency_without_rate(rates, client):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     with client.session_transaction() as sess:
         sess['authenticated'] = True
     resp = client.post('/create', data=_form('A3-XYZ', 'XYZ'))
@@ -80,7 +80,7 @@ def test_create_route_refuses_currency_without_rate(rates, client):
 
 def test_recurring_gbp_template_uses_gbp_rate(rates, loaded_modules):
     import json
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     module = loaded_modules.modules['recurring_invoices']
     for old in module.RecurringInvoice.query.all():
         old.active = False
@@ -100,6 +100,6 @@ def test_recurring_gbp_template_uses_gbp_rate(rates, loaded_modules):
 
 def test_currency_service_has_no_silent_one_to_one(loaded_modules, monkeypatch):
     svc = loaded_modules.core.currency_service
-    monkeypatch.setattr('currency_converter.get_multiple_exchange_rates',
+    monkeypatch.setattr('contaautonomo.utils.currency_converter.get_multiple_exchange_rates',
                         lambda *a, **k: {})
     assert svc._default_rate('GBP', 'EUR', '2026-03-02') == (None, None)

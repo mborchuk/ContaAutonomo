@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from functions import InvalidArguments
-from message_center import IMAGE_MAX_PX, check_image, render_text
+from contaautonomo.core.functions import InvalidArguments
+from contaautonomo.core.message_center import IMAGE_MAX_PX, check_image, render_text
 
 
 def _png(w, h, fmt='PNG'):
@@ -20,7 +20,7 @@ def _png(w, h, fmt='PNG'):
 
 def _clear_messages():
     from sqlalchemy.exc import OperationalError
-    from app import Message, db
+    from contaautonomo.app import Message, db
     try:
         Message.query.delete()
         db.session.commit()
@@ -31,7 +31,7 @@ def _clear_messages():
 
 @pytest.fixture
 def center(loaded_modules, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     db.create_all()
     _clear_messages()
     c = loaded_modules.core.message_center
@@ -185,7 +185,7 @@ def test_pages_require_login(loaded_modules, client):
 
 
 def test_logs_page_links_message_entries(loaded_modules, owner):
-    from app import _message_log_link, app
+    from contaautonomo.app import _message_log_link, app
     with app.test_request_context():
         link = _message_log_link({'category': 'messages',
                                   'details': json.dumps({'id': 12, 'source': 'documents'})})

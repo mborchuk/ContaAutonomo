@@ -33,7 +33,7 @@ def _auth(client):
 
 
 def test_delete_document_with_files_history_and_notes(documents, client):
-    from app import db
+    from contaautonomo.app import db
 
     doc = _document_with_children(documents, db, 'DELME', files=5)
     doc_id = doc.id
@@ -51,7 +51,7 @@ def test_delete_document_with_files_history_and_notes(documents, client):
 def test_delete_survives_missing_storage_files(documents, client, monkeypatch):
     """A file already gone from the storage backend (e.g. deleted in Google
     Drive) must not block deleting the database record."""
-    from app import db
+    from contaautonomo.app import db
 
     doc = _document_with_children(documents, db, 'DELME2', files=2)
     doc_id = doc.id
@@ -67,7 +67,7 @@ def test_delete_survives_missing_storage_files(documents, client, monkeypatch):
 
 
 def test_bulk_delete_with_children(documents, client):
-    from app import db
+    from contaautonomo.app import db
 
     a = _document_with_children(documents, db, 'BULK-A')
     b = _document_with_children(documents, db, 'BULK-B')

@@ -2,7 +2,7 @@
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from settings_forms import secret_from_form
+from contaautonomo.utils.settings_forms import secret_from_form
 
 XSS = '"><script>alert(1)</script>'
 SECRET = 'S3cr3t-value-that-must-not-leak'
@@ -52,7 +52,7 @@ def test_invoice_email_panel_escapes_and_hides_password(loaded_modules, request_
 
 
 def test_backup_panel_escapes_path_and_hides_password(loaded_modules, request_ctx):
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     mod = loaded_modules.modules['backup']
     cfg = mod._get_config()
     cfg.backup_path = XSS
@@ -76,7 +76,7 @@ def test_backup_panel_escapes_path_and_hides_password(loaded_modules, request_ct
 
 
 def test_irpf_panel_escapes_categories(loaded_modules, request_ctx):
-    from app import db
+    from contaautonomo.app import db
     mod = loaded_modules.modules['tax_es_irpf']
     profile = mod._get_profile()
     profile.equipment_categories = XSS
@@ -88,7 +88,7 @@ def test_irpf_panel_escapes_categories(loaded_modules, request_ctx):
 
 def test_expenses_panel_escapes_textarea(loaded_modules, request_ctx):
     import json
-    from app import db
+    from contaautonomo.app import db
     mod = loaded_modules.modules['expenses']
     mod.save_settings(None, MultiDict({'expense_category_defaults': json.dumps(
         {'</textarea><script>alert(1)</script>': {'vat_rate': 21}})}))
@@ -100,7 +100,7 @@ def test_expenses_panel_escapes_textarea(loaded_modules, request_ctx):
 
 
 def test_external_storage_panel_hides_keys(standalone, request_ctx):
-    from app import db
+    from contaautonomo.app import db
     mod = standalone('external_storage')
     cfg = mod._get_config()
     cfg.s3_bucket = XSS
@@ -117,7 +117,7 @@ def test_external_storage_panel_hides_keys(standalone, request_ctx):
 
 
 def test_ai_parser_panel_hides_api_keys(standalone, request_ctx):
-    from app import db
+    from contaautonomo.app import db
     mod = standalone('ai_parser')
     cfg = mod._get_config()
     cfg.openai_api_key = SECRET
@@ -135,7 +135,7 @@ def test_ai_parser_panel_hides_api_keys(standalone, request_ctx):
 
 
 def test_pdf_signature_panel_hides_certificate_password(standalone, request_ctx):
-    from app import db
+    from contaautonomo.app import db
     mod = standalone('pdf_signature')
     cfg = mod._get_config()
     cfg.certificate_password = SECRET
@@ -144,7 +144,7 @@ def test_pdf_signature_panel_hides_certificate_password(standalone, request_ctx)
 
 
 def test_tax_poland_and_simple_panels_render(standalone, loaded_modules, request_ctx):
-    from app import Settings
+    from contaautonomo.app import Settings
     html = standalone('tax_poland').get_settings_html(None)
     assert 'tax_pl_zus' in html
     assert 'fiscal_forms' in loaded_modules.modules['fiscal_calendar'].get_settings_html(None)
@@ -154,7 +154,7 @@ def test_tax_poland_and_simple_panels_render(standalone, loaded_modules, request
 
 def test_api_token_shown_once_then_masked(standalone, app):
     from sqlalchemy import inspect, text
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     mod = standalone('api')
     if 'api_token' not in [c['name'] for c in inspect(db.engine).get_columns('settings')]:
         db.session.execute(text('ALTER TABLE settings ADD COLUMN api_token VARCHAR(64)'))
@@ -176,7 +176,7 @@ def test_api_token_shown_once_then_masked(standalone, app):
 # --- core settings page ---------------------------------------------------------
 
 def test_settings_page_never_contains_currency_api_key(loaded_modules, client):
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     s = Settings.query.first()
     if not s:
         s = Settings()

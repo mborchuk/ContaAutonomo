@@ -12,8 +12,8 @@ import pytest
 @pytest.fixture
 def bk(loaded_modules, tmp_path, monkeypatch):
     """The backup module, isolated to tmp_path, with default configuration."""
-    from app import Settings, db
-    from module_manager import CoreServices
+    from contaautonomo.app import Settings, db
+    from contaautonomo.core.module_manager import CoreServices
 
     module = loaded_modules.modules['backup']
     root = tmp_path / 'app_root'
@@ -47,7 +47,7 @@ def test_backup_module_enabled_by_default(loaded_modules):
 
 
 def test_disabling_a_default_enabled_module_persists(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
 
     mm = loaded_modules
     model = mm._get_module_enabled_model()
@@ -85,7 +85,7 @@ def test_backup_key_from_environment(bk, tmp_path, monkeypatch):
 
 
 def test_legacy_app_password_config_switches_to_key(bk):
-    from app import db
+    from contaautonomo.app import db
 
     cfg = bk._get_config()
     cfg.encrypt_method = 'app_password'
@@ -95,7 +95,7 @@ def test_legacy_app_password_config_switches_to_key(bk):
 
 
 def test_restore_round_trip_database_and_files(bk):
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
     from modules.backup.index import FILE_FOLDERS
 
     root = bk.core.app_path
@@ -133,7 +133,7 @@ def test_restore_round_trip_database_and_files(bk):
 def test_restore_legacy_app_password_backup_with_login_password(bk, tmp_path, monkeypatch):
     """Backups made with the old 'app_password' method restore when the owner
     types the login password; no key is kept in the session any more."""
-    from auth import auth_manager
+    from contaautonomo.security.auth import auth_manager
 
     monkeypatch.setattr(auth_manager, 'config_file', str(tmp_path / 'auth_config.json'))
     auth_manager.setup_password('synthetic-login-pass')

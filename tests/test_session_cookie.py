@@ -13,7 +13,7 @@ def _cookie_payload(client):
 
 
 def test_login_stores_no_key_in_session_cookie(loaded_modules, client, tmp_path, monkeypatch):
-    from auth import auth_manager
+    from contaautonomo.security.auth import auth_manager
 
     monkeypatch.setattr(auth_manager, 'config_file', str(tmp_path / 'auth_config.json'))
     auth_manager.setup_password('synthetic-login-pass')

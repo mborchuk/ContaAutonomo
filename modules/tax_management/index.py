@@ -8,11 +8,11 @@ import csv
 import io
 import json
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash, Response
 from datetime import datetime
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 def _csv_safe(value):
@@ -352,7 +352,7 @@ class TaxManagementModule(BaseModule):
                 flash('Invalid file type. Allowed: PDF, Excel, Word', 'danger')
                 return redirect(url_for('tax_management.tax_forms_index'))
             # Validate real content, not just the extension (rename bypass).
-            from file_validation import validate_filestorage
+            from contaautonomo.security.file_validation import validate_filestorage
             if not validate_filestorage(file, ext):
                 flash('File content does not match its extension.', 'danger')
                 return redirect(url_for('tax_management.tax_forms_index'))
@@ -477,7 +477,7 @@ class TaxManagementModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         return [
             Function('tax.filed_boxes', self.filed_boxes,
                      'Boxes declared on the filed AEAT return of a period, read from its '

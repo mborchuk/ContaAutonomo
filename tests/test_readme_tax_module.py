@@ -18,7 +18,7 @@ def _example_source():
 
 @pytest.fixture
 def example(loaded_modules):
-    from module_manager import BaseModule
+    from contaautonomo.core.module_manager import BaseModule
     source = _example_source()
     code = types.ModuleType('readme_tax_example')
     exec(compile(source, 'README.md', 'exec'), code.__dict__)
@@ -34,7 +34,7 @@ def test_example_uses_the_core_not_app_or_other_modules(example):
 
 
 def test_example_on_enable_sets_the_vat_rate(example):
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     _source, module = example
     settings = Settings.query.first() or Settings()
     db.session.add(settings)
