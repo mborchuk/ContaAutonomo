@@ -1,8 +1,30 @@
-# ContaAutónomo — Invoice & Finance Manager
+# ContaAutónomo
 
-A self-hosted web application for freelancers and small businesses to manage invoices, expenses, tax obligations, and financial reports. Built with Flask and a modular plugin architecture that adapts to different countries' tax systems.
+**Your finances. Your data. Your server.**
+
+A self-hosted, open-source finance manager for freelancers and small businesses. Manage invoices, expenses, documents, bank imports, and tax estimates in one modular application — while keeping control of your data and deployment.
+
+<p align="center">
+  <strong>Self-hosted · Modular · Multi-currency · Open source (MIT)</strong>
+</p>
+
+ContaAutónomo is built for independent professionals who want more control than a typical hosted invoicing tool offers. Run it on your own server, enable the modules you need, and connect optional services — including AI providers — on your terms.
+
+**Good fit for:** freelancers and autónomos, international contractors working across currencies, privacy-conscious small businesses, and self-hosters who want an extensible finance workspace.
+
+- **Own your deployment:** run the app on infrastructure you control.
+- **See more than invoices:** bring expenses, documents, bank imports, reports, and tax estimates together.
+- **Work across currencies:** use ECB exchange-rate conversion and track multiple currencies.
+- **Adapt it to your workflow:** enable country-specific and optional modules as needed.
+- **Choose your integrations:** optional AI and external-storage providers are configurable.
+
+> **Tax and compliance notice:** Tax figures and draft calculations are planning aids, not tax advice, tax filings, or a guarantee of compliance. The Verifactu module provides tamper-evident, hash-chained billing records as a compliance aid; this description is not a claim of certification or full legal compliance. Confirm requirements with a qualified tax professional and the relevant authorities before relying on the software for regulated processes.
+
 
 ## Features
+
+ContaAutónomo combines day-to-day finance workflows with optional modules. Enable or disable modules in **Settings → Modules**.
+
 
 - Invoice management with PDF generation and customizable templates
 - Invoice lifecycle: draft → issued → paid, with per-series sequential numbering,
@@ -53,44 +75,52 @@ A self-hosted web application for freelancers and small businesses to manage inv
 
 ## Quick Start
 
+The recommended way to run ContaAutónomo is Docker Compose. It avoids installing Python dependencies on your host.
+
 ### Prerequisites
 
-- Python 3.14 (the version of the Docker image and CI)
-- pip
+- Git
+- Docker Engine and the Docker Compose plugin
 
-### Installation
+### Run with Docker
 
 ```bash
-git clone git@github.com:mborchuk/ContaAutonomo.git
+git clone https://github.com/mborchuk/ContaAutonomo.git
+cd ContaAutonomo
+make setup
+```
+
+Review the generated `.env` file and keep it private. It contains the application secret and encryption keys. Then start the application:
+
+```bash
+make start
+```
+
+Open [http://localhost:4000](http://localhost:4000). On first launch, the application will guide you through creating a password.
+
+To stop the application:
+
+```bash
+make stop
+```
+
+Docker Compose persists application data, backups, logs, invoices, expenses, documents, tax forms, logos, and signature files in named volumes. Back up your data and keep the encryption keys from `.env` in a secure password manager. Losing an encryption key may make the corresponding encrypted data or backups unrecoverable.
+
+### Run locally (development)
+
+- Python 3.14
+- pip
+
+```bash
+git clone https://github.com/mborchuk/ContaAutonomo.git
 cd ContaAutonomo
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### Run
-
-```bash
-# Development
 FLASK_DEBUG=1 python app.py
-
-# Production
-SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") python app.py
 ```
 
-Open http://127.0.0.1:5000 — first launch will prompt you to create a password.
-
-### Docker
-
-```bash
-# Quick start
-docker compose up -d
-
-# With a proper secret key
-SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))") docker compose up -d
-```
-
-Data is persisted in Docker volumes (`app_data`, `app_backups`, etc.).
+Open [http://127.0.0.1:5000](http://127.0.0.1:5000). For tests and development dependencies, see the Makefile and `requirements-dev.txt`.
 
 ### Environment Variables
 
@@ -314,6 +344,18 @@ example with progressive brackets, health insurance and ZUS contributions.
 - **Exchange Rates**: ECB API with Frankfurter and exchangerate-api fallbacks
 - **AI Parsing**: OpenAI, Anthropic, Google Generative AI (optional)
 - **Signature Verification**: asn1crypto (PKCS#7/CMS parsing)
+
+## Contributing
+
+Contributions, bug reports, and thoughtful feature proposals are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+## Security
+
+Please do not report security vulnerabilities in public issues. See [SECURITY.md](SECURITY.md) for the responsible disclosure process.
+
+## Project status
+
+ContaAutónomo is an actively developed open-source project. Features and country-specific modules may evolve; review the documentation and test the workflows that matter to your business before using the application for operational or tax-critical work.
 
 ## License
 
