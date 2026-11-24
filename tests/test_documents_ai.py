@@ -79,6 +79,10 @@ def docs(app, loaded_modules, client, monkeypatch):
 
 @pytest.fixture
 def ai(loaded_modules, monkeypatch):
+    # The request runs in a background thread; here it runs at once.
+    docs_module = loaded_modules.modules['documents']
+    monkeypatch.setattr(docs_module, '_start_background', lambda work: work())
+
     def install(reply=REPLY, available=('anthropic',)):
         fake = FakeAI(loaded_modules.core, reply, available)
         monkeypatch.setitem(loaded_modules.modules, 'zz_ai', fake)
@@ -168,7 +172,7 @@ def test_suggest_sends_only_the_ticked_text_to_the_chosen_provider(docs, client,
     _enable(docs, provider='anthropic')
     file_id = docs.DocumentFile.query.filter_by(document_id=doc.id).one().id
     html = _ask(client, doc, [file_id]).get_data(as_text=True)
-    assert '9 suggestion(s) from ANTHROPIC' in html
+    assert 'Asked ANTHROPIC. The suggestions appear on this page' in html
     [call] = fake.calls
     assert call['provider'] == 'anthropic'
     assert 'POL-77' in call['user'] and 'secret-name.pdf' not in call['user']
@@ -240,19 +244,20 @@ def test_the_ai_module_default_is_used_without_naming_a_provider(docs, client, a
     assert fake.calls[0]['provider'] is None
 
 
-@pytest.mark.parametrize('reply, message', [
-    (RuntimeError('secret detail sk-123'), 'The AI provider did not answer.'),
-    ('not json at all', 'could not be read as suggestions'),
-    ('{"category": "Holidays"}', 'nothing to suggest'),
+@pytest.mark.parametrize('reply, status, message', [
+    (RuntimeError('secret detail sk-123'), 'failed', 'The AI provider did not answer.'),
+    ('not json at all', 'failed', 'could not be read as suggestions'),
+    ('{"category": "Holidays"}', 'empty', 'nothing to suggest'),
 ])
-def test_failures_change_nothing(docs, client, ai, reply, message):
+def test_failures_change_nothing(docs, client, ai, reply, status, message):
     ai(reply=reply)
     doc = _document(docs, client)
     _enable(docs)
     html = _ask(client, doc, [docs.DocumentFile.query.filter_by(document_id=doc.id).one().id]
                 ).get_data(as_text=True)
-    assert message in html and 'sk-123' not in html
-    assert docs.DocumentAISuggestion.query.count() == 0
+    assert 'Last request to ANTHROPIC' in html and message in html and 'sk-123' not in html
+    assert [r.status for r in docs.DocumentAISuggestion.query.all()] == [status]
+    assert 'Apply ticked' not in html and docs._db.session.get(docs.Document, doc.id).tags is None
 
 
 def test_without_an_ai_module(docs, client):
@@ -295,3 +300,81 @@ def test_settings(docs, client, ai):
     assert docs.ai_config()['max_chars'] == 30000
     page = client.get('/settings').get_data(as_text=True)
     assert 'AI suggestions for fields and tags' in page and 'KIRO_CLI · kiro_cli-model' in page
+
+
+# --- feedback while the provider works ------------------------------------------ #
+
+def test_the_page_shows_the_running_request_and_refuses_a_second(docs, client, ai,
+                                                                 loaded_modules, monkeypatch):
+    fake = ai()
+    queued = []
+    monkeypatch.setattr(loaded_modules.modules['documents'], '_start_background', queued.append)
+    doc = _document(docs, client)
+    _enable(docs)
+    file_id = docs.DocumentFile.query.filter_by(document_id=doc.id).one().id
+    html = _ask(client, doc, [file_id]).get_data(as_text=True)
+    assert 'Asked ANTHROPIC' in html and 'id="ai-running"' in html
+    assert 'you do not need to press again' in html and 'Waiting for ANTHROPIC' in html
+    assert client.get(f'/documents/view/{doc.id}/ai-status').get_json() == {
+        'running': True, 'status': 'running'}
+    html = _ask(client, doc, [file_id]).get_data(as_text=True)          # pressed again
+    assert 'already running' in html and len(queued) == 1 and fake.calls == []
+    queued[0]()                                                          # the answer arrives
+    assert client.get(f'/documents/view/{doc.id}/ai-status').get_json() == {
+        'running': False, 'status': 'new'}
+    html = client.get(f'/documents/view/{doc.id}').get_data(as_text=True)
+    assert 'id="ai-running"' not in html and 'Apply ticked' in html
+    assert len(fake.calls) == 1
+
+
+def test_a_request_cut_off_is_closed(docs, client, ai, loaded_modules, monkeypatch):
+    from datetime import timedelta
+    from timeutil import utcnow
+    ai()
+    monkeypatch.setattr(loaded_modules.modules['documents'], '_start_background', lambda w: None)
+    doc = _document(docs, client)
+    _enable(docs)
+    _ask(client, doc, [docs.DocumentFile.query.filter_by(document_id=doc.id).one().id])
+    row = docs.DocumentAISuggestion.query.one()
+    row.created_at = utcnow() - timedelta(minutes=16)
+    docs._db.session.commit()
+    html = client.get(f'/documents/view/{doc.id}').get_data(as_text=True)
+    assert 'id="ai-running"' not in html and 'the request was interrupted' in html
+    assert docs.DocumentAISuggestion.query.one().status == 'failed'
+
+
+def test_ai_status_needs_login(docs, client):
+    doc = _document(docs, client)
+    with client.session_transaction() as sess:
+        sess.clear()
+    assert client.get(f'/documents/view/{doc.id}/ai-status').status_code in (302, 401)
+
+
+def test_the_request_really_runs_in_a_background_thread(docs, client, loaded_modules,
+                                                       monkeypatch):
+    import threading
+    import time
+    started = threading.Event()
+    release = threading.Event()
+
+    class SlowAI(FakeAI):
+        def _complete(self, system, user, max_tokens=1500, provider=None):
+            started.set()
+            release.wait(5)
+            return REPLY
+
+    monkeypatch.setitem(loaded_modules.modules, 'zz_ai', SlowAI(loaded_modules.core, REPLY))
+    doc = _document(docs, client)
+    _enable(docs)
+    file_id = docs.DocumentFile.query.filter_by(document_id=doc.id).one().id
+    resp = client.post(f'/documents/view/{doc.id}/ai-suggest', data={'ai_file': [str(file_id)]})
+    assert resp.status_code == 302                      # answered before the AI did
+    assert started.wait(5)
+    assert client.get(f'/documents/view/{doc.id}/ai-status').get_json()['running'] is True
+    release.set()
+    for _ in range(50):
+        if client.get(f'/documents/view/{doc.id}/ai-status').get_json()['status'] == 'new':
+            break
+        time.sleep(0.1)
+    assert client.get(f'/documents/view/{doc.id}/ai-status').get_json() == {
+        'running': False, 'status': 'new'}

@@ -184,9 +184,24 @@
         </div>
 
         <!-- AI suggestions -->
-        {% if ai.state != 'off' or ai.suggestion %}
+        {% if ai.state != 'off' or ai.suggestion or ai.running or ai.problem %}
         <div id="ai-suggestions" style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px; font-size: 13px;">
             <h3 style="margin: 0 0 12px 0; font-size: 15px; color: var(--color-text-muted); border-bottom: 1px solid var(--color-surface-3); padding-bottom: 8px;">✨ AI suggestions</h3>
+            {% if ai.running %}
+            <div class="note" role="status" aria-live="polite" id="ai-running"
+                 data-status-url="{{ url_for('documents.documents_ai_status', id=doc.id) }}"
+                 data-poll-seconds="{{ ai.poll_seconds }}"
+                 style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                <span class="ai-spinner" aria-hidden="true"></span>
+                <span>Asking <strong>{{ ai.running.provider }}</strong>{% if ai.running.model %} ({{ ai.running.model }}){% endif %}
+                    since {{ ai.running.since.strftime('%H:%M:%S') if ai.running.since else '' }}
+                    — <span id="ai-elapsed">waiting for the answer</span>. This page updates by itself; you do not need to press again.</span>
+            </div>
+            {% elif ai.problem %}
+            <p class="note note-warning" role="status" style="margin: 0 0 12px;">
+                Last request to {{ ai.problem.provider }}{% if ai.problem.at %} ({{ ai.problem.at.strftime('%d/%m/%Y %H:%M') }}){% endif %}: {{ ai.problem.error }}
+            </p>
+            {% endif %}
             {% if ai.suggestion %}
             <form method="POST" action="{{ url_for('documents.documents_ai_apply', id=doc.id) }}">
                 <input type="hidden" name="suggestion_id" value="{{ ai.suggestion.id }}">
@@ -221,7 +236,7 @@
             <p style="margin: 8px 0 0; color: var(--color-text-muted);">No PDF of this document has readable text yet: suggestions use the text read from PDFs (scans need OCR).</p>
             {% elif ai.state == 'ready' %}
             {% set dest = ai.destination %}
-            <form method="POST" action="{{ url_for('documents.documents_ai_suggest', id=doc.id) }}" style="margin-top: {{ '14px' if ai.suggestion else '0' }};">
+            <form method="POST" action="{{ url_for('documents.documents_ai_suggest', id=doc.id) }}" id="ai-suggest-form" style="margin-top: {{ '14px' if ai.suggestion else '0' }};">
                 <p style="margin: 0 0 6px;"><strong>Send for suggestions</strong> — tick the files whose text may leave the app:</p>
                 {% for f in ai.files %}
                 <label style="display: flex; align-items: center; gap: 6px; margin: 2px 0;">
@@ -237,13 +252,60 @@
                     Chosen in <a href="{{ url_for('settings') }}#mod_documents">Settings → Documents</a>.
                 </p>
                 {% if dest.available %}
-                <button type="submit" class="btn btn-secondary btn-sm">✨ Ask {{ dest.name }} for suggestions</button>
+                {% if ai.running %}
+                <button type="submit" class="btn btn-secondary btn-sm" disabled>⏳ Waiting for {{ ai.running.provider }}…</button>
+                {% else %}
+                <button type="submit" class="btn btn-secondary btn-sm" id="ai-suggest-button" data-busy-label="⏳ Sending to {{ dest.name }}…">✨ Ask {{ dest.name }} for suggestions</button>
+                {% endif %}
                 {% else %}
                 <p class="note note-warning" role="status" style="margin: 0;">{{ dest.reason }}</p>
                 {% endif %}
             </form>
             {% endif %}
         </div>
+        {% endif %}
+        {% if ai.running or ai.state == 'ready' %}
+        <style>
+            .ai-spinner { width: 16px; height: 16px; flex: none; border-radius: 50%;
+                border: 2px solid var(--color-surface-3); border-top-color: var(--color-primary);
+                animation: ai-spin 0.9s linear infinite; }
+            @keyframes ai-spin { to { transform: rotate(360deg); } }
+            @media (prefers-reduced-motion: reduce) { .ai-spinner { animation: none; } }
+        </style>
+        <script>
+        (function () {
+            var form = document.getElementById('ai-suggest-form');
+            var button = document.getElementById('ai-suggest-button');
+            if (form && button) {
+                form.addEventListener('submit', function () {
+                    // One request per press: the button cannot be pressed twice.
+                    setTimeout(function () {
+                        button.disabled = true;
+                        button.textContent = button.getAttribute('data-busy-label');
+                    }, 0);
+                });
+            }
+            var box = document.getElementById('ai-running');
+            if (!box) return;
+            var url = box.getAttribute('data-status-url');
+            var every = (parseInt(box.getAttribute('data-poll-seconds'), 10) || 3) * 1000;
+            var started = Date.now();
+            var elapsed = document.getElementById('ai-elapsed');
+            setInterval(function () {
+                var s = Math.round((Date.now() - started) / 1000);
+                if (elapsed) elapsed.textContent = 'waiting for the answer (' + s + ' s on this page)';
+            }, 1000);
+            (function poll() {
+                fetch(url, {credentials: 'same-origin', headers: {'Accept': 'application/json'}})
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (data && !data.running) { window.location.hash = 'ai-suggestions'; window.location.reload(); return; }
+                        setTimeout(poll, every);
+                    })
+                    .catch(function () { setTimeout(poll, every * 2); });
+            })();
+        })();
+        </script>
         {% endif %}
         <!-- Notes -->
         <div style="background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 20px; margin-bottom: 20px;">

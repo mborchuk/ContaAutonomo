@@ -14,7 +14,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   text and the category and tag names go to the AI. The checked suggestions
   (name, category, dates, amount, reference, counterparty, creator,
   language, description, tags) are applied one by one; every request is in
-  the activity log and the document history.
+  the activity log and the document history. The provider is asked in the
+  background: the page shows that it is waiting, cannot send the same
+  request twice, and shows the suggestions or the problem when the answer
+  arrives.
 - **AI Agent: a caller may choose the provider.** `ai.complete_text` and
   `ai.text_status` take an optional `provider`, and `ai.list_providers`
   lists every provider with its model and whether it can answer now, so a

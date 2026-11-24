@@ -31,6 +31,8 @@ READ_NOW_BUDGET = 60           # seconds for "Read now" (gunicorn timeout is 120
 AI_MAX_CHARS_DEFAULT = 20_000
 AI_MAX_CHARS_RANGE = (1_000, 100_000)
 AI_UNANSWERED = 'The AI provider did not answer. Check the server log.'
+AI_STALE_MINUTES = 15          # a request running longer was cut off
+AI_POLL_SECONDS = 3            # how often the document page checks for the answer
 TEXT_STATUS_LABELS = {
     'ok': 'Searchable',
     'no_text_layer': 'No text layer (a scan: needs OCR)',
@@ -215,7 +217,9 @@ class DocumentsModule(BaseModule):
             file_ids = db.Column(db.String(500))      # files whose text was sent
             chars_sent = db.Column(db.Integer)
             fields = db.Column(db.Text)               # JSON {field: value}, checked
-            status = db.Column(db.String(12), default='new')  # new, applied, discarded
+            # running (asked, no answer yet), new, applied, discarded, failed, empty
+            status = db.Column(db.String(12), default='new')
+            error = db.Column(db.String(300))         # why failed / empty
             created_at = db.Column(db.DateTime, default=utcnow)
             decided_at = db.Column(db.DateTime)
 
@@ -496,6 +500,11 @@ class DocumentsModule(BaseModule):
         @login_required
         def documents_ai_apply(id):
             return module._ai_apply(id)
+
+        @bp.route('/view/<int:id>/ai-status')
+        @login_required
+        def documents_ai_status(id):
+            return module._ai_status(id)
 
         @bp.route('/view/<int:id>/ai-discard', methods=['POST'])
         @login_required
@@ -1451,12 +1460,29 @@ class DocumentsModule(BaseModule):
             self.DocumentText.status == 'ok').all()} if doc_files else {}
         return [(f, rows[f.file_path]) for f in doc_files if f.file_path in rows]
 
+    def _suggestions(self, doc_id):
+        """This document's suggestions, read fresh: the background request
+        writes them in another database session."""
+        return (self.DocumentAISuggestion.query.execution_options(populate_existing=True)
+                .filter_by(document_id=doc_id))
+
     def _ai_panel(self, doc, doc_files):
         """What the document page shows for AI suggestions."""
         cfg = self.ai_config()
         panel = {'state': 'off', 'files': [], 'destination': None, 'suggestion': None,
-                 'max_chars': cfg['max_chars']}
-        latest = (self.DocumentAISuggestion.query.filter_by(document_id=doc.id, status='new')
+                 'max_chars': cfg['max_chars'], 'running': None, 'problem': None,
+                 'poll_seconds': AI_POLL_SECONDS}
+        running = self._ai_running(doc.id)
+        if running:
+            panel['running'] = {'provider': running.provider, 'model': running.model,
+                                'since': running.created_at}
+        last = (self._suggestions(doc.id)
+                .filter(self.DocumentAISuggestion.status != 'running')
+                .order_by(self.DocumentAISuggestion.created_at.desc()).first())
+        if last and last.status in ('failed', 'empty'):
+            panel['problem'] = {'provider': last.provider, 'error': last.error,
+                                'at': last.decided_at or last.created_at}
+        latest = (self._suggestions(doc.id).filter_by(status='new')
                   .order_by(self.DocumentAISuggestion.created_at.desc()).first())
         if latest:
             fields = ai_suggest.from_json(latest.fields)
@@ -1521,37 +1547,89 @@ class DocumentsModule(BaseModule):
         arguments = {'system': system, 'user': user, 'max_tokens': ai_suggest.REPLY_TOKENS}
         if dest['provider']:
             arguments['provider'] = dest['provider']
+        if self._ai_running(doc.id):
+            flash('A request for this document is already running; its answer appears here.',
+                  'info')
+            return back
         sent = ai_suggest.characters_sent(texts, cfg['max_chars'])
+        row = self.DocumentAISuggestion(
+            document_id=doc.id, provider=dest['name'], model=dest['model'],
+            file_ids=','.join(str(f.id) for f, _ in chosen), chars_sent=sent,
+            status='running')
+        self._db.session.add(row)
+        self._db.session.commit()
         self.core.log_activity('document_sent_to_ai', 'documents',
                                f'{doc.identifier or doc.id}: text of {len(chosen)} file(s), '
                                f'{sent} characters, to {dest["name"]}')
-        try:
-            reply = self._ai_functions().call('ai.complete_text', **arguments)
-        except Exception as e:
-            self.logger.warning('AI suggestion for a document failed: %s', type(e).__name__)
-            reason = str(e) if type(e).__name__ == 'FunctionUnavailable' else AI_UNANSWERED
-            flash(reason, 'warning')
-            return back
-        try:
-            fields = ai_suggest.clean(ai_suggest.parse_reply(reply), categories)
-        except ValueError:
-            flash('The AI reply could not be read as suggestions. Try again.', 'warning')
-            return back
-        if not fields:
-            flash('The AI found nothing to suggest for this document.', 'info')
-            return back
-        self.DocumentAISuggestion.query.filter_by(document_id=doc.id, status='new').update(
-            {'status': 'discarded', 'decided_at': utcnow()}, synchronize_session=False)
-        self._db.session.add(self.DocumentAISuggestion(
-            document_id=doc.id, provider=dest['name'], model=dest['model'],
-            file_ids=','.join(str(f.id) for f, _ in chosen), chars_sent=sent,
-            fields=ai_suggest.to_json(fields)))
-        self._log_history(doc.id, 'ai_suggested',
-                          f'{len(fields)} field(s) suggested by {dest["name"]}')
-        self._db.session.commit()
-        flash(f'{len(fields)} suggestion(s) from {dest["name"]}. Tick the ones to apply.',
-              'success')
+        from flask import current_app
+        app = current_app._get_current_object()
+        row_id = row.id     # read now: the row object belongs to this request's session
+        self._start_background(lambda: self._run_ai_request(app, row_id, arguments, categories))
+        flash(f'Asked {dest["name"]}. The suggestions appear on this page when the answer '
+              'arrives; this can take a minute or more.', 'info')
         return back
+
+    def _start_background(self, work):
+        """Run `work` outside the web request (tests run it at once)."""
+        import threading
+        threading.Thread(target=work, name='documents-ai-suggest', daemon=True).start()
+
+    def _run_ai_request(self, app, suggestion_id, arguments, categories):
+        """Ask the AI and store the checked answer on the running suggestion."""
+        with app.app_context():
+            row = self._db.session.get(self.DocumentAISuggestion, suggestion_id)
+            if row is None:
+                return
+            status, error, fields = 'failed', AI_UNANSWERED, {}
+            try:
+                reply = self._ai_functions().call('ai.complete_text', **arguments)
+                fields = ai_suggest.clean(ai_suggest.parse_reply(reply), categories)
+                status, error = ('new', None) if fields else (
+                    'empty', 'The AI found nothing to suggest for this document.')
+            except ValueError:
+                error = 'The AI reply could not be read as suggestions. Try again.'
+            except Exception as e:
+                self.logger.warning('AI suggestion for a document failed: %s',
+                                    type(e).__name__)
+                if type(e).__name__ == 'FunctionUnavailable':
+                    error = str(e)[:300]
+            if status == 'new':
+                self.DocumentAISuggestion.query.filter(
+                    self.DocumentAISuggestion.document_id == row.document_id,
+                    self.DocumentAISuggestion.status == 'new',
+                    self.DocumentAISuggestion.id != row.id).update(
+                    {'status': 'discarded', 'decided_at': utcnow()}, synchronize_session=False)
+                row.fields = ai_suggest.to_json(fields)
+                self._log_history(row.document_id, 'ai_suggested',
+                                  f'{len(fields)} field(s) suggested by {row.provider}')
+            row.status, row.error, row.decided_at = status, error, utcnow()
+            self._db.session.commit()
+            self._db.session.remove()
+
+    def _ai_running(self, doc_id):
+        """The request for this document still waiting for its answer, or None.
+        One older than AI_STALE_MINUTES was cut off (the app restarted) and is
+        closed as failed."""
+        row = (self._suggestions(doc_id).filter_by(status='running')
+               .order_by(self.DocumentAISuggestion.created_at.desc()).first())
+        if row is None:
+            return None
+        if row.created_at and utcnow() - row.created_at > timedelta(minutes=AI_STALE_MINUTES):
+            row.status, row.decided_at = 'failed', utcnow()
+            row.error = 'No answer arrived (the request was interrupted). Ask again.'
+            self._db.session.commit()
+            return None
+        return row
+
+    def _ai_status(self, id):
+        """JSON for the document page while a request runs: {running, status}."""
+        from flask import jsonify
+        doc = db_get_or_404(self.Document, id)
+        running = self._ai_running(doc.id)
+        latest = (self._suggestions(doc.id)
+                  .order_by(self.DocumentAISuggestion.created_at.desc()).first())
+        return jsonify(running=running is not None,
+                       status=latest.status if latest else None)
 
     def _ai_apply(self, id):
         """Apply the ticked suggested fields; tags are added to the existing ones."""
