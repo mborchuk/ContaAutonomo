@@ -27,6 +27,12 @@
                     <td style="padding: 6px 0; color: var(--color-text-faint); width: 140px;">Identifier</td>
                     <td style="padding: 6px 0;"><strong>{{ doc.identifier or '—' }}</strong></td>
                 </tr>
+                {% if text_badge %}
+                <tr>
+                    <td style="padding: 6px 0; color: var(--color-text-faint);">Text</td>
+                    <td style="padding: 6px 0;"><span class="status-badge {{ text_badge.css }}" title="{{ text_badge.title }}" data-text-state="{{ text_badge.state }}">{{ text_badge.label }}</span></td>
+                </tr>
+                {% endif %}
                 <tr>
                     <td style="padding: 6px 0; color: var(--color-text-faint);">Status</td>
                     <td style="padding: 6px 0;">
@@ -128,7 +134,7 @@
                     {% if df.pdfa %}<span class="status-badge status-active" style="margin-left: 6px;" title="The PDF declares this archival PDF/A level (ISO 19005) in its metadata; not validated">{{ df.pdfa }}</span>{% endif %}
                     <div style="font-size: 11px; color: var(--color-text-faint); margin-top: 2px;">
                         {% if df.sha256 %}SHA-256 <code title="{{ df.sha256 }}">{{ short(df.sha256) }}…</code>{% else %}No fingerprint yet — Verify integrity records one{% endif %}
-                        {% if text_status.get(df.id) %} · {{ text_status[df.id] }}{% endif %}
+                        {% if text_states.get(df.id) %} · Text: {{ text_states[df.id].label }}{% endif %}
                     </div>
                     {% set earlier = versions.get(df.id, []) %}
                     {% if earlier %}

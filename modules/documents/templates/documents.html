@@ -146,6 +146,8 @@
                     {% set doc_files = files_by_doc.get(doc.id, []) %}
                     {% if doc_files %}
                         <span style="font-size: 11px; color: var(--color-text-faint);">{{ doc_files|length }} file{{ 's' if doc_files|length > 1 else '' }}</span>
+                        {% set badge = text_badges.get(doc.id) %}
+                        {% if badge %}<br><span class="status-badge {{ badge.css }}" title="{{ badge.title }}" data-text-state="{{ badge.state }}">{{ badge.label }}</span>{% endif %}
                     {% elif doc.file_format %}
                         <span style="font-size: 11px; color: var(--color-text-faint);">{{ (doc.file_format or '')|upper }}</span>
                     {% else %}-{% endif %}

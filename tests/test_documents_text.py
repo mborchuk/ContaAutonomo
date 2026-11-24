@@ -109,7 +109,7 @@ def test_new_pdf_is_read_in_the_background_and_found(docs, client):
     row = docs.DocumentText.query.one()
     assert (row.status, row.page_count, row.method) == ('ok', 1, 'pypdf')
     view = client.get(f'/documents/view/{docs.Document.query.one().id}').get_data(as_text=True)
-    assert 'Text: searchable, 1 page(s)' in view
+    assert 'Text: Searchable, 1 page(s)' in view
 
 
 def test_snippet_is_escaped(docs, client):
@@ -297,3 +297,56 @@ def test_backup_leaves_out_the_index_and_restore_rebuilds_it(docs, client, loade
     assert ok and not text_index.available(docs._db.session)    # dropped by the restore
     docs._ensure_text_index()                                    # what the restart does
     assert 'Deed' in _search(client, 'compraventa')
+
+
+# --- the "text read" badge -------------------------------------------------- #
+
+def _badge(html):
+    import re
+    found = re.findall(r'data-text-state="([a-z]+)">([^<]+)<', html)
+    return found
+
+
+@pytest.mark.parametrize('states, expected', [
+    ([], None),
+    (['searchable', 'searchable'], 'searchable'),
+    (['searchable', 'waiting'], 'waiting'),
+    (['searchable', 'scan'], 'partly'),
+    (['searchable', 'failed'], 'partly'),
+    (['scan', 'scan'], 'scan'),
+    (['scan', 'failed'], 'failed'),
+])
+def test_document_state_from_its_pdfs(docs, states, expected):
+    badge = docs._document_text_state([{'state': s} for s in states])
+    assert (badge or {}).get('state') == expected
+
+
+def test_badge_in_the_list_and_on_the_document_page(docs, client):
+    _create(client, _pdf('Póliza de seguro'), 'policy.pdf', name='Policy')
+    _create(client, b'plain', 'note.txt', name='Plain note')
+    doc = docs.Document.query.filter_by(name='Policy').one()
+    assert _badge(client.get('/documents/').get_data(as_text=True)) == \
+        [('waiting', 'Text pending')]                       # the note has no badge
+    assert _badge(client.get(f'/documents/view/{doc.id}').get_data(as_text=True)) == \
+        [('waiting', 'Text pending')]
+    docs.read_pending_text()
+    assert _badge(client.get('/documents/').get_data(as_text=True)) == [('searchable', 'Text read')]
+    view = client.get(f'/documents/view/{doc.id}').get_data(as_text=True)
+    assert _badge(view) == [('searchable', 'Text read')]
+    assert 'class="status-badge status-paid"' in view
+
+
+def test_badge_for_a_scan_and_for_a_file_still_retried(docs, client):
+    _create(client, _pdf(None), 'scan.pdf', name='Scan')
+    _create(client, _pdf('Recibo'), 'lost.pdf', name='Lost')
+    lost = docs.DocumentFile.query.filter_by(original_filename='lost.pdf').one()
+    docs.storage.files.pop(lost.file_path)
+    docs.read_pending_text()
+    badges = dict((label, state) for state, label in
+                  _badge(client.get('/documents/').get_data(as_text=True)))
+    assert badges == {'Scan: needs OCR': 'scan', 'Text pending': 'waiting'}
+    view = client.get(f'/documents/view/{lost.document_id}').get_data(as_text=True)
+    assert 'Text: Could not be fetched, will try again' in view
+    docs.read_pending_text()
+    docs.read_pending_text()                                 # third attempt: gives up
+    assert ('failed', 'Text not readable') in _badge(client.get('/documents/').get_data(as_text=True))

@@ -32,7 +32,21 @@ TEXT_STATUS_LABELS = {
     'encrypted': 'Encrypted: text not readable',
     'unreadable': 'Not a readable PDF',
     'too_large': 'Too large to read',
-    'error': 'Could not be read yet',
+    'error': 'Could not be read',
+}
+# Document-level badge of how far its PDFs' text has been read (CSS class of
+# the shared status badges; the text says it too, never the colour alone).
+TEXT_BADGES = {
+    'searchable': {'label': 'Text read', 'css': 'status-paid',
+                   'title': 'The text of every PDF is read and searchable'},
+    'partly': {'label': 'Partly read', 'css': 'status-warning',
+               'title': 'Some PDFs are searchable; others are scans or cannot be read'},
+    'waiting': {'label': 'Text pending', 'css': 'status-closed',
+                'title': 'Waiting for the background job (Settings → Documents)'},
+    'scan': {'label': 'Scan: needs OCR', 'css': 'status-warning',
+             'title': 'No text layer: an OCR module is needed to read it'},
+    'failed': {'label': 'Text not readable', 'css': 'status-failed',
+               'title': 'Encrypted, broken, too large, or could not be fetched'},
 }
 
 
@@ -745,9 +759,11 @@ class DocumentsModule(BaseModule):
         notes = self.DocumentNote.query.filter_by(
             document_id=doc.id).order_by(self.DocumentNote.created_at.desc()).all()
         category_colors = self._get_category_colors()
+        file_states = self._file_text_states(doc_files)
         return render_template('document_view.html', doc=doc, doc_files=doc_files,
                                versions=versions, short=integrity.short,
-                               text_status=self._text_status(doc_files),
+                               text_states=file_states,
+                               text_badge=self._document_text_state(list(file_states.values())),
                                is_record=self._is_record(doc),
                                retention_due=retention.is_due(doc),
                                category_retention=self._category_retention(doc.category),
@@ -828,6 +844,7 @@ class DocumentsModule(BaseModule):
                                sort_by=sort_by, sort_dir=sort_dir,
                                page=page, total_pages=total_pages, total=total,
                                text_hits=text_hits,
+                               text_badges=self._documents_text_states(files_by_doc),
                                today=date.today())
 
     def _create_document(self):
@@ -1331,9 +1348,15 @@ class DocumentsModule(BaseModule):
             found.setdefault(doc_id, snippets[key])
         return found
 
-    def _text_status(self, doc_files):
-        """{file id: label} of how far the text of each PDF has been read."""
-        pdfs = [f for f in doc_files if (f.file_format or '').lower() == 'pdf']
+    @staticmethod
+    def _is_pdf(f):
+        return ((f.file_format or '').lower() == 'pdf'
+                or (f.original_filename or '').lower().endswith('.pdf'))
+
+    def _file_text_states(self, files):
+        """{file id: {state, label}} for the PDFs among `files`, one query.
+        state: waiting, searchable, scan or failed (TEXT_BADGES)."""
+        pdfs = [f for f in files if self._is_pdf(f)]
         if not pdfs:
             return {}
         rows = {r.storage_key: r for r in self.DocumentText.query.filter(
@@ -1342,14 +1365,49 @@ class DocumentsModule(BaseModule):
         for f in pdfs:
             row = rows.get(f.file_path)
             if row is None:
-                out[f.id] = 'Text: waiting to be read'
-            elif row.status == 'ok' and row.empty_pages:
-                out[f.id] = (f'Text: searchable, {row.page_count} page(s), '
-                             f'{row.empty_pages} without text')
+                state, label = 'waiting', 'Waiting to be read'
+            elif row.status == 'error' and (row.attempts or 0) < TEXT_JOB_MAX_ATTEMPTS:
+                state, label = 'waiting', 'Could not be fetched, will try again'
             elif row.status == 'ok':
-                out[f.id] = f'Text: searchable, {row.page_count} page(s)'
+                state = 'searchable'
+                label = f'Searchable, {row.page_count} page(s)' + (
+                    f', {row.empty_pages} without text' if row.empty_pages else '')
+            elif row.status == 'no_text_layer':
+                state, label = 'scan', TEXT_STATUS_LABELS['no_text_layer']
             else:
-                out[f.id] = 'Text: ' + TEXT_STATUS_LABELS.get(row.status, row.status)
+                state = 'failed'
+                label = TEXT_STATUS_LABELS.get(row.status, row.status)
+            out[f.id] = {'state': state, 'label': label}
+        return out
+
+    @staticmethod
+    def _document_text_state(states):
+        """One badge for a document from its PDFs' states, or None without PDFs:
+        waiting while any PDF is; searchable when all are; partly when some are."""
+        values = [s['state'] for s in states]
+        if not values:
+            return None
+        if 'waiting' in values:
+            key = 'waiting'
+        elif all(v == 'searchable' for v in values):
+            key = 'searchable'
+        elif 'searchable' in values:
+            key = 'partly'
+        elif all(v == 'scan' for v in values):
+            key = 'scan'
+        else:
+            key = 'failed'
+        return {'state': key, **TEXT_BADGES[key]}
+
+    def _documents_text_states(self, files_by_doc):
+        """{document id: badge} for the list page."""
+        files = [f for fs in files_by_doc.values() for f in fs]
+        per_file = self._file_text_states(files)
+        out = {}
+        for doc_id, fs in files_by_doc.items():
+            badge = self._document_text_state([per_file[f.id] for f in fs if f.id in per_file])
+            if badge:
+                out[doc_id] = badge
         return out
 
     def _delete_file_and_versions(self, df):

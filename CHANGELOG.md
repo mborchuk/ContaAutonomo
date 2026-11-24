@@ -11,8 +11,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   and indexes it with SQLite FTS5, so saving a document stays fast. The
   Documents search then also finds documents by words in their files —
   accents folded, words as prefixes — and shows where they matched. The
-  document page says per PDF whether its text is searchable, still to be
-  read, or a scan that needs OCR. Settings → Documents turns the job on or
+  list and the document page show a badge per document — *Text read*,
+  *Text pending*, *Partly read*, *Scan: needs OCR*, *Text not readable* —
+  and the document page the status of each PDF. Settings → Documents turns the job on or
   off, sets how often it runs (default every 5 minutes) and how many PDFs it
   reads per run (default 10), shows how many are waiting, and reads a batch
   at once with *Read now*. Backups leave the index out; a restore drops it
