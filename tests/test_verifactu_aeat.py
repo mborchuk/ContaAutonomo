@@ -92,7 +92,7 @@ def test_stamp_adds_label_once_and_phrase_only_for_verifactu():
 # --- module hook ------------------------------------------------------------------
 
 def _issue(db, number):
-    from app import Customer, Invoice, _issue_invoice
+    from contaautonomo.app import Customer, Invoice, _issue_invoice
     cust = Customer(name=f'{number} SL', tax_type='standard')
     db.session.add(cust)
     db.session.flush()
@@ -105,7 +105,7 @@ def _issue(db, number):
 
 
 def test_hook_stamps_issued_invoices_only(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     vf = loaded_modules.modules['verifactu']
     inv, issue = _issue(db, 'D3-A')
     draft_pdf = _pdf()
@@ -116,7 +116,7 @@ def test_hook_stamps_issued_invoices_only(loaded_modules):
 
 
 def test_generated_pdf_of_issued_invoice_carries_qr(loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     inv, issue = _issue(db, 'D3-B')
     issue(inv)
     with client.session_transaction() as sess:

@@ -15,7 +15,7 @@ TODAY = date(YEAR, 6, 15)       # Q2 open, 6 months left
 
 @pytest.fixture
 def synthetic_year(loaded_modules, app):
-    from app import Customer, Expense, Invoice, Settings, db
+    from contaautonomo.app import Customer, Expense, Invoice, Settings, db
     settings = Settings.query.first()
     if settings is None:
         settings = Settings()
@@ -160,7 +160,7 @@ def _snapshot(db):
 
 
 def test_database_is_unchanged_after_use(synthetic_year, client):
-    from app import db
+    from contaautonomo.app import db
     irpf = _irpf(synthetic_year)
     irpf.IrpfProfile.query.delete()     # a first visit must not create a profile
     db.session.commit()

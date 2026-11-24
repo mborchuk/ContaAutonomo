@@ -8,6 +8,9 @@ inheriting from BaseModule.
 """
 
 import os
+
+from contaautonomo import paths
+from contaautonomo.security.login import login_required
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,12 +24,12 @@ def _sanitize_log(value):
 import importlib
 import importlib.util
 from abc import ABC, abstractmethod
-from db_helpers import db_get
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get
+from contaautonomo.utils.timeutil import utcnow
 
-from constants import invoice_locked
-import core_functions
-from functions import FunctionRegistry
+from contaautonomo.utils.constants import invoice_locked
+from contaautonomo.core import core_functions
+from contaautonomo.core.functions import FunctionRegistry
 
 
 def valid_capability(cap):
@@ -529,7 +532,7 @@ class BaseModule(ABC):
             list[AuthProvider]: provider instances to register with AuthService
 
         Example:
-            from auth import AuthProvider, AuthResult
+            from contaautonomo.security.auth import AuthProvider, AuthResult
 
             class GoogleAuthProvider(AuthProvider):
                 provider_id = 'google'
@@ -1178,14 +1181,15 @@ class CoreServices:
         self.app = app
         self.db = db
         self._settings_model = None
+        self._invoice_model = None   # set by ModuleManager.register_core_functions
         self._module_enabled_model = None
         self._module_manager = None
         # MessageCenter (message_center.py) and InvoicePdf (invoice_pdf.py),
         # set by register_core_functions.
         self.message_center = None
         self.invoice_pdf = None
-        self._storage_backend = LocalStorageBackend(app.root_path)
-        self._activity_logger = FileActivityLogger(app.root_path)
+        self._storage_backend = LocalStorageBackend(paths.data_dir())
+        self._activity_logger = FileActivityLogger(paths.data_dir())
         self._scheduler = TaskScheduler(app)
 
     @property
@@ -1201,8 +1205,10 @@ class CoreServices:
 
     @property
     def app_path(self):
-        """Application root path"""
-        return self.app.root_path
+        """The data folder: database and keys under instance/, logs/,
+        backups/ and the uploaded files (`contaautonomo.paths`). Before the
+        core moved into the package it was also the code's folder."""
+        return paths.data_dir()
 
     def data_years(self):
         """Years to offer in year pickers: every year with an invoice or an
@@ -1231,7 +1237,7 @@ class CoreServices:
         Get a safe upload path for module files.
         Creates the directory if it doesn't exist.
         """
-        path = os.path.join(self.app.root_path, subfolder)
+        path = os.path.join(paths.data_dir(), subfolder)
         os.makedirs(path, exist_ok=True)
         return path
 
@@ -1275,7 +1281,6 @@ class CoreServices:
 
     def login_required(self, f):
         """Decorator: require login for a route"""
-        from app import login_required
         return login_required(f)
 
     # --- File Storage ---
@@ -1582,7 +1587,7 @@ class CurrencyService:
             from datetime import date
             date_str = date.today().strftime('%Y-%m-%d')
 
-        from currency_converter import get_multiple_exchange_rates
+        from contaautonomo.utils.currency_converter import get_multiple_exchange_rates
         return get_multiple_exchange_rates(date_str, currencies, base_currency=base)
 
     def convert(self, amount, from_currency, to_currency, date_str):
@@ -1612,7 +1617,7 @@ class CurrencyService:
 
     def _default_rate(self, from_currency, to_currency, date_str):
         """Fetch rate using built-in ECB-based currency_converter."""
-        from currency_converter import get_exchange_rate, get_multiple_exchange_rates
+        from contaautonomo.utils.currency_converter import get_exchange_rate, get_multiple_exchange_rates
 
         if from_currency == to_currency:
             return 1.0, date_str
@@ -1659,7 +1664,11 @@ class InvoiceService:
         self._core = core
 
     def _get_models(self):
-        from app import Invoice
+        # The app hands the core its Invoice model (register_core_functions),
+        # so the core never imports the app.
+        Invoice = self._core._invoice_model
+        if Invoice is None:
+            raise RuntimeError('InvoiceService needs register_core_functions(Invoice=...) first')
         return Invoice, self._core.db
 
     def get(self, invoice_id):
@@ -1909,12 +1918,13 @@ class ModuleManager:
         `core.message_center` and its functions are registered. The invoice
         PDF builder (invoice_pdf.py) is `core.invoice_pdf`; `Bank` goes to the
         template files that take it."""
+        self.core._invoice_model = Invoice
         center = None
         if Message is not None:
-            from message_center import MessageCenter
+            from contaautonomo.core.message_center import MessageCenter
             center = MessageCenter(self.db, Message, self.core.log_activity)
         self.core.message_center = center
-        from invoice_pdf import InvoicePdf
+        from contaautonomo.core.invoice_pdf import InvoicePdf
         self.core.invoice_pdf = InvoicePdf(self, Bank=Bank)
         core_functions.register(self.functions, self.core, Invoice=Invoice, Customer=Customer,
                                 message_center=center, invoice_pdf=self.core.invoice_pdf)
@@ -1939,7 +1949,7 @@ class ModuleManager:
 
     def discover_modules(self):
         """Scan modules/ directory for available modules"""
-        modules_dir = os.path.join(self.app.root_path, 'modules')
+        modules_dir = paths.MODULES_DIR
         if not os.path.exists(modules_dir):
             os.makedirs(modules_dir)
             return
@@ -2234,7 +2244,7 @@ class ModuleManager:
             try:
                 providers = instance.get_auth_providers()
                 if providers:
-                    from auth import auth_service
+                    from contaautonomo.security.auth import auth_service
                     for provider in providers:
                         auth_service.register(provider)
                         logger.info("Auth provider '%s' registered from module '%s'",

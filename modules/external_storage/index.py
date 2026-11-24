@@ -5,14 +5,14 @@ Intercepts core file operations and routes them to configurable storage backends
 Supports: Local filesystem (default), AWS S3, Google Cloud Storage, Google Drive.
 """
 
-from module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
-from settings_forms import secret_from_form
+from contaautonomo.core.module_manager import BaseModule, FileStorageBackend, LocalStorageBackend
+from contaautonomo.utils.settings_forms import secret_from_form
 from flask import Blueprint, redirect, url_for, flash
 import logging
 import os
 import io
-from secret_box import EncryptedString, encrypt_existing
-from timeutil import utcnow
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
+from contaautonomo.utils.timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 

@@ -31,12 +31,12 @@ Complete guide for creating modules for ContaAutónomo.
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                   Core (app.py)                       │
+│          Core (contaautonomo/app.py)                  │
 │  Models: Invoice, Customer, Bank, Settings, etc.      │
 │  Routes: Dashboard, Invoices, Settings, Auth, Logs    │
 │  Services: DB, Auth, Currency                         │
 ├──────────────────────────────────────────────────────┤
-│            ModuleManager (module_manager.py)           │
+│ ModuleManager (contaautonomo/core/module_manager.py)  │
 │  CoreServices: DB, Storage, Logger, Scheduler         │
 │  discover_modules() → load_enabled_modules()          │
 ├────────────┬────────────┬────────────┬───────────────┤
@@ -73,7 +73,7 @@ modules/
 ### Step 2: Define module class in `index.py`
 
 ```python
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template
 
 class MyModule(BaseModule):
@@ -465,7 +465,7 @@ def register_models(self, db):
 
 ### Using Core Models
 
-To query models defined in core (app.py), use `extend_existing=True`
+To query models defined in core (`contaautonomo/app.py`), use `extend_existing=True`
 and define only the columns you need:
 
 ```python
@@ -657,8 +657,8 @@ auto-escaped, so stored values cannot inject markup, and it works for modules
 without a blueprint.
 
 ```python
-from module_manager import BaseModule
-from settings_forms import secret_from_form
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.utils.settings_forms import secret_from_form
 
 @property
 def settings_tab(self):
@@ -805,7 +805,7 @@ then uses the default template. The core never imports the module.
 
 ### Building an invoice PDF
 
-One place builds every invoice PDF (`invoice_pdf.py`), and callers use it
+One place builds every invoice PDF (`contaautonomo/core/invoice_pdf.py`), and callers use it
 through two core registry functions:
 
 - `invoice.render_pdf(invoice_id)` → `{"pdf": bytes, "template": str,
@@ -1032,7 +1032,7 @@ If `total_field` is provided, a TOTAL row is appended with the sum of that field
 
 ```python
 # modules/notes/index.py
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
 
@@ -1137,7 +1137,7 @@ def _upload_file(self):
 8. **Don't modify core models**: only read from them via `extend_existing`
 9. **Templates extend `base.html`**: ensures consistent navigation and styling
 10. **Use `url_for('blueprint.endpoint')`**: never hardcode URLs
-11. **Never `from app import ...`** in modules — use `self.core` for all core access. Direct imports from `app` cause circular import issues where values may be `None`.
+11. **Never `from contaautonomo.app import ...`** in modules — use `self.core` for all core access. Direct imports from `app` cause circular import issues where values may be `None`.
 12. **No ORM relationships across modules**: models defined with `extend_existing=True` don't inherit relationships from core. Use explicit queries (e.g. `Contractor.query.get(expense.contractor_id)`) instead of `expense.contractor`.
 13. **Use `self.core.db` for DB session** — never import `db` from `app`. Use `self.core.db.session.commit()` in service code. Importing `db` from `app` can cause "Flask app not registered with this SQLAlchemy instance" errors.
 14. **Always `file.seek(0)` before reading** uploaded files — the stream position may be at the end if Flask or another handler already read it.
@@ -1145,7 +1145,7 @@ def _upload_file(self):
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
 17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
 18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
-19. **Use another module through registry functions** — `self.core.functions.call('<area.name>', ...)`, after `available(name)` when the function is optional (see `MODULES_DOCUMENTATION.md` → "Functions"). Declare what you offer in `get_functions()`. Never import another module's code (a test fails on it) and never reach into `module_manager.modules`; when a module itself is needed, use `provider_of('<module id>')`.
+19. **Use another module through registry functions** — `self.core.functions.call('<area.name>', ...)`, after `available(name)` when the function is optional (see `docs/MODULES_DOCUMENTATION.md` → "Functions"). Declare what you offer in `get_functions()`. Never import another module's code (a test fails on it) and never reach into `module_manager.modules`; when a module itself is needed, use `provider_of('<module id>')`.
 
 ### Replacing a module
 
@@ -1157,7 +1157,7 @@ def provides(self):
     return ['expenses']
 ```
 
-The replacement must have every name in the replaced module's `interface` (no bundled module declares one), otherwise `provider_of` skips it and logs a warning. The `expense` table columns a replacement expenses module must fill are listed in `MODULES_DOCUMENTATION.md` → "Replacing a module".
+The replacement must have every name in the replaced module's `interface` (no bundled module declares one), otherwise `provider_of` skips it and logs a warning. The `expense` table columns a replacement expenses module must fill are listed in `docs/MODULES_DOCUMENTATION.md` → "Replacing a module".
 
 ---
 
@@ -1198,7 +1198,7 @@ The replacement must have every name in the replaced module's `interface` (no bu
 - Do NOT import `db` from `app` in module code or services
 - Use `self.core.db` (or `self._core.db` in services) for all DB session operations
 - Pass invoice/model objects directly to service methods instead of IDs when possible
-- This error typically occurs when `from app import db` creates a reference to a different SQLAlchemy context
+- This error typically occurs when `from contaautonomo.app import db` creates a reference to a different SQLAlchemy context
 
 ### File upload returns empty content
 

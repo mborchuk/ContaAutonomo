@@ -19,7 +19,7 @@ be written, the transition is rolled back.
 
 ```mermaid
 sequenceDiagram
-    participant Core as app.py (invoice lifecycle)
+    participant Core as contaautonomo/app.py (invoice lifecycle)
     participant VF as verifactu module
     participant DB as verifactu_record (append-only)
 

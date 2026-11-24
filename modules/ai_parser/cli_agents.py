@@ -85,7 +85,7 @@ def pdf_text(data):
     """The PDF's text layer, '' for a scan without one, read by the core's
     default (pdf_text.py) when no registry is at hand. Inside the app the
     module passes `extract_pdf_text`, which calls `pdf.extract_text`."""
-    import pdf_text as core_pdf_text
+    from contaautonomo.core import pdf_text as core_pdf_text
     return core_pdf_text.extract(data)['text']
 
 

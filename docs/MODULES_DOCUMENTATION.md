@@ -15,7 +15,33 @@ Technical reference for the Autónomos application architecture.
 
 ## Core Components
 
-### Models (app.py)
+### Package Layout
+
+The core is the `contaautonomo` package; plug-in modules stay in `modules/`.
+
+| Import | What it holds |
+|---|---|
+| `contaautonomo.app` | The Flask app, core models (`db`, `Invoice`, `Expense`, …), core routes, `bootstrap()` |
+| `contaautonomo.core.module_manager` | `BaseModule`, `CoreServices`, `ModuleManager`, storage backends, loggers, scheduler |
+| `contaautonomo.core.functions` | The function registry: `Function`, `Param`, `FunctionRegistry` |
+| `contaautonomo.core.*` | `core_functions`, `message_center`, `invoice_pdf`, `invoice_amounts`, `pdf_text`, `repositories`, `schema_migrations` |
+| `contaautonomo.security.*` | `auth` (`AuthProvider`, `AuthResult`), `auth_routes`, `secret_box` (`EncryptedString`), `rate_limit`, `file_validation` |
+| `contaautonomo.utils.*` | `constants`, `timeutil`, `db_helpers`, `currency_converter`, `api_errors` (`ApiError`), `settings_forms` |
+| `contaautonomo.paths` | `data_dir()`, `instance_dir()`, `MODULES_DIR` |
+
+A module imports `from contaautonomo.core.module_manager import BaseModule`.
+The 2.x top-level names (`module_manager`, `app`, `functions`, …) still
+import the same module objects, with a `DeprecationWarning` naming the new
+one; they go in the next major version.
+
+Runtime data — `instance/` (database, keys, auth config), `logs/`, `backups/`
+and the uploaded files — lives in the data folder: the repository root (`/app`
+in the image) unless `CONTAAUTONOMO_DATA_DIR` names another folder.
+`core.app_path` returns it. The core's templates, static files and invoice
+templates are in the package (`contaautonomo/templates/`, `static/`,
+`invoice_templates/`).
+
+### Models (`contaautonomo/app.py`)
 
 | Model | Table | Description |
 |-------|-------|-------------|
@@ -123,7 +149,7 @@ Key rules:
 | `/customers/*` | Customer CRUD |
 | `/contractors/*` | Contractor CRUD |
 | `/manifest.webmanifest` | Web app manifest (public): name, icons, `start_url`; with Expenses loaded also the "Capture a receipt" shortcut and the share target `/expenses/capture/share` |
-| `/sw.js` | Service worker (public, `static/js/sw.js`, scope `/`, `Cache-Control: no-cache`). It caches nothing; it only receives shared photos and hands them to the capture page |
+| `/sw.js` | Service worker (public, `contaautonomo/static/js/sw.js`, scope `/`, `Cache-Control: no-cache`). It caches nothing; it only receives shared photos and hands them to the capture page |
 
 ### Security
 
@@ -132,7 +158,7 @@ Key rules:
 - **Security Headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, HSTS (when FORCE_HTTPS=1)
 - **Session Security**: HttpOnly cookies, SameSite=Lax, Secure (when HTTPS), 1-hour lifetime
 - **Auth Blueprint**: exempt from CSRF (handles its own validation)
-- **Credentials at rest**: `secret_box.py` encrypts stored service credentials
+- **Credentials at rest**: `contaautonomo/security/secret_box.py` encrypts stored service credentials
   (Fernet, prefix `enc:v1:`) with `CREDENTIALS_KEY` or `instance/credentials.key`.
   Columns use the `EncryptedString` type; JSON-stored values (SMTP password) and
   the raw-SQL API token call `encrypt()` / `decrypt()` directly. Backups (raw SQL
@@ -147,12 +173,12 @@ Core provides two logger backends:
 - `FileActivityLogger` — JSON-lines files, one per day in `logs/` directory
 - `DbActivityLogger` — SQLite `activity_log` table
 
-### Currency Symbols (`currency_converter.py`)
+### Currency Symbols (`contaautonomo/utils/currency_converter.py`)
 
 Shared registry of 50+ currency code → symbol mappings. All templates and modules should use this instead of local dicts:
 
 ```python
-from currency_converter import get_currency_symbol, CURRENCY_SYMBOLS
+from contaautonomo.utils.currency_converter import get_currency_symbol, CURRENCY_SYMBOLS
 
 sym = get_currency_symbol('PLN')   # → 'zł'
 sym = get_currency_symbol('EUR')   # → '€'
@@ -218,7 +244,7 @@ Every module receives `self.core` — a `CoreServices` instance.
 |----------|------|-------------|
 | `core.app` | `Flask` | Flask application |
 | `core.db` | `SQLAlchemy` | Database instance |
-| `core.app_path` | `str` | Application root path |
+| `core.app_path` | `str` | The data folder (`instance/`, `logs/`, `backups/`, uploads): the repository root unless `CONTAAUTONOMO_DATA_DIR` is set |
 | `core.storage` | `FileStorageBackend` | Active file storage backend |
 | `core.activity_logger` | `ActivityLogger` | Active logger instance |
 | `core.scheduler` | `TaskScheduler` | Task scheduler |
@@ -287,7 +313,7 @@ Exchange rate API for modules. Default provider: ECB (European Central Bank) wit
 
 #### Built-in Providers
 
-The following providers are available in `currency_converter.py` and can be registered by modules or selected in Settings → General → Exchange Rate Source:
+The following providers are available in `contaautonomo/utils/currency_converter.py` and can be registered by modules or selected in Settings → General → Exchange Rate Source:
 
 | Provider | Key | API Key | Notes |
 |----------|-----|---------|-------|
@@ -363,7 +389,7 @@ a full VAT breakdown.
   `/expenses/capture/share` → redirect → `postMessage`, held in memory only).
   Without an active service worker that POST only redirects back with a
   message (CSRF-exempt because it changes nothing; login required).
-  Scripts are external files (`static/js/pwa.js`, `capture.js`, `sw.js`) so
+  Scripts are external files (`contaautonomo/static/js/pwa.js`, `capture.js`, `sw.js`) so
   they keep working under an enforced Content Security Policy (task C-5).
   Installing needs HTTPS (or `localhost`): Chrome on Android installs from the
   menu and gets the share target; Safari on iOS adds it with "Add to Home
@@ -674,7 +700,7 @@ Polish tax rules for IT freelancers (JDG/B2B).
 ### AI Communication API (`api`)
 
 REST/JSON API under `/api/v1` so AI agents and external tools can read and write
-app data. Full reference: [`modules/api/README.md`](api/README.md).
+app data. Full reference: [`modules/api/README.md`](../modules/api/README.md).
 
 - Routes: `/api/v1/` (index), `/api/v1/openapi.json` (manifest), `/api/v1/health`,
   `/api/v1/invoices` (GET list, POST create), `/api/v1/invoices/<id>`
@@ -907,7 +933,7 @@ Tamper-evident, hash-chained billing records for issued and annulled invoices
 
 ```mermaid
 sequenceDiagram
-    participant Core as app.py (lifecycle)
+    participant Core as contaautonomo/app.py (lifecycle)
     participant VF as verifactu
     participant DB as verifactu_record (append-only)
 
@@ -991,7 +1017,7 @@ modules/my_module/
 
 ```python
 # modules/my_module/index.py
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template
 
 class MyModule(BaseModule):
@@ -1050,7 +1076,7 @@ class MyModule(BaseModule):
 
 ### Navigation Grouping
 
-Navigation is a left sidebar (`templates/base.html`). Module nav items support a
+Navigation is a left sidebar (`contaautonomo/templates/base.html`). Module nav items support a
 `group` key to place them inside an existing or a new collapsible group:
 
 ```python
@@ -1129,7 +1155,7 @@ Each message has its own id. Deleting hides a message and keeps its row, so its 
 stays used. Every change writes an activity-log entry in category `messages` —
 `message_posted`, `message_read`, `message_unread`, `message_deleted` — with the
 message id; System → Logs links the entry to the message on the Messages page
-(`/messages#message-<id>`). Rules and rendering: `message_center.py`; routes
+(`/messages#message-<id>`). Rules and rendering: `contaautonomo/core/message_center.py`; routes
 `/messages`, `POST /messages/<id>/read|unread|delete`, `POST /messages/read-all` (the
 bell's script posts with `Accept: application/json` and updates the count in place).
 
@@ -1195,7 +1221,7 @@ new ones; nothing in the core has to change.
   module's own folder:
 
   ```python
-  from functions import Function, Param
+  from contaautonomo.core.functions import Function, Param
 
   def get_functions(self):
       return [
@@ -1215,7 +1241,7 @@ new ones; nothing in the core has to change.
   app), `assistant` (the ledger assistant may call it; needs `read_only`, not
   `external`, plus `record_kind` and the `assistant_fields` it may send) — the
   callable, which must accept every parameter by name, and an optional browser
-  `route`. The core declares its own the same way (`core_functions.py`).
+  `route`. The core declares its own the same way (`contaautonomo/core/core_functions.py`).
 - **Who owns a name**: the first provider to register it — the core, then the
   modules in load order (module id order). A later module that declares the
   same name is not used for it; its card in the Modules tab shows
@@ -1253,8 +1279,8 @@ Functions today:
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `messages.post` | core | `source`, `text`, `level?`, `image?`, `key?` → `{id, created}`; shows a message in the bell and on the Messages page (*Message Center*). Not read-only |
 | `messages.unread_count` | core | Number of unread messages |
-| `pdf.extract_text` | core default (`pdf_text.py`, pypdf) | `pdf_bytes`, `max_pages?` (default 200, at most 2000) → `{status, text, pages, page_count, empty_pages, truncated, method}`. `status`: `ok`, `no_text_layer` (a scan: no OCR here), `encrypted`, `unreadable`, `too_large` (over the 50 MB upload limit); never raises for a bad file. A module declaring the name (PyMuPDF, OCR) replaces it. The AI Parser's CLI agents call it |
-| `invoice.render_pdf` | core | `invoice_id` → `{pdf, template, fallback}`: the PDF in the template chosen in Settings → General, after every module's `filter_invoice_pdf` (Verifactu QR); the default template when the chosen one is not available (`fallback` true). Builds only, does not store. The new-invoice PDF, `/generate-pdf/<id>` and `/preview-pdf/<id>` call it (`invoice_pdf.py`) |
+| `pdf.extract_text` | core default (`contaautonomo/core/pdf_text.py`, pypdf) | `pdf_bytes`, `max_pages?` (default 200, at most 2000) → `{status, text, pages, page_count, empty_pages, truncated, method}`. `status`: `ok`, `no_text_layer` (a scan: no OCR here), `encrypted`, `unreadable`, `too_large` (over the 50 MB upload limit); never raises for a bad file. A module declaring the name (PyMuPDF, OCR) replaces it. The AI Parser's CLI agents call it |
+| `invoice.render_pdf` | core | `invoice_id` → `{pdf, template, fallback}`: the PDF in the template chosen in Settings → General, after every module's `filter_invoice_pdf` (Verifactu QR); the default template when the chosen one is not available (`fallback` true). Builds only, does not store. The new-invoice PDF, `/generate-pdf/<id>` and `/preview-pdf/<id>` call it (`contaautonomo/core/invoice_pdf.py`) |
 | `invoice.list_pdf_templates` | core | `{data: [{id, name, module_id}]}`: the core files in `invoice_templates/` (`module_id` `core`) and the templates of enabled modules. The Settings dropdown calls it |
 | `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
@@ -1341,7 +1367,7 @@ def provides(self):
   No bundled module declares one: they call each other through registry
   functions ([Functions](#functions)), which a replacement declares instead.
 
-The tax modules read the core `expense` table (`from app import Expense`). A
+The tax modules read the core `expense` table (`from contaautonomo.app import Expense`). A
 replacement expenses module must
 write its records there with these columns filled: `expense_date`, `amount`,
 `currency`, `net_amount`, `vat_amount`, `vat_rate`, `deductible`,
@@ -1349,13 +1375,13 @@ write its records there with these columns filled: `expense_date`, `amount`,
 `description`. A test fails if one of these columns disappears.
 
 No module imports another module's code; a test fails if one does. The core
-reads its own data for modules: `invoice_amounts.py` gives an invoice's amount
+reads its own data for modules: `contaautonomo/core/invoice_amounts.py` gives an invoice's amount
 in EUR rounded to the cent and its customer's tax type saved at issue. It holds
 no tax rule. A rule one module owns and another needs is a registry function,
 not core code: the reverse-charge region check is Spanish Tax Forms'
 `vat.reverse_charge_check`, which Expenses calls, and the output VAT of each
 invoice is its `vat.invoice_lines`, which Reports calls.
-`ApiError` is in the core (`from api_errors import ApiError`);
+`ApiError` is in the core (`from contaautonomo.utils.api_errors import ApiError`);
 `modules.api.index.ApiError` is the same class.
 
 ### Capabilities System
@@ -1394,7 +1420,7 @@ for signer in signers:
 
 Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`, `year_table` (a yearly tax table for Tax Data). Modules can define any custom types.
 
-See [modules/README.md](modules/README.md) for the full development guide with examples.
+See [modules/README.md](../modules/README.md) for the full development guide with examples.
 
 ---
 
@@ -1426,7 +1452,7 @@ Login Request
 ### AuthProvider Interface
 
 ```python
-from auth import AuthProvider, AuthResult
+from contaautonomo.security.auth import AuthProvider, AuthResult
 
 class MyAuthProvider(AuthProvider):
 
@@ -1492,8 +1518,8 @@ AuthResult(
 Register auth providers from a module via `get_auth_providers()`:
 
 ```python
-from module_manager import BaseModule
-from auth import AuthProvider, AuthResult
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.security.auth import AuthProvider, AuthResult
 
 class GoogleAuthProvider(AuthProvider):
     provider_id = 'google'

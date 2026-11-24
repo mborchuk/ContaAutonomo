@@ -20,7 +20,7 @@ from datetime import date
 
 from flask import Blueprint, render_template, Response, url_for
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .aeat import VERIFACTU_PHRASE, qr_url
 from .obligations import CHECKED_ON, OBLIGATIONS_VERSION, obligations
@@ -35,7 +35,7 @@ from .chain import (
     verify_chain,
     verify_signature,
 )
-from timeutil import utcnow
+from contaautonomo.utils.timeutil import utcnow
 
 
 class VerifactuModule(BaseModule):

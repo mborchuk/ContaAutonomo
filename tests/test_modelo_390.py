@@ -74,7 +74,7 @@ def test_table_year_fallback():
 # --- module integration -----------------------------------------------------------
 
 def test_draft_390_matches_quarterly_drafts(loaded_modules):
-    from app import Customer, Invoice, _issue_invoice, db
+    from contaautonomo.app import Customer, Invoice, _issue_invoice, db
     forms = loaded_modules.modules['tax_es_forms']
     year = 2031   # synthetic year with no other data
     cust = Customer(name='Annual SL', tax_type='standard')

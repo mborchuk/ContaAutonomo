@@ -28,8 +28,8 @@ from urllib.parse import urlsplit
 
 from markupsafe import Markup, escape
 
-from functions import InvalidArguments
-from timeutil import utcnow
+from contaautonomo.core.functions import InvalidArguments
+from contaautonomo.utils.timeutil import utcnow
 
 LEVELS = ('info', 'warning', 'danger')
 MAX_TEXT = 1000

@@ -11,7 +11,7 @@ TODAY = date(2035, 6, 15)
 @pytest.fixture
 def documents(loaded_modules):
     from sqlalchemy.exc import OperationalError
-    from app import Message, db
+    from contaautonomo.app import Message, db
     db.create_all()
     dm = loaded_modules.modules['documents']
 
@@ -30,7 +30,7 @@ def documents(loaded_modules):
 
 
 def _doc(dm, name, expiry):
-    from app import db
+    from contaautonomo.app import db
     doc = dm.Document(name=name, file_path='_multi_', expiry_date=expiry)
     db.session.add(doc)
     db.session.commit()
@@ -38,7 +38,7 @@ def _doc(dm, name, expiry):
 
 
 def _messages():
-    from app import Message
+    from contaautonomo.app import Message
     return Message.query.filter_by(source='documents').order_by(Message.id).all()
 
 
@@ -62,7 +62,7 @@ def test_expiring_and_recently_expired_documents_get_one_message_each(documents)
 
 
 def test_a_read_or_deleted_alert_does_not_come_back(documents, loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     doc = _doc(documents, 'Synthetic licence', TODAY + timedelta(days=5))
     documents.post_expiry_messages(today=TODAY)
     center = loaded_modules.core.message_center

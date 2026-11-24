@@ -124,7 +124,7 @@ def _expense_rows(db):
 
 @pytest.fixture
 def vehicle_expense(loaded_modules, app):
-    from app import Expense, db
+    from contaautonomo.app import Expense, db
     e = Expense(amount=121.0, currency='EUR', category='Vehicle', description='Synthetic fuel',
                 expense_date=date(2032, 4, 4), net_amount=100.0, vat_rate=21.0,
                 vat_amount=21.0, deductible=True, deductible_pct=100.0)
@@ -135,7 +135,7 @@ def vehicle_expense(loaded_modules, app):
 
 def test_list_and_form_show_the_notice_without_changing_the_expense(
         vehicle_expense, client):
-    from app import db
+    from contaautonomo.app import db
     _auth(client)
     before = _expense_rows(db)
     listing = client.get('/expenses/').get_data(as_text=True)
@@ -147,7 +147,7 @@ def test_list_and_form_show_the_notice_without_changing_the_expense(
 
 
 def test_dismissal_is_recorded_per_expense(vehicle_expense, loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     expenses = loaded_modules.modules['expenses']
     _auth(client)
     before = _expense_rows(db)

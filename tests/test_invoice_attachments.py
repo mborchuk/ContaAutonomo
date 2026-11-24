@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from module_manager import LocalStorageBackend
+from contaautonomo.core.module_manager import LocalStorageBackend
 
 PDF = b'%PDF-1.4\n% synthetic test pdf\n%%EOF\n'
 
@@ -22,7 +22,7 @@ def attachments(loaded_modules, tmp_path, monkeypatch):
 
 
 def _invoice(number, status='draft', issued=False):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     inv = Invoice.query.filter_by(invoice_number=number).first()
     if inv:
         db.session.delete(inv)

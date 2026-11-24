@@ -15,11 +15,11 @@ the user exactly what to fill before an invoice is e-invoice ready.
 
 from flask import Blueprint, Response, flash, redirect, request, url_for
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from . import xades
 from .facturae import check_readiness, generate_facturae
-from db_helpers import db_get
+from contaautonomo.utils.db_helpers import db_get
 
 
 class EInvoiceModule(BaseModule):
@@ -50,7 +50,7 @@ class EInvoiceModule(BaseModule):
     # --- Readiness ---------------------------------------------------------- #
 
     def _readiness(self, invoice):
-        from app import Customer
+        from contaautonomo.app import Customer
         seller = self.core.get_settings()
         customer = db_get(Customer, invoice.customer_id) \
             if invoice.customer_id else None
@@ -147,7 +147,7 @@ class EInvoiceModule(BaseModule):
         ]
 
     def _api_facturae(self, request, invoice_id=None):
-        from api_errors import ApiError
+        from contaautonomo.utils.api_errors import ApiError
         invoice = self.core.invoice_service.get(invoice_id)
         if not invoice:
             raise ApiError(404, 'not_found', f'Invoice #{invoice_id} not found')

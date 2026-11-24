@@ -271,7 +271,7 @@ The handler returns a `(json_data, status)` tuple or a Flask `Response`. Path
 params are supported: a route `path` of `things/<int:id>` matches
 `/api/v1/m/my_module/things/5` and the handler is called as
 `handler(request, id=5)`. To signal an error, raise
-`ApiError(status, code, message)` from the core: `from api_errors import ApiError`
+`ApiError(status, code, message)` from the core: `from contaautonomo.utils.api_errors import ApiError`
 (`modules.api.index.ApiError` is the same class, kept for older modules).
 
 ### Module endpoints that ship today
@@ -342,5 +342,5 @@ To invalidate a leaked token, tick **Rotate token on save** in Settings → API.
 
 ---
 
-*Part of ContaAutónomo. See [`MODULES_DOCUMENTATION.md`](../../MODULES_DOCUMENTATION.md)
+*Part of ContaAutónomo. See [`MODULES_DOCUMENTATION.md`](../../docs/MODULES_DOCUMENTATION.md)
 for the full module reference and `AUTONOMOS_MD/API.MD` for the design rationale.*

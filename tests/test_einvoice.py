@@ -20,7 +20,7 @@ def test_country_alpha3_mapping():
 
 @pytest.fixture
 def issued_invoice(loaded_modules):
-    from app import db, Customer, Invoice, Settings, _issue_invoice
+    from contaautonomo.app import db, Customer, Invoice, Settings, _issue_invoice
 
     settings = Settings.query.first()
     if not settings:
@@ -49,7 +49,7 @@ def issued_invoice(loaded_modules):
 
 
 def test_readiness_flags_missing_data(loaded_modules):
-    from app import db, Customer, Invoice
+    from contaautonomo.app import db, Customer, Invoice
 
     cust = Customer(name='Bare Cli', tax_type='standard')  # no VAT, no address
     db.session.add(cust)

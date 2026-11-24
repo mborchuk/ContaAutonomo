@@ -6,7 +6,7 @@ Adds an "Attach Invoice" button on the invoice view page.
 Uses core.invoice_service for safe, controlled access.
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, request, redirect, url_for, flash
 
 

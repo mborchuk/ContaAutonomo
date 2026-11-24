@@ -75,7 +75,7 @@ def drafts(app, loaded_modules):
 
 
 def _filed_303(tm, year, quarter, boxes):
-    from app import db
+    from contaautonomo.app import db
     db.session.add(tm.TaxForm(form_type='303', year=year, quarter=quarter,
                               file_path='', status='filed',
                               filed_boxes=json.dumps(boxes)))

@@ -8,11 +8,11 @@ Integrates via BaseModule hooks without modifying core models.
 import io
 import importlib.util
 
-from module_manager import BaseModule
-from secret_box import EncryptedString, encrypt_existing
-from settings_forms import secret_from_form
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
+from contaautonomo.utils.settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template, flash, redirect, url_for
-from timeutil import utcnow
+from contaautonomo.utils.timeutil import utcnow
 
 # Graceful degradation: try importing optional dependencies
 try:
@@ -388,8 +388,8 @@ class PDFSignatureModule(BaseModule):
 
     def sign_invoice(self, invoice_id):
         """Sign the invoice's stored PDF with the signatures chosen on its form."""
-        from app import Invoice
-        from db_helpers import db_get
+        from contaautonomo.app import Invoice
+        from contaautonomo.utils.db_helpers import db_get
         sig = self.PDFSignatureInvoice.query.filter_by(invoice_id=invoice_id).first()
         if not sig or not (sig.has_visual or sig.has_digital):
             return {'signed': False, 'requested': False}
@@ -411,7 +411,7 @@ class PDFSignatureModule(BaseModule):
         return {'pfx': stored[0], 'password': cfg.certificate_password or ''}
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         return [
             Function('pdf.sign_invoice', self.sign_invoice,
                      "Sign an invoice's stored PDF with the signatures chosen on its form "

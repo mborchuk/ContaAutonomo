@@ -15,12 +15,12 @@ import json
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .parsers import parse_n43, parse_csv
 from .matching import suggest_expenses_for_movement, suggest_for_movement
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 
 class BankImportModule(BaseModule):
@@ -144,7 +144,7 @@ class BankImportModule(BaseModule):
     # --- Matching ---------------------------------------------------------- #
 
     def _unpaid_invoices(self):
-        from app import Invoice
+        from contaautonomo.app import Invoice
         return Invoice.query.filter(
             Invoice.status.in_(('issued', 'pending'))).all()
 
@@ -162,7 +162,7 @@ class BankImportModule(BaseModule):
         """Expenses not yet linked to a movement, with their amount in
         `currency` (converted when needed; skipped when no rate is available)."""
         from types import SimpleNamespace
-        from app import Contractor, Expense
+        from contaautonomo.app import Contractor, Expense
         linked = {mid for (mid,) in self._db.session.query(self.BankMovement.matched_id)
                   .filter(self.BankMovement.matched_type == 'expense')}
         names = {c.id: c.name for c in Contractor.query.all()}
@@ -273,7 +273,7 @@ class BankImportModule(BaseModule):
             if not invoice_id:
                 flash('Pick an invoice to match.', 'danger')
                 return redirect(url_for('bank_import.bank_index'))
-            from app import Invoice, _mark_invoice_paid
+            from contaautonomo.app import Invoice, _mark_invoice_paid
             invoice = db_get_or_404(Invoice, invoice_id)
             try:
                 # Normal core transition -> lifecycle log; F2/F1 semantics hold.
@@ -298,7 +298,7 @@ class BankImportModule(BaseModule):
         def bank_link_expense(movement_id):
             movement = db_get_or_404(module.BankMovement, movement_id)
             expense_id = request.form.get('expense_id', type=int)
-            from app import Expense
+            from contaautonomo.app import Expense
             expense = db_get_or_404(Expense, expense_id)
             movement.status = 'matched'
             movement.matched_type = 'expense'

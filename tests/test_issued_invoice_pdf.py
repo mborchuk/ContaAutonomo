@@ -5,7 +5,7 @@ import io
 import pytest
 from pypdf import PdfReader
 
-from module_manager import LocalStorageBackend
+from contaautonomo.core.module_manager import LocalStorageBackend
 
 
 def _text(data):
@@ -21,7 +21,7 @@ def owner(loaded_modules, client, tmp_path, monkeypatch):
 
 
 def _create(client, number, description='Consulting work'):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     client.post('/create', data={
         'invoice_number': number, 'client_name': 'PDF Check SL', 'invoice_date': '2026-11-12',
         'currency': 'EUR', 'items[0][description]': description,
@@ -36,7 +36,7 @@ def test_new_invoice_gets_a_generated_draft_pdf(owner):
 
 
 def test_issued_invoice_pdf_has_final_number_and_qr(owner):
-    from app import db
+    from contaautonomo.app import db
     inv = _create(owner, 'PDF-B')
     old_key = inv.pdf_storage_key
     owner.post(f'/issue/{inv.id}')
@@ -51,7 +51,7 @@ def test_issued_invoice_pdf_has_final_number_and_qr(owner):
 
 
 def test_editing_a_draft_rebuilds_its_pdf(owner):
-    from app import db
+    from contaautonomo.app import db
     inv = _create(owner, 'PDF-C', description='First wording')
     owner.post(f'/edit/{inv.id}', data={
         'invoice_number': 'PDF-C', 'client_name': 'PDF Check SL', 'invoice_date': '2026-11-12',
@@ -63,7 +63,7 @@ def test_editing_a_draft_rebuilds_its_pdf(owner):
 
 
 def test_attached_and_legacy_pdfs_are_kept_on_issue(owner, loaded_modules):
-    from app import db, _issue_invoice
+    from contaautonomo.app import db, _issue_invoice
     svc = loaded_modules.core.invoice_service
     attached = _create(owner, 'PDF-D')
     svc.attach_pdf(attached, b'%PDF-1.4 user file', 'mine.pdf')
@@ -78,7 +78,7 @@ def test_attached_and_legacy_pdfs_are_kept_on_issue(owner, loaded_modules):
 
 
 def test_regenerate_button_and_force_rebuild(owner):
-    from app import db, _issue_invoice
+    from contaautonomo.app import db, _issue_invoice
     inv = _create(owner, 'PDF-F')
     inv.pdf_generated = None             # e.g. created before this fix
     db.session.commit()

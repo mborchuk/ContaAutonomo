@@ -8,7 +8,7 @@ the built-in pdf_signature module, etc.).
 import io
 import logging
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 logger = logging.getLogger('module.pdf_verify')
 
@@ -371,7 +371,7 @@ class PDFVerifyModule(BaseModule):
         self._db = db
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         return [Function(
             'pdf.extract_signatures', extract_signatures,
             'Digital signatures embedded in a PDF; [] when unsigned or not a PDF.',

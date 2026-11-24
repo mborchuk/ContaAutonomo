@@ -23,9 +23,9 @@ from datetime import date, datetime
 
 from flask import Blueprint, render_template, request
 
-from constants import NON_INCOME_INVOICE_STATUSES
-from module_manager import BaseModule
-from invoice_amounts import invoice_base_eur, to_cents
+from contaautonomo.utils.constants import NON_INCOME_INVOICE_STATUSES
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.core.invoice_amounts import invoice_base_eur, to_cents
 
 from .engine import (
     IrpfEngine,
@@ -36,8 +36,8 @@ from .engine import (
 )
 from .depreciation import depreciation_in_year
 from .params_store import available_years, load_params
-from db_helpers import db_get
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get
+from contaautonomo.utils.timeutil import utcnow
 
 # Quarter → last calendar day (month, day), used for cumulative YTD windows.
 _QUARTER_END = {1: (3, 31), 2: (6, 30), 3: (9, 30), 4: (12, 31)}
@@ -141,12 +141,12 @@ class TaxEsIrpfModule(BaseModule):
 
     @property
     def Invoice(self):
-        from app import Invoice
+        from contaautonomo.app import Invoice
         return Invoice
 
     @property
     def Expense(self):
-        from app import Expense
+        from contaautonomo.app import Expense
         return Expense
 
     def _function(self, name):
@@ -565,7 +565,7 @@ class TaxEsIrpfModule(BaseModule):
     # ── Registry functions ───────────────────────────────────────────────
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         year = Param('year', 'int', 'Tax year', required=True, minimum=2000, maximum=2100)
         quarter = Param('quarter', 'int', 'Quarter, 1-4', required=True, minimum=1, maximum=4)
         return [

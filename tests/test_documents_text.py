@@ -5,8 +5,8 @@ import io
 import pytest
 from sqlalchemy import text as sql
 
-from functions import Function, Param
-from module_manager import BaseModule
+from contaautonomo.core.functions import Function, Param
+from contaautonomo.core.module_manager import BaseModule
 from modules.documents import text_index
 
 
@@ -45,7 +45,7 @@ class MemoryStorage:
 
 @pytest.fixture
 def docs(app, loaded_modules, client, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     module = loaded_modules.modules['documents']
     module._ensure_text_index()
     storage = MemoryStorage()

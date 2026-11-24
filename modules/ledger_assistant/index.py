@@ -31,8 +31,8 @@ from contextlib import contextmanager
 from flask import Blueprint, render_template, request
 from sqlalchemy import event
 
-from functions import FunctionUnavailable
-from module_manager import BaseModule
+from contaautonomo.core.functions import FunctionUnavailable
+from contaautonomo.core.module_manager import BaseModule
 
 from . import assistant as core_steps
 
@@ -256,7 +256,7 @@ class LedgerAssistantModule(BaseModule):
                        url_prefix='/assistant')
         login_required = self.core.login_required
         module = self
-        from app import limiter
+        from contaautonomo.app import limiter
 
         def _rl(rule):
             def deco(f):

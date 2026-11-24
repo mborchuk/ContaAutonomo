@@ -16,7 +16,7 @@ def owner(loaded_modules, client, standalone_module, monkeypatch):
 
 
 def _draft(number):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     inv = Invoice(invoice_number=number, client_name='Delete SL', amount_usd=0.0,
                   amount_eur=50.0, exchange_rate=1.0, invoice_date=date(2026, 11, 12),
                   status='draft', currency='EUR')
@@ -26,13 +26,13 @@ def _draft(number):
 
 
 def test_foreign_keys_are_enforced(app):
-    from app import db
+    from contaautonomo.app import db
     from sqlalchemy import text
     assert db.session.execute(text('PRAGMA foreign_keys')).scalar() == 1
 
 
 def test_delete_draft_with_signature_and_comment_rows(owner, loaded_modules):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     sig = loaded_modules.modules['pdf_signature']
     com = loaded_modules.modules['invoice_comments']
     inv = _draft('DEL-1')
@@ -49,7 +49,7 @@ def test_delete_draft_with_signature_and_comment_rows(owner, loaded_modules):
 
 
 def test_blocked_delete_rolls_back_with_a_message(owner, loaded_modules, monkeypatch):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     sig = loaded_modules.modules['pdf_signature']
     inv = _draft('DEL-2')
     db.session.add(sig.PDFSignatureInvoice(invoice_id=inv.id))

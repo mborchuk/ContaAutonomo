@@ -1,7 +1,5 @@
 """Account-lockout helper tests."""
-import auth_routes as ar
-
-
+from contaautonomo.security import auth_routes as ar
 def test_lockout_after_threshold():
     ar._failed_attempts.clear()
     ip = '203.0.113.7'

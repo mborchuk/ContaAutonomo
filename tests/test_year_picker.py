@@ -9,7 +9,7 @@ def _login(client):
 
 
 def _seed(db):
-    from app import Expense, Invoice
+    from contaautonomo.app import Expense, Invoice
     if Invoice.query.filter_by(invoice_number='YP-1').first():
         return
     db.session.add(Invoice(invoice_number='YP-1', client_name='Old Client SL',
@@ -21,7 +21,7 @@ def _seed(db):
 
 
 def test_data_years_has_current_year_without_data(loaded_modules):
-    from app import Expense, Invoice, db
+    from contaautonomo.app import Expense, Invoice, db
     Invoice.query.delete()
     Expense.query.delete()
     db.session.commit()
@@ -30,7 +30,7 @@ def test_data_years_has_current_year_without_data(loaded_modules):
 
 
 def test_data_years_has_every_data_year_newest_first(loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     _seed(db)
     years = loaded_modules.core.data_years()
     assert {2019, 2031, date.today().year} <= set(years)
@@ -38,7 +38,7 @@ def test_data_years_has_every_data_year_newest_first(loaded_modules):
 
 
 def test_reports_picker_lists_data_years_and_current_year(loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     _seed(db)
     _login(client)
     html = client.get('/reports/').get_data(as_text=True)

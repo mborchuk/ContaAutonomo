@@ -9,7 +9,7 @@ and `non_eu` an export. Pure functions, no database queries: the module passes
 invoices in. Other modules read these figures through the registry function
 `vat.invoice_lines` (Reports shows them in its income section).
 """
-from invoice_amounts import customer_tax_type, invoice_base_eur, to_cents
+from contaautonomo.core.invoice_amounts import customer_tax_type, invoice_base_eur, to_cents
 
 
 def invoice_output_vat(invoice, vat_rate):

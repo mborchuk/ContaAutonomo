@@ -14,7 +14,7 @@
 
 - [ ] `python -m pytest` passes locally
 - [ ] Tests added or updated (required for tax calculations, invoice lifecycle, and data deletion)
-- [ ] Documentation updated (`README.md`, `MODULES_DOCUMENTATION.md`, module README, `CHANGELOG.md`) where behavior changed
+- [ ] Documentation updated (`README.md`, `docs/MODULES_DOCUMENTATION.md`, module README, `CHANGELOG.md`) where behavior changed
 - [ ] Schema changes use the idempotent migration pattern and work on an existing database
 - [ ] No secrets, real customer data, databases, or backups are included
 - [ ] Tax logic cites official sources and keeps "estimate, not tax advice" framing

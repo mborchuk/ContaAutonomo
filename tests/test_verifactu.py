@@ -75,7 +75,7 @@ def verifactu(loaded_modules):
 
 
 def _issue_one(db, number):
-    from app import Customer, Invoice, _issue_invoice
+    from contaautonomo.app import Customer, Invoice, _issue_invoice
     cust = Customer(name=f'{number} SL', tax_type='standard')
     db.session.add(cust)
     db.session.flush()
@@ -90,7 +90,7 @@ def _issue_one(db, number):
 
 
 def test_issue_writes_alta_record_and_chain_verifies(verifactu):
-    from app import db
+    from contaautonomo.app import db
 
     inv = _issue_one(db, 'VF-A')
     recs = verifactu.VerifactuRecord.query.filter_by(invoice_id=inv.id).all()
@@ -105,7 +105,7 @@ def test_issue_writes_alta_record_and_chain_verifies(verifactu):
 
 
 def test_annul_appends_anulacion_record(verifactu, client):
-    from app import db
+    from contaautonomo.app import db
 
     inv = _issue_one(db, 'VF-B')
     with client.session_transaction() as sess:
@@ -118,7 +118,7 @@ def test_annul_appends_anulacion_record(verifactu, client):
 
 
 def test_qr_payload_contains_invoice_fields(verifactu):
-    from app import db
+    from contaautonomo.app import db
 
     inv = _issue_one(db, 'VF-C')
     url = verifactu.qr_payload(inv)
@@ -142,7 +142,7 @@ def test_verify_chain_accepts_per_record_key_resolver():
 
 
 def test_new_records_are_signed_with_verifactu_key_not_secret_key(verifactu):
-    from app import db
+    from contaautonomo.app import db
     from modules.verifactu.chain import key_id
 
     inv = _issue_one(db, 'VF-K1')
@@ -153,7 +153,7 @@ def test_new_records_are_signed_with_verifactu_key_not_secret_key(verifactu):
 
 
 def test_rotating_secret_key_keeps_chain_valid(verifactu, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
 
     _issue_one(db, 'VF-K2')
     monkeypatch.setitem(verifactu.core.app.config, 'SECRET_KEY', 'rotated-session-key')
@@ -163,7 +163,7 @@ def test_rotating_secret_key_keeps_chain_valid(verifactu, monkeypatch):
 
 def _append_legacy_record(verifactu, signature_key):
     """Append a record the way the module wrote them before VERIFACTU_KEY."""
-    from app import db
+    from contaautonomo.app import db
     from modules.verifactu.chain import canonical_payload
 
     last = verifactu.VerifactuRecord.query.order_by(
@@ -198,7 +198,7 @@ def test_legacy_records_verify_with_secret_key_then_migrate(verifactu):
 
 
 def test_migration_leaves_records_with_bad_signature_alone(verifactu):
-    from app import db
+    from contaautonomo.app import db
 
     rec = _append_legacy_record(verifactu, 'some-other-key')
     verifactu._migrate_signing_key()
@@ -250,6 +250,6 @@ def test_key_file_is_named_by_the_module_not_the_core(loaded_modules, monkeypatc
     assert core.deployment_key_path('ZZ_SYNTHETIC_KEY', 'zz.key') == str(tmp_path / 'cfg.key')
     monkeypatch.setenv('ZZ_SYNTHETIC_KEY_FILE', str(tmp_path / 'env.key'))
     assert core.deployment_key_path('ZZ_SYNTHETIC_KEY', 'zz.key') == str(tmp_path / 'env.key')
-    app_source = (Path(__file__).resolve().parent.parent / 'app.py').read_text()
+    app_source = (Path(__file__).resolve().parent.parent / 'contaautonomo' / 'app.py').read_text()
     assert 'VERIFACTU_KEY' not in app_source
     assert 'BACKUP_KEY' not in app_source

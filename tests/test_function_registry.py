@@ -7,9 +7,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from functions import (CORE, Function, FunctionRegistry, FunctionUnavailable,
+from contaautonomo.core.functions import (CORE, Function, FunctionRegistry, FunctionUnavailable,
                        InvalidArguments, Param)
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 TEXT = Param('text', 'str', required=True, max_length=10)
 TIMES = Param('times', 'int', minimum=1, maximum=3)
@@ -301,7 +301,7 @@ def test_bundled_modules_declare_valid_functions_without_conflicts(loaded_module
 
 @pytest.fixture
 def invoices(app, loaded_modules):
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
     acme = Customer(name='ACME Synthetic SL', email='a@example.invalid', tax_type='standard')
     db.session.add(acme)
     db.session.flush()
@@ -348,7 +348,7 @@ def test_modules_raise_the_core_api_error():
     """ApiError lives in the core; modules must not import it from the api module."""
     import pathlib
     import re
-    from api_errors import ApiError
+    from contaautonomo.utils.api_errors import ApiError
     from modules.api.index import ApiError as Reexported
     assert Reexported is ApiError
     root = pathlib.Path(__file__).resolve().parent.parent

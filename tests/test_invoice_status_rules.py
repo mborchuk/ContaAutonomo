@@ -14,7 +14,7 @@ def _auth(client):
 
 
 def _draft(number, status='draft'):
-    from app import db, Invoice, Customer
+    from contaautonomo.app import db, Invoice, Customer
     customer = Customer(name=f'Client {number}', tax_type='standard')
     db.session.add(customer)
     db.session.flush()
@@ -38,7 +38,7 @@ def _form(number, **extra):
 
 @pytest.fixture
 def api_headers(loaded_modules):
-    from app import db, Settings
+    from contaautonomo.app import db, Settings
     if not Settings.query.first():
         db.session.add(Settings())
         db.session.commit()
@@ -51,7 +51,7 @@ def api_headers(loaded_modules):
 
 @pytest.mark.parametrize('status', ['paid', 'cancelled', 'issued', 'pending'])
 def test_web_create_rejects_status(loaded_modules, client, status):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     _auth(client)
     resp = client.post('/create', data=_form(f'WEB-{status}', status=status))
     assert resp.status_code == 302
@@ -59,7 +59,7 @@ def test_web_create_rejects_status(loaded_modules, client, status):
 
 
 def test_web_create_makes_a_draft(loaded_modules, client):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     _auth(client)
     client.post('/create', data=_form('WEB-DRAFT'))
     assert Invoice.query.filter_by(invoice_number='WEB-DRAFT').one().status == 'draft'
@@ -67,7 +67,7 @@ def test_web_create_makes_a_draft(loaded_modules, client):
 
 @pytest.mark.parametrize('status', ['paid', 'cancelled'])
 def test_web_edit_cannot_change_status(loaded_modules, client, status):
-    from app import db, Invoice
+    from contaautonomo.app import db, Invoice
     inv = _draft(f'EDIT-{status}')
     _auth(client)
     resp = client.post(f'/edit/{inv.id}', data=_form(inv.invoice_number, status=status))
@@ -76,7 +76,7 @@ def test_web_edit_cannot_change_status(loaded_modules, client, status):
 
 
 def test_web_edit_without_status_still_saves(loaded_modules, client):
-    from app import db, Invoice
+    from contaautonomo.app import db, Invoice
     inv = _draft('EDIT-OK')
     _auth(client)
     client.post(f'/edit/{inv.id}', data=_form('EDIT-OK', notes='updated'))
@@ -86,7 +86,7 @@ def test_web_edit_without_status_still_saves(loaded_modules, client):
 
 
 def test_paid_only_after_issue(loaded_modules, client):
-    from app import db, Invoice
+    from contaautonomo.app import db, Invoice
     inv = _draft('FLOW-1')
     _auth(client)
     client.post(f'/mark-paid/{inv.id}')
@@ -99,7 +99,7 @@ def test_paid_only_after_issue(loaded_modules, client):
 # --- annulled invoices are read-only -----------------------------------------
 
 def test_annulled_invoice_cannot_be_edited_or_deleted(loaded_modules, client):
-    from app import db, Invoice
+    from contaautonomo.app import db, Invoice
     inv = _draft('ANNUL-1')
     _auth(client)
     client.post(f'/issue/{inv.id}')
@@ -113,7 +113,7 @@ def test_annulled_invoice_cannot_be_edited_or_deleted(loaded_modules, client):
 
 
 def test_legacy_cancelled_invoice_stays_editable(loaded_modules):
-    from app import _invoice_locked
+    from contaautonomo.app import _invoice_locked
     inv = _draft('LEGACY-CANCEL', status='cancelled')
     assert inv.issued_at is None
     assert _invoice_locked(inv) is False

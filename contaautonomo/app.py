@@ -7,26 +7,28 @@ Features: Save invoices, USD to EUR conversion, PDF generation, filtering
 from flask import Flask, render_template, request, redirect, url_for, send_file, flash, session, Response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from functools import wraps
 import io
 from contextlib import contextmanager
 import os
 import sys
 import hashlib
 
-# When started with `python app.py`, this module is '__main__'. Register it
-# under its import name as well, *before* any `from app import ...` runs (here
-# or in plugin modules / InvoiceService). Otherwise that import re-executes this
-# file as a separate 'app' module with a second SQLAlchemy()/db, and ORM calls
-# made through the import fail with "current Flask app is not registered with
-# this 'SQLAlchemy' instance". Aliasing keeps a single module/db.
+# When started with `python -m contaautonomo.app`, this module is '__main__'.
+# Register it under its import name as well, *before* any
+# `from contaautonomo.app import ...` runs (here or in plugin modules /
+# InvoiceService). Otherwise that import re-executes this file as a separate
+# module with a second SQLAlchemy()/db, and ORM calls made through the import
+# fail with "current Flask app is not registered with this 'SQLAlchemy'
+# instance". Aliasing keeps a single module/db.
 if __name__ == '__main__':
-    sys.modules.setdefault('app', sys.modules['__main__'])
+    sys.modules.setdefault('contaautonomo.app', sys.modules['__main__'])
 
-from currency_converter import convert_usd_to_eur, get_currency_symbol
+from contaautonomo import paths
+
+from contaautonomo.utils.currency_converter import convert_usd_to_eur, get_currency_symbol
 import logging
 import logging.config
-from timeutil import utcnow
+from contaautonomo.utils.timeutil import utcnow
 
 
 class _RequestIdFilter(logging.Filter):
@@ -63,7 +65,11 @@ logging.config.dictConfig({
 logger = logging.getLogger(__name__)
 
 
-app = Flask(__name__)
+# Templates, static files and invoice templates sit in this package
+# (root_path); runtime data — instance/, logs/, uploads — in the data folder
+# (paths.py), which is the repository root unless CONTAAUTONOMO_DATA_DIR says
+# otherwise. A relative sqlite:/// URL resolves under instance/ there.
+app = Flask(__name__, instance_path=paths.instance_dir())
 APP_VERSION = '2'
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///invoices.db')
@@ -98,7 +104,7 @@ app.config['INIT_LOCK_PATH'] = os.path.join(
 app.config['CREDENTIALS_KEY_FILE'] = os.environ.get(
     'CREDENTIALS_KEY_FILE', os.path.join(app.instance_path, 'credentials.key'))
 
-from constants import (
+from contaautonomo.utils.constants import (
     INITIAL_INVOICE_STATUS,
     LOCKED_INVOICE_STATUSES,
     MAX_CONTENT_LENGTH_BYTES,
@@ -107,7 +113,7 @@ from constants import (
     invoice_locked,
     is_legacy_settled,
 )
-from secret_box import EncryptedString, encrypt_existing
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
 
 # --- Upload size cap: reject oversized bodies before they fill disk ---
 app.config['MAX_CONTENT_LENGTH'] = MAX_CONTENT_LENGTH_BYTES
@@ -154,7 +160,7 @@ except ImportError:
     logger.warning('flask-wtf not installed — CSRF protection disabled')
 
 # --- Rate limiting ---
-from rate_limit import limiter
+from contaautonomo.security.rate_limit import limiter
 limiter.init_app(app)
 
 # --- Client address behind a reverse proxy ---
@@ -348,15 +354,8 @@ def log_activity(action, category='system', details=None):
         module_manager.core.log_activity(action, category, details)
 
 
-# Login required decorator
-def login_required(f):
-    """Decorator to require login for routes"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('authenticated'):
-            return redirect(url_for('auth.login'))
-        return f(*args, **kwargs)
-    return decorated_function
+# Login required decorator (security/login.py; modules use core.login_required)
+from contaautonomo.security.login import login_required  # noqa: E402
 
 
 
@@ -734,7 +733,7 @@ def dashboard():
 
     # Get current exchange rates for tracked currencies
     from datetime import date
-    from currency_converter import get_multiple_exchange_rates, refresh_ecb_rates
+    from contaautonomo.utils.currency_converter import get_multiple_exchange_rates, refresh_ecb_rates
     today = date.today().strftime('%Y-%m-%d')
     try:
         refresh_ecb_rates()
@@ -1324,7 +1323,7 @@ def invoice_amounts(total, currency, date_str):
     """
     if currency in ('EUR', 'USD'):
         # Looked up at call time (not the module-level name) so tests can stub it.
-        from currency_converter import get_exchange_rate as current_rate
+        from contaautonomo.utils.currency_converter import get_exchange_rate as current_rate
         exchange_rate, _ = current_rate(date_str)
         if currency == 'EUR':
             return total * exchange_rate, total, exchange_rate
@@ -1894,7 +1893,7 @@ def generate_pdf(id):
             invoice.pdf_generated = True
         else:
             # Fallback: direct write (no module_manager)
-            pdf_dir = os.path.join(os.path.dirname(__file__), 'invoices_pdf')
+            pdf_dir = os.path.join(paths.data_dir(), 'invoices_pdf')
             os.makedirs(pdf_dir, exist_ok=True)
             with open(os.path.join(pdf_dir, pdf_filename), 'wb') as f:
                 f.write(pdf_content)
@@ -1983,7 +1982,7 @@ def settings():
                     setattr(app_settings, attr, request.form.get(form_key, ''))
             # Secrets are never rendered back (C-1): blank keeps the stored key.
             if 'currency_provider_api_key' in request.form:
-                from settings_forms import secret_from_form
+                from contaautonomo.utils.settings_forms import secret_from_form
                 app_settings.currency_provider_api_key = secret_from_form(
                     request.form, 'currency_provider_api_key',
                     app_settings.currency_provider_api_key or '')
@@ -2169,7 +2168,7 @@ def set_default_customer(id):
 # ============================================================================
 
 # Register Auth Blueprint (must be first)
-from auth_routes import auth_bp
+from contaautonomo.security.auth_routes import auth_bp
 app.register_blueprint(auth_bp)
 
 # Exempt auth routes from CSRF (login/setup have no session to protect)
@@ -2301,7 +2300,7 @@ def inject_message_bell():
 
 @app.template_filter('message_html')
 def message_html_filter(text):
-    from message_center import render_text
+    from contaautonomo.core.message_center import render_text
     return render_text(text)
 
 
@@ -2481,7 +2480,7 @@ def init_database():
     Idempotent; every entry point (python app.py, docker_entrypoint.py,
     gunicorn workers) calls it before loading modules. Needs an app context.
     """
-    from schema_migrations import run_migrations
+    from contaautonomo.core.schema_migrations import run_migrations
     run_migrations(db.engine, db.metadata)
     encrypt_existing(db, 'settings', ['currency_provider_api_key'])
 
@@ -2500,7 +2499,7 @@ def init_database():
 def init_module_manager():
     """Initialize the module manager, discover and load enabled modules"""
     global module_manager
-    from module_manager import ModuleManager
+    from contaautonomo.core.module_manager import ModuleManager
 
     module_manager = ModuleManager(app, db)
     module_manager.core._settings_model = Settings
@@ -2520,7 +2519,7 @@ def init_module_manager():
     app.jinja_env.globals['current_year'] = datetime.now().year
 
     # Make auth_service available in templates
-    from auth import auth_service
+    from contaautonomo.security.auth import auth_service
     app.jinja_env.globals['auth_service'] = auth_service
 
     import json as _json
@@ -2531,7 +2530,7 @@ def init_module_manager():
 
 def _apply_log_settings(s, mgr):
     """Apply log path / retention / storage type from Settings to the core logger."""
-    from module_manager import FileActivityLogger, DbActivityLogger
+    from contaautonomo.core.module_manager import FileActivityLogger, DbActivityLogger
     storage = getattr(s, 'log_storage', 'file') or 'file'
     current = mgr.core.activity_logger
 
@@ -2540,7 +2539,7 @@ def _apply_log_settings(s, mgr):
             mgr.core.set_activity_logger(DbActivityLogger(db, app))
     else:
         if not isinstance(current, FileActivityLogger):
-            mgr.core.set_activity_logger(FileActivityLogger(app.root_path))
+            mgr.core.set_activity_logger(FileActivityLogger(paths.data_dir()))
 
     logger = mgr.core.activity_logger
     if hasattr(logger, 'cleanup') and s.log_retention_days is not None:
@@ -2566,7 +2565,7 @@ def _apply_currency_provider(s, mgr):
     """Apply currency provider from Settings to CurrencyService."""
     if not s or not mgr:
         return
-    from currency_converter import make_frankfurter_provider, \
+    from contaautonomo.utils.currency_converter import make_frankfurter_provider, \
         make_open_exchange_rates_provider, make_fixer_provider
     provider_name = getattr(s, 'currency_provider', 'ecb') or 'ecb'
     api_key = getattr(s, 'currency_provider_api_key', '') or ''

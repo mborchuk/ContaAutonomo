@@ -16,7 +16,7 @@ def no_network(monkeypatch):
 
 @pytest.fixture
 def income(app, loaded_modules):
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
     customer = Customer(name='Synthetic Client SL', tax_type='standard')
     db.session.add(customer)
     db.session.flush()

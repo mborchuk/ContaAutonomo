@@ -22,15 +22,15 @@ only those slots and the generator renders the block in the chosen one. The
 designer reads them through the core registry function `invoice.list_blocks`.
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, Response)
 from datetime import datetime, date
 import json
 import os
 import logging
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -852,7 +852,7 @@ def generate_pdf_from_config(invoice, customer, settings, config, storage=None,
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
                                     Paragraph, Spacer, Image)
-    from currency_converter import get_currency_symbol
+    from contaautonomo.utils.currency_converter import get_currency_symbol
 
     PAGE_W = letter[0]  # 612
     MARGIN = 50

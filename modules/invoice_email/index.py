@@ -19,11 +19,11 @@ from email.message import EmailMessage
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 
-from module_manager import BaseModule
-import secret_box
-from settings_forms import secret_from_form
-from db_helpers import db_get_or_404
-from timeutil import utcnow
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.security import secret_box
+from contaautonomo.utils.settings_forms import secret_from_form
+from contaautonomo.utils.db_helpers import db_get_or_404
+from contaautonomo.utils.timeutil import utcnow
 
 # Overdue reminder offsets (days after due_date) and hard cap per invoice.
 REMINDER_OFFSETS = (3, 10)
@@ -238,7 +238,7 @@ class InvoiceEmailModule(BaseModule):
         @bp.route('/send/<int:invoice_id>', methods=['POST'])
         @login_required
         def email_send(invoice_id):
-            from app import Invoice
+            from contaautonomo.app import Invoice
             invoice = db_get_or_404(Invoice, invoice_id)
             recipient = (request.form.get('recipient') or '').strip()
             if not recipient or '@' not in recipient:
@@ -305,7 +305,7 @@ class InvoiceEmailModule(BaseModule):
         cfg = self._smtp_config()
         if not cfg.get('reminders_enabled') or not self._configured():
             return []
-        from app import Invoice
+        from contaautonomo.app import Invoice
         today = today or date.today()
         sent = []
         candidates = Invoice.query.filter(

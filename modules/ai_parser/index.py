@@ -5,12 +5,12 @@ Pluggable AI-powered document parsing for invoices and expenses.
 Supports multiple backends: OpenAI, Anthropic Claude, Google Document AI.
 """
 
-from module_manager import BaseModule
-from settings_forms import secret_from_form
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.utils.settings_forms import secret_from_form
 from flask import Blueprint, request, jsonify, render_template
-from secret_box import EncryptedString, encrypt_existing
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
 
-from functions import Function, FunctionUnavailable, Param
+from contaautonomo.core.functions import Function, FunctionUnavailable, Param
 
 from . import catalog
 from .catalog import CLI_DEFAULT_MODELS, DEFAULT_MODELS
@@ -175,7 +175,7 @@ class AIParserModule(BaseModule):
         module = self
 
         # Rate-limit the AI parse endpoint (calls an external AI provider).
-        from app import limiter
+        from contaautonomo.app import limiter
 
         def _rl(rule):
             def deco(f):
@@ -281,7 +281,7 @@ class AIParserModule(BaseModule):
         ]
 
     def _api_parse(self, request):
-        from api_errors import ApiError
+        from contaautonomo.utils.api_errors import ApiError
         file = request.files.get('file')
         if not file or not file.filename:
             raise ApiError(400, 'bad_request',

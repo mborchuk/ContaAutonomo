@@ -16,10 +16,10 @@ replaces this one for them.
 
 from flask import Blueprint, jsonify, request
 
-from functions import Function, FunctionUnavailable, Param
-from module_manager import BaseModule
-from secret_box import EncryptedString, encrypt_existing
-from settings_forms import secret_from_form
+from contaautonomo.core.functions import Function, FunctionUnavailable, Param
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.security.secret_box import EncryptedString, encrypt_existing
+from contaautonomo.utils.settings_forms import secret_from_form
 
 from . import catalog, cli, vendors
 from .catalog import API_PROVIDERS, DEFAULT_MODELS, DEFAULT_PROVIDER, PROVIDER_NAMES
@@ -225,7 +225,7 @@ class AIAgentModule(BaseModule):
                        url_prefix='/ai-agent')
         login_required = self.core.login_required
         module = self
-        from app import limiter
+        from contaautonomo.app import limiter
 
         def _rl(rule):
             def deco(f):

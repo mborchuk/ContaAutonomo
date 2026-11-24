@@ -43,7 +43,7 @@ body:
       label: How do you run the app?
       options:
         - Docker / docker-compose
-        - python app.py (development)
+        - python -m contaautonomo.app (development)
         - gunicorn (production, no Docker)
         - Other
     validations:

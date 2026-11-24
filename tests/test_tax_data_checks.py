@@ -3,7 +3,7 @@ from datetime import date
 
 
 def test_unpaid_invoices_and_unmarked_vat_free_purchases_are_flagged(app, loaded_modules):
-    from app import Customer, Expense, Invoice, db
+    from contaautonomo.app import Customer, Expense, Invoice, db
 
     customer = Customer(name='ACME Synthetic s.r.o.', tax_type='eu_b2b')
     db.session.add(customer)

@@ -247,7 +247,7 @@ def ai_module(standalone_module):
 
 
 def test_module_uses_a_cli_provider(ai_module, cli_env):
-    from app import db
+    from contaautonomo.app import db
     cfg = ai_module._get_config()
     cfg.provider = 'kiro_cli'
     db.session.commit()
@@ -259,7 +259,7 @@ def test_module_uses_a_cli_provider(ai_module, cli_env):
 
 
 def test_module_explains_an_unavailable_cli(ai_module, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
     monkeypatch.delenv(cli_agents.ALLOW_ENV, raising=False)
     cfg = ai_module._get_config()
     cfg.provider = 'claude_cli'
@@ -274,7 +274,7 @@ def test_refresh_kiro_models_needs_no_key(ai_module, cli_env):
     cli_env(stdout=json.dumps({'models': [{'model_id': 'auto', 'model_name': 'auto'}]}))
     payload, status = ai_module.refresh_models('kiro_cli')
     assert status == 200 and payload['models'][0]['id'] == 'auto'
-    from app import db
+    from contaautonomo.app import db
     ai_module._get_config().models_cache = ''
     db.session.commit()
 

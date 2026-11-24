@@ -8,7 +8,7 @@ YEAR = 2099          # no module has tables for it: every table is a fallback
 
 @pytest.fixture
 def owner(app, loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     entry = loaded_modules.modules['tax_data'].Entry
     with client.session_transaction() as sess:
         sess['authenticated'] = True

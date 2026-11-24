@@ -10,8 +10,8 @@ authentication.
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session)
 from functools import wraps
-from auth import auth_manager, auth_service
-from rate_limit import limiter
+from contaautonomo.security.auth import auth_manager, auth_service
+from contaautonomo.security.rate_limit import limiter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def _activity(action, category, details=None):
     """
     try:
         from importlib import import_module
-        import_module('app').log_activity(action, category, details)
+        import_module('contaautonomo.app').log_activity(action, category, details)
     except Exception:
         # Activity logging is best-effort; never block auth on a logging hiccup
         # (app may not be fully initialized yet during early startup).
@@ -233,7 +233,7 @@ def _notify_modules_authenticated(identity):
     """Notify all modules that a user authenticated."""
     try:
         from importlib import import_module
-        module_manager = import_module('app').module_manager
+        module_manager = import_module('contaautonomo.app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:
@@ -249,7 +249,7 @@ def _notify_modules_logout():
     """Notify all modules that a user logged out."""
     try:
         from importlib import import_module
-        module_manager = import_module('app').module_manager
+        module_manager = import_module('contaautonomo.app').module_manager
         if module_manager:
             for mod in module_manager.modules.values():
                 try:

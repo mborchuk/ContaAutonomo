@@ -89,7 +89,7 @@ def test_expenses_have_no_region_notice_without_the_function(loaded_modules, mon
 
 
 def test_303_draft_and_expense_page_list_the_mismatch(loaded_modules):
-    from app import Contractor, Expense, db
+    from contaautonomo.app import Contractor, Expense, db
     forms = loaded_modules.modules['tax_es_forms']
     supplier = Contractor(name='Synthetic Cloud Inc.', country='United States')
     db.session.add(supplier)

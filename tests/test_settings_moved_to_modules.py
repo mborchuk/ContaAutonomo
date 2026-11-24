@@ -12,7 +12,7 @@ LEGACY = (('report_template', 'VARCHAR(100)'), ('auto_backup_enabled', 'BOOLEAN'
 @pytest.fixture
 def legacy_settings(app, loaded_modules):
     """The core settings table as a 1.x database has it, with values."""
-    from app import Settings, db
+    from contaautonomo.app import Settings, db
     if not Settings.query.first():
         db.session.add(Settings())
         db.session.commit()
@@ -32,14 +32,14 @@ def legacy_settings(app, loaded_modules):
 
 
 def test_the_core_settings_model_has_no_module_columns():
-    from app import Settings
+    from contaautonomo.app import Settings
     for name, _ddl in LEGACY:
         assert not hasattr(Settings, name)
 
 
 def test_backup_takes_the_old_values_when_its_config_is_created(legacy_settings,
                                                                  loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     backup = loaded_modules.modules['backup']
     legacy_settings(auto_backup_enabled=0, daily_backup_retention_count=7)
     backup.BackupConfig.query.delete()
@@ -51,7 +51,7 @@ def test_backup_takes_the_old_values_when_its_config_is_created(legacy_settings,
 def test_backup_copies_the_old_values_when_it_adds_the_columns(legacy_settings,
                                                                 loaded_modules):
     """An existing 1.x backup_config row without the new columns."""
-    from app import db
+    from contaautonomo.app import db
     backup = loaded_modules.modules['backup']
     backup._get_config()
     legacy_settings(auto_backup_enabled=0, daily_backup_retention_count=9)
@@ -67,7 +67,7 @@ def test_backup_copies_the_old_values_when_it_adds_the_columns(legacy_settings,
 
 def test_reports_takes_the_old_template_and_ignores_a_missing_one(legacy_settings,
                                                                     loaded_modules):
-    from app import db
+    from contaautonomo.app import db
     reports = loaded_modules.modules['reports']
     legacy_settings(report_template='official_template')
     reports.ReportsConfig.query.delete()

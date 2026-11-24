@@ -65,10 +65,10 @@ def _template(module, db, next_run, cadence='monthly'):
 
 
 def test_generation_creates_draft_with_items(recurring_module, monkeypatch):
-    from app import db, Invoice
+    from contaautonomo.app import db, Invoice
 
     # Deterministic exchange rate — no network in tests.
-    monkeypatch.setattr('currency_converter.get_exchange_rate',
+    monkeypatch.setattr('contaautonomo.utils.currency_converter.get_exchange_rate',
                         lambda d: (1.1, d))
 
     tpl = _template(recurring_module, db, next_run=date(2026, 5, 1))
@@ -87,9 +87,9 @@ def test_generation_creates_draft_with_items(recurring_module, monkeypatch):
 
 
 def test_generation_idempotent_same_day(recurring_module, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
 
-    monkeypatch.setattr('currency_converter.get_exchange_rate',
+    monkeypatch.setattr('contaautonomo.utils.currency_converter.get_exchange_rate',
                         lambda d: (1.0, d))
     _template(recurring_module, db, next_run=date(2026, 7, 1))
     first = recurring_module._generate_due(today=date(2026, 7, 1))
@@ -99,9 +99,9 @@ def test_generation_idempotent_same_day(recurring_module, monkeypatch):
 
 
 def test_generation_skips_paused_templates(recurring_module, monkeypatch):
-    from app import db
+    from contaautonomo.app import db
 
-    monkeypatch.setattr('currency_converter.get_exchange_rate',
+    monkeypatch.setattr('contaautonomo.utils.currency_converter.get_exchange_rate',
                         lambda d: (1.0, d))
     tpl = _template(recurring_module, db, next_run=date(2026, 8, 1))
     tpl.active = False

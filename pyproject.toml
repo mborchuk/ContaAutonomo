@@ -1,5 +1,11 @@
 # Tool configuration only — the app is not packaged.
 
+[tool.pytest.ini_options]
+# The repository root on sys.path, so `import contaautonomo` and `import modules`
+# work however pytest is started (`pytest` or `python -m pytest`).
+pythonpath = ["."]
+testpaths = ["tests"]
+
 [tool.ruff]
 target-version = "py314"
 line-length = 100

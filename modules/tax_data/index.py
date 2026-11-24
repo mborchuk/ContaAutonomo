@@ -28,8 +28,8 @@ from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
-from module_manager import BaseModule
-from timeutil import utcnow
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.utils.timeutil import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class TaxDataModule(BaseModule):
     # --- Registry functions ------------------------------------------------ #
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         table = Param('table', 'str', 'Table id, e.g. es.threshold_347', required=True,
                       max_length=80)
         year = Param('year', 'int', 'Fiscal year', required=True,

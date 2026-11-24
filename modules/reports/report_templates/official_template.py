@@ -12,7 +12,7 @@ from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle, Paragraph,
                                 Spacer, CondPageBreak)
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from datetime import datetime
-from currency_converter import get_currency_symbol
+from contaautonomo.utils.currency_converter import get_currency_symbol
 
 
 def _append_section_table(story, section_start, table, width, keep_rows=2):

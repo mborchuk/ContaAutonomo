@@ -17,7 +17,7 @@ References (content rephrased for compliance with licensing restrictions):
   - ZUS contribution amounts based on 2025/2026 published rates
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 
 # Polish tax constants (2025/2026)

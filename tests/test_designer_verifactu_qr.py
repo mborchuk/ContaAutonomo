@@ -243,7 +243,7 @@ def test_form_keeps_blocks_of_disabled_modules(designer, loaded_modules, app, mo
     tpl = inst.InvoiceTemplate(name='Keep', config_json=json.dumps(
         {'block_positions': {'verifactu_qr': 'top-left'},
          'block_options': {'verifactu_qr': {'size_mm': 35}}}))
-    from app import db
+    from contaautonomo.app import db
     db.session.add(tpl)
     db.session.commit()
     monkeypatch.delitem(loaded_modules.modules, 'verifactu')
@@ -300,8 +300,8 @@ def test_stamping_skips_a_pdf_that_already_has_the_qr(designer, loaded_modules):
 def test_issued_invoice_with_designer_template_gets_one_qr(designer, loaded_modules, client,
                                                            tmp_path, monkeypatch):
     from datetime import date
-    from app import Customer, Invoice, Settings, _issue_invoice, db
-    from module_manager import LocalStorageBackend
+    from contaautonomo.app import Customer, Invoice, Settings, _issue_invoice, db
+    from contaautonomo.core.module_manager import LocalStorageBackend
     inst, _g = designer
     monkeypatch.setitem(loaded_modules.modules, 'invoice_designer', inst)
     monkeypatch.setattr(loaded_modules.core, '_storage_backend', LocalStorageBackend(str(tmp_path)))

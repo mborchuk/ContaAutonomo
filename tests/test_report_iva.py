@@ -112,7 +112,7 @@ def test_vat_line_eu_b2b_is_reverse_charge():
 # --- vat.invoice_lines: Reports reads the IVA columns from the tax module ---
 
 def _two_invoices():
-    from app import Customer, Invoice, db
+    from contaautonomo.app import Customer, Invoice, db
     local = Customer(name='Synthetic Local SL', tax_type='standard')
     eu = Customer(name='Synthetic EU GmbH', tax_type='eu_b2b')
     db.session.add_all([local, eu])

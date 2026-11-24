@@ -119,7 +119,7 @@ def test_import_dedups_across_batches(bank):
 
 
 def test_confirm_marks_invoice_paid_via_core_path(bank, client):
-    from app import db, Customer, Invoice, _issue_invoice
+    from contaautonomo.app import db, Customer, Invoice, _issue_invoice
 
     cust = Customer(name='BankCli', tax_type='standard')
     db.session.add(cust)

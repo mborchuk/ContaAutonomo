@@ -3,7 +3,7 @@ import json
 import re
 from pathlib import Path
 
-STATIC = Path(__file__).resolve().parent.parent / 'static'
+STATIC = Path(__file__).resolve().parent.parent / 'contaautonomo' / 'static'
 
 
 def _auth(client):
@@ -82,7 +82,7 @@ def test_capture_page_shows_photo_inputs_and_the_form(loaded_modules, client):
 
 
 def test_capture_form_saves_like_the_create_form(loaded_modules, app, client):
-    from app import Expense
+    from contaautonomo.app import Expense
     _auth(client)
     resp = client.post('/expenses/capture', data={
         'amount': '12.10', 'currency': 'EUR', 'category': 'Meals',
@@ -93,7 +93,7 @@ def test_capture_form_saves_like_the_create_form(loaded_modules, app, client):
 
 
 def test_share_post_without_service_worker_changes_nothing(loaded_modules, app, client):
-    from app import Expense
+    from contaautonomo.app import Expense
     app.config['WTF_CSRF_ENABLED'] = True     # a share from another app has no token
     try:
         _auth(client)

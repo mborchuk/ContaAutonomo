@@ -54,7 +54,7 @@ def test_expense_without_reverse_charge_and_no_vat_stays_out():
 
 
 def test_expense_form_and_api_keep_the_marker(app, loaded_modules, client):
-    from app import Expense
+    from contaautonomo.app import Expense
 
     with client.session_transaction() as sess:
         sess['authenticated'] = True

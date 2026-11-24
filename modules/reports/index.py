@@ -4,7 +4,7 @@ Reports Module
 Generate professional financial reports (PDF) for tax authorities or banks.
 """
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_file, jsonify
 from datetime import datetime, date
 import calendar
@@ -174,7 +174,7 @@ class ReportsModule(BaseModule):
         # --- Dedicated REST API blueprint for heavy report generation ---
         # Kept off the generic /api/v1/m dispatcher (which shares READ_LIMIT) so
         # generation gets its own HEAVY rate limit.
-        from app import csrf, limiter
+        from contaautonomo.app import csrf, limiter
         HEAVY = '10/minute'  # mirror modules.api.index.HEAVY_LIMIT
 
         api_bp = Blueprint('reports_api', __name__, url_prefix='/api/v1/reports')
@@ -400,7 +400,7 @@ class ReportsModule(BaseModule):
         Raises ValueError on invalid input. Shared by the web form route and the
         REST API route.
         """
-        from repositories import InvoiceRepository, SettingsRepository
+        from contaautonomo.core.repositories import InvoiceRepository, SettingsRepository
 
         invoice_repo = InvoiceRepository(self._db, self.Invoice)
         settings_repo = SettingsRepository(self._db, self.Settings)

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from invoice_amounts import invoice_base_eur, to_cents
+from contaautonomo.core.invoice_amounts import invoice_base_eur, to_cents
 from modules.tax_es_forms.output_vat import invoice_output_vat
 from modules.tax_es_forms.calculator import compute_modelo_303
 
@@ -40,7 +40,7 @@ def test_303_bases_add_the_cents_of_each_invoice():
 
 @pytest.fixture
 def irpf_2039(loaded_modules):
-    from app import Customer, Invoice, Settings, db
+    from contaautonomo.app import Customer, Invoice, Settings, db
     if not Settings.query.first():
         db.session.add(Settings())
     customer = Customer(name='Cents Synthetic Ltd', tax_type='non_eu')

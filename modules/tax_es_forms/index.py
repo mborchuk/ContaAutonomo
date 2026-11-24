@@ -15,7 +15,7 @@ from datetime import datetime
 
 from flask import Blueprint, render_template, abort
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .boxes import (
     BOX_TABLE_VERSION,
@@ -119,7 +119,7 @@ class TaxEsFormsModule(BaseModule):
         return self.core.invoice_service.get_all()
 
     def _all_expenses(self):
-        from app import Expense  # core model, avoids mapper duplication
+        from contaautonomo.app import Expense  # core model, avoids mapper duplication
         return Expense.query.all()
 
     def _invoices_in(self, year, quarter=None, up_to_quarter=None):
@@ -524,7 +524,7 @@ class TaxEsFormsModule(BaseModule):
     # --- Registry functions ---------------------------------------------- #
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         quarter = (Param('year', 'int', 'Tax year', required=True, minimum=2000, maximum=2100),
                    Param('quarter', 'int', 'Quarter, 1-4', required=True, minimum=1, maximum=4))
         draft = dict(params=quarter, assistant=True, record_kind='draft',
@@ -607,7 +607,7 @@ class TaxEsFormsModule(BaseModule):
         return draft, 200
 
     def _api_validate_quarter(self, quarter):
-        from api_errors import ApiError
+        from contaautonomo.utils.api_errors import ApiError
         if quarter not in (1, 2, 3, 4):
             raise ApiError(400, 'bad_request', 'quarter must be 1-4')
 

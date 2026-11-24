@@ -2,7 +2,7 @@
 with a message instead of an error page, and the forms can ask before sending."""
 import pytest
 
-from module_manager import LocalStorageBackend
+from contaautonomo.core.module_manager import LocalStorageBackend
 
 
 @pytest.fixture
@@ -26,13 +26,13 @@ def _flashes(client):
 
 
 def _count(number):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     return Invoice.query.filter_by(invoice_number=number).count()
 
 
 @pytest.mark.parametrize('again', ['UNQ-1', ' UNQ-1 '])
 def test_create_with_a_used_number_is_refused_with_a_message(owner, again):
-    from app import Customer
+    from contaautonomo.app import Customer
     _create(owner, 'UNQ-1')
     _flashes(owner)                                    # clear
     customers = Customer.query.count()
@@ -49,7 +49,7 @@ def test_create_stores_the_number_without_surrounding_spaces(owner):
 
 
 def test_edit_to_a_used_number_is_refused(owner):
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     _create(owner, 'UNQ-3')
     _create(owner, 'UNQ-4')
     inv = Invoice.query.filter_by(invoice_number='UNQ-4').one()
@@ -65,7 +65,7 @@ def test_edit_to_a_used_number_is_refused(owner):
 
 
 def test_check_number_says_taken_except_for_the_invoice_itself(owner):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     _create(owner, 'UNQ-5')
     inv = Invoice.query.filter_by(invoice_number='UNQ-5').one()
     taken = owner.post('/invoices/check-number', json={'invoice_number': ' UNQ-5 '}).get_json()
@@ -83,7 +83,7 @@ def test_check_number_needs_login(client):
 
 
 def test_forms_ask_before_sending(owner):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     assert 'invoice-number-taken' in owner.get('/create').get_data(as_text=True)
     _create(owner, 'UNQ-6')
     inv = Invoice.query.filter_by(invoice_number='UNQ-6').one()

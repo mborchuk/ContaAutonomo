@@ -1,6 +1,5 @@
 """Currency conversion + ECB feed cache tests."""
-import currency_converter as cc
-
+from contaautonomo.utils import currency_converter as cc
 SAMPLE_XML = (
     b'<gesmes:Envelope '
     b'xmlns:gesmes="http://www.gesmes.org/xml/2002-09-01" '

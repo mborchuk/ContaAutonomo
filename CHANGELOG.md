@@ -71,6 +71,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   also after the document is gone. Removing the record status needs a
   reason, kept in the history.
 
+### Changed
+- **The core is a package.** The 22 Python files of the repository root are
+  now the `contaautonomo` package: `contaautonomo/app.py`, `core/` (module
+  system, function registry, message center, invoice PDFs), `security/`
+  (authentication, stored secrets, rate limits, upload checks) and `utils/`.
+  The core's templates, static files and invoice templates moved into it;
+  `docker_entrypoint.py` and `gunicorn.conf.py` into `deploy/`,
+  `MODULES_DOCUMENTATION.md` into `docs/`, `demo_data.json` into the Backup
+  module, the pytest settings into `pyproject.toml`. Runtime data —
+  `instance/`, `logs/`, `backups/`, uploads — stays where it was (the
+  repository root, `/app` in the image), so installations and Docker volumes
+  are unchanged; `CONTAAUTONOMO_DATA_DIR` can move it. Start the development
+  server with `python -m contaautonomo.app` and gunicorn with
+  `gunicorn --config deploy/gunicorn.conf.py contaautonomo.app:app`; the
+  Docker image does this itself.
+- **For module authors:** import the core by its new names, e.g.
+  `from contaautonomo.core.module_manager import BaseModule`,
+  `from contaautonomo.core.functions import Function, Param`. The old names
+  (`module_manager`, `app`, `functions`, …) still work, as the same modules,
+  with a `DeprecationWarning`; they go in the next major version
+  (`docs/MODULES_DOCUMENTATION.md` → *Package Layout*).
+- The test suite keeps its runtime data in a temporary folder; it no longer
+  writes logs or generated invoice PDFs into the checkout.
+
 ### Fixed
 - Documents: the edit form showed "None" in an empty description.
 - Documents: deleting a document deleted the stored files its duplicate

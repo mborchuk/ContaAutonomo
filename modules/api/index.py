@@ -28,11 +28,10 @@ from flask import Blueprint, jsonify, request
 from werkzeug.wrappers import Response as WerkzeugResponse
 from sqlalchemy import inspect as sa_inspect, text
 
-from api_errors import ApiError
-from core_functions import serialize_customer, serialize_invoice
-from module_manager import BaseModule
-import secret_box
-
+from contaautonomo.utils.api_errors import ApiError
+from contaautonomo.core.core_functions import serialize_customer, serialize_invoice
+from contaautonomo.core.module_manager import BaseModule
+from contaautonomo.security import secret_box
 # API surface version (path is /api/v1). Bump when the contract changes.
 API_VERSION = 'v1'
 
@@ -182,7 +181,7 @@ class ApiModule(BaseModule):
         return bool(expected) and hmac.compare_digest(token.encode(), expected.encode())
 
     def get_functions(self):
-        from functions import Function, Param
+        from contaautonomo.core.functions import Function, Param
         return [Function(
             'api.check_token', self.check_token,
             'Whether a token is the API token (X-API-Token), compared in constant time.',
@@ -255,7 +254,7 @@ class ApiModule(BaseModule):
     # ------------------------------------------------------------------ #
 
     def register_routes(self, app):
-        from app import csrf, limiter
+        from contaautonomo.app import csrf, limiter
 
         bp = Blueprint('api', __name__, url_prefix='/api/' + API_VERSION)
         module = self
@@ -273,7 +272,7 @@ class ApiModule(BaseModule):
         @require_token
         @limit(READ_LIMIT)
         def api_index():
-            from app import APP_VERSION
+            from contaautonomo.app import APP_VERSION
             return jsonify({
                 'name': 'ContaAutónomo',
                 'app_version': APP_VERSION,
@@ -489,7 +488,7 @@ class ApiModule(BaseModule):
                              for k in ('date_from', 'date_to', 'client', 'status')}), 200
 
     def _create_invoice(self):
-        from app import Invoice, InvoiceItem, Customer, db
+        from contaautonomo.app import Invoice, InvoiceItem, Customer, db
         body = self._json_body()
 
         client_name = (body.get('client_name') or '').strip()
@@ -567,7 +566,7 @@ class ApiModule(BaseModule):
             raise ApiError(409, 'conflict',
                            f'invoice_number {invoice_number} already exists')
 
-        from constants import INITIAL_INVOICE_STATUS
+        from contaautonomo.utils.constants import INITIAL_INVOICE_STATUS
         status = body.get('status', INITIAL_INVOICE_STATUS)
         if status != INITIAL_INVOICE_STATUS:
             raise ApiError(400, 'bad_request',
@@ -659,7 +658,7 @@ class ApiModule(BaseModule):
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _delete_invoice(self, invoice_id):
-        from app import db
+        from contaautonomo.app import db
         svc = self.core.invoice_service
         inv = svc.get(invoice_id)
         if not inv:
@@ -675,7 +674,7 @@ class ApiModule(BaseModule):
         return {'data': {'deleted': True, 'invoice_number': number}}, 200
 
     def _issue_invoice(self, invoice_id):
-        from app import _issue_invoice, db
+        from contaautonomo.app import _issue_invoice, db
         svc = self.core.invoice_service
         inv = svc.get(invoice_id)
         if not inv:
@@ -693,7 +692,7 @@ class ApiModule(BaseModule):
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _mark_paid(self, invoice_id):
-        from app import _mark_invoice_paid, db
+        from contaautonomo.app import _mark_invoice_paid, db
         svc = self.core.invoice_service
         inv = svc.get(invoice_id)
         if not inv:
@@ -727,7 +726,7 @@ class ApiModule(BaseModule):
         return self._call('ledger.list_expenses', page=page, per_page=per_page, **filters), 200
 
     def _dashboard_summary(self):
-        from app import Invoice
+        from contaautonomo.app import Invoice
         settings = self.core.get_settings()
         base_currency = (settings.base_currency if settings else 'EUR') or 'EUR'
         vat_rate = (settings.default_vat_rate / 100.0
@@ -837,7 +836,7 @@ class ApiModule(BaseModule):
     # ------------------------------------------------------------------ #
 
     def _build_openapi(self):
-        from app import APP_VERSION
+        from contaautonomo.app import APP_VERSION
         mm = self.core.module_manager
 
         def op(method, summary, has_body=False):

@@ -3,7 +3,7 @@ from datetime import date
 
 
 def _make(db, number, currency, amount_usd, amount_eur):
-    from app import Invoice
+    from contaautonomo.app import Invoice
     inv = Invoice.query.filter_by(invoice_number=number).first()
     if inv:
         return inv
@@ -29,7 +29,7 @@ def _amount_section(html):
 
 
 def test_eur_invoice_shows_euro_and_no_usd(loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     inv = _make(db, 'VC-EUR', 'EUR', amount_usd=110.0, amount_eur=100.0)
     section = _amount_section(_view(client, inv))
     assert 'USD' not in section and '$' not in section
@@ -38,7 +38,7 @@ def test_eur_invoice_shows_euro_and_no_usd(loaded_modules, client):
 
 
 def test_usd_invoice_shows_usd_and_eur_equivalent(loaded_modules, client):
-    from app import db
+    from contaautonomo.app import db
     inv = _make(db, 'VC-USD', 'USD', amount_usd=220.0, amount_eur=200.0)
     section = _amount_section(_view(client, inv))
     assert 'Total (USD)' in section and '$220.00' in section
@@ -46,6 +46,6 @@ def test_usd_invoice_shows_usd_and_eur_equivalent(loaded_modules, client):
 
 
 def test_amount_in_currency_property():
-    from app import Invoice
+    from contaautonomo.app import Invoice
     assert Invoice(currency='EUR', amount_usd=1.1, amount_eur=1.0).amount_in_currency == 1.0
     assert Invoice(currency='USD', amount_usd=1.1, amount_eur=1.0).amount_in_currency == 1.1

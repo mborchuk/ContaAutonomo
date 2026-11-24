@@ -3,7 +3,7 @@ import logging
 
 import pytest
 
-from module_manager import BaseModule, valid_capability
+from contaautonomo.core.module_manager import BaseModule, valid_capability
 
 
 def fake(module_id, deps=(), caps=(), provides=(), interface=(), attrs=None):
@@ -123,7 +123,7 @@ def test_loaded_modules_have_their_declared_interface(loaded_modules):
 
 def test_expense_columns_the_tax_modules_read_exist():
     """The expenses contract: tax modules read these core columns directly."""
-    from app import Expense
+    from contaautonomo.app import Expense
     for column in ('expense_date', 'amount', 'currency', 'net_amount', 'vat_amount',
                    'vat_rate', 'deductible', 'deductible_pct', 'category',
                    'reverse_charge', 'description'):
@@ -196,7 +196,8 @@ def test_modules_look_each_other_up_through_provider_of():
     import pathlib
     import re
     root = pathlib.Path(__file__).resolve().parent.parent
-    files = [root / 'app.py', *root.glob('modules/*/*.py'), *root.glob('templates/*.html'),
+    files = [*root.glob('contaautonomo/**/*.py'), *root.glob('modules/*/*.py'),
+             *root.glob('contaautonomo/templates/*.html'),
              *root.glob('modules/*/templates/*.html')]
     offenders = [str(p.relative_to(root)) for p in files
                  if re.search(r"\.modules\.get\(\s*['\"]", p.read_text())]
@@ -218,7 +219,7 @@ def test_no_new_imports_between_modules():
         for other in re.findall(r'^\s*(?:from|import) modules\.(\w+)', path.read_text(), re.M):
             if other != own:
                 found.add((own, other))
-    core = sorted(p.name for p in root.glob('*.py')
+    core = sorted(str(p.relative_to(root)) for p in root.glob('contaautonomo/**/*.py')
                   if re.search(r'^\s*(?:from|import) modules\.', p.read_text(), re.M))
     assert not core, f'core files import a module: {core}'
     assert found <= KNOWN_CROSS_MODULE_IMPORTS, sorted(found - KNOWN_CROSS_MODULE_IMPORTS)

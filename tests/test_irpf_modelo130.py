@@ -41,7 +41,7 @@ def test_no_depreciation_without_cost_or_rate():
 
 @pytest.fixture
 def year_2026(app, loaded_modules):
-    from app import Customer, Expense, Invoice, Settings, db
+    from contaautonomo.app import Customer, Expense, Invoice, Settings, db
 
     irpf = loaded_modules.modules['tax_es_irpf']
     ss_model = loaded_modules.modules['tax_management'].SSPayment
@@ -184,7 +184,7 @@ def test_breakdown_parts_are_cents_and_add_up_exactly(year_2026):
     """Each expense line and the Social Security total are in cents, so the
     parts add up to box 02 to the cent and a capped difícil justificación
     shows its cap, not the cap plus a rounding cent."""
-    from app import Expense, db
+    from contaautonomo.app import Expense, db
     extra = Expense(expense_date=date(2026, 8, 20), category='Services',
                     description='synthetic odd amount', amount=10.0049, net_amount=10.0049,
                     vat_amount=0.0, vat_rate=0.0, currency='EUR', deductible=True,
@@ -210,7 +210,7 @@ def test_breakdown_parts_are_cents_and_add_up_exactly(year_2026):
 def test_breakdown_lists_the_invoices_of_box_01(year_2026, loaded_modules, client):
     """Box 01 by invoice: amount in its own currency, the stored rate and the
     EUR value in cents; the lines add up to box 01, retentions to box 06."""
-    from app import Invoice, db
+    from contaautonomo.app import Invoice, db
     usd = Invoice(invoice_number='T-USD', client_name='Dollar Synthetic Inc.',
                   amount_usd=1000.0, amount_eur=909.7525473, exchange_rate=0.9097525473,
                   currency='USD', invoice_date=date(2026, 9, 10), status='issued',

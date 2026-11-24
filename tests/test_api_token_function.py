@@ -1,13 +1,13 @@
 """Reports' API route is token-protected through api.check_token."""
 import pytest
 
-from functions import Function, InvalidArguments, Param
-from module_manager import BaseModule
+from contaautonomo.core.functions import Function, InvalidArguments, Param
+from contaautonomo.core.module_manager import BaseModule
 
 
 @pytest.fixture
 def token(loaded_modules):
-    from app import db, Settings
+    from contaautonomo.app import db, Settings
     if not Settings.query.first():
         db.session.add(Settings())
         db.session.commit()

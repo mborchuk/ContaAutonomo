@@ -23,7 +23,7 @@ from datetime import date
 
 from flask import Blueprint
 
-from module_manager import BaseModule
+from contaautonomo.core.module_manager import BaseModule
 
 from .provision import direction, round2, summarise
 

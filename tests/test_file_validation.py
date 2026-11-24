@@ -1,5 +1,5 @@
 """Magic-byte file validation tests."""
-from file_validation import content_matches_ext, sniff_kind
+from contaautonomo.security.file_validation import content_matches_ext, sniff_kind
 
 
 def test_pdf_accepted():

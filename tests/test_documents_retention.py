@@ -43,7 +43,7 @@ class MemoryStorage:
 
 @pytest.fixture
 def docs(app, loaded_modules, client, monkeypatch):
-    from app import Message, db
+    from contaautonomo.app import Message, db
     module = loaded_modules.modules['documents']
     storage = MemoryStorage()
     for name in ('save', 'get', 'exists', 'delete'):
@@ -131,7 +131,7 @@ def test_bulk_actions_leave_records_alone(docs, client):
 
 
 def test_declaring_takes_missing_fingerprints(docs, client):
-    from app import db
+    from contaautonomo.app import db
     doc = _create(client, docs)
     df = docs.DocumentFile.query.filter_by(document_id=doc.id).one()
     df.sha256 = None
@@ -154,7 +154,7 @@ def test_record_status_is_removed_only_with_a_reason(docs, client):
 
 
 def test_review_keeps_or_disposes_and_the_log_remains(docs, client):
-    from app import db
+    from contaautonomo.app import db
     due = _create(client, docs, document_date='2015-02-01')
     later = _create(client, docs, document_date='2026-02-01')
     for doc in (due, later):
@@ -183,7 +183,7 @@ def test_review_keeps_or_disposes_and_the_log_remains(docs, client):
 
 
 def test_records_past_their_date_get_one_message(docs, client):
-    from app import Message
+    from contaautonomo.app import Message
     doc = _create(client, docs, document_date='2015-02-01')
     client.post(f'/documents/view/{doc.id}/declare', data={'retention_years': '4'})
     assert docs.post_retention_messages() == 1

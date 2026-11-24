@@ -101,8 +101,8 @@ def test_render_pdf_from_config(designer):
 def test_core_renders_a_module_template_through_its_callable(loaded_modules, client,
                                                              monkeypatch):
     from datetime import date
-    from app import Invoice, Settings, db
-    from module_manager import BaseModule
+    from contaautonomo.app import Invoice, Settings, db
+    from contaautonomo.core.module_manager import BaseModule
     seen = []
 
     class Templates(BaseModule):
