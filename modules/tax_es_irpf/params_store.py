@@ -78,6 +78,8 @@ def load_params(
         params = copy.deepcopy(_load_file(years[-1]))
         params["_requested_year"] = year
         params["_fallback_from"] = years[-1]
+        # Figures some quarters of that file's own year used: not this year's.
+        params.get("eds", {}).pop("modelo130_earlier_quarters", None)
     if override:
         params = _deep_merge(params, override)
     return params

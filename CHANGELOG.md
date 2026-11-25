@@ -6,6 +6,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **IRPF: Real Decreto-ley 43/2026 figures, and the yearly IRPF figures in
+  Tax Data.** For 2026 the gastos de difícil justificación are 10 % of the
+  net with a 3,000 EUR cap (were 5 % and 2,000 EUR), counted from the
+  fourth-quarter Modelo 130 on; the first three quarters keep the old
+  figures, as filed. The percentage, the cap and the Modelo 130 rate are a
+  table in Taxes → Tax Data (`es.irpf_figures`): the owner confirms them for
+  a year or enters new values, and the IRPF Estimator, the Modelo 130 draft
+  and the renta estimate use them. A year without its own figures warns on
+  the IRPF pages until confirmed.
 - **Documents: AI suggestions for fields and tags.** Off until the owner
   turns them on in Settings → Documents and chooses the provider (the AI
   Agent's choice or a named one; nothing is sent when it is not set up),

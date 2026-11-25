@@ -5,7 +5,8 @@ enter the new values. On by default.
 
 Tax figures that change by year ship with the modules that use them, keyed by
 year: the Modelo 303 and 130 boxes, the 390 casillas and the 347 threshold
-(Spanish Tax Forms), the RETA brackets and contribution rate (RETA Advisor).
+(Spanish Tax Forms), the RETA brackets and contribution rate (RETA Advisor),
+the gastos de difícil justificación and the Modelo 130 rate (IRPF Estimator).
 When a year has no table of its own, the module uses the latest earlier one
 and its pages warn *"Figures for 2027 use the 2026 table"*.
 
@@ -18,7 +19,8 @@ and its pages warn *"Figures for 2027 use the 2026 table"*.
 - for the 303, 130 and 390 boxes, an automatic comparison with the official
   AEAT record layouts the app ships;
 - **Confirm unchanged for 2027**, or the values (347 threshold; RETA rate,
-  bracket limits and monthly quotas) and **Save for 2027**.
+  bracket limits and monthly quotas; IRPF percentage, cap and 130 rate) and
+  **Save for 2027**.
 
 Once confirmed, the pages use the saved values for that year and stop
 warning. **Remove the confirmation** undoes it. Box numbers cannot be edited:

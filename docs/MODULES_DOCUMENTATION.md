@@ -853,15 +853,26 @@ confirms them for a new year, or enters the new values. On by default.
   `id`, `name`, `holds`, `steps`, `links`, `after_check`, `action(year)` →
   `{table_year, built_in, fields, auto}`, optional `validate(year, values)`.
   Declared today: `es.boxes_303_130`, `es.casillas_390`, `es.threshold_347`
-  (`tax_es_forms`), `es.reta` (`reta_advisor`).
-- Not covered yet: the IRPF scales (`tax_es_irpf/params/`), the filing
-  calendar and the AEAT record layouts.
+  (`tax_es_forms`), `es.reta` (`reta_advisor`), `es.irpf_figures`
+  (`tax_es_irpf`).
+- Not covered yet: the IRPF scales, mínimos and regional deductions
+  (`tax_es_irpf/params/`), the filing calendar and the AEAT record layouts.
 
 ### IRPF Estimator (`tax_es_irpf`)
 
 Modelo 130 (quarterly) and Modelo 100 (annual) estimates for estimación
 directa simplificada, from year-keyed parameters (`params/es_irpf_<year>.json`).
 Estimate only.
+
+- **Yearly figures in Tax Data.** The `year_table` `es.irpf_figures` holds the
+  gastos de difícil justificación percentage and annual cap and the Modelo
+  130 rate. The owner confirms them for a year in Taxes → Tax Data or enters
+  new values; the estimates use them for that year (`yearly.py`). A year
+  without its own params file uses the latest earlier one, and the overview
+  and Modelo 130 pages warn until it is confirmed. 2026: 10 % and 3,000 EUR
+  (Real Decreto-ley 43/2026), counted from the fourth-quarter Modelo 130 on;
+  the first three quarters keep 5 % and 2,000 EUR
+  (`eds.modelo130_earlier_quarters` in the params file).
 
 - Routes: `/irpf-es/` (overview), `/irpf-es/modelo130/<year>/<q>`,
   `/irpf-es/modelo100/<year>` (individual vs. joint), `/irpf-es/simulator`
@@ -1291,7 +1302,7 @@ Functions today:
 | `vat.reverse_charge_check` | `tax_es_forms` | `mark` (`eu`/`non_eu`), `country?`, `vat_number?`, `supplier?` → `{problem}`: a sentence when the mark does not match where the supplier is, else null. Expenses calls it for its deduction-check notice |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
 | `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
-| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the 5 % difícil justificación; box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
+| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the difícil justificación (the year's percentage and cap, from Tax Data); box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
 | `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
 | `taxdata.year_values` | `tax_data` | `table`, `year` → `{confirmed, confirmed_on, values}`: whether the owner confirmed a yearly table for the year, and the values entered that differ from the app's table. Spanish Tax Forms and the RETA Advisor call it |
 | `taxdata.year_notice` | `tax_data` | `table`, `year`, `table_year` → `{html}`: the warning for a page showing `year` with the `table_year` table (how to check it, the automatic check, a link to confirm it) |
