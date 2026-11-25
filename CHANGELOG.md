@@ -6,6 +6,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **`log.write`, a core function for writing the activity log.** A module
+  writes an entry on System → Logs through the function registry
+  (`source`, `action`, optional `details`, `category` and `level`), into
+  the file or database log chosen in Settings, without importing the core.
+  Source, action and category are checked (lower case letters, digits,
+  `_`); a `warning` or `error` also goes to the server log, with the action
+  only.
 - **Yearly VAT return from 2027 (Real Decreto-ley 43/2026).** In Settings →
   Tax Forms the owner records that they file VAT yearly from a tax year
   (régimen especial de declaración anual, up to 85,000 EUR of volume of

@@ -735,11 +735,27 @@ Modules have two logging mechanisms:
 
 ### Activity Log (user-visible, System → Logs)
 
+Write through the core function `log.write`, like any registry function:
+
 ```python
-self.core.log_activity('record_created', 'my_module', f'Record #{id} created by user')
+self.core.functions.call('log.write', source=self.module_id,
+                         action='record_created', details=f'Record #{record.id}')
+# A failure the server log should show too:
+self.core.functions.call('log.write', source=self.module_id,
+                         action='sync_failed', level='error', details=str(error))
 ```
 
-Categories: `'auth'`, `'invoice'`, `'expense'`, `'backup'`, `'settings'`, `'system'`, or any custom string.
+| Argument | Rule |
+|---|---|
+| `source` | The module id (lower case letters, digits, `_`) |
+| `action` | What happened, same characters, e.g. `record_created` |
+| `details` | Optional text, up to 2,000 characters, shown with the entry |
+| `category` | Optional Logs page filter (`'invoice'`, `'expense'`, `'backup'`, `'tax'`, `'system'`, ...); default the source |
+| `level` | `info` (default), `warning` or `error`. A warning or error also goes to the server log as `module.<source>`, with the action only: the details stay in the activity log |
+
+Bad arguments raise `InvalidArguments` and nothing is written. The entry goes to the
+logger chosen in Settings → General Settings → System Logs (files or the database).
+`self.core.log_activity(action, category, details)` writes the same entry without the checks.
 
 ### Python Logger (console/file, for debugging)
 
@@ -753,7 +769,7 @@ self.logger.error('Failed to save: %s', error)
 ```
 
 Output goes to console (and log files if configured). Use `self.logger` for developer-facing
-diagnostics and `self.core.log_activity()` for user-facing audit trail.
+diagnostics and `log.write` for the user-facing audit trail.
 
 ---
 
@@ -1141,7 +1157,7 @@ def _upload_file(self):
 12. **No ORM relationships across modules**: models defined with `extend_existing=True` don't inherit relationships from core. Use explicit queries (e.g. `Contractor.query.get(expense.contractor_id)`) instead of `expense.contractor`.
 13. **Use `self.core.db` for DB session** — never import `db` from `app`. Use `self.core.db.session.commit()` in service code. Importing `db` from `app` can cause "Flask app not registered with this SQLAlchemy instance" errors.
 14. **Always `file.seek(0)` before reading** uploaded files — the stream position may be at the end if Flask or another handler already read it.
-15. **Use `self.logger`** for console/debug logging and `self.core.log_activity()` for user-visible audit trail. Both are available automatically.
+15. **Use `self.logger`** for console/debug logging and the `log.write` function for the user-visible audit trail (System → Logs). Both are available automatically.
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
 17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
 18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
