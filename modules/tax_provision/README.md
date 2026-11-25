@@ -17,6 +17,10 @@ The open quarter is the calendar quarter of today.
 
 ## Rules
 
+- **Yearly VAT return.** When the owner files VAT yearly (Settings → Tax
+  Forms, from 2027) the IVA part is the result of the year so far less the
+  advances already debited (`vat.yearly_return`), with the yearly return's
+  filing date.
 - **Total = sum of the parts that are available.** Positive is owed,
   negative is money coming back. A negative 303 result in Q1–Q3 is shown as a
   credit to compensate, in Q4 as a refund; a negative renta or RETA result is a

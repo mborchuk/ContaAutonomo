@@ -6,6 +6,7 @@ One total and its four parts, each read through the function registry from
 whatever module calculates it; this module adds no tax logic:
 
   - IVA, open quarter      -> tax.draft_303          box 71
+    (filing VAT yearly: vat.yearly_return, the year so far less the advances debited)
   - IRPF, open quarter     -> tax.modelo130_boxes    box 07
   - Renta, year to date    -> tax.modelo100_result   cuota diferencial
   - RETA regularización    -> reta.projection        regularization_delta
@@ -104,7 +105,29 @@ class TaxProvisionModule(BaseModule):
                     reason='could not be calculated — open its page for details')
         return part
 
+    def _iva_yearly_part(self, year):
+        """IVA when the owner files VAT yearly (from 2027): the result of the
+        year so far minus the advances already debited; None when the owner
+        files quarterly or nothing provides `vat.yearly_return`."""
+        if not self._available('vat.yearly_return'):
+            return None
+        try:
+            yearly = self._call('vat.yearly_return', year=year)
+        except Exception:
+            self.logger.exception('Tax provision: yearly VAT return failed')
+            return None
+        if not yearly.get('yearly'):
+            return None
+        amount = round2(yearly['due_so_far'])
+        return {'id': 'iva', 'label': f'IVA {year} (yearly return)', 'form': '303',
+                'function': 'vat.yearly_return', 'endpoint': 'tax_es_forms.vat_yearly_draft',
+                'args': {'year': year}, 'deadline': self._deadline('303', year, None),
+                'amount': amount, 'direction': direction(amount, 'refund')}
+
     def _iva_part(self, year, quarter):
+        yearly = self._iva_yearly_part(year)
+        if yearly is not None:
+            return yearly
         part = {'id': 'iva', 'label': f'IVA {quarter}T {year}', 'form': '303',
                 'function': 'tax.draft_303', 'endpoint': 'tax_es_forms.draft_303',
                 'args': {'year': year, 'quarter': quarter},
