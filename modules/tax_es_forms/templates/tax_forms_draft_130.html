@@ -119,7 +119,7 @@
                 {% if bd.reta.capped %}(capped: mutualidad){% endif %}</td>
                 <td class="text-right">{{ "%.2f"|format(bd.reta.amount) }}</td></tr>
             {% if bd.dificil_justificacion %}
-            <tr><td>Gastos de difícil justificación (5 % of the net, applied in Settings → IRPF)</td>
+            <tr><td>Gastos de difícil justificación (the year's percentage of the net, applied in Settings → IRPF)</td>
                 <td class="text-right">{{ "%.2f"|format(bd.dificil_justificacion) }}</td></tr>
             {% endif %}
             </tbody>

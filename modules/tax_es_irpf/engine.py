@@ -6,7 +6,7 @@ from both hooks and routes.
 
 Both modelos share the same money path:
   income - deductible expenses = rendimiento neto previo
-  - 5% difícil justificación (EDS only, annual cap)         -> rendimiento neto
+  - difícil justificación % (EDS only, annual cap)          -> rendimiento neto
 
 Modelo 130 then: x20%, minus retenciones YTD, minus prior 130 payments,
 floor at 0. Modelo 100 then: optional 20% inicio reduction, optional joint
@@ -64,28 +64,51 @@ def net_profit_previo(income: float, deductible_expenses: float) -> float:
     return income - deductible_expenses
 
 
+def dificil_rule(params: dict[str, Any], quarter: int | None = None) -> tuple[float, float]:
+    """(percentage as a fraction, annual cap) of the gastos de difícil
+    justificación for the year, or for one Modelo 130 quarter.
+
+    A year can say that its Modelo 130 quarters before a given one used
+    other figures (`eds.modelo130_earlier_quarters`): 2026 rose from 5 % /
+    2,000 to 10 % / 3,000 by Real Decreto-ley 43/2026, counted from the
+    fourth-quarter payment on, so Q1–Q3 keep what was filed then.
+    """
+    eds = params["eds"]
+    earlier = eds.get("modelo130_earlier_quarters")
+    if quarter is not None and earlier and quarter < earlier["before_quarter"]:
+        return earlier["pct"], earlier["cap"]
+    return eds["dificil_justificacion_pct"], eds["dificil_justificacion_cap"]
+
+
 def dificil_justificacion(
     net_previo: float,
     params: dict[str, Any],
     *,
     eds_eligible: bool,
     already_applied: float = 0.0,
+    quarter: int | None = None,
 ) -> float:
-    """5% gastos de difícil justificación (EDS specialty).
+    """Gastos de difícil justificación (EDS specialty): the year's
+    percentage of the positive net, up to the annual cap (see dificil_rule).
 
     Only when EDS applies AND activity positive. Cap is ANNUAL, so the caller
     passes how much was already used earlier in the year (`already_applied`);
     the running total is clamped to the cap. For Modelo 130 the YTD recompute
     naturally handles this because `net_previo` is cumulative — pass
-    already_applied=0 and the YTD 5% is clamped to the cap directly.
+    already_applied=0 and the YTD amount is clamped to the cap directly.
     """
     if not eds_eligible or net_previo <= 0:
         return 0.0
-    eds = params["eds"]
-    raw = eds["dificil_justificacion_pct"] * net_previo
-    cap = eds["dificil_justificacion_cap"]
+    pct, cap = dificil_rule(params, quarter)
+    raw = pct * net_previo
     remaining_cap = max(0.0, cap - already_applied)
     return _round(min(raw, remaining_cap))
+
+
+def dificil_label(params: dict[str, Any], quarter: int | None = None) -> str:
+    """'10% difícil justificación (cap 3000)' for the year or quarter."""
+    pct, cap = dificil_rule(params, quarter)
+    return f"{pct * 100:g}% difícil justificación (cap {cap:.0f})"
 
 
 def rendimiento_neto(
@@ -94,13 +117,16 @@ def rendimiento_neto(
     params: dict[str, Any],
     *,
     eds_eligible: bool,
+    quarter: int | None = None,
 ) -> tuple[float, float]:
     """Return (rendimiento_neto, dificil_justificacion_applied).
 
-    Shared by 130 and 100 so the base is computed identically in both.
+    Shared by 130 and 100 so the base is computed identically in both;
+    `quarter` is the Modelo 130 quarter (None for the annual return).
     """
     previo = net_profit_previo(income, deductible_expenses)
-    dificil = dificil_justificacion(previo, params, eds_eligible=eds_eligible)
+    dificil = dificil_justificacion(previo, params, eds_eligible=eds_eligible,
+                                   quarter=quarter)
     return _round(previo - dificil), dificil
 
 
@@ -218,7 +244,7 @@ class Modelo130Input:
     ytd_retenciones: float = 0.0
     prior_payments: float = 0.0  # 130 paid in earlier quarters, same year
     eds_eligible: bool = True
-    # Apply the 5% difícil justificación inside M130 box 02. Default ON per the
+    # Apply the difícil justificación inside M130 box 02. Default ON per the
     # official AEAT instructions (box 02 includes it). None = use params default.
     apply_dificil_justif: bool | None = None
     low_income_deduction: bool = False
@@ -262,7 +288,7 @@ class IrpfEngine:
 
     def compute_modelo130(self, inp: Modelo130Input) -> IrpfResult:
         params = self.params
-        # 5% difícil justificación toggle: input override, else params default.
+        # Difícil justificación toggle: input override, else params default.
         apply_dificil = inp.apply_dificil_justif
         if apply_dificil is None:
             apply_dificil = params["modelo130"].get("apply_5pct_dificil_justif", True)
@@ -271,6 +297,7 @@ class IrpfEngine:
             inp.ytd_deductible_expenses,
             params,
             eds_eligible=inp.eds_eligible and apply_dificil,
+            quarter=inp.quarter,
         )
 
         rate = params["modelo130"]["rate"]
@@ -291,10 +318,7 @@ class IrpfEngine:
             _line("Deductible expenses YTD", -inp.ytd_deductible_expenses),
         ]
         if dificil:
-            cap = params["eds"]["dificil_justificacion_cap"]
-            lines.append(
-                _line(f"5% difícil justificación (cap {cap:.0f})", -dificil)
-            )
+            lines.append(_line(dificil_label(params, inp.quarter), -dificil))
         lines.append(_line("Rendimiento neto YTD", net))
         lines.append(_line(f"× {rate * 100:.0f}%", gross))
         if inp.ytd_retenciones:
@@ -396,8 +420,7 @@ class IrpfEngine:
             _line("Deductible expenses", -inp.deductible_expenses),
         ]
         if dificil:
-            cap = params["eds"]["dificil_justificacion_cap"]
-            lines.append(_line(f"5% difícil justificación (cap {cap:.0f})", -dificil))
+            lines.append(_line(dificil_label(params), -dificil))
         if inicio:
             lines.append(_line("− 20% reducción inicio actividad", -inicio))
         lines.append(_line("Rendimiento neto actividad", net_actividad))

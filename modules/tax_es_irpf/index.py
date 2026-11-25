@@ -7,7 +7,7 @@ Summary: this module estimates two figures for a Spanish autónomo.
     and withholdings (retenciones).
 
 Both modelos live in ONE module because they share the same money path
-(net profit, expense handling, 5% difícil justificación cap). The actual math
+(net profit, expense handling, difícil justificación % and cap). The actual math
 is in `engine.py` — pure, no Flask/DB — so it is easy to test. This file only
 does the I/O: pull numbers from invoices/expenses/SS, call the engine, render.
 
@@ -36,6 +36,8 @@ from .engine import (
 )
 from .depreciation import depreciation_in_year
 from .params_store import available_years, load_params
+from .table_checks import CHECK_IRPF
+from . import yearly
 from contaautonomo.utils.db_helpers import db_get
 from contaautonomo.utils.timeutil import utcnow
 
@@ -101,7 +103,7 @@ class TaxEsIrpfModule(BaseModule):
             ascendientes75 = db.Column(db.Integer, default=0)
             uses_mutualidad = db.Column(db.Boolean, default=False)
             low_income_deduction = db.Column(db.Boolean, default=False)
-            # 5% difícil justificación inside M130 box 02. Default OFF: the
+            # Difícil justificación inside M130 box 02. Default OFF: the
             # owner's gestor applies it only in the annual Modelo 100.
             apply_dificil_justif_m130 = db.Column(db.Boolean, default=False)
             eds_eligible = db.Column(db.Boolean, default=True)  # prior INCN ≤ limit
@@ -224,8 +226,40 @@ class TaxEsIrpfModule(BaseModule):
         }
 
     def _params(self, year):
-        override = None  # DB param override hook — not wired in v1 UI yet
-        return load_params(year, override=override)
+        """The year's params file (or the latest earlier one), with the
+        figures the owner confirmed for that year in Tax Data applied."""
+        status = yearly.confirmed_values(getattr(self.core, 'functions', None), year)
+        override = yearly.override(status['values']) if status else None
+        params = load_params(year, override=override or None)
+        if status is not None:  # a copy: the loaded file is cached
+            params = {**params, '_confirmed_on': status.get('confirmed_on')}
+        return params
+
+    def _figures_notice(self, year):
+        """The Tax Data warning when `year` uses an earlier year's figures
+        the owner has not confirmed, else ''."""
+        params = self._params(year)
+        if not params.get('_fallback_from') or params.get('_confirmed_on'):
+            return ''
+        return yearly.notice_html(getattr(self.core, 'functions', None), year,
+                                  params['_fallback_from'])
+
+    def get_capabilities(self):
+        """The IRPF figures of a year, for the Tax Data module (`year_table`):
+        the owner confirms them for a year or enters the new values."""
+        def action(year):
+            params = load_params(year)
+            return {'table_year': params.get('_fallback_from', year),
+                    'built_in': not params.get('_fallback_from'),
+                    'fields': yearly.fields(params), 'auto': None}
+
+        def validate(_year, values):
+            return yearly.validate(values)
+
+        return [{'type': 'year_table', 'id': CHECK_IRPF['id'], 'name': CHECK_IRPF['name'],
+                 'holds': CHECK_IRPF['holds'], 'steps': CHECK_IRPF['steps'],
+                 'links': CHECK_IRPF['links'], 'after_check': CHECK_IRPF['after_check'],
+                 'action': action, 'validate': validate}]
 
     def _engine(self, year):
         return IrpfEngine(self._params(year))
@@ -488,7 +522,7 @@ class TaxEsIrpfModule(BaseModule):
     def modelo130_breakdown(self, year, quarter, boxes=None):
         """How boxes 01, 02 and 05 of one quarter are made up: the invoices
         behind box 01, expenses by
-        category (with their lines), equipment depreciation, RETA, the 5 %
+        category (with their lines), equipment depreciation, RETA, the
         difícil justificación when the profile applies it, and each earlier
         quarter's payment with its source. Amounts in EUR, rounded."""
         profile = self._get_profile()
@@ -529,7 +563,7 @@ class TaxEsIrpfModule(BaseModule):
         result = self._engine(year).compute_modelo130(inp)
         net = result.summary['rendimiento_neto_ytd']
         rate = self._params(year)['modelo130']['rate']
-        expenses = inp.ytd_income - net  # includes 5% difícil justificación
+        expenses = inp.ytd_income - net  # includes the difícil justificación
         return {
             '01': round(inp.ytd_income, 2),
             '02': round(expenses, 2),
@@ -792,14 +826,16 @@ class TaxEsIrpfModule(BaseModule):
             'irpf_overview.html', year=year, quarter=quarter, region=region,
             m130=m130.as_dict() if m130 else None,
             m100=m100.as_dict() if m100 else None,
-            years=available_years(), error=error)
+            years=available_years(), error=error,
+            figures_notice=self._figures_notice(year))
 
     def _render_modelo130(self, year, quarter):
         profile = self._get_profile()
         result = self._engine(year).compute_modelo130(
             self._build_modelo130_input(year, quarter, profile))
         return render_template('irpf_detail.html', title=f'Modelo 130 — {quarter}T {year}',
-                               result=result.as_dict(), year=year)
+                               result=result.as_dict(), year=year,
+                               figures_notice=self._figures_notice(year))
 
     def _render_modelo100(self, year):
         profile = self._get_profile()
@@ -971,6 +1007,8 @@ class TaxEsIrpfModule(BaseModule):
         return self.render_settings_template(
             'tax_es_irpf_settings_panel.html',
             profile=profile, regions=regions, depreciate=depreciate, rate=rate,
+            dificil_pct=params['eds']['dificil_justificacion_pct'] * 100,
+            this_year=date.today().year,
             threshold=threshold,
             start=profile.start_date.isoformat() if profile.start_date else '')
 

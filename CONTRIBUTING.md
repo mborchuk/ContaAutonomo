@@ -113,7 +113,8 @@ modules use, for the year you pick:
   renumbered box fails the build.
 - **Confirm or change.** *Confirm unchanged for 2027* (box tables), or edit
   the values and *Save for 2027* (Modelo 347 threshold; RETA rate, bracket
-  limits and monthly quotas). The pages use the saved values for that year and
+  limits and monthly quotas; IRPF difícil justificación % and cap, Modelo 130
+  rate). The pages use the saved values for that year and
   stop warning. *Remove the confirmation* undoes it.
 
 Box numbers cannot be edited: a renumbered box changes the calculation and
@@ -126,13 +127,14 @@ number of brackets.
 | Modelo 390 casillas | [AEAT Modelo 390](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/G412.shtml) → Ayuda → Instrucciones |
 | Modelo 347 threshold | [Real Decreto 1065/2007, art. 33](https://www.boe.es/buscar/act.php?id=BOE-A-2007-15984#a33), paragraph 1; [AEAT Modelo 347](https://sede.agenciatributaria.gob.es/Sede/procedimientoini/GI27.shtml) |
 | RETA brackets and rate | [Seguridad Social: bases y tipos de cotización](https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537), self-employed section |
+| IRPF figures: gastos de difícil justificación % and cap, Modelo 130 rate | BOE (Ley de Presupuestos or Real Decreto-ley of the year; 2026: [Real Decreto-ley 43/2026](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2026-24701)), AEAT *Manual práctico de Renta* |
 
 Not in Tax Data yet (check them by hand, and update the code below):
 
 | Data | Where you see it in the app | Official source |
 |------|-----------------------------|-----------------|
 | AEAT record layouts (import files) | The ⬇ AEAT file buttons | [Models 300–399](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-300-399.html), [models 100–199](https://sede.agenciatributaria.gob.es/Sede/ayuda/disenos-registro/modelos-100-199.html) |
-| IRPF scales and deductions | IRPF Estimator | AEAT *Manual práctico de Renta* of the year, regional laws |
+| IRPF scales, mínimos and regional deductions | IRPF Estimator | AEAT *Manual práctico de Renta* of the year, regional laws |
 | Filing calendar | Fiscal Calendar (dates marked *verify*) | AEAT Sede, *Calendario del contribuyente* of the year |
 
 ### In the code — a release ships the new year

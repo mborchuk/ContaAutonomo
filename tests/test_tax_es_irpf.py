@@ -58,11 +58,13 @@ def test_modelo130_real_1t_2026(engine):
 
 # ── Real filing: Modelo 130, 4T 2024 (design §3, worked example A2) ────────
 
-def test_modelo130_real_4t_2024(engine):
+def test_modelo130_real_4t_2024():
     # box 02 = 3.145,98 real gastos + 2.000 difícil (cap). Feed real gastos and
-    # let the engine add the 5% (clamped to the 2.000 annual cap).
+    # let the engine add the 5% (clamped to the 2.000 annual cap). 2026 has
+    # 10 % / 3.000 from the fourth quarter on, so this uses the 2025 figures.
+    engine = IrpfEngine(load_params(2025))
     result = engine.compute_modelo130(Modelo130Input(
-        year=2026, quarter=4,
+        year=2025, quarter=4,
         ytd_income=72373.81, ytd_deductible_expenses=3145.98,
         prior_payments=9843.01,
     ))
@@ -85,10 +87,11 @@ def test_modelo130_illustrative_example_b(engine):
 
 # ── Real filing: Modelo 100, 2025 conjunta (design §4) ────────────────────
 
-def test_modelo100_real_2025_conjunta(engine):
+def test_modelo100_real_2025_conjunta():
     """Reproduces M100-2025 box-by-box: inicio 20%, conjunta, RETA, difícil
     cap, split state/CV mínimos, CV scale, pagos-fraccionados credit.
     """
+    engine = IrpfEngine(load_params(2025))
     result = engine.compute_modelo100(_m100(
         year=2025, income=68008.33, deductible_expenses=6742.81,
         minimo_estatal=10650, minimo_autonomico=11715,  # state / CV, 2 kids
@@ -146,7 +149,8 @@ def test_minimo_applied_to_each_half_scale_not_base(engine):
         _m100(minimo_estatal=0, minimo_autonomico=0), region='valenciana')
     r1 = engine.compute_modelo100(
         _m100(minimo_estatal=5550, minimo_autonomico=6105), region='valenciana')
-    assert r0.summary['base_liquidable'] == r1.summary['base_liquidable'] == 40000.0
+    # 60.000 − 18.000 − 3.000 (10 %, capped at 3.000 in 2026)
+    assert r0.summary['base_liquidable'] == r1.summary['base_liquidable'] == 39000.0
     assert r1.summary['cuota_integra'] < r0.summary['cuota_integra']
 
 
@@ -172,12 +176,34 @@ def test_modelo130_retenciones_exceed_gross_floors_at_zero(engine):
 
 # ── Edge: difícil-justificación cap, EDS eligibility, M130 box-02 toggle ──
 
-def test_dificil_justificacion_capped_at_2000(params):
+def test_dificil_justificacion_2026_is_10pct_capped_at_3000(params):
+    """Real Decreto-ley 43/2026: 10 % and 3.000 for the 2026 renta."""
+    assert dificil_justificacion(60000, params, eds_eligible=True) == 3000.0
+    assert dificil_justificacion(22000, params, eds_eligible=True) == 2200.0
+
+
+def test_dificil_justificacion_2025_is_5pct_capped_at_2000():
+    params = load_params(2025)
     assert dificil_justificacion(60000, params, eds_eligible=True) == 2000.0
-
-
-def test_dificil_justificacion_under_cap(params):
     assert dificil_justificacion(22000, params, eds_eligible=True) == 1100.0
+
+
+def test_2026_modelo130_first_three_quarters_keep_5pct_and_2000(params):
+    """The new figures count from the 4T 2026 pago fraccionado on."""
+    for quarter in (1, 2, 3):
+        assert dificil_justificacion(60000, params, eds_eligible=True,
+                                     quarter=quarter) == 2000.0
+        assert dificil_justificacion(22000, params, eds_eligible=True,
+                                     quarter=quarter) == 1100.0
+    assert dificil_justificacion(22000, params, eds_eligible=True, quarter=4) == 2200.0
+
+
+def test_a_later_year_on_2026_figures_does_not_keep_the_quarter_rule():
+    params = load_params(2099)          # no file: uses 2026's
+    assert params['_fallback_from'] == 2026
+    assert 'modelo130_earlier_quarters' not in params['eds']
+    assert dificil_justificacion(22000, params, eds_eligible=True, quarter=1) == 2200.0
+    assert 'modelo130_earlier_quarters' in load_params(2026)['eds']   # cache untouched
 
 
 def test_dificil_justificacion_zero_when_not_eds(params):
@@ -192,8 +218,14 @@ def test_modelo130_5pct_toggle_default_on(engine):
     """Default ON (AEAT box 02): the 5% is applied without an explicit flag."""
     on = engine.compute_modelo130(Modelo130Input(
         year=2026, quarter=1, ytd_income=22000, ytd_deductible_expenses=0))
-    # 22.000 − 1.100 (5%) = 20.900; ×20% = 4.180.
+    # 1T 2026 still 5 %: 22.000 − 1.100 = 20.900; ×20% = 4.180.
     assert on.summary['modelo130_due'] == 4180.0
+    assert any(l['label'] == '5% difícil justificación (cap 2000)' for l in on.lines)
+    q4 = engine.compute_modelo130(Modelo130Input(
+        year=2026, quarter=4, ytd_income=22000, ytd_deductible_expenses=0))
+    # 4T 2026: 22.000 − 2.200 (10 %) = 19.800; ×20% = 3.960.
+    assert q4.summary['modelo130_due'] == 3960.0
+    assert any(l['label'] == '10% difícil justificación (cap 3000)' for l in q4.lines)
 
 
 def test_modelo130_5pct_toggle_off(engine):
@@ -218,8 +250,9 @@ def test_inicio_actividad_reduction_applied(engine):
     result = engine.compute_modelo100(
         _m100(inicio_reduction_eligible=True), region='valenciana')
     by_label = {l['label']: l['amount'] for l in result.lines}
-    assert by_label['− 20% reducción inicio actividad'] == -8000.0
-    assert by_label['Rendimiento neto actividad'] == 32000.0
+    # 60.000 − 18.000 − 3.000 (10 %, cap) = 39.000; − 20 % = 31.200
+    assert by_label['− 20% reducción inicio actividad'] == -7800.0
+    assert by_label['Rendimiento neto actividad'] == 31200.0
 
 
 def test_inicio_actividad_base_cap(engine):

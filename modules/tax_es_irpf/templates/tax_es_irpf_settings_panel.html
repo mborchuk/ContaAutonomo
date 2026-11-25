@@ -24,7 +24,7 @@
     <label><input type="checkbox" name="irpf_inicio"{% if profile.inicio_reduction_eligible %} checked{% endif %}> Eligible for 20% inicio-actividad reduction</label>
 </div>
 <div class="form-group">
-    <label><input type="checkbox" name="irpf_dificil_m130"{% if profile.apply_dificil_justif_m130 %} checked{% endif %}> Apply 5% difícil justificación inside Modelo 130 box 02 (off by default: applied in Modelo 100)</label>
+    <label><input type="checkbox" name="irpf_dificil_m130"{% if profile.apply_dificil_justif_m130 %} checked{% endif %}> Apply the gastos de difícil justificación ({{ '%g'|format(dificil_pct) }} % of the net in {{ this_year }}; the figures are in Taxes → Tax Data) inside Modelo 130 box 02 (off by default: applied in Modelo 100)</label>
 </div>
 <h4>Equipment (bienes de inversión) in Modelo 130 / 100</h4>
 <div class="form-group">
