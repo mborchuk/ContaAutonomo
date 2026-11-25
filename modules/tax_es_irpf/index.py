@@ -33,6 +33,8 @@ from .engine import (
     Modelo130Input,
     default_retencion_rate,
     minimo_for_region,
+    modelo130_plan,
+    reference_year,
 )
 from .depreciation import depreciation_in_year
 from .params_store import available_years, load_params
@@ -120,6 +122,15 @@ class TaxEsIrpfModule(BaseModule):
             depreciation_rate = db.Column(db.Float, default=25.0)   # % per year
             equipment_threshold = db.Column(db.Float, default=300.0)  # EUR net
             equipment_categories = db.Column(db.String(200), default='Equipment')
+            # Modelo 130 from 2027 (Real Decreto-ley 43/2026), answered for one
+            # tax year (m130_year): the reference year's net turnover (None =
+            # from the invoices in the app), whether its 130 payments were all
+            # refunded, and the option for AEAT-calculated payments.
+            m130_year = db.Column(db.Integer)
+            m130_ref_turnover = db.Column(db.Float)
+            m130_ref_refunded = db.Column(db.Boolean, default=False)
+            m130_aeat_mode = db.Column(db.Boolean, default=False)
+            m130_aeat_amount = db.Column(db.Float)
 
         class IrpfQuarter(db.Model):
             __tablename__ = 'irpfes_quarter'
@@ -184,6 +195,11 @@ class TaxEsIrpfModule(BaseModule):
                 ('depreciation_rate', 'FLOAT DEFAULT 25.0'),
                 ('equipment_threshold', 'FLOAT DEFAULT 300.0'),
                 ('equipment_categories', "VARCHAR(200) DEFAULT 'Equipment'"),
+                ('m130_year', 'INTEGER'),
+                ('m130_ref_turnover', 'FLOAT'),
+                ('m130_ref_refunded', 'BOOLEAN DEFAULT 0'),
+                ('m130_aeat_mode', 'BOOLEAN DEFAULT 0'),
+                ('m130_aeat_amount', 'FLOAT'),
             ],
         }
         inspector = sa_inspect(self._db.engine)
@@ -251,7 +267,7 @@ class TaxEsIrpfModule(BaseModule):
             params = load_params(year)
             return {'table_year': params.get('_fallback_from', year),
                     'built_in': not params.get('_fallback_from'),
-                    'fields': yearly.fields(params), 'auto': None}
+                    'fields': yearly.fields(params, year), 'auto': None}
 
         def validate(_year, values):
             return yearly.validate(values)
@@ -447,6 +463,45 @@ class TaxEsIrpfModule(BaseModule):
             total += amount
         return total
 
+    def _ref_turnover(self, year, profile):
+        """(net turnover of the reference year of `year`, annualised, or None
+        when not known; where it comes from). The owner's figure for that
+        year wins; else the invoices in the app (0 when the activity started
+        after the reference year)."""
+        ref = reference_year(year)
+        if profile.m130_year == year and profile.m130_ref_turnover is not None:
+            return profile.m130_ref_turnover, 'settings'
+        start = profile.start_date
+        if start and start.year > ref:
+            return 0.0, 'no activity'
+        income, _ret = self._sum_income(ref, profile, date(ref, 12, 31))
+        if not income:
+            return None, 'unknown'
+        if start and start.year == ref:  # started that year: raised to the year
+            active = (date(ref, 12, 31) - start).days + 1
+            whole = (date(ref, 12, 31) - date(ref, 1, 1)).days + 1
+            income = round(income * whole / active, 2)
+        return income, 'invoices'
+
+    def _m130_answers(self, year, profile):
+        """The owner's Modelo 130 answers when they are for `year`."""
+        mine = profile.m130_year == year
+        return {'ref_refunded': bool(profile.m130_ref_refunded) if mine else False,
+                'aeat_mode': bool(profile.m130_aeat_mode) if mine else False,
+                'aeat_amount': profile.m130_aeat_amount if mine else None}
+
+    def modelo130_plan(self, year):
+        """How the Modelo 130 of `year` works for the owner: {'mode' ('file',
+        'exempt', 'aeat'), 'rate', 'ref_year', 'ref_turnover', 'source',
+        'notes'}."""
+        profile = self._read_profile()
+        turnover, source = self._ref_turnover(year, profile)
+        answers = self._m130_answers(year, profile)
+        plan = modelo130_plan(self._params(year), year, ref_turnover=turnover,
+                              ref_refunded=answers['ref_refunded'],
+                              aeat_mode=answers['aeat_mode'])
+        return dict(plan, ref_turnover=turnover, source=source)
+
     def _build_modelo130_input(self, year, quarter, profile):
         month, day = _QUARTER_END[quarter]
         end_dt = date(year, month, day)
@@ -455,6 +510,7 @@ class TaxEsIrpfModule(BaseModule):
         expenses += self._sum_reta(year, profile, end_dt)
 
         prior = sum(row['amount'] for row in self._prior_payments(year, quarter, profile))
+        turnover, _source = self._ref_turnover(year, profile)
 
         return Modelo130Input(
             year=year,
@@ -466,6 +522,8 @@ class TaxEsIrpfModule(BaseModule):
             eds_eligible=bool(profile.eds_eligible),
             apply_dificil_justif=bool(profile.apply_dificil_justif_m130),
             low_income_deduction=bool(profile.low_income_deduction),
+            ref_turnover=turnover,
+            **self._m130_answers(year, profile),
         )
 
     def _build_modelo100_input(self, year, profile):
@@ -562,7 +620,7 @@ class TaxEsIrpfModule(BaseModule):
         inp = self._build_modelo130_input(year, quarter, profile)
         result = self._engine(year).compute_modelo130(inp)
         net = result.summary['rendimiento_neto_ytd']
-        rate = self._params(year)['modelo130']['rate']
+        rate = result.summary['rate']
         expenses = inp.ytd_income - net  # includes the difícil justificación
         return {
             '01': round(inp.ytd_income, 2),
@@ -593,8 +651,10 @@ class TaxEsIrpfModule(BaseModule):
 
     def _modelo130(self, year, quarter):
         boxes, rate = self.modelo130_boxes(year, quarter)
+        plan = self.modelo130_plan(year)
         return {'boxes': boxes, 'rate': rate,
-                'breakdown': self.modelo130_breakdown(year, quarter, boxes)}
+                'breakdown': self.modelo130_breakdown(year, quarter, boxes),
+                'mode': plan['mode'], 'notes': plan['notes']}
 
     # ── Registry functions ───────────────────────────────────────────────
 
@@ -608,6 +668,8 @@ class TaxEsIrpfModule(BaseModule):
                      'from the IRPF profile.',
                      params=(year, quarter),
                      returns='{"boxes": {"01".."07": amount}, "rate": fraction, '
+                             '"mode": "file" | "exempt" (nothing due, RIRPF 109.2) | '
+                             '"aeat" (AEAT-calculated payments), "notes": [str], '
                              '"breakdown": {"income": [{date, number, customer, status, '
                              'currency, amount, rate, eur, retention}], '
                              '"expenses": [{category, amount, lines}], '
@@ -1004,18 +1066,58 @@ class TaxEsIrpfModule(BaseModule):
         params = self._params(date.today().year)
         regions = [r for r in params.get('regional_scales', {}) if r != 'supletoria']
         depreciate, rate, threshold, _ = self._equipment_rule(profile)
+        m130_years = self._m130_years()
+        m130_year = (profile.m130_year if profile.m130_year in m130_years
+                     else (m130_years[0] if m130_years else None))
         return self.render_settings_template(
             'tax_es_irpf_settings_panel.html',
             profile=profile, regions=regions, depreciate=depreciate, rate=rate,
             dificil_pct=params['eds']['dificil_justificacion_pct'] * 100,
             this_year=date.today().year,
+            m130_years=m130_years, m130_year=m130_year,
+            m130_mine=profile.m130_year == m130_year,
+            m130_plan=self.modelo130_plan(m130_year) if m130_year else None,
             threshold=threshold,
             start=profile.start_date.isoformat() if profile.start_date else '')
+
+    def _m130_years(self, today=None):
+        """Tax years the owner can answer the 2027 Modelo 130 questions for:
+        this year and next, from the year the rules start."""
+        this_year = (today or date.today()).year
+        start = self._params(this_year)['modelo130'].get('reduced_rate', {}).get('from_year')
+        if start is None:
+            return []
+        return [y for y in (this_year, this_year + 1) if y >= start]
+
+    def _save_m130(self, profile, form):
+        """The Modelo 130 answers for one tax year (Settings → IRPF)."""
+        try:
+            year = int(form.get('irpf_m130_year', ''))
+        except (TypeError, ValueError):
+            return
+        if year not in self._m130_years():
+            return
+        profile.m130_year = year
+        profile.m130_ref_refunded = 'irpf_m130_refunded' in form
+        profile.m130_aeat_mode = 'irpf_m130_aeat' in form
+        for field_name, attr in [('irpf_m130_ref_turnover', 'm130_ref_turnover'),
+                                 ('irpf_m130_aeat_amount', 'm130_aeat_amount')]:
+            text = (form.get(field_name) or '').strip()
+            if not text:
+                setattr(profile, attr, None)  # empty: worked out by the app
+                continue
+            try:
+                value = float(text.replace(',', '.'))
+            except ValueError:
+                continue  # non-numeric: keep the stored value
+            if value >= 0:
+                setattr(profile, attr, value)
 
     def save_settings(self, settings, form):
         if 'irpf_region' not in form:
             return
         profile = self._get_profile()
+        self._save_m130(profile, form)
         profile.region = form.get('irpf_region', 'valenciana')
         start = form.get('irpf_start_date', '')
         if start:
