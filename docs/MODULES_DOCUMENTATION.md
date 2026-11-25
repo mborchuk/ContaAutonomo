@@ -957,12 +957,12 @@ sequenceDiagram
   (`CHAIN_SPEC_VERSION`) pending verification against the official AEAT
   technical annexes. VERI*FACTU real-time submission is scaffolded and gated
   on AEAT test-environment access. See `modules/verifactu/README.md`.
-- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 1 January
-  2027 for Impuesto sobre Sociedades taxpayers and 1 July 2027 for autónomos
-  and everyone else (Real Decreto-ley 15/2025, BOE-A-2025-24446). The move to
-  October 2028 announced on 5 October 2026 is labelled *announced, not yet in
-  force* until its norm is in the BOE. B2B e-invoicing: 6 October 2027 /
-  6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
+- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 6 October
+  2028 for every obligated taxpayer (Real Decreto-ley 43/2026,
+  BOE-A-2026-24701: the end of the 24-month period of RD 238/2026 for
+  autónomos). The earlier 1 January 2027 and 1 July 2027 dates (Real
+  Decreto-ley 15/2025) are listed as *superseded*. B2B e-invoicing: 6 October
+  2027 / 6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
 
 ### Bank Import (`bank_import`)
 
