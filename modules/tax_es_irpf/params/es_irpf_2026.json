@@ -11,8 +11,10 @@
     "new_window_years": 3
   },
   "eds": {
-    "dificil_justificacion_pct": 0.05,
-    "dificil_justificacion_cap": 2000,
+    "dificil_justificacion_pct": 0.10,
+    "dificil_justificacion_cap": 3000,
+    "modelo130_earlier_quarters": {"before_quarter": 4, "pct": 0.05, "cap": 2000},
+    "dificil_justificacion_source": "Real Decreto-ley 43/2026, art. 2.Dos (BOE-A-2026-24701): 2026 percentage +5 points, cap 3,000; counted from the 4T 2026 Modelo 130",
     "incn_limit": 600000
   },
   "inicio_actividad": {

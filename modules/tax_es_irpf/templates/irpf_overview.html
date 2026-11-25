@@ -2,6 +2,7 @@
 {% block title %}IRPF Estimator{% endblock %}
 {% block content %}
 <h1>🧮 IRPF Estimator (España)</h1>
+{% if figures_notice %}{{ figures_notice|safe }}{% endif %}
 <p style="background: var(--color-surface); border: 1px solid var(--color-border);
    border-radius: 4px; padding: 10px;">
   <strong>ESTIMATE — not tax advice.</strong> Numbers are approximations to help
