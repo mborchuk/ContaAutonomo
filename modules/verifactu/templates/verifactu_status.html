@@ -41,7 +41,7 @@
             <td>{{ 'Verifactu' if o.topic == 'verifactu' else 'B2B e-invoicing' }}</td>
             <td>{{ o.who }}</td>
             <td>{{ o.date_text }}</td>
-            <td>{% if o.status == 'announced' %}<span class="status-badge status-missing">{{ o.status_label }}</span>{% else %}{{ o.status_label }}{% endif %}</td>
+            <td>{% if o.status == 'announced' %}<span class="status-badge status-missing">{{ o.status_label }}</span>{% elif o.status == 'superseded' %}<span class="fine-print">{{ o.status_label }} by {{ o.superseded_by }}</span>{% else %}{{ o.status_label }}{% endif %}</td>
             <td class="fine-print">{{ o.source }}</td>
         </tr>
         {% endfor %}
@@ -51,7 +51,8 @@
 <p class="fine-print" id="obligations-note">
     Dates checked on {{ obligations_checked_on.strftime('%d/%m/%Y') }} (table
     {{ obligations_version }}). An announced date binds nobody until its norm is
-    published in the BOE; until then the dates in force apply.
+    published in the BOE; until then the dates in force apply. A superseded date
+    no longer applies: the norm named replaced it.
 </p>
 
 <h3>Latest records</h3>

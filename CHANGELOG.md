@@ -81,6 +81,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   reason, kept in the history.
 
 ### Changed
+- **Verifactu starts on 6 October 2028 for everyone.** Real Decreto-ley
+  43/2026 (BOE-A-2026-24701) moves the Verifactu obligation of every
+  taxpayer to the end of the B2B e-invoicing period for autónomos. The
+  status page shows it in force and the 1 January 2027 and 1 July 2027
+  dates of Real Decreto-ley 15/2025 as superseded.
 - **The core is a package.** The 22 Python files of the repository root are
   now the `contaautonomo` package: `contaautonomo/app.py`, `core/` (module
   system, function registry, message center, invoice PDFs), `security/`
