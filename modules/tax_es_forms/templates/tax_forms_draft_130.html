@@ -15,10 +15,18 @@
 {% if draft.table_fallback %}
 {% if table_notice %}{{ table_notice|safe }}{% else %}<div class="note note-warning" role="note">⚠ {{ draft.table_note }}</div>{% endif %}
 {% endif %}
+{% if draft.mode == 'exempt' %}
+<div class="note note-info" role="note">✓ {{ draft.notes[-1] }} The boxes below are for reference only.</div>
+{% elif draft.mode == 'aeat' %}
+<div class="note note-info" role="note">{{ draft.notes[-1] }}</div>
+{% endif %}
+{% for note in draft.notes if draft.mode == 'file' %}
+<div class="note note-info" role="note">{{ note }}</div>
+{% endfor %}
 <!-- Non-dismissible estimate banner -->
 <div class="note note-info">
     <strong>Estimate, not tax advice.</strong> Cumulative year-to-date, estimación
-    directa, fixed 20% pago fraccionado. Verify every box against the current
+    directa, pago fraccionado at {{ '%g'|format((draft.irpf_rate or 0) * 100) }} %. Verify every box against the current
     official AEAT Modelo 130 before filing. Box table version: {{ draft.table_version }}.
     {% if draft.meta.source == 'tax_es_irpf' %}
     Calculated by the IRPF Estimator: income by invoice date (unpaid included),

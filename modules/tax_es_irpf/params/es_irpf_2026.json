@@ -3,7 +3,10 @@
   "modelo130": {
     "rate": 0.20,
     "low_income_deduction_max": 100,
-    "apply_5pct_dificil_justif": true
+    "apply_5pct_dificil_justif": true,
+    "reduced_rate": {"from_year": 2027, "rate": 0.19, "turnover_below": 250000},
+    "exemption": {"from_year": 2027, "turnover_below": 85000},
+    "from_2027_source": "Real Decreto-ley 43/2026, art. 2.Uno, Cuatro and Cinco (BOE-A-2026-24701): LIRPF art. 101.11.a) 19 % below 250,000 EUR; RIRPF art. 109.2 no pago fraccionado below 85,000 EUR when all were refunded; RIRPF art. 110.5 AEAT-calculated payments. Reference: the last period whose renta deadline ended before the first 130 window of the year (year - 2)"
   },
   "retencion": {
     "general": 0.15,

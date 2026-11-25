@@ -64,7 +64,7 @@ MODELO_130_BOXES = {
     "01": "Ingresos computables (acumulado del ejercicio)",
     "02": "Gastos deducibles (acumulado del ejercicio)",
     "03": "Rendimiento (01 − 02)",
-    "04": "20% del rendimiento (casilla 03, si es positivo)",
+    "04": "Porcentaje del rendimiento (casilla 03, si es positivo): 20 %, o 19 % desde 2027 con cifra de negocios inferior a 250.000 €",
     "05": "Pagos fraccionados de trimestres anteriores",
     "06": "Retenciones e ingresos a cuenta (acumulado del ejercicio)",
     "07": "Resultado — pago fraccionado del trimestre (04 − 05 − 06)",

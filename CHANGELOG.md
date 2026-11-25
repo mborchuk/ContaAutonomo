@@ -15,6 +15,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
   a year or enters new values, and the IRPF Estimator, the Modelo 130 draft
   and the renta estimate use them. A year without its own figures warns on
   the IRPF pages until confirmed.
+- **Modelo 130 from 2027 (Real Decreto-ley 43/2026).** The rate is 19 %
+  instead of 20 % when the net turnover two years before was below 250,000
+  EUR. No Modelo 130 is due when it was below 85,000 EUR and all of that
+  year's payments were refunded in its renta. The owner can also record the
+  option for payments the AEAT calculates and debits, with the amount the
+  AEAT shows. The turnover comes from the invoices in the app (or the owner
+  enters it) and the answers are in Settings → IRPF (España); the rates and
+  limits are in Tax Data. The IRPF Estimator, the Modelo 130 draft, the
+  renta estimate and Tax Provision follow it.
 - **Documents: AI suggestions for fields and tags.** Off until the owner
   turns them on in Settings → Documents and chooses the provider (the AI
   Agent's choice or a named one; nothing is sent when it is not set up),
