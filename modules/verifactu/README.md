@@ -48,20 +48,21 @@ alarm when the chain is broken.
 
 ## When the obligation starts
 
-Checked on 16 November 2026. The same table, with its sources, is in
+Checked on 25 November 2026. The same table, with its sources, is in
 `obligations.py` and on the status page.
 
 | Who | From | Status | Source |
 |-----|------|--------|--------|
-| Taxpayers of the Impuesto sobre Sociedades | 1 January 2027 | In force | Real Decreto-ley 15/2025, de 2 de diciembre (BOE-A-2025-24446), amending RD 1007/2023 |
-| Autónomos and every other obligated taxpayer | 1 July 2027 | In force | Real Decreto-ley 15/2025 |
-| All obligated taxpayers | October 2028 | **Announced, not yet in force** | Ministerio de Hacienda, nota informativa of 5 October 2026; no norm in the BOE yet |
+| Every obligated taxpayer: Impuesto sobre Sociedades taxpayers, autónomos and everyone else | 6 October 2028 | In force | Real Decreto-ley 43/2026, de 24 de noviembre (BOE-A-2026-24701), disposición final primera: the end of the 24-month period of Real Decreto 238/2026, disposición final cuarta.1.b), counted from Orden HAC/1028/2026 (in force 6 October 2026) |
+| Taxpayers of the Impuesto sobre Sociedades | ~~1 January 2027~~ | Superseded | Real Decreto-ley 15/2025 (BOE-A-2025-24446), replaced by Real Decreto-ley 43/2026 |
+| Autónomos and every other obligated taxpayer | ~~1 July 2027~~ | Superseded | Real Decreto-ley 15/2025, replaced by Real Decreto-ley 43/2026 |
 
-Until a norm carrying out the October 2028 announcement is published, the
-2027 dates apply. When it is published, follow the update procedure in the
-docstring of `obligations.py`.
+Verifactu now starts on the same day as the B2B e-invoicing obligation for
+autónomos. When a later norm moves the date again, follow the update
+procedure in the docstring of `obligations.py`.
 
-B2B e-invoicing has its own dates (6 October 2027 and 6 October 2028); see
+B2B e-invoicing has its own dates (6 October 2027, 6 October 2028 and 6 October
+2029 for status reporting); see
 [`modules/einvoice/README.md`](../einvoice/README.md).
 
 ## Signing key

@@ -888,6 +888,21 @@ Estimate only.
   (Real Decreto-ley 43/2026), counted from the fourth-quarter Modelo 130 on;
   the first three quarters keep 5 % and 2,000 EUR
   (`eds.modelo130_earlier_quarters` in the params file).
+- **Modelo 130 from 2027** (Real Decreto-ley 43/2026; `engine.modelo130_plan`,
+  rules in the params with the year they start). The reference year is two
+  years before (the last renta closed before the first 130 window). 19 %
+  instead of 20 % when its net turnover was below 250,000 EUR; no Modelo
+  130 (`mode` `exempt`, box 07 = 0) when it was below 85,000 EUR and all of
+  that year's payments were refunded; or the owner's option for payments the
+  AEAT calculates and debits (`mode` `aeat`, box 07 = the amount the AEAT
+  shows, if entered). The turnover comes from the invoices of the reference
+  year (raised to the year when the activity started in it; 0 when it
+  started later) unless the owner enters it. Settings → IRPF (España) holds
+  the answers for one tax year (`irpfes_profile.m130_*`); the rates and
+  limits are in Tax Data. Not modelled: the option for the average tax rate
+  instead of 19 % (LIRPF art. 101.11.a), the 70 % retention exemption of
+  professionals (RIRPF art. 109.2), and the fiscal calendar does not drop
+  the 130 by itself (Settings → Fiscal Calendar does).
 
 - Routes: `/irpf-es/` (overview), `/irpf-es/modelo130/<year>/<q>`,
   `/irpf-es/modelo100/<year>` (individual vs. joint), `/irpf-es/simulator`
@@ -983,12 +998,12 @@ sequenceDiagram
   (`CHAIN_SPEC_VERSION`) pending verification against the official AEAT
   technical annexes. VERI*FACTU real-time submission is scaffolded and gated
   on AEAT test-environment access. See `modules/verifactu/README.md`.
-- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 1 January
-  2027 for Impuesto sobre Sociedades taxpayers and 1 July 2027 for autónomos
-  and everyone else (Real Decreto-ley 15/2025, BOE-A-2025-24446). The move to
-  October 2028 announced on 5 October 2026 is labelled *announced, not yet in
-  force* until its norm is in the BOE. B2B e-invoicing: 6 October 2027 /
-  6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
+- **Obligation dates** (`obligations.py`, shown on `/verifactu/`): 6 October
+  2028 for every obligated taxpayer (Real Decreto-ley 43/2026,
+  BOE-A-2026-24701: the end of the 24-month period of RD 238/2026 for
+  autónomos). The earlier 1 January 2027 and 1 July 2027 dates (Real
+  Decreto-ley 15/2025) are listed as *superseded*. B2B e-invoicing: 6 October
+  2027 / 6 October 2028 (RD 238/2026, Orden HAC/1028/2026).
 
 ### Bank Import (`bank_import`)
 
@@ -1318,7 +1333,7 @@ Functions today:
 | `vat.reverse_charge_check` | `tax_es_forms` | `mark` (`eu`/`non_eu`), `country?`, `vat_number?`, `supplier?` → `{problem}`: a sentence when the mark does not match where the supplier is, else null. Expenses calls it for its deduction-check notice |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
 | `ss.payments_total` | `tax_management` | `date_from`, `date_to`; `{total, count}` of the Social Security payments recorded. The IRPF Estimator and the RETA Advisor call it |
-| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the difícil justificación (the year's percentage and cap, from Tax Data); box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
+| `tax.modelo130_boxes`, `tax.modelo100_result` | `tax_es_irpf` | `{boxes, rate, breakdown}` for a quarter (`breakdown`: box 01 by invoice — amount in its currency, stored rate, EUR in cents, retention; box 02 by expense category with its lines, equipment depreciation, RETA and its source, the difícil justificación (the year's percentage and cap, from Tax Data); box 05 by earlier quarter, filed or estimated — shown on the Modelo 130 draft page; `mode` `file`, `exempt` or `aeat` from 2027 with its `notes`); the renta estimate for a year (`ValueError` for a foral region). The Modelo 130 draft and Tax Provision call them |
 | `tax.equipment_rule` | `tax_es_irpf` | `{threshold, categories}` of equipment (bienes de inversión). Modelo 303 boxes 30/31 use it; without it, category "Equipment" from 300 EUR |
 | `taxdata.year_values` | `tax_data` | `table`, `year` → `{confirmed, confirmed_on, values}`: whether the owner confirmed a yearly table for the year, and the values entered that differ from the app's table. Spanish Tax Forms and the RETA Advisor call it |
 | `taxdata.year_notice` | `tax_data` | `table`, `year`, `table_year` → `{html}`: the warning for a page showing `year` with the `table_year` table (how to check it, the automatic check, a link to confirm it) |

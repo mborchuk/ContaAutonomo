@@ -46,6 +46,43 @@
     <label for="irpf_equipment_categories">Expense categories treated as equipment (comma-separated)</label>
     <input type="text" id="irpf_equipment_categories" name="irpf_equipment_categories" value="{{ profile.equipment_categories or 'Equipment' }}">
 </div>
+{% if m130_plan %}
+<h4>Modelo 130 from 2027 (Real Decreto-ley 43/2026)</h4>
+<p class="fine-print">From 2027 the pago fraccionado is 19 % instead of 20 % when the net
+    turnover of the year two before was below 250,000 EUR. No Modelo 130 is due when that
+    turnover was below 85,000 EUR and all that year's Modelo 130 payments were refunded in
+    its renta. Instead of filing, you can opt for payments the AEAT calculates and debits
+    (declaración censal: March 2027, then each December). The figures are in Taxes → Tax
+    Data.</p>
+<div class="form-group">
+    <label for="irpf_m130_year">These answers are for the tax year</label>
+    <select id="irpf_m130_year" name="irpf_m130_year">
+        {% for y in m130_years %}<option value="{{ y }}"{% if y == m130_year %} selected{% endif %}>{{ y }} (looks at {{ y - 2 }})</option>{% endfor %}
+    </select>
+</div>
+<div class="form-group">
+    <label for="irpf_m130_ref_turnover">Net turnover (importe neto de la cifra de negocios) of {{ m130_year - 2 }}, EUR</label>
+    <input type="number" step="0.01" min="0" id="irpf_m130_ref_turnover" name="irpf_m130_ref_turnover"
+           value="{{ profile.m130_ref_turnover if m130_mine and profile.m130_ref_turnover is not none else '' }}"
+           placeholder="{% if m130_plan.source == 'invoices' %}From the invoices in the app: {{ '%.2f'|format(m130_plan.ref_turnover) }}{% elif m130_plan.source == 'no activity' %}No activity in {{ m130_year - 2 }}{% else %}Not known: enter it{% endif %}">
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_m130_refunded"{% if m130_mine and profile.m130_ref_refunded %} checked{% endif %}> In the renta of {{ m130_year - 2 }}, all my Modelo 130 payments of that year were refunded (cuota diferencial negative and at least as large as the payments)</label>
+</div>
+<div class="form-group">
+    <label><input type="checkbox" name="irpf_m130_aeat"{% if m130_mine and profile.m130_aeat_mode %} checked{% endif %}> I opted for the Modelo 130 payments the AEAT calculates (nothing to file; debited on the last day of each window)</label>
+</div>
+<div class="form-group">
+    <label for="irpf_m130_aeat_amount">Quarterly amount the AEAT shows in the Sede (EUR, optional)</label>
+    <input type="number" step="0.01" min="0" id="irpf_m130_aeat_amount" name="irpf_m130_aeat_amount"
+           value="{{ profile.m130_aeat_amount if m130_mine and profile.m130_aeat_amount is not none else '' }}">
+</div>
+<p class="fine-print">For {{ m130_year }}:
+    {% if m130_plan.mode == 'exempt' %}no Modelo 130 is due.
+    {% elif m130_plan.mode == 'aeat' %}the AEAT calculates and debits each payment.
+    {% else %}file the Modelo 130 at {{ '%g'|format(m130_plan.rate * 100) }} %.{% endif %}
+    {% for note in m130_plan.notes %}{{ note }} {% endfor %}</p>
+{% endif %}
 <div class="form-group">
     <label><input type="checkbox" name="irpf_low_income"{% if profile.low_income_deduction %} checked{% endif %}> Apply art. 110.3.c low-income deduction (Modelo 130)</label>
 </div>

@@ -111,6 +111,68 @@ def dificil_label(params: dict[str, Any], quarter: int | None = None) -> str:
     return f"{pct * 100:g}% difícil justificación (cap {cap:.0f})"
 
 
+def reference_year(year: int) -> int:
+    """The period a year's Modelo 130 rules look at: the last one whose renta
+    deadline (30 June) ended before the first 130 window of the year opens
+    (1 April) — two years earlier."""
+    return year - 2
+
+
+def modelo130_plan(
+    params: dict[str, Any],
+    year: int,
+    *,
+    ref_turnover: float | None = None,
+    ref_refunded: bool = False,
+    aeat_mode: bool = False,
+) -> dict[str, Any]:
+    """How the Modelo 130 of `year` works for this taxpayer.
+
+    Returns {'mode': 'file' | 'exempt' | 'aeat', 'rate', 'ref_year', 'notes'}.
+    From 2027 (Real Decreto-ley 43/2026; the rules sit in the params with
+    the year they start):
+      - 19 % instead of 20 % when the reference year's net turnover is below
+        250,000 EUR (LIRPF art. 101.11.a);
+      - no pago fraccionado when it is below 85,000 EUR and all of that
+        year's 130 payments were refunded in its renta (RIRPF art. 109.2);
+      - the owner may opt for payments the AEAT calculates and debits
+        (RIRPF art. 110.5); then nothing is filed.
+    """
+    m130 = params["modelo130"]
+    rate = m130["rate"]
+    ref = reference_year(year)
+    notes: list[str] = []
+    reduced = m130.get("reduced_rate")
+    if reduced and year >= reduced["from_year"]:
+        if ref_turnover is None:
+            notes.append(
+                f"The {reduced['rate'] * 100:g} % rate applies when the net turnover of "
+                f"{ref} was below {reduced['turnover_below']:,.0f} EUR; it is not known, "
+                f"so {rate * 100:g} % is used. Enter it in Settings → IRPF (España).")
+        elif ref_turnover < reduced["turnover_below"]:
+            rate = reduced["rate"]
+            notes.append(
+                f"{rate * 100:g} %: the net turnover of {ref} "
+                f"({ref_turnover:,.2f} EUR) was below {reduced['turnover_below']:,.0f} EUR.")
+    exemption = m130.get("exemption")
+    if exemption and year >= exemption["from_year"]:
+        if (ref_turnover is not None and ref_turnover < exemption["turnover_below"]
+                and ref_refunded):
+            notes.append(
+                f"No Modelo 130 is due for {year}: the net turnover of {ref} was below "
+                f"{exemption['turnover_below']:,.0f} EUR and all of that year's Modelo 130 "
+                f"payments were refunded in its renta. You can leave Modelo 130 out of "
+                f"Settings → Fiscal Calendar.")
+            return {"mode": "exempt", "rate": rate, "ref_year": ref, "notes": notes}
+    if aeat_mode and reduced and year >= reduced["from_year"]:
+        notes.append(
+            "You opted for the payments the AEAT calculates: nothing to file. The AEAT "
+            "shows each amount in the Sede in the first five days of the window and "
+            "debits it on the last day.")
+        return {"mode": "aeat", "rate": rate, "ref_year": ref, "notes": notes}
+    return {"mode": "file", "rate": rate, "ref_year": ref, "notes": notes}
+
+
 def rendimiento_neto(
     income: float,
     deductible_expenses: float,
@@ -249,6 +311,15 @@ class Modelo130Input:
     apply_dificil_justif: bool | None = None
     low_income_deduction: bool = False
     low_income_amount: float = 0.0  # art. 110.3.c, ≤ params cap
+    # From 2027 (Real Decreto-ley 43/2026), about the reference year (see
+    # modelo130_plan): its net turnover, annualised (None = not known),
+    # whether that year's 130 payments were all refunded in its renta, and
+    # whether the owner opted for the payments the AEAT calculates (with the
+    # quarterly amount the AEAT shows, when known).
+    ref_turnover: float | None = None
+    ref_refunded: bool = False
+    aeat_mode: bool = False
+    aeat_amount: float | None = None
 
 
 @dataclass
@@ -300,7 +371,9 @@ class IrpfEngine:
             quarter=inp.quarter,
         )
 
-        rate = params["modelo130"]["rate"]
+        plan = modelo130_plan(params, inp.year, ref_turnover=inp.ref_turnover,
+                              ref_refunded=inp.ref_refunded, aeat_mode=inp.aeat_mode)
+        rate = plan["rate"]
         gross = _round(max(0.0, net) * rate) if net > 0 else _round(net * rate)
 
         low_income = 0.0
@@ -312,6 +385,10 @@ class IrpfEngine:
             gross - inp.ytd_retenciones - inp.prior_payments - low_income
         )
         payment_due = _round(max(0.0, result_before_floor))
+        if plan["mode"] == "exempt":
+            payment_due = 0.0
+        elif plan["mode"] == "aeat" and inp.aeat_amount is not None:
+            payment_due = _round(max(0.0, inp.aeat_amount))
 
         lines = [
             _line("Income YTD", inp.ytd_income),
@@ -320,17 +397,24 @@ class IrpfEngine:
         if dificil:
             lines.append(_line(dificil_label(params, inp.quarter), -dificil))
         lines.append(_line("Rendimiento neto YTD", net))
-        lines.append(_line(f"× {rate * 100:.0f}%", gross))
+        lines.append(_line(f"× {rate * 100:g}%", gross))
         if inp.ytd_retenciones:
             lines.append(_line("− Retenciones YTD", -inp.ytd_retenciones))
         if inp.prior_payments:
             lines.append(_line("− Modelo 130 prior quarters", -inp.prior_payments))
         if low_income:
             lines.append(_line("− Low-income deduction (art. 110.3.c)", -low_income))
+        if plan["mode"] == "exempt":
+            lines.append(_line("No Modelo 130 due this year (RIRPF art. 109.2)", 0.0))
+        elif plan["mode"] == "aeat" and inp.aeat_amount is not None:
+            lines.append(_line("Amount the AEAT calculates and debits", payment_due))
         lines.append(_line("Payment due", payment_due, total=True))
 
-        notes: list[str] = []
-        if result_before_floor < 0:
+        notes: list[str] = list(plan["notes"])
+        if plan["mode"] == "aeat" and inp.aeat_amount is None:
+            notes.append("The amount the AEAT shows is not entered in Settings → IRPF "
+                         "(España); this is the app's own estimate.")
+        if result_before_floor < 0 and plan["mode"] == "file":
             notes.append(
                 "Negative result → payment is 0; the negative rendimiento "
                 "carries forward to offset later quarters this year."
@@ -341,6 +425,9 @@ class IrpfEngine:
                 "modelo130_due": payment_due,
                 "rendimiento_neto_ytd": net,
                 "quarter": inp.quarter,
+                "rate": rate,
+                "mode": plan["mode"],
+                "ref_year": plan["ref_year"],
             },
             lines=lines,
             params_year=self.year,

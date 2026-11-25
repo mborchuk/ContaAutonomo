@@ -16,8 +16,11 @@ CHECK_IRPF = dict(
     name='IRPF figures (estimación directa simplificada)',
     holds=('The percentage of the net deducted as gastos de difícil justificación and its '
            'annual cap (10 % and 3,000 EUR in 2026, set by Real Decreto-ley 43/2026; 5 % and '
-           '2,000 EUR before), and the Modelo 130 rate on the net (20 %). The IRPF Estimator, '
-           'the Modelo 130 draft and the renta estimate use them.'),
+           '2,000 EUR before), and the Modelo 130 rate on the net (20 %). From 2027 also the '
+           'reduced Modelo 130 rate (19 % when the net turnover two years before was below '
+           '250,000 EUR) and the turnover below which no Modelo 130 is due when all '
+           'payments were refunded (85,000 EUR). The IRPF Estimator, the Modelo 130 draft '
+           'and the renta estimate use them.'),
     steps=(
         'Search the BOE for the year\'s IRPF changes (Ley de Presupuestos or a Real '
         'Decreto-ley) that mention "gastos de difícil justificación" or "pagos '
