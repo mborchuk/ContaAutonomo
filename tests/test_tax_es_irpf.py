@@ -1,8 +1,8 @@
 """Unit tests for the tax_es_irpf engine (Modelo 130 + Modelo 100).
 
-The worked examples in autonomos_md/MODELOS_100_130.md are REAL filings from
-the user (two tax years), reproduced box-by-box. We assert the engine matches
-each AEAT box to the cent. Plus the edge cases the design calls out: loss
+Worked examples with synthetic figures, each box checked by hand against the
+year's scales (the arithmetic is in the comments). Plus the edge cases the
+design calls out: loss
 quarter, EDS difícil-justificación cap + M130 box-02 toggle, split state/CV
 mínimos, 20% inicio, conjunta, region split + supletoria fallback, foral
 refusal, retención window, year-versioned params.
@@ -42,34 +42,33 @@ def _m100(**kw):
     return Modelo100Input(**defaults)
 
 
-# ── Real filing: Modelo 130, 1T 2026 (design §3, worked example A) ─────────
+# ── Worked example: Modelo 130, 1T 2026 (synthetic) ──────────────────────
 
-def test_modelo130_real_1t_2026(engine):
-    # box 02 already bundles real gastos + the 1T share of the 5%, so we feed
-    # the box-02 total and turn the engine's own 5% off to avoid double count.
+def test_modelo130_worked_1t_2026(engine):
+    # Box 02 given as a total (difícil justificación inside it), so the
+    # engine's own deduction is off to avoid counting it twice.
     result = engine.compute_modelo130(Modelo130Input(
         year=2026, quarter=1,
-        ytd_income=16923.78, ytd_deductible_expenses=2097.81,
+        ytd_income=15000.00, ytd_deductible_expenses=2500.00,
         apply_dificil_justif=False,
     ))
-    assert result.summary['rendimiento_neto_ytd'] == 14825.97  # box 03
-    assert result.summary['modelo130_due'] == 2965.19          # box 19 ✓ filing
+    assert result.summary['rendimiento_neto_ytd'] == 12500.00  # box 03: 15.000 − 2.500
+    assert result.summary['modelo130_due'] == 2500.00          # 12.500 × 20 %
 
 
-# ── Real filing: Modelo 130, 4T 2024 (design §3, worked example A2) ────────
+# ── Worked example: Modelo 130, 4T 2025 (synthetic) ──────────────────────
 
-def test_modelo130_real_4t_2024():
-    # box 02 = 3.145,98 real gastos + 2.000 difícil (cap). Feed real gastos and
-    # let the engine add the 5% (clamped to the 2.000 annual cap). 2026 has
-    # 10 % / 3.000 from the fourth quarter on, so this uses the 2025 figures.
+def test_modelo130_worked_4t_2025():
+    # 60.000 − 4.000 = 56.000; 5 % = 2.800, capped at 2.000 (2025 figures)
+    # → box 03 54.000; × 20 % = 10.800; − 8.000 paid in Q1–Q3 = 2.800.
     engine = IrpfEngine(load_params(2025))
     result = engine.compute_modelo130(Modelo130Input(
         year=2025, quarter=4,
-        ytd_income=72373.81, ytd_deductible_expenses=3145.98,
-        prior_payments=9843.01,
+        ytd_income=60000.00, ytd_deductible_expenses=4000.00,
+        prior_payments=8000.00,
     ))
-    assert result.summary['rendimiento_neto_ytd'] == 67227.83  # box 03
-    assert result.summary['modelo130_due'] == 3602.56          # box 19 ✓ filing
+    assert result.summary['rendimiento_neto_ytd'] == 54000.00  # box 03
+    assert result.summary['modelo130_due'] == 2800.00          # box 07
 
 
 # ── Illustrative example B (design §3) — 5% toggle ON ─────────────────────
@@ -85,33 +84,39 @@ def test_modelo130_illustrative_example_b(engine):
     assert result.lines[-1]['total'] is True
 
 
-# ── Real filing: Modelo 100, 2025 conjunta (design §4) ────────────────────
+# ── Worked example: Modelo 100, 2025 conjunta (synthetic) ────────────────
 
-def test_modelo100_real_2025_conjunta():
-    """Reproduces M100-2025 box-by-box: inicio 20%, conjunta, RETA, difícil
-    cap, split state/CV mínimos, CV scale, pagos-fraccionados credit.
+def test_modelo100_worked_2025_conjunta():
+    """Inicio 20 %, conjunta, difícil cap, split state/CV mínimos, CV scale,
+    pagos-fraccionados credit — every line worked out by hand below.
     """
     engine = IrpfEngine(load_params(2025))
     result = engine.compute_modelo100(_m100(
-        year=2025, income=68008.33, deductible_expenses=6742.81,
-        minimo_estatal=10650, minimo_autonomico=11715,  # state / CV, 2 kids
-        retenciones=0, pagos_fraccionados=12253.10,
+        year=2025, income=50000.00, deductible_expenses=6000.00,
+        minimo_estatal=7950, minimo_autonomico=8745,  # state / CV, one child
+        retenciones=0, pagos_fraccionados=8000.00,
         inicio_reduction_eligible=True,
         declaration_mode='conjunta', family_unit='biparental',
     ), region='valenciana')
 
     by_label = {l['label']: l['amount'] for l in result.lines}
-    assert by_label['5% difícil justificación (cap 2000)'] == -2000.0   # 0222
-    assert by_label['− 20% reducción inicio actividad'] == -11853.10    # 0234
-    assert by_label['Rendimiento neto actividad'] == 47412.42           # 0235/0435
-    assert by_label['− Reducción conjunta (biparental)'] == -3400.0     # 0491
-    assert by_label['Base liquidable general'] == 44012.42              # 0500
-    assert by_label['Cuota estatal'] == 4981.30                         # 0532
-    assert by_label['Cuota autonómica (valenciana)'] == 4878.13         # 0533
+    # 50.000 − 6.000 = 44.000; 5 % = 2.200, capped at 2.000
+    assert by_label['5% difícil justificación (cap 2000)'] == -2000.0
+    # (44.000 − 2.000) × 20 % = 8.400 → 33.600
+    assert by_label['− 20% reducción inicio actividad'] == -8400.00
+    assert by_label['Rendimiento neto actividad'] == 33600.00
+    assert by_label['− Reducción conjunta (biparental)'] == -3400.0
+    assert by_label['Base liquidable general'] == 30200.00
+    # State: 12.450 × 9,5 % + 7.750 × 12 % + 10.000 × 15 % = 3.612,75,
+    # minus the mínimo 7.950 × 9,5 % = 755,25
+    assert by_label['Cuota estatal'] == 2857.50
+    # CV: 12.000 × 9 % + 10.000 × 12 % + 8.200 × 15 % = 3.510,00,
+    # minus the mínimo 8.745 × 9 % = 787,05
+    assert by_label['Cuota autonómica (valenciana)'] == 2722.95
 
     s = result.summary
-    assert s['cuota_integra'] == 9859.43                                # 0587
-    assert s['modelo100_diferencial'] == -2393.67                       # 0610 ✓
+    assert s['cuota_integra'] == 5580.45
+    assert s['modelo100_diferencial'] == -2419.55      # 5.580,45 − 8.000
     assert s['a_ingresar'] is False  # a devolver (refund)
 
 
@@ -131,11 +136,11 @@ def test_apply_scale_zero_and_negative(params):
 
 
 def test_minimo_split_state_vs_autonomic(params):
-    """CV mínimo is the state block × 1.10 — verified vs the 2025 filing."""
-    profile = {'descendientes': 2}  # contribuyente + 2 kids
+    """CV mínimo is the state block × 1.10 (the params' CV amounts)."""
+    profile = {'descendientes': 1}  # contribuyente + one child
     estatal, autonomico = minimo_for_region(profile, params, 'valenciana')
-    assert estatal == 10650.0       # 5.550 + 2.400 + 2.700
-    assert autonomico == 11715.0    # 6.105 + 2.640 + 2.970
+    assert estatal == 7950.0        # 5.550 + 2.400
+    assert autonomico == 8745.0     # 6.105 + 2.640
 
 
 def test_minimo_autonomico_falls_back_to_state_for_unloaded_region(params):
