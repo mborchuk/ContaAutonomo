@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from modules.verifactu.obligations import (
-    ANNOUNCED, IN_FORCE, OBLIGATIONS, STATUS_LABELS, obligations)
+    ANNOUNCED, IN_FORCE, OBLIGATIONS, STATUS_LABELS, SUPERSEDED, obligations)
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -12,28 +12,40 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_every_date_cites_its_source_and_has_a_known_status():
     for entry in OBLIGATIONS:
         assert entry['source'].strip()
-        assert entry['status'] in (IN_FORCE, ANNOUNCED)
+        assert entry['status'] in (IN_FORCE, ANNOUNCED, SUPERSEDED)
+        if entry['status'] == SUPERSEDED:
+            assert 'BOE' in entry['superseded_by'], entry
         if entry['status'] == IN_FORCE:
             assert 'BOE' in entry['source'], entry
             assert isinstance(entry['date'], date)
 
 
 def test_dates_in_force_follow_the_boe():
-    verifactu = {e['who']: e['date'] for e in obligations('verifactu')
-                 if e['status'] == IN_FORCE}
-    assert date(2027, 1, 1) in verifactu.values()
-    assert date(2027, 7, 1) in verifactu.values()
+    """Real Decreto-ley 43/2026: Verifactu for everyone on 6 October 2028,
+    the B2B e-invoicing date for autónomos; the 2027 dates are superseded."""
+    verifactu = [e for e in obligations('verifactu') if e['status'] == IN_FORCE]
+    assert [e['date'] for e in verifactu] == [date(2028, 10, 6)]
+    assert 'BOE-A-2026-24701' in verifactu[0]['source']
+    superseded = {e['date'] for e in obligations('verifactu') if e['status'] == SUPERSEDED}
+    assert superseded == {date(2027, 1, 1), date(2027, 7, 1)}
     einvoice = [e['date'] for e in obligations('einvoice')]
     assert date(2027, 10, 6) in einvoice and date(2028, 10, 6) in einvoice
+    assert verifactu[0]['date'] in einvoice
 
 
-def test_announced_date_is_labelled_as_not_in_force():
-    announced = [e for e in obligations() if e['status'] == ANNOUNCED]
-    assert announced, 'the October 2028 announcement is tracked'
-    for entry in announced:
-        assert entry['status_label'] == STATUS_LABELS[ANNOUNCED]
-        assert 'not yet in force' in entry['status_label'].lower()
-        assert 'BOE' in entry['source']  # says it is not in the BOE yet
+def test_superseded_dates_come_last_and_can_be_left_out():
+    entries = obligations('verifactu')
+    assert entries[0]['status'] == IN_FORCE
+    assert [e['status'] for e in entries[1:]] == [SUPERSEDED, SUPERSEDED]
+    assert all(e['status'] != SUPERSEDED
+               for e in obligations('verifactu', include_superseded=False))
+
+
+def test_nothing_is_announced_without_its_norm():
+    for entry in obligations():
+        if entry['status'] == ANNOUNCED:
+            assert entry['status_label'] == STATUS_LABELS[ANNOUNCED]
+            assert 'not yet in force' in entry['status_label'].lower()
 
 
 def test_no_obligation_starts_in_2026():
@@ -49,11 +61,11 @@ def test_documents_do_not_give_2026_as_the_verifactu_start():
         assert not pattern.search(text), doc
 
 
-def test_status_page_shows_dates_and_the_announced_label(loaded_modules, client):
+def test_status_page_shows_the_date_in_force_and_the_superseded_ones(loaded_modules, client):
     with client.session_transaction() as sess:
         sess['authenticated'] = True
     html = client.get('/verifactu/').get_data(as_text=True)
+    assert '6 October 2028' in html and 'BOE-A-2026-24701' in html
     assert '1 July 2027' in html and '1 January 2027' in html
-    assert 'October 2028' in html
-    assert 'Announced, not yet in force' in html
+    assert 'Superseded by Real Decreto-ley 43/2026' in html
     assert 'BOE-A-2025-24446' in html
