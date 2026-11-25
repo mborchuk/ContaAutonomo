@@ -1,0 +1,33 @@
+<h3>Yearly VAT return (from 2027)</h3>
+<p class="fine-print">Real Decreto-ley 43/2026 adds a voluntary yearly VAT return for
+    individuals whose volume of operations in the previous year did not exceed 85,000 EUR.
+    One return for the year, filed in January, instead of four quarterly Modelo 303. The
+    AEAT debits three advances on 20 April, 20 July and 20 October, each a quarter of the
+    previous year's result. You opt in by declaración censal: for 2027 in March 2027, then
+    in December for the next year. Renouncing binds for three years. It cannot be combined
+    with the régimen simplificado, the monthly refund register or cash accounting
+    (criterio de caja).</p>
+{% if years %}
+<div class="form-group">
+    <label><input type="checkbox" name="vat_yearly"{% if config.from and (config.until is none or config.until >= target) %} checked{% endif %}>
+        I file VAT yearly (régimen especial de declaración anual)</label>
+</div>
+<div class="form-group">
+    <label for="vat_yearly_from">From the tax year</label>
+    <select id="vat_yearly_from" name="vat_yearly_from">
+        {% for y in years %}<option value="{{ y }}"{% if y == (config.from or target) %} selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+</div>
+<input type="hidden" name="vat_advance_year" value="{{ target }}">
+<div class="form-group">
+    <label for="vat_advance_amount">Each advance of {{ target }}, as the AEAT shows it (EUR, optional)</label>
+    <input type="number" step="0.01" min="0" id="vat_advance_amount" name="vat_advance_amount"
+           value="{{ entered if entered is not none else '' }}"
+           placeholder="App estimate: {{ '%.2f'|format(plan.advance) }} (a quarter of {{ plan.reference_from }})">
+</div>
+<p class="fine-print">{% if plan.volume_ok is false %}⚠ {% endif %}{{ plan.volume_note }}
+    {% if config.until %}You left the regime: it applies until {{ config.until }}.{% endif %}</p>
+{% else %}
+<p class="fine-print">Available from 2027.</p>
+{% endif %}
+<input type="hidden" name="tax_forms_submitted" value="1">

@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Yearly VAT return from 2027 (Real Decreto-ley 43/2026).** In Settings →
+  Tax Forms the owner records that they file VAT yearly from a tax year
+  (régimen especial de declaración anual, up to 85,000 EUR of volume of
+  operations) and, optionally, each advance as the AEAT shows it. The new
+  page Yearly VAT return adds up the year's quarterly drafts and deducts the
+  three advances (20 April, 20 July, 20 October; a quarter of the previous
+  year's result). The quarterly 303 pages say there is nothing to file, the
+  Fiscal Calendar shows the advance debits and the yearly return instead of
+  the quarterly 303 (new `filing_plan` capability), and Tax Provision counts
+  the year so far less the advances debited. The AEAT form is not published
+  yet: concepts, not box numbers, and no AEAT file.
 - **IRPF: Real Decreto-ley 43/2026 figures, and the yearly IRPF figures in
   Tax Data.** For 2026 the gastos de difícil justificación are 10 % of the
   net with a 3,000 EUR cap (were 5 % and 2,000 EUR), counted from the

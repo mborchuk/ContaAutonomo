@@ -758,6 +758,11 @@ Spanish AEAT filing deadlines as local, versioned data — no external API.
   link to the year view (key `window:<form>:<year>:<quarter|annual>`).
   Reminders at T-14/T-7/T-1 before a window closes are messages too, at level
   `info`/`warning`/`danger` (key `reminder:<form>:<year>:<quarter|annual>:<days>`).
+  An annual entry's key uses its period (`annual`, or `advance1`..`advance3`).
+- Filing plans: the `filing_plan` capability of another module changes a
+  year's deadlines (`calendar_data.apply_plan`). Spanish Tax Forms replaces
+  the quarterly 303 with the yearly VAT return's three advance debits and
+  its return in the years the owner files VAT yearly.
   Each key is posted once, so a read or deleted message does not come back.
   Without the function (core older than the message center) nothing is posted
 - Settings: "which forms do I file" checkboxes (defaults inferred from
@@ -784,6 +789,16 @@ links, and an automatic comparison of the 303 / 130 / 390 box numbers with the
 AEAT record layouts in `aeat_layouts/`). Yearly checklist: `CONTRIBUTING.md`
 → *Annual Tax Data Update*.
 
+- **Yearly VAT return** (from 2027, Real Decreto-ley 43/2026; `vat_yearly.py`,
+  pure): the owner opts in in Settings → Tax Forms (table
+  `tax_es_forms_config`, key `vat_yearly`: `from`, `until`, each year's
+  advance as the AEAT shows it). `/tax-forms-draft/vat-yearly/<year>`: the
+  four quarterly drafts added up (boxes 27, 45, 46), the three advances (a
+  quarter of the previous year's yearly result, or in the first year of the
+  sum of its four 303 results — filed box 71, else the draft) and what is
+  left. No box numbers or AEAT file until the form is published. Function
+  `vat.yearly_return`; `filing_plan` capability for the Fiscal Calendar;
+  Tax Provision uses it for the IVA part.
 - Routes: `/tax-forms-draft/` (index), `/tax-forms-draft/303/<year>/<q>`,
   `/tax-forms-draft/130/<year>/<q>` — copy-to-clipboard per box, print/PDF;
   `/tax-forms-draft/390/<year>` — Modelo 390 annual summary, each casilla the
@@ -1313,6 +1328,7 @@ Functions today:
 | `invoice.list_blocks` | core | `{data: [block]}`: the layout blocks of all enabled modules (`get_invoice_blocks()`, e.g. the Verifactu QR), each with its `render` callable and `module_id`. The Invoice Designer calls it. For modules only (not offered to the assistant or the API) |
 | `ledger.list_expenses` | `expenses` | Filters `date_from`, `date_to`, `category`; paged. `GET /api/v1/expenses` calls it |
 | `tax.draft_303`, `tax.draft_130` | `tax_es_forms` | `year`, `quarter`. Tax Provision calls `tax.draft_303` |
+| `vat.yearly_return` | `tax_es_forms` | `year` → whether the owner files VAT yearly that year, `result` (the four quarterly drafts), `advance`, `advances`, `to_settle`, `due_so_far`, `advance_dates`. Tax Provision calls it |
 | `vat.invoice_lines` | `tax_es_forms` | `date_from`, `date_to` → `{lines: {"<invoice id>": {vat_rate_pct, vat_eur, reverse_charge}}}`: output VAT of each invoice of the period (issue snapshot; drafts at the Settings rate). Reports fills its IVA columns from it; without it they show '–' |
 | `vat.reverse_charge_check` | `tax_es_forms` | `mark` (`eu`/`non_eu`), `country?`, `vat_number?`, `supplier?` → `{problem}`: a sentence when the mark does not match where the supplier is, else null. Expenses calls it for its deduction-check notice |
 | `tax.filed_boxes` | `tax_management` | `form_type`, `year`, `quarter?`; boxes read from the filed AEAT PDF, `{}` when none. Modelo 303 (VAT credit) and the IRPF Estimator (box 05) call it |
@@ -1446,7 +1462,7 @@ for signer in signers:
     signed_pdf = signer['action'](pdf_bytes)
 ```
 
-Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`, `year_table` (a yearly tax table for Tax Data). Modules can define any custom types.
+Standard capability types: `pdf_sign`, `pdf_verify`, `file_badge`, `file_badge_script`, `document_view_panel`, `ocr`, `email_send`, `year_table` (a yearly tax table for Tax Data), `filing_plan` (changes to a year's filing deadlines for the Fiscal Calendar). Modules can define any custom types.
 
 See [modules/README.md](../modules/README.md) for the full development guide with examples.
 

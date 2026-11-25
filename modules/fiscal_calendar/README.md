@@ -36,6 +36,13 @@ rules, stamped with `CALENDAR_VERSION`:
 | 100 (Renta) | Annual | 1 April – 30 June of the following year |
 
 - A window that ends on a Saturday or Sunday moves to the following Monday.
+- **Filing plans.** A module can change a year's deadlines with a
+  `filing_plan` capability: `action(year)` → `None` or `{'drop': [(form,
+  quarter)], 'add': [{form, period, period_label, quarter, window_start,
+  window_end, verified}]}`. Spanish Tax Forms uses it for the yearly VAT
+  return (from 2027): the four quarterly 303 give way to three advance
+  debits (20 April, 20 July, 20 October) and the yearly return (1–30
+  January). Added dates are not shifted and are marked to verify.
 - Dates AEAT moves for other reasons (national holidays) go into
   `WINDOW_OVERRIDES`, keyed by `(year, form, period)`.
 - Years in `VERIFIED_YEARS` were checked against the AEAT calendar. Other

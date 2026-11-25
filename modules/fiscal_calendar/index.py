@@ -20,6 +20,7 @@ from contaautonomo.core.module_manager import BaseModule
 from .calendar_data import (
     CALENDAR_VERSION,
     all_deadlines,
+    apply_plan,
     deadlines_for_year,
     upcoming,
     available_forms,
@@ -119,26 +120,48 @@ class FiscalCalendarModule(BaseModule):
             self.logger.warning('Inferring default forms failed: %s', e)
         return set(available_forms())
 
+    # --- Filing plans of other modules ------------------------------------ #
+
+    def _adjust(self, year, entries):
+        """Apply the `filing_plan` capabilities of the enabled modules (for
+        example the yearly VAT return) to the deadlines of `year`."""
+        mgr = getattr(self.core, 'module_manager', None)
+        try:
+            caps = mgr.find_capabilities('filing_plan') if mgr else []
+        except Exception:  # pragma: no cover - defensive
+            return entries
+        for cap in caps:
+            try:
+                plan = cap['action'](year)
+            except Exception:
+                self.logger.warning('A filing plan failed', exc_info=True)
+                continue
+            if plan:
+                entries = apply_plan(year, entries, plan)
+        return entries
+
     # --- Dashboard panel (F3-D2) ------------------------------------------ #
 
     def upcoming_deadlines(self, limit=4, today=None):
         """Next open or upcoming filing windows for the selected forms, for the
         compact "Tax Deadlines" column on the dashboard."""
-        items = upcoming(366, today=today, selected_forms=self._selected_forms())
+        items = upcoming(366, today=today, selected_forms=self._selected_forms(),
+                         adjust=self._adjust)
         return items[:limit]
 
     def deadline_for(self, form, year, quarter=None):
         """The filing window of one return: `form` for fiscal `year` and
         `quarter` (None for an annual form). None when the calendar has no
         such entry. Independent of the forms selected for reminders."""
-        for entry in deadlines_for_year(year):
-            if entry['form'] == form and entry['quarter'] == quarter:
-                return entry
-        return None
+        matches = [e for e in deadlines_for_year(year, self._adjust)
+                   if e['form'] == form and e['quarter'] == quarter]
+        if quarter is None:  # the annual return before any advance
+            matches.sort(key=lambda e: e['period'] != 'annual')
+        return matches[0] if matches else None
 
     def year_deadlines(self, year):
         """Every filing window of fiscal `year`, all forms, by window end."""
-        return deadlines_for_year(year)
+        return deadlines_for_year(year, self._adjust)
 
     def selected_forms(self):
         return sorted(self._selected_forms())
@@ -200,7 +223,8 @@ class FiscalCalendarModule(BaseModule):
 
     @staticmethod
     def _key(kind, entry, *extra):
-        quarter = entry['quarter'] if entry['quarter'] is not None else 'annual'
+        # Annual forms: their period ('annual', or 'advance1'.. for the yearly VAT).
+        quarter = entry['quarter'] if entry['quarter'] is not None else entry['period']
         return ':'.join([kind, entry['form'], str(entry['year']), str(quarter),
                          *map(str, extra)])
 
@@ -212,7 +236,7 @@ class FiscalCalendarModule(BaseModule):
         created = 0
         try:
             entries = upcoming(LOOKAHEAD_DAYS, today=today,
-                               selected_forms=self._selected_forms())
+                               selected_forms=self._selected_forms(), adjust=self._adjust)
         except Exception:
             self.logger.warning('Could not read the fiscal calendar', exc_info=True)
             return 0
@@ -238,7 +262,8 @@ class FiscalCalendarModule(BaseModule):
         @login_required
         def calendar_index():
             selected = module._selected_forms()
-            deadlines = [d for d in all_deadlines() if d['form'] in selected]
+            deadlines = [d for d in all_deadlines(adjust=module._adjust)
+                         if d['form'] in selected]
             return render_template('fiscal_calendar_index.html',
                                    deadlines=deadlines,
                                    selected=sorted(selected),
@@ -293,7 +318,7 @@ class FiscalCalendarModule(BaseModule):
         selected = self._selected_forms()
         state = self._reminder_state()
         fired = []
-        for entry in all_deadlines(today=today):
+        for entry in all_deadlines(today=today, adjust=self._adjust):
             if entry['form'] not in selected:
                 continue
             days_to_end = (entry['window_end'] - today).days

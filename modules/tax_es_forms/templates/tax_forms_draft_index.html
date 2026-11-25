@@ -43,6 +43,10 @@
             </td>
             {% endfor %}
             <td>
+                {% if year in vat_yearly_years %}
+                <a href="{{ url_for('tax_es_forms.vat_yearly_draft', year=year) }}"
+                   class="btn btn-secondary btn-sm">Yearly VAT</a>
+                {% endif %}
                 <a href="{{ url_for('tax_es_forms.draft_390', year=year) }}"
                    class="btn btn-secondary btn-sm">390</a>
                 <a href="{{ url_for('tax_es_forms.draft_347', year=year) }}"

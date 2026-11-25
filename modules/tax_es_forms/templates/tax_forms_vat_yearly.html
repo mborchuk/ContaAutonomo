@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Yearly VAT return · {{ draft.year }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Yearly VAT return — {{ draft.year }}</h1>
+    <div class="page-actions">
+        <a href="{{ url_for('tax_es_forms.drafts_index') }}" class="btn btn-secondary">← Back</a>
+        <button type="button" class="btn btn-primary" onclick="window.print()">🖨 Print / Save PDF</button>
+    </div>
+</div>
+
+{% if not draft.yearly %}
+<div class="note note-warning" role="note">You do not file VAT yearly in {{ draft.year }}
+    (Settings → Tax Forms){% if draft.year < draft.from_year %}; the regime starts in {{ draft.from_year }}{% endif %}.
+    The figures below show what it would look like.</div>
+{% endif %}
+{% if draft.volume_ok is false %}
+<div class="note note-warning" role="note">⚠ {{ draft.volume_note }}</div>
+{% endif %}
+<!-- Non-dismissible estimate banner -->
+<div class="note note-info">
+    <strong>Estimate, not tax advice.</strong> The AEAT has not published the form for the
+    yearly return and the advances yet, so this page shows the concepts, not box numbers,
+    and there is no AEAT file. The figures are the four quarterly Modelo 303 drafts of
+    {{ draft.year }} added up. {{ draft.source }}.
+</div>
+
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Concept</th><th class="text-right">Amount (EUR)</th></tr></thead>
+    <tbody>
+        <tr><td>VAT charged (sum of 303 box 27)</td><td class="text-right">{{ "%.2f"|format(draft.charged) }}</td></tr>
+        <tr><td>VAT deductible (sum of 303 box 45)</td><td class="text-right">{{ "%.2f"|format(draft.deductible) }}</td></tr>
+        <tr class="box-result"><td>Result of the year (sum of 303 box 46)</td><td class="text-right">{{ "%.2f"|format(draft.result) }}</td></tr>
+        <tr><td>− Three advances of {{ "%.2f"|format(draft.advance) }} ({{ draft.advance_from }})</td><td class="text-right">{{ "%.2f"|format(-draft.advances) }}</td></tr>
+        <tr class="box-result"><td>{% if draft.to_settle >= 0 %}To pay in January {{ draft.year + 1 }}{% else %}To refund or carry forward{% endif %}</td>
+            <td class="text-right">{{ "%.2f"|format(draft.to_settle) }}</td></tr>
+    </tbody>
+</table>
+</div>
+
+<h3>Advances (pagos a cuenta)</h3>
+<p class="fine-print">Reference: {{ draft.reference_from }} = {{ "%.2f"|format(draft.reference) }} EUR;
+    each advance is a quarter of it, or 0 when it is not positive or the activity starts.
+    The AEAT shows each amount in the Sede in the first five days of the month and debits it
+    from the account given in the declaración censal.</p>
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>Debited on</th><th class="text-right">Amount (EUR)</th></tr></thead>
+    <tbody>
+        {% for day in draft.advance_dates %}
+        <tr><td>{{ day.strftime('%d/%m/%Y') }}</td><td class="text-right">{{ "%.2f"|format(draft.advance) }}</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="fine-print">Due so far (result to date minus the advances already debited):
+    {{ "%.2f"|format(draft.due_so_far) }} EUR.</p>
+{% endblock %}

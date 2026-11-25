@@ -11,7 +11,8 @@ Pure math live in calculator.py; box numbers live in boxes.py (versioned).
 This file only fetch data and render.
 """
 
-from datetime import datetime
+import json
+from datetime import date, datetime
 
 from flask import Blueprint, render_template, abort
 
@@ -32,6 +33,7 @@ from .table_checks import CHECK_303_130, CHECK_347, CHECK_390
 from .yearly import fallback_note, notice_html, resolve, table_for_year
 from .supplier_region import reverse_charge_check, reverse_charge_problem
 from .output_vat import invoice_vat_line
+from . import vat_yearly
 from .calculator import (
     compute_modelo_303,
     compute_modelo_130,
@@ -77,10 +79,182 @@ class TaxEsFormsModule(BaseModule):
              'icon': '🧮', 'group': 'Taxes', 'order': 30}
         ]
 
+    @property
+    def settings_tab(self):
+        return {'id': 'tax_es_forms', 'label': 'Tax Forms'}
+
     def register_models(self, db):
-        # No own tables — pure read/aggregate over core Invoice + Expense.
+        # Reads core Invoice + Expense; its own table only holds settings.
         self._db = db
-        return {}
+
+        class TaxEsFormsConfig(db.Model):
+            __tablename__ = 'tax_es_forms_config'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            key = db.Column(db.String(100), unique=True, nullable=False)
+            value = db.Column(db.Text)
+
+        self.Config = TaxEsFormsConfig
+        return {'TaxEsFormsConfig': TaxEsFormsConfig}
+
+    # --- Yearly VAT return (from 2027) ------------------------------------ #
+
+    def _vat_config(self):
+        """{'from': year or None, 'until': year or None, 'advances': {'<year>':
+        amount the AEAT shows}} — Settings → Tax Forms."""
+        out = {'from': None, 'until': None, 'advances': {}}
+        try:
+            row = self.Config.query.filter_by(key='vat_yearly').first()
+            if row and row.value:
+                data = json.loads(row.value)
+                if isinstance(data, dict):
+                    out.update({k: data[k] for k in out if k in data})
+        except Exception:  # pragma: no cover - defensive
+            self.logger.warning('Reading the yearly VAT settings failed', exc_info=True)
+        return out
+
+    def _save_vat_config(self, data):
+        row = self.Config.query.filter_by(key='vat_yearly').first()
+        if not row:
+            row = self.Config(key='vat_yearly')
+            self._db.session.add(row)
+        row.value = json.dumps(data, sort_keys=True)
+        self._db.session.commit()
+
+    def vat_yearly(self, year):
+        """True when the owner files VAT yearly in `year`."""
+        return vat_yearly.in_regime(self._vat_config(), year)
+
+    def _vat_reference(self, year):
+        """(reference for the advances of `year`, where it comes from): the
+        previous year's yearly result, or in the first year the sum of the
+        previous year's quarterly 303 results (filed box 71, else the draft)."""
+        previous = year - 1
+        if self.vat_yearly(previous):
+            numbers = self._vat_yearly_numbers(previous)
+            return numbers['result'], f'the yearly VAT result of {previous} (app estimate)'
+        functions = self._function('tax.filed_boxes')
+        total, filed = 0.0, 0
+        for quarter in (1, 2, 3, 4):
+            boxes = (functions.call('tax.filed_boxes', form_type='303', year=previous,
+                                    quarter=quarter) if functions else {})
+            if '71' in boxes:
+                total += boxes['71']
+                filed += 1
+            else:
+                total += self._draft_303(previous, quarter)['boxes']['71']
+        what = (f'the four Modelo 303 results of {previous}'
+                + (f' ({filed} filed, {4 - filed} from the drafts)' if filed < 4 else ' (filed)'))
+        return round(total, 2), what
+
+    def _vat_yearly_numbers(self, year, advance=0.0):
+        quarters = [self._draft_303(year, q)['boxes'] for q in (1, 2, 3, 4)]
+        return vat_yearly.yearly_result(quarters, advance)
+
+    def _volume(self, year):
+        """Volume of operations of `year`, from the invoices (taxable base in
+        EUR, every customer); None when the app has no invoice that year."""
+        from contaautonomo.core.invoice_amounts import invoice_base_eur
+        invoices = [inv for inv in self._invoices_in(year)
+                    if getattr(inv, 'status', None) != 'cancelled']
+        if not invoices:
+            return None
+        return round(sum(invoice_base_eur(inv) for inv in invoices), 2)
+
+    def vat_yearly_return(self, year, today=None):
+        """The yearly VAT return of `year` as the app sees it: whether the
+        owner is in the regime, the result from the four quarterly drafts,
+        the advances (the amount the AEAT shows when entered, else a quarter
+        of the reference), what is left and what is due so far."""
+        today = today or self._today()
+        config = self._vat_config()
+        yearly = vat_yearly.in_regime(config, year)
+        reference, reference_from = self._vat_reference(year)
+        entered = (config.get('advances') or {}).get(str(year))
+        advance = (round(float(entered), 2) if entered is not None
+                   else vat_yearly.advance_amount(reference))
+        numbers = self._vat_yearly_numbers(year, advance)
+        volume_ok, volume_note = vat_yearly.volume_check(self._volume(year - 1), year)
+        debited = vat_yearly.advances_debited(advance, year, today)
+        return dict(
+            numbers, yearly=yearly, year=year, from_year=vat_yearly.FROM_YEAR,
+            reference=reference, reference_from=reference_from,
+            advance_from='the amount entered in Settings → Tax Forms' if entered is not None
+            else f'a quarter of {reference_from}',
+            advance_dates=vat_yearly.advance_dates(year),
+            debited=debited, due_so_far=round(numbers['result'] - debited, 2),
+            volume_ok=volume_ok, volume_note=volume_note, source=vat_yearly.SOURCE,
+            config=config)
+
+    def _filing_plan(self, year):
+        """For the Fiscal Calendar (`filing_plan` capability): in a yearly
+        year, no quarterly 303; three advance debits and the yearly return."""
+        if not self.vat_yearly(year):
+            return None
+        added = []
+        for n, day in enumerate(vat_yearly.advance_dates(year), start=1):
+            added.append({'form': '303', 'period': f'advance{n}',
+                          'period_label': f'VAT advance {n}/3 of {year}, debited {day:%d/%m}',
+                          'quarter': None, 'window_start': day.replace(day=1),
+                          'window_end': day, 'verified': False})
+        added.append({'form': '303', 'period': 'annual',
+                      'period_label': f'Yearly VAT return {year}', 'quarter': None,
+                      'window_start': date(year + 1, 1, 1), 'window_end': date(year + 1, 1, 30),
+                      'verified': False})
+        return {'drop': [('303', q) for q in (1, 2, 3, 4)], 'add': added,
+                'source': vat_yearly.SOURCE}
+
+    @staticmethod
+    def _today():
+        return date.today()
+
+    def get_settings_html(self, settings):
+        config = self._vat_config()
+        this_year = self._today().year
+        years = [y for y in (this_year, this_year + 1) if y >= vat_yearly.FROM_YEAR]
+        target = (config['from'] if config['from'] in years
+                  else (years[0] if years else vat_yearly.FROM_YEAR))
+        return self.render_settings_template(
+            'tax_es_forms_settings_panel.html', config=config, years=years,
+            target=target, plan=self.vat_yearly_return(target),
+            entered=(config.get('advances') or {}).get(str(target)))
+
+    def save_settings(self, settings, form):
+        if 'tax_forms_submitted' not in form:
+            return  # another tab was saved
+        config = self._vat_config()
+        this_year = self._today().year
+        if 'vat_yearly' in form:
+            try:
+                first = int(form.get('vat_yearly_from', ''))
+            except (TypeError, ValueError):
+                first = None
+            if first is not None and first >= vat_yearly.FROM_YEAR and first <= this_year + 1:
+                config['from'], config['until'] = first, None
+        elif config.get('from'):
+            # Left the regime: the years already in it stay yearly.
+            last = this_year if config['from'] <= this_year else None
+            config['until'] = last
+            if last is None:
+                config['from'] = None
+        try:
+            target = int(form.get('vat_advance_year', ''))
+        except (TypeError, ValueError):
+            target = None
+        if target is not None:
+            text = (form.get('vat_advance_amount') or '').strip().replace(',', '.')
+            advances = dict(config.get('advances') or {})
+            if not text:
+                advances.pop(str(target), None)
+            else:
+                try:
+                    amount = float(text)
+                except ValueError:
+                    amount = None
+                if amount is not None and amount >= 0:
+                    advances[str(target)] = round(amount, 2)
+            config['advances'] = advances
+        self._save_vat_config(config)
 
     # --- Rates & currency helpers ---------------------------------------- #
 
@@ -215,6 +389,7 @@ class TaxEsFormsModule(BaseModule):
         result.update(self._table_info(year))
         result['year'] = year
         result['quarter'] = quarter
+        result['vat_yearly'] = self.vat_yearly(year)
         return result
 
     def draft_303(self, year, quarter):
@@ -434,13 +609,20 @@ class TaxEsFormsModule(BaseModule):
     def get_capabilities(self):
         """The yearly tables the Tax Data module lets the owner confirm or
         change (`year_table`): the 303/130 boxes and 390 casillas (confirm
-        only, with the automatic layout check) and the 347 threshold."""
+        only, with the automatic layout check) and the 347 threshold; and the
+        `filing_plan` of the yearly VAT return for the Fiscal Calendar."""
         return [
             _year_table_capability(CHECK_303_130, BOX_TABLES, lambda tables: []),
             _year_table_capability(CHECK_390, MODELO_390_TABLES, lambda table: []),
             _year_table_capability(CHECK_347, MODELO_347_TABLES, _fields_347,
                                    validate=_validate_347),
+            # For the Fiscal Calendar: the yearly VAT return replaces the
+            # quarterly 303 in the years the owner files VAT yearly.
+            {'type': 'filing_plan', 'id': 'es.vat_yearly', 'action': self._filing_plan},
         ]
+
+    def _vat_yearly_years(self):
+        return [y for y in self._available_years() if self.vat_yearly(y)]
 
     def _available_years(self):
         return self.core.data_years()
@@ -463,6 +645,7 @@ class TaxEsFormsModule(BaseModule):
                 years=module._available_years(),
                 current_year=now.year,
                 current_quarter=quarter_of(now.date()),
+                vat_yearly_years=module._vat_yearly_years(),
                 table_version=BOX_TABLE_VERSION)
 
         @bp.route('/303/<int:year>/<int:quarter>')
@@ -504,6 +687,14 @@ class TaxEsFormsModule(BaseModule):
             if form not in ('390', '347'):
                 abort(404)
             return module._aeat_file_response(form, year, None)
+
+        @bp.route('/vat-yearly/<int:year>')
+        @login_required
+        def vat_yearly_draft(year):
+            if not 2000 <= year <= 2100:
+                abort(404)
+            return render_template('tax_forms_vat_yearly.html',
+                                   draft=module.vat_yearly_return(year))
 
         @bp.route('/347/<int:year>')
         @login_required
@@ -550,6 +741,13 @@ class TaxEsFormsModule(BaseModule):
                      'Modelo 130 (IRPF) draft boxes for one quarter. Needs year and quarter (1-4).',
                      returns='{"form": "130", "year": int, "quarter": int, '
                              '"boxes": {box: amount}, ...}', **draft),
+            Function('vat.yearly_return', self.vat_yearly_return,
+                     'The yearly VAT return of a year (régimen especial de declaración '
+                     'anual, from 2027): whether the owner is in it, the result from the '
+                     'four quarterly drafts, the three advances and what is due so far.',
+                     params=(quarter[0],),
+                     returns='{"yearly": bool, "result", "advance", "advances", '
+                             '"to_settle", "due_so_far", "advance_dates": [date], ...}'),
             Function('vat.invoice_lines', self.invoice_vat_lines,
                      'Output VAT (IVA repercutido) of each invoice dated in a '
                      'period, cancelled ones included: rate, amount and whether '

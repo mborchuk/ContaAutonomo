@@ -15,6 +15,11 @@
 {% if draft.table_fallback %}
 {% if table_notice %}{{ table_notice|safe }}{% else %}<div class="note note-warning" role="note">⚠ {{ draft.table_note }}</div>{% endif %}
 {% endif %}
+{% if draft.vat_yearly %}
+<div class="note note-info" role="note">In {{ draft.year }} you file VAT yearly: no quarterly
+    Modelo 303 to file. These figures are for information; see the
+    <a href="{{ url_for('tax_es_forms.vat_yearly_draft', year=draft.year) }}">yearly VAT return {{ draft.year }}</a>.</div>
+{% endif %}
 <!-- Non-dismissible estimate banner -->
 <div class="note note-info">
     <strong>Estimate, not tax advice.</strong> Devengo (accrual) basis; régimen

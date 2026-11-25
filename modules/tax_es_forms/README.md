@@ -13,8 +13,9 @@ nothing and provides no tax advice — every page carries a non-dismissible
 3. [How the figures are computed](#how-the-figures-are-computed)
 4. [Modelo 390 (annual summary)](#modelo-390-annual-summary)
 5. [Modelo 347 (operations with third parties)](#modelo-347-operations-with-third-parties)
-6. [AEAT import files](#aeat-import-files)
-7. [Scope exclusions](#scope-exclusions)
+6. [Yearly VAT return (from 2027)](#yearly-vat-return-from-2027)
+7. [AEAT import files](#aeat-import-files)
+8. [Scope exclusions](#scope-exclusions)
 
 ## Features
 
@@ -162,6 +163,45 @@ A listed counterparty without a NIF gets a warning. The page shows every
 exclusion with its rule, the counterparties below the threshold, and what the
 check does not cover (cash above 6,000 EUR, rent of business premises,
 purchases with retention, criterio de caja).
+
+## Yearly VAT return (from 2027)
+
+Real Decreto-ley 43/2026, art. 3 ([BOE-A-2026-24701](https://www.boe.es/diario_boe/txt.php?id=BOE-A-2026-24701))
+adds a voluntary *régimen especial de declaración anual para pequeños
+empresarios y profesionales* from 2027:
+
+- **Who.** Individuals whose volume of operations in the previous year did not
+  exceed 85,000 EUR (raised to the year when they started that year; a new
+  activity can apply at once). Not with the régimen simplificado, the monthly
+  refund register, the group regime or cash accounting.
+- **What.** One VAT return for the calendar year, filed 1–30 January of the
+  next year, instead of four quarterly Modelo 303.
+- **Advances.** The AEAT debits three advances on 20 April, 20 July and 20
+  October. Each is a quarter of the previous year's yearly result or, in the
+  first year, of the sum of the previous year's four 303 results; 0 when that
+  is not positive or the activity starts. The yearly return deducts them.
+- **Option.** By declaración censal: for 2027 in March 2027, then in December
+  for the next year. Renouncing binds for three years.
+
+In the app:
+
+- **Settings → Tax Forms**: *I file VAT yearly* from a tax year, and,
+  optionally, each advance as the AEAT shows it in the Sede. Unticking it
+  keeps the years already in the regime. The tab also checks the previous
+  year's volume of operations from the invoices.
+- **`/tax-forms-draft/vat-yearly/<year>`**: VAT charged, deductible and the
+  result (the four quarterly drafts added up, before compensation between
+  quarters), the three advances and what is left to pay or refund. The form
+  is not published yet (an Orden will set it), so the page shows concepts,
+  not box numbers, and has no AEAT file.
+- The quarterly 303 pages of a year in the regime say there is nothing to
+  file for the quarter; the index links the yearly return.
+- **Fiscal Calendar**: through the `filing_plan` capability, a year in the
+  regime shows the three advance debits and the yearly return instead of the
+  four quarterly 303 (dates marked to verify until the AEAT publishes them).
+- **Tax Provision**: the IVA part is the result of the year so far less the
+  advances already debited.
+- Function `vat.yearly_return(year)`.
 
 ## AEAT import files
 

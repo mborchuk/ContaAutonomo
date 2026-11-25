@@ -17,6 +17,10 @@ Each deadline entry is a dict:
     verified (bool: the year is in VERIFIED_YEARS).
 The `year`/`quarter` are what Tax Management matches a TaxForm against
 (form_type + year + quarter).
+
+Another module can change a year's deadlines (`adjust`, built by the module
+from `filing_plan` capabilities): for example the yearly VAT return replaces
+the four quarterly Modelo 303 with three advance debits and one return.
 """
 
 from datetime import date, timedelta
@@ -86,13 +90,34 @@ def _annual_entries(year):
     ]
 
 
-def deadlines_for_year(year):
-    """All deadlines for one fiscal year, sorted by window end."""
+def apply_plan(year, entries, plan):
+    """`entries` of `year` changed by one filing plan: {'drop': [(form,
+    quarter)], 'add': [{'form', 'period', 'period_label', 'quarter',
+    'window_start', 'window_end', 'verified'?}]}. Added dates keep the
+    plan's own days (no weekend shift) and say whether they were checked."""
+    drop = {tuple(item) for item in plan.get('drop', ())}
+    kept = [e for e in entries if (e['form'], e['quarter']) not in drop]
+    for item in plan.get('add', ()):
+        kept.append({
+            'form': item['form'], 'period': item['period'],
+            'period_label': item['period_label'], 'year': year,
+            'quarter': item.get('quarter'), 'window_start': item['window_start'],
+            'window_end': item['window_end'],
+            'verified': bool(item.get('verified', False)) and year in VERIFIED_YEARS,
+        })
+    return kept
+
+
+def deadlines_for_year(year, adjust=None):
+    """All deadlines for one fiscal year, sorted by window end. `adjust`
+    (year, entries) -> entries lets the caller apply filing plans."""
     entries = _quarterly_entries(year) + _annual_entries(year)
+    if adjust is not None:
+        entries = adjust(year, entries)
     return sorted(entries, key=lambda e: e['window_end'])
 
 
-def all_deadlines(years=None, today=None):
+def all_deadlines(years=None, today=None, adjust=None):
     """Deadlines for `years` (default: previous, current and next fiscal year
     relative to `today`), sorted by window end. The default covers every
     window that can be open or upcoming today."""
@@ -101,7 +126,7 @@ def all_deadlines(years=None, today=None):
         years = (current - 1, current, current + 1)
     entries = []
     for year in years:
-        entries.extend(deadlines_for_year(year))
+        entries.extend(deadlines_for_year(year, adjust))
     return sorted(entries, key=lambda e: e['window_end'])
 
 
@@ -117,7 +142,7 @@ def _state(entry, today):
     return 'closed'
 
 
-def upcoming(days, today=None, selected_forms=None):
+def upcoming(days, today=None, selected_forms=None, adjust=None):
     """Deadlines whose filing window is still ahead or open within `days`.
 
     Returns each entry enriched with `state` (upcoming/open/closed) and
@@ -127,7 +152,7 @@ def upcoming(days, today=None, selected_forms=None):
     today = today or date.today()
     years = range(today.year - 1, today.year + 2 + days // 365)
     out = []
-    for entry in all_deadlines(years=years):
+    for entry in all_deadlines(years=years, adjust=adjust):
         if selected_forms is not None and entry['form'] not in selected_forms:
             continue
         state = _state(entry, today)
