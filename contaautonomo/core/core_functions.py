@@ -6,6 +6,9 @@ for PDFs, declared and implemented here, like a module does in
 (`ModuleManager.register_core_functions`), so this file imports nothing from
 app.py.
 """
+import logging
+import re
+
 from contaautonomo.core.functions import Function, InvalidArguments, Param
 
 DATE_FROM = Param('date_from', 'date', 'Earliest date, YYYY-MM-DD')
@@ -95,10 +98,49 @@ def register(registry, core, Invoice, Customer, message_center=None, invoice_pdf
         assistant=True, record_kind='customer',
         assistant_fields=('id', 'name', 'country', 'tax_type')))
     register_pdf_text(registry)
+    register_log(registry, core)
     if message_center is not None:
         register_messages(registry, message_center)
     if invoice_pdf is not None:
         register_invoice_pdf(registry, core, invoice_pdf)
+
+
+LOG_LEVELS = ('info', 'warning', 'error')
+LOG_MAX_DETAILS = 2000
+_LOG_NAME = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
+def register_log(registry, core):
+    """`log.write`: an entry in the activity log (System → Logs) through the
+    activity logger the owner chose in Settings (file or database). A
+    `warning` or `error` also goes to the server log, as `module.<source>`,
+    with the action only: the details stay in the activity log."""
+
+    def write(source, action, details=None, category=None, level='info'):
+        for name, value in (('source', source), ('action', action), ('category', category)):
+            if value is not None and (len(value) > 80 or not _LOG_NAME.match(value)):
+                raise InvalidArguments(f'{name} must be lower case letters, digits and _')
+        core.log_activity(action, category or source, details)
+        if level != 'info':
+            logging.getLogger(f'module.{source}').log(
+                logging.WARNING if level == 'warning' else logging.ERROR,
+                'activity: %s', action)
+
+    registry.register_core(Function(
+        'log.write', write,
+        'Write an entry in the activity log (System → Logs). The category is the '
+        'source unless given; a warning or error also goes to the server log.',
+        params=(Param('source', 'str', 'Who writes: the module id', required=True,
+                      max_length=80),
+                Param('action', 'str', 'What happened, e.g. record_created', required=True,
+                      max_length=80),
+                Param('details', 'str', 'Extra information shown with the entry',
+                      max_length=LOG_MAX_DETAILS),
+                Param('category', 'str', 'Logs page filter, default the source',
+                      max_length=80),
+                Param('level', 'str', 'info (default), warning or error', choices=LOG_LEVELS)),
+        returns='None',
+        read_only=False))
 
 
 def register_pdf_text(registry):

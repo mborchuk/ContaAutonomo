@@ -189,7 +189,13 @@ sym = get_currency_symbol('XOF')   # → 'XOF' (fallback to code)
 
 Configurable in Settings → General Settings → System Logs. Modules have two logging mechanisms:
 
-- Activity log (user-visible): `self.core.log_activity(action, category, details)` — appears in System → Logs
+- Activity log (user-visible, System → Logs): the registry function `log.write`, e.g.
+  `self.core.functions.call('log.write', source=self.module_id, action='record_created', details='Record #7')`.
+  `source` and `action` (and `category`, the Logs page filter, default the source) are lower case
+  letters, digits and `_`; `details` up to 2,000 characters; `level` `info` (default), `warning` or
+  `error`. A warning or error also goes to the server log as `module.<source>`, with the action only:
+  the details stay in the activity log. It writes through the logger chosen in Settings (file or
+  database); `self.core.log_activity(action, category, details)` is the same entry without the checks
 - Python logger (console): `self.logger.info(...)` — named `module.<module_id>`, for developer diagnostics
 
 ### Task Scheduler
@@ -1322,6 +1328,7 @@ Functions today:
 | `ledger.list_customers` | core | `GET /api/v1/customers` calls it |
 | `messages.post` | core | `source`, `text`, `level?`, `image?`, `key?` → `{id, created}`; shows a message in the bell and on the Messages page (*Message Center*). Not read-only |
 | `messages.unread_count` | core | Number of unread messages |
+| `log.write` | core | `source`, `action`, `details?`, `category?`, `level?` → `None`; an entry in the activity log (System → Logs) through the logger chosen in Settings; `warning` and `error` also in the server log, action only (*Activity Logging*). Not read-only |
 | `pdf.extract_text` | core default (`contaautonomo/core/pdf_text.py`, pypdf) | `pdf_bytes`, `max_pages?` (default 200, at most 2000) → `{status, text, pages, page_count, empty_pages, truncated, method}`. `status`: `ok`, `no_text_layer` (a scan: no OCR here), `encrypted`, `unreadable`, `too_large` (over the 50 MB upload limit); never raises for a bad file. A module declaring the name (PyMuPDF, OCR) replaces it. The AI Parser's CLI agents call it |
 | `invoice.render_pdf` | core | `invoice_id` → `{pdf, template, fallback}`: the PDF in the template chosen in Settings → General, after every module's `filter_invoice_pdf` (Verifactu QR); the default template when the chosen one is not available (`fallback` true). Builds only, does not store. The new-invoice PDF, `/generate-pdf/<id>` and `/preview-pdf/<id>` call it (`contaautonomo/core/invoice_pdf.py`) |
 | `invoice.list_pdf_templates` | core | `{data: [{id, name, module_id}]}`: the core files in `invoice_templates/` (`module_id` `core`) and the templates of enabled modules. The Settings dropdown calls it |
