@@ -28,7 +28,7 @@ _LOCK_WINDOW = 900  # seconds (15 min)
 _failed_attempts = {}  # ip -> [count, first_ts]
 
 
-def _activity(action, category, details=None):
+def _activity(action, category, details=None, level='info'):
     """Write to the activity log via a late dynamic import.
 
     app.py imports this module, so a static `from app import ...` here forms an
@@ -37,7 +37,7 @@ def _activity(action, category, details=None):
     """
     try:
         from importlib import import_module
-        import_module('contaautonomo.app').log_activity(action, category, details)
+        import_module('contaautonomo.app').log_activity(action, category, details, level=level)
     except Exception:
         # Activity logging is best-effort; never block auth on a logging hiccup
         # (app may not be fully initialized yet during early startup).
@@ -120,7 +120,7 @@ def setup():
             flash('Account created successfully!', 'success')
             return redirect(url_for('dashboard'))
         except Exception as e:
-            logger.error('Setup error: %s', e)
+            logger.exception('Setup error: %s', e)
             flash('Error setting up account. Check server logs.', 'danger')
             return render_template('setup.html')
 
@@ -174,7 +174,7 @@ def login():
                            safe_ip, safe_provider)
             # record failed logins in the activity log for incident analysis
             _activity('login_failed', 'auth',
-                      {'provider': safe_provider, 'ip': safe_ip})
+                      {'provider': safe_provider, 'ip': safe_ip}, level='warning')
             flash(result.error or 'Authentication failed.', 'danger')
 
     # Render login page with all available providers
@@ -223,7 +223,7 @@ def security():
                 flash('Password changed successfully!', 'success')
                 _activity('password_changed', 'auth')
             except Exception as e:
-                logger.error('Password change error: %s', e)
+                logger.exception('Password change error: %s', e)
                 flash('Error changing password. Check current password.', 'danger')
 
     return render_template('security.html')

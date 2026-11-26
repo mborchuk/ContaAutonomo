@@ -105,7 +105,7 @@ class VerifactuModule(BaseModule):
                 timeout=120,
             )
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register submission job: %s', e)
+            self.logger.exception('Failed to register submission job: %s', e)
 
     # --- Record building ---------------------------------------------------- #
 
@@ -162,7 +162,7 @@ class VerifactuModule(BaseModule):
                 self.logger.info('Re-signed %d Verifactu record(s) with VERIFACTU_KEY', moved)
         except Exception as e:  # pragma: no cover - defensive
             self._db.session.rollback()
-            self.logger.error('Verifactu signing-key migration failed: %s', e)
+            self.logger.exception('Verifactu signing-key migration failed: %s', e)
 
     def _last_hash(self):
         last = self.VerifactuRecord.query.order_by(
@@ -220,10 +220,10 @@ class VerifactuModule(BaseModule):
         )
         self._db.session.add(record)
         self._db.session.flush()
-        self.core.log_activity(
-            'verifactu_record', 'invoice',
-            f'{record_type} record #{record.id} for invoice '
-            f'#{invoice.invoice_number}')
+        self.log('verifactu_record_added',
+                 f'{record_type} record #{record.id} for invoice '
+                 f'#{invoice.invoice_number}',
+                 category='verifactu')
         return record
 
     # --- F2 lifecycle hooks (issue-blocking) --------------------------------- #

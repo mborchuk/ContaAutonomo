@@ -236,7 +236,7 @@ class LedgerAssistantModule(BaseModule):
             out['missing'] = self.missing() or NO_TEXT_PROVIDER
             return out
         except Exception as e:  # the provider failed; never echo its payload
-            self.logger.error('Ledger assistant provider call failed: %s', type(e).__name__)
+            self.logger.exception('Ledger assistant provider call failed: %s', type(e).__name__)
             out['errors'].append('The AI provider did not answer. Try again later.')
             return out
         parsed = core_steps.parse_json(reply)

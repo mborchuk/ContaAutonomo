@@ -126,13 +126,14 @@ class AIAgentModule(BaseModule):
             self._db.session.commit()
         except Exception as e:  # pragma: no cover - defensive
             self._db.session.rollback()
-            self.logger.error('AI Agent: could not copy the AI Parser settings: %s',
+            self.logger.exception('AI Agent: could not copy the AI Parser settings: %s',
                               type(e).__name__)
             return False
         self.logger.info('AI Agent: copied the AI Parser settings (provider %s)',
                          values['provider'])
-        self.core.log_activity('ai_agent_settings_copied', 'ai_agent',
-                               f'provider={values["provider"]} from the AI Parser')
+        self.log('ai_agent_settings_copied',
+                 f'provider={values["provider"]} from the AI Parser',
+                 category='ai')
         return True
 
     # --- Registry functions ------------------------------------------------- #
@@ -338,5 +339,4 @@ class AIAgentModule(BaseModule):
             setattr(cfg, column, (value or '').strip() or DEFAULT_MODELS[provider])
         self._db.session.commit()
         self.logger.info('AI Agent settings saved: provider=%s', cfg.provider)
-        self.core.log_activity('ai_agent_settings_saved', 'ai_agent',
-                               f'provider={cfg.provider}')
+        self.log('ai_agent_settings_saved', f'provider={cfg.provider}', category='ai')

@@ -254,10 +254,11 @@ try:
 except ImportError:
     pass  # flask-wtf not installed — CSRF error handler not registered
 
-def log_activity(action, category='system', details=None):
-    """Log user/system activity via core logger (safe to call before init)"""
+def log_activity(action, category='system', details=None, level='info'):
+    """Log user/system activity via core logger (safe to call before init).
+    The core's own entries: source 'core'; `level` info, warning or error."""
     if state.module_manager:
-        state.module_manager.core.log_activity(action, category, details)
+        state.module_manager.core.log_activity(action, category, details, level=level)
 
 
 # ============================================================================

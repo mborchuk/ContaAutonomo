@@ -6,6 +6,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Log levels and sources on System → Logs.** Every activity log entry now
+  has a level (info, warning, error) and says who wrote it (the core or a
+  module). The Logs page shows both and filters by *Warnings and errors* or
+  *Errors*. Entries written before keep working and read as info; a database
+  log gets the two new columns at start-up.
+- **Every module writes the activity log the same way.** Modules call
+  `self.log()`, which goes through `log.write`: actions in snake_case and the
+  past tense, one list of categories (`LOG_CATEGORIES`), failures as
+  warnings or errors. Some entries changed: `bank_import` is now
+  `bank_statement_imported` (category `bank`), `ai_parse_success`
+  `ai_parse_succeeded`, `verifactu_record` `verifactu_record_added`,
+  `fiscal_deadline_reminder` `fiscal_deadline_reminded`, `demo_loaded`
+  `demo_data_loaded`; API tokens are under `auth`, reports under `report`,
+  tax filings and reminders under `tax`. A failed login and a failed PDF
+  generation are warnings. Modules can react to entries with
+  `core.add_activity_listener()`.
+- **Server log.** An error caught in an `except` block is logged with its
+  traceback (`.exception()`), and lint (ruff `G`, `LOG`, `TRY400`) keeps it
+  that way.
 - **`log.write`, a core function for writing the activity log.** A module
   writes an entry on System → Logs through the function registry
   (`source`, `action`, optional `details`, `category` and `level`), into

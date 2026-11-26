@@ -103,14 +103,14 @@ class ApiModule(BaseModule):
                     conn.commit()
                 self.logger.info('Added settings.api_token column')
         except Exception as e:
-            self.logger.error('api_token migration failed: %s', e, exc_info=True)
+            self.logger.exception('api_token migration failed: %s', e)
             return
 
         # C-2: encrypt a token stored in plaintext by earlier versions.
         try:
             secret_box.encrypt_existing(db, 'settings', ['api_token'])
         except Exception as e:
-            self.logger.error('api_token encryption failed: %s', e)
+            self.logger.exception('api_token encryption failed: %s', e)
 
         # Generate an initial token if a settings row exists but has none.
         try:
@@ -158,15 +158,13 @@ class ApiModule(BaseModule):
             return ''
         token = secrets.token_urlsafe(32)
         self._set_token(token)
-        self.core.log_activity('api_token_generated', 'system',
-                               'A new API token was generated')
+        self.log('api_token_generated', 'A new API token was generated', category='auth')
         return token
 
     def _rotate_token(self):
         token = secrets.token_urlsafe(32)
         self._set_token(token)
-        self.core.log_activity('api_token_rotated', 'system',
-                               'The API token was rotated')
+        self.log('api_token_rotated', 'The API token was rotated', category='auth')
         return token
 
     # ------------------------------------------------------------------ #
@@ -447,7 +445,7 @@ class ApiModule(BaseModule):
             # Any other exception is unexpected: log it server-side, return a
             # generic message so no stack-trace/exception detail leaks to clients.
             self.core.db.session.rollback()
-            self.logger.error('API handler error: %s', e, exc_info=True)
+            self.logger.exception('API handler error: %s', e)
             return _json_error(500, 'server_error', 'Unexpected server error')
 
         if isinstance(result, tuple):
@@ -539,7 +537,7 @@ class ApiModule(BaseModule):
             amount_usd, _, _ = cur.convert(total, currency, 'USD', date_str)
             exchange_rate, _ = cur.get_rate('USD', 'EUR', date_str)
         except Exception as e:
-            self.logger.error('Rate lookup failed: %s', e)
+            self.logger.exception('Rate lookup failed: %s', e)
             raise ApiError(400, 'bad_request',
                            f'Could not get exchange rate for {currency}')
 
@@ -597,12 +595,13 @@ class ApiModule(BaseModule):
             db.session.add(InvoiceItem(invoice_id=invoice.id, **item))
         db.session.commit()
 
-        self.core.log_activity('invoice_created', 'invoice',
-                               {'invoice_number': invoice.invoice_number,
-                                'client': client_name,
-                                'currency': currency,
-                                'amount_eur': round(amount_eur, 2),
-                                'via': 'api'})
+        self.log('invoice_created',
+                 {'invoice_number': invoice.invoice_number,
+                  'client': client_name,
+                  'currency': currency,
+                  'amount_eur': round(amount_eur, 2),
+                  'via': 'api'},
+                 category='invoice')
 
         # Let modules react (e.g. invoice_attachments) — same as the web path.
         mm = self.core.module_manager
@@ -669,8 +668,7 @@ class ApiModule(BaseModule):
         number = inv.invoice_number
         db.session.delete(inv)  # items cascade via relationship
         db.session.commit()
-        self.core.log_activity('invoice_deleted', 'invoice',
-                               {'invoice_number': number, 'via': 'api'})
+        self.log('invoice_deleted', {'invoice_number': number, 'via': 'api'}, category='invoice')
         return {'data': {'deleted': True, 'invoice_number': number}}, 200
 
     def _issue_invoice(self, invoice_id):
@@ -687,8 +685,9 @@ class ApiModule(BaseModule):
         except ValueError:
             db.session.rollback()
             raise ApiError(409, 'conflict', f'Invoice #{invoice_id} could not be issued')
-        self.core.log_activity('invoice_issued', 'invoice',
-                               {'invoice_number': inv.invoice_number, 'via': 'api'})
+        self.log('invoice_issued',
+                 {'invoice_number': inv.invoice_number, 'via': 'api'},
+                 category='invoice')
         return {'data': self._serialize_invoice(inv, svc)}, 200
 
     def _mark_paid(self, invoice_id):

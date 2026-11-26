@@ -99,7 +99,10 @@ def system_logs():
     search = request.args.get('search', '')
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
-    page = int(request.args.get('page', 1))
+    level = request.args.get('level', '')
+    if level not in ('warning', 'error'):
+        level = ''
+    page = max(1, request.args.get('page', 1, type=int))
     per_page = 50
 
     logger = state.module_manager.core.activity_logger if state.module_manager else None
@@ -111,7 +114,8 @@ def system_logs():
             category=cat or None,
             date_from=date_from or None,
             date_to=date_to or None,
-            search=search or None)
+            search=search or None,
+            min_level=level or None)
         if hasattr(logger, 'get_categories'):
             categories = logger.get_categories()
 
@@ -121,7 +125,7 @@ def system_logs():
     return render_template('logs.html',
                            entries=entries,
                            categories=categories,
-                           filters={'category': cat, 'search': search,
+                           filters={'category': cat, 'search': search, 'level': level,
                                     'date_from': date_from, 'date_to': date_to},
                            page=page, per_page=per_page)
 

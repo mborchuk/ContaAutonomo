@@ -112,7 +112,8 @@ _LOG_NAME = re.compile(r'^[a-z][a-z0-9_]*$')
 
 def register_log(registry, core):
     """`log.write`: an entry in the activity log (System → Logs) through the
-    activity logger the owner chose in Settings (file or database). A
+    activity logger the owner chose in Settings (file or database), with its
+    level and source, which the Logs page shows and filters by. A
     `warning` or `error` also goes to the server log, as `module.<source>`,
     with the action only: the details stay in the activity log."""
 
@@ -120,7 +121,7 @@ def register_log(registry, core):
         for name, value in (('source', source), ('action', action), ('category', category)):
             if value is not None and (len(value) > 80 or not _LOG_NAME.match(value)):
                 raise InvalidArguments(f'{name} must be lower case letters, digits and _')
-        core.log_activity(action, category or source, details)
+        core.log_activity(action, category or source, details, level=level, source=source)
         if level != 'info':
             logging.getLogger(f'module.{source}').log(
                 logging.WARNING if level == 'warning' else logging.ERROR,

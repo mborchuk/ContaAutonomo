@@ -205,18 +205,19 @@ class AIParserModule(BaseModule):
             try:
                 file_data = file.read()
                 result = provider.parse_document(file_data, file.filename, doc_type)
-                module.core.log_activity(
-                    'ai_parse_success', 'ai_parser',
-                    f'Parsed {doc_type}: {file.filename} via {provider.display_name}')
+                module.log('ai_parse_succeeded',
+                           f'Parsed {doc_type}: {file.filename} via {provider.display_name}',
+                           category='ai')
                 module.logger.info('Parsed %s: %s via %s', doc_type, file.filename, provider.name)
                 return jsonify(result)
             except (UnsupportedFile, NotADocument) as e:
                 return jsonify({'error': rejection_message(e)}), 422
             except Exception as e:
-                module.logger.error('AI parse failed: %s — %s', file.filename, e)
-                module.core.log_activity(
-                    'ai_parse_failed', 'ai_parser',
-                    f'Failed to parse {file.filename}: {e}')
+                module.logger.exception('AI parse failed: %s — %s', file.filename, e)
+                module.log('ai_parse_failed',
+                           f'Failed to parse {file.filename}: {e}',
+                           category='ai',
+                           level='error')
                 return jsonify({'error': describe_error(e)
                                 or 'Parsing failed. Check server logs.'}), 500
 
@@ -295,12 +296,13 @@ class AIParserModule(BaseModule):
         except (UnsupportedFile, NotADocument) as e:
             raise ApiError(422, 'unprocessable', rejection_message(e))
         except Exception as e:
-            self.logger.error('AI parse failed via API: %s — %s', file.filename, e)
+            self.logger.exception('AI parse failed via API: %s — %s', file.filename, e)
             raise ApiError(502, 'parse_failed',
                            describe_error(e) or 'Parsing failed. Check server logs.')
-        self.core.log_activity('ai_parse_success', 'ai_parser',
-                               {'file': file.filename, 'doc_type': doc_type,
-                                'provider': provider.name, 'via': 'api'})
+        self.log('ai_parse_succeeded',
+                 {'file': file.filename, 'doc_type': doc_type,
+                  'provider': provider.name, 'via': 'api'},
+                 category='ai')
         return {'data': result}, 200
 
     # --- Settings integration ---
@@ -338,7 +340,7 @@ class AIParserModule(BaseModule):
                                          column, DEFAULT_MODELS[provider])
                 conn.commit()
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('AI Parser migration failed: %s', e)
+            self.logger.exception('AI Parser migration failed: %s', e)
 
     def get_settings_html(self, settings):
         cfg = self._get_config()

@@ -219,7 +219,7 @@ class TaxEsIrpfModule(BaseModule):
                         conn.commit()
                     self.logger.info('IRPF migrate: added %s.%s', table, col)
                 except Exception as e:
-                    self.logger.error('IRPF migrate: %s.%s failed: %s', table, col, e)
+                    self.logger.exception('IRPF migrate: %s.%s failed: %s', table, col, e)
 
     # ── Profile + params helpers ─────────────────────────────────────────
 
@@ -923,7 +923,7 @@ class TaxEsIrpfModule(BaseModule):
             result = self._engine(year).compute_modelo130(
                 self._build_modelo130_input(year, quarter, profile))
         except Exception as e:
-            self.logger.error('IRPF tax_obligations failed: %s', e)
+            self.logger.exception('IRPF tax_obligations failed: %s', e)
             return None
         due = result.summary['modelo130_due']
         return {
@@ -950,7 +950,7 @@ class TaxEsIrpfModule(BaseModule):
             result = self._engine(year).compute_modelo100(
                 self._build_modelo100_input(year, profile), region)
         except Exception as e:
-            self.logger.error('IRPF calculate_income_tax failed: %s', e)
+            self.logger.exception('IRPF calculate_income_tax failed: %s', e)
             return None
 
         summary = result.summary
@@ -1057,7 +1057,7 @@ class TaxEsIrpfModule(BaseModule):
             self._db.session.commit()
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('IRPF store retención failed: %s', e)
+            self.logger.exception('IRPF store retención failed: %s', e)
 
     # ── Settings tab ─────────────────────────────────────────────────────
 

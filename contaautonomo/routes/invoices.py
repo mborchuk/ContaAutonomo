@@ -585,7 +585,7 @@ def create_invoice():
                 logger.error('PDF auto-generation failed for invoice #%s: %s',
                              clean(invoice.invoice_number), e, exc_info=True)
                 log_activity('invoice_pdf_autogen_failed', 'invoice',
-                             f'#{invoice.invoice_number}: {e}')
+                             f'#{invoice.invoice_number}: {e}', level='warning')
 
         logger.info('=== Invoice #%s done ===', clean(invoice.invoice_number))
         return redirect(url_for('index'))

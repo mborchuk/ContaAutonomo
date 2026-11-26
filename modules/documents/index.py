@@ -367,7 +367,7 @@ class DocumentsModule(BaseModule):
                             'and records past their retention date',
                 timeout=120)
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register the expiry-messages job: %s', e)
+            self.logger.exception('Failed to register the expiry-messages job: %s', e)
         try:
             self.core.scheduler.add_job(
                 job_id='documents.read_text', func=self.scheduled_read_text,
@@ -376,7 +376,7 @@ class DocumentsModule(BaseModule):
                             '(how often and how many: Settings → Documents)',
                 timeout=900)
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register the read-text job: %s', e)
+            self.logger.exception('Failed to register the read-text job: %s', e)
 
     def _backfill_identifiers(self):
         """Give every document without one an identifier, oldest first, in
@@ -979,7 +979,7 @@ class DocumentsModule(BaseModule):
                 return redirect(url_for('documents.documents_index'))
             except Exception as e:
                 self._db.session.rollback()
-                self.logger.error('Error creating document: %s', e)
+                self.logger.exception('Error creating document: %s', e)
                 flash('Error creating record. Please try again.', 'danger')
 
         categories = self._get_all_categories()
@@ -1056,7 +1056,7 @@ class DocumentsModule(BaseModule):
                 return redirect(url_for('documents.documents_view', id=doc.id))
             except Exception as e:
                 self._db.session.rollback()
-                self.logger.error('Error updating document: %s', e)
+                self.logger.exception('Error updating document: %s', e)
                 flash('Error processing form data. Please check your input.', 'danger')
 
         categories = self._get_all_categories()
@@ -1111,7 +1111,7 @@ class DocumentsModule(BaseModule):
             flash('Document deleted.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error deleting document: %s', e)
+            self.logger.exception('Error deleting document: %s', e)
             flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('documents.documents_index'))
 
@@ -1566,9 +1566,10 @@ class DocumentsModule(BaseModule):
             status='running')
         self._db.session.add(row)
         self._db.session.commit()
-        self.core.log_activity('document_sent_to_ai', 'documents',
-                               f'{doc.identifier or doc.id}: text of {len(chosen)} file(s), '
-                               f'{sent} characters, to {dest["name"]}')
+        self.log('document_sent_to_ai',
+                 f'{doc.identifier or doc.id}: text of {len(chosen)} file(s), '
+                 f'{sent} characters, to {dest["name"]}',
+                 category='documents')
         from flask import current_app
         app = current_app._get_current_object()
         row_id = row.id     # read now: the row object belongs to this request's session
@@ -1803,7 +1804,7 @@ class DocumentsModule(BaseModule):
             flash(f'File replaced; version {version - 1} is kept.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error replacing document file: %s', e)
+            self.logger.exception('Error replacing document file: %s', e)
             flash('An error occurred. Please try again.', 'danger')
         return redirect(url_for('documents.documents_view', id=df.document_id))
 
@@ -1892,7 +1893,7 @@ class DocumentsModule(BaseModule):
             flash('File removed.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error removing document file: %s', e)
+            self.logger.exception('Error removing document file: %s', e)
             flash('An error occurred. Please try again.', 'danger')
         return redirect(url_for('documents.documents_edit', id=doc_id))
 
@@ -1921,7 +1922,7 @@ class DocumentsModule(BaseModule):
                 self._log_history(doc_id, 'updated',
                                   f'Auto-signed: {df.original_filename} ({", ".join(names)})')
             except Exception as e:
-                self.logger.error('Auto-sign failed for %s: %s', df.original_filename, e)
+                self.logger.exception('Auto-sign failed for %s: %s', df.original_filename, e)
         self._db.session.commit()
 
     def _sign_file(self, file_id, cap_index):
@@ -1958,7 +1959,7 @@ class DocumentsModule(BaseModule):
             self._db.session.commit()
             flash(f'File signed with {cap.get("name", "signer")}.', 'success')
         except Exception as e:
-            self.logger.error('Sign file error: %s', e)
+            self.logger.exception('Sign file error: %s', e)
             flash('Signing failed. Check server logs.', 'danger')
 
         return redirect(url_for('documents.documents_view', id=doc_id))
@@ -2218,7 +2219,7 @@ class DocumentsModule(BaseModule):
             flash(f'"{name}" was disposed of; the disposal log keeps its record.', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error disposing of a document: %s', e)
+            self.logger.exception('Error disposing of a document: %s', e)
             flash('Error disposing of the document. Please try again.', 'danger')
         return redirect(url_for('documents.retention_index'))
 

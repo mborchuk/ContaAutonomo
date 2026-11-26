@@ -12,6 +12,9 @@ line-length = 100
 extend-exclude = [".venv", "instance", "backups", "logs"]
 
 [tool.ruff.lint]
+# Logging: lazy %-arguments, never f-strings or .format in a log call (G),
+# and .exception() in an except block so the traceback is kept (LOG, TRY400).
+extend-select = ["G", "LOG", "TRY400"]
 # Start small (task E-1): pyflakes plus the pycodestyle error classes that
 # catch real bugs. Tighten in later pull requests, one rule family at a time.
 select = ["E4", "E7", "E9", "F"]

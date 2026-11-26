@@ -95,7 +95,7 @@ class RecurringInvoicesModule(BaseModule):
                 description='Generate due recurring invoice drafts',
             )
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register generation job: %s', e)
+            self.logger.exception('Failed to register generation job: %s', e)
 
     # --- Generation (F7-D2) ------------------------------------------------ #
 
@@ -116,7 +116,7 @@ class RecurringInvoicesModule(BaseModule):
                     created.append(inv.id)
                 except Exception as e:
                     self._db.session.rollback()
-                    self.logger.error('Generation failed for template %s: %s',
+                    self.logger.exception('Generation failed for template %s: %s',
                                       tpl.id, e)
                     break  # keep next_run_date at the failed period -> retried next run
             else:
@@ -178,9 +178,9 @@ class RecurringInvoicesModule(BaseModule):
             self.core.module_manager.on_invoice_created(inv, None)
         except Exception as e:  # pragma: no cover - fan-out already swallows
             self.logger.warning('on_invoice_created fan-out error: %s', e)
-        self.core.log_activity(
-            'recurring_invoice_generated', 'invoice',
-            f'Draft {inv.invoice_number} from template "{tpl.name}"')
+        self.log('recurring_invoice_generated',
+                 f'Draft {inv.invoice_number} from template "{tpl.name}"',
+                 category='invoice')
         return inv
 
     # --- Dashboard nudge (F7-D3) ------------------------------------------- #
@@ -292,7 +292,7 @@ class RecurringInvoicesModule(BaseModule):
                     return redirect(url_for('recurring_invoices.recurring_index'))
                 except Exception as e:
                     module._db.session.rollback()
-                    module.logger.error('Create recurring failed: %s', e)
+                    module.logger.exception('Create recurring failed: %s', e)
                     flash('Error creating template. Check your input.', 'danger')
             return render_template('recurring_form.html', template=None,
                                    items=[], **_form_ctx())
@@ -309,7 +309,7 @@ class RecurringInvoicesModule(BaseModule):
                     return redirect(url_for('recurring_invoices.recurring_index'))
                 except Exception as e:
                     module._db.session.rollback()
-                    module.logger.error('Edit recurring failed: %s', e)
+                    module.logger.exception('Edit recurring failed: %s', e)
                     flash('Error updating template. Check your input.', 'danger')
             return render_template('recurring_form.html', template=tpl,
                                    items=json.loads(tpl.items_json), **_form_ctx())

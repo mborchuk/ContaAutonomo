@@ -5,8 +5,10 @@
 /* page-only: fixed column widths for log table */
 .logTable { table-layout: fixed; }
 .logTable th:nth-child(1) { width: 170px; }
-.logTable th:nth-child(2) { width: 110px; }
-.logTable th:nth-child(3) { width: 160px; }
+.logTable th:nth-child(2) { width: 90px; }
+.logTable th:nth-child(3) { width: 110px; }
+.logTable th:nth-child(4) { width: 190px; }
+.logTable .log-source { display: block; font-weight: var(--fw-normal); font-size: var(--fs-sm); }
 </style>
 
 <h1>System Logs</h1>
@@ -21,6 +23,14 @@
                     {% for c in categories %}
                     <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
                     {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="log-level">Level</label>
+                <select id="log-level" name="level">
+                    <option value="">All</option>
+                    <option value="warning" {% if filters.level == 'warning' %}selected{% endif %}>Warnings and errors</option>
+                    <option value="error" {% if filters.level == 'error' %}selected{% endif %}>Errors</option>
                 </select>
             </div>
             <div class="form-group">
@@ -49,6 +59,7 @@
     <thead>
         <tr>
             <th>Timestamp</th>
+            <th>Level</th>
             <th>Category</th>
             <th>Action</th>
             <th>Details</th>
@@ -61,6 +72,11 @@
                 {{ e.timestamp[:19] | replace('T', ' ') if e.timestamp else '-' }}
             </td>
             <td>
+                {% if e.level == 'error' %}<span class="status-badge status-failed">error</span>
+                {% elif e.level == 'warning' %}<span class="status-badge status-warning">warning</span>
+                {% else %}<span class="muted">info</span>{% endif %}
+            </td>
+            <td>
                 {# map log category to existing badge token pair — dark-mode safe #}
                 {% set badge = 'status-closed' %}
                 {% if e.category in ('auth', 'backup') %}{% set badge = 'status-active' %}
@@ -69,7 +85,8 @@
                 {% endif %}
                 <span class="status-badge {{ badge }}">{{ e.category }}</span>
             </td>
-            <td style="font-weight: var(--fw-medium);">{{ e.action }}</td>
+            <td style="font-weight: var(--fw-medium);">{{ e.action }}
+                {% if e.source %}<span class="log-source muted">{{ e.source }}</span>{% endif %}</td>
             <td class="muted" style="word-break: break-all; white-space: normal;">
                 {% if e.message_link %}<a href="{{ e.message_link.url }}">Message #{{ e.message_link.id }}</a> · {% endif %}{{ e.details or '' }}
             </td>
@@ -81,12 +98,12 @@
 
 <div class="action-row" style="margin-top: var(--space-5); justify-content: center;">
     {% if page > 1 %}
-    <a href="{{ url_for('system_logs', page=page-1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
+    <a href="{{ url_for('system_logs', page=page-1, category=filters.category, level=filters.level, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
        class="btn btn-secondary">&laquo; Previous</a>
     {% endif %}
     <span class="muted" style="padding: var(--space-2) var(--space-4);">Page {{ page }}</span>
     {% if entries|length == per_page %}
-    <a href="{{ url_for('system_logs', page=page+1, category=filters.category, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
+    <a href="{{ url_for('system_logs', page=page+1, category=filters.category, level=filters.level, search=filters.search, date_from=filters.date_from, date_to=filters.date_to) }}"
        class="btn btn-secondary">Next &raquo;</a>
     {% endif %}
 </div>

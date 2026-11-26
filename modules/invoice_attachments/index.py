@@ -48,9 +48,10 @@ class InvoiceAttachmentsModule(BaseModule):
             invoice = svc.get(invoice_id)
             if not invoice:
                 module.logger.warning('Invoice ID=%d not found', invoice_id)
-                module.core.log_activity(
-                    'invoice_pdf_attach_failed', 'invoice',
-                    f'Invoice #{invoice_id} not found (attach via view page)')
+                module.log('invoice_pdf_attach_failed',
+                           f'Invoice #{invoice_id} not found (attach via view page)',
+                           category='invoice',
+                           level='warning')
                 flash('Invoice not found', 'danger')
                 return redirect(url_for('index'))
 
@@ -63,10 +64,11 @@ class InvoiceAttachmentsModule(BaseModule):
             if not file.filename.lower().endswith('.pdf'):
                 module.logger.warning('Non-PDF file rejected: %s for invoice #%s',
                                       file.filename, invoice.invoice_number)
-                module.core.log_activity(
-                    'invoice_pdf_attach_rejected', 'invoice',
-                    f'Invoice #{invoice.invoice_number} | '
-                    f'rejected non-PDF file: {file.filename}')
+                module.log('invoice_pdf_attach_rejected',
+                           f'Invoice #{invoice.invoice_number} | '
+                           f'rejected non-PDF file: {file.filename}',
+                           category='invoice',
+                           level='warning')
                 flash('Only PDF files are allowed', 'danger')
                 return redirect(url_for('view_invoice', id=invoice_id))
 
@@ -76,11 +78,12 @@ class InvoiceAttachmentsModule(BaseModule):
                                    invoice.invoice_number, path)
                 flash('Invoice PDF attached successfully!', 'success')
             except ValueError as e:
-                module.logger.error('Attach failed for invoice #%s: %s',
+                module.logger.exception('Attach failed for invoice #%s: %s',
                                     invoice.invoice_number, e)
-                module.core.log_activity(
-                    'invoice_pdf_attach_failed', 'invoice',
-                    f'Invoice #{invoice.invoice_number} | error: {e}')
+                module.log('invoice_pdf_attach_failed',
+                           f'Invoice #{invoice.invoice_number} | error: {e}',
+                           category='invoice',
+                           level='error')
                 flash(str(e), 'danger')
 
             return redirect(url_for('view_invoice', id=invoice_id))
@@ -156,10 +159,11 @@ class InvoiceAttachmentsModule(BaseModule):
         if not file.filename.lower().endswith('.pdf'):
             self.logger.warning('Rejected non-PDF file: %s for invoice #%s',
                                 file.filename, invoice.invoice_number)
-            self.core.log_activity(
-                'invoice_pdf_attach_rejected', 'invoice',
-                f'Invoice #{invoice.invoice_number} | '
-                f'rejected non-PDF file from {source} form: {file.filename}')
+            self.log('invoice_pdf_attach_rejected',
+                     f'Invoice #{invoice.invoice_number} | '
+                     f'rejected non-PDF file from {source} form: {file.filename}',
+                     category='invoice',
+                     level='warning')
             from flask import flash
             flash('Attached file is not a PDF — skipped', 'warning')
             return
@@ -171,11 +175,12 @@ class InvoiceAttachmentsModule(BaseModule):
             from flask import flash
             flash('Invoice PDF attached!', 'success')
         except Exception as e:
-            self.logger.error('PDF attachment failed: invoice #%s, file=%s, source=%s, error=%s',
+            self.logger.exception('PDF attachment failed: invoice #%s, file=%s, source=%s, error=%s',
                               invoice.invoice_number, file.filename, source, e)
-            self.core.log_activity(
-                'invoice_pdf_attach_failed', 'invoice',
-                f'Invoice #{invoice.invoice_number} | '
-                f'file={file.filename} | source={source} | error: {e}')
+            self.log('invoice_pdf_attach_failed',
+                     f'Invoice #{invoice.invoice_number} | '
+                     f'file={file.filename} | source={source} | error: {e}',
+                     category='invoice',
+                     level='error')
             from flask import flash
             flash(f'PDF attachment failed: {e}', 'warning')

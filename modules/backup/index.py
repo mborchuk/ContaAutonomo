@@ -160,7 +160,7 @@ class BackupModule(BaseModule):
             prefix = 'manual_'
             ok, result = module._create_full_backup(password=password, prefix=prefix)
             if ok:
-                module.core.log_activity('backup_created', 'backup', result)
+                module.log('backup_created', result, category='backup')
             flash(f'Backup created: {result}' if ok else f'Backup failed: {result}',
                   'success' if ok else 'danger')
             return redirect(url_for('settings') + '#security')
@@ -182,7 +182,7 @@ class BackupModule(BaseModule):
                 filename, module._decryption_candidates(
                     request.form.get('password', '').strip() or None))
             if ok:
-                module.core.log_activity('backup_restored', 'backup', filename)
+                module.log('backup_restored', filename, category='backup', level='warning')
             flash(msg, 'success' if ok else 'danger')
             return redirect(url_for('settings') + '#security')
 
@@ -210,8 +210,10 @@ class BackupModule(BaseModule):
                 return redirect(url_for('backup.upload_restore'))
             ok, msg = module._restore_db_from_json(jd)
             if ok:
-                module.core.log_activity('backup_restored', 'backup',
-                                         f'JSON upload: {f.filename}')
+                module.log('backup_restored',
+                           f'JSON upload: {f.filename}',
+                           category='backup',
+                           level='warning')
                 flash('Data restored successfully! Please restart the application.',
                       'success')
             else:
@@ -233,7 +235,7 @@ class BackupModule(BaseModule):
                 return redirect(url_for('settings') + '#security')
             ok, msg = module._restore_db_from_json(jd)
             if ok:
-                module.core.log_activity('demo_loaded', 'backup', 'demo_data.json')
+                module.log('demo_data_loaded', 'demo_data.json', category='backup', level='warning')
                 flash('Demo data loaded! Please restart the application.', 'success')
             else:
                 flash(f'Demo load failed: {msg}', 'danger')
@@ -295,7 +297,7 @@ class BackupModule(BaseModule):
                 try:
                     self._perform_startup_backup()
                 except Exception as e:
-                    logger.error('Deferred startup backup failed: %s', e)
+                    logger.exception('Deferred startup backup failed: %s', e)
 
         t = threading.Timer(60.0, _deferred_startup_backup)
         t.daemon = True
@@ -478,7 +480,7 @@ class BackupModule(BaseModule):
 
             return True, filename
         except Exception as e:
-            logger.error('Error creating backup: %s', e)
+            logger.exception('Error creating backup: %s', e)
             return False, str(e)
 
     def _dump_db_json(self):
@@ -832,7 +834,7 @@ class BackupModule(BaseModule):
                 except Exception as e:
                     logger.warning('Error deleting %s: %s', old.name, e)
         except Exception as e:
-            logger.error('Error cleaning up backups: %s', e)
+            logger.exception('Error cleaning up backups: %s', e)
 
     def _should_create_backup(self):
         try:
@@ -867,7 +869,7 @@ class BackupModule(BaseModule):
             else:
                 logger.error('Backup failed: %s', result)
         except Exception as e:
-            logger.error('Error during startup backup: %s', e)
+            logger.exception('Error during startup backup: %s', e)
 
     def _scheduled_backup(self):
         """Called by the core scheduler for daily automatic backups."""
@@ -889,5 +891,5 @@ class BackupModule(BaseModule):
             else:
                 logger.error('Scheduled backup failed: %s', result)
         except Exception as e:
-            logger.error('Scheduled backup error: %s', e)
+            logger.exception('Scheduled backup error: %s', e)
             raise

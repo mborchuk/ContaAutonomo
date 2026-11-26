@@ -570,8 +570,9 @@ class TaxEsFormsModule(BaseModule):
                             'draft (a negative amount in a field that cannot be negative).',
                             'danger')
             return redirect(url_for('tax_es_forms.drafts_index'))
-        self.core.log_activity('aeat_file_downloaded', 'tax',
-                               {'form': form, 'year': year, 'quarter': quarter})
+        self.log('aeat_file_downloaded',
+                 {'form': form, 'year': year, 'quarter': quarter},
+                 category='tax')
         return Response(encode(content), mimetype='text/plain; charset=iso-8859-1',
                         headers={'Content-Disposition': f'attachment; filename="{filename}"'})
 

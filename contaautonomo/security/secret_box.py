@@ -97,7 +97,7 @@ def decrypt(value):
     try:
         return _fernet().decrypt(value[len(PREFIX):].encode('ascii')).decode('utf-8')
     except InvalidToken:
-        logger.error('A stored credential cannot be decrypted with the current '
+        logger.exception('A stored credential cannot be decrypted with the current '
                      'credentials key; enter it again in Settings')
         return ''
 

@@ -196,6 +196,7 @@ Every module must inherit from `BaseModule` and implement required properties.
 |-----------|------|-------------|
 | `self.core` | `CoreServices` | Core services interface (DB, storage, logger, scheduler, etc.) |
 | `self.logger` | `logging.Logger` | Python logger named `module.<module_id>` (e.g. `module.invoice_attachments`). Use for console/file logging. |
+| `self.log(action, details, category, level)` | method | Write an activity log entry (System → Logs) through `log.write`; see [Activity Logging](#activity-logging) |
 
 ---
 
@@ -229,9 +230,10 @@ interface for interacting with the application core.
 | `core.delete_file(storage_key)` | `str` | `None` | Delete file via storage backend |
 | `core.send_file(storage_key, download_name)` | `str`, `str` | Response | Send file as download |
 | `core.file_exists(storage_key)` | `str` | `bool` | Check if file exists |
-| `core.log_activity(action, category, details, user)` | `str`, ... | `None` | Log an activity entry |
+| `core.log_activity(action, category, details, user, level, source)` | `str`, ... | `None` | The core's own activity log entries; modules use `self.log()` |
+| `core.add_activity_listener(callback)` / `remove_activity_listener` | callable | `None` | Called with each entry after it is written |
 | `core.set_storage_backend(backend)` | backend | `None` | Replace file storage backend |
-| `core.set_activity_logger(logger)` | logger | `None` | Replace activity logger |
+| `core.set_activity_logger(logger)` | logger | `None` | Replace where entries are stored (core only) |
 
 ### Usage Examples
 
@@ -731,45 +733,67 @@ View all registered tasks at System → Scheduled Tasks.
 
 ## Activity Logging
 
-Modules have two logging mechanisms:
+Modules have two logs: the **activity log**, which the owner reads on System → Logs,
+and the **server log** (`self.logger`), for whoever runs the app.
 
-### Activity Log (user-visible, System → Logs)
+### Activity log (System → Logs)
 
-Write through the core function `log.write`, like any registry function:
+Write with `self.log()`. It calls the core function `log.write` with your module as
+the source:
 
 ```python
-self.core.functions.call('log.write', source=self.module_id,
-                         action='record_created', details=f'Record #{record.id}')
-# A failure the server log should show too:
-self.core.functions.call('log.write', source=self.module_id,
-                         action='sync_failed', level='error', details=str(error))
+self.log('expense_created', f'#{exp.id}', category='expense')
+self.log('bank_statement_imported', {'file': name, 'imported': 12, 'bad_lines': 1},
+         category='bank', level='warning')
 ```
 
 | Argument | Rule |
 |---|---|
-| `source` | The module id (lower case letters, digits, `_`) |
-| `action` | What happened, same characters, e.g. `record_created` |
-| `details` | Optional text, up to 2,000 characters, shown with the entry |
-| `category` | Optional Logs page filter (`'invoice'`, `'expense'`, `'backup'`, `'tax'`, `'system'`, ...); default the source |
-| `level` | `info` (default), `warning` or `error`. A warning or error also goes to the server log as `module.<source>`, with the action only: the details stay in the activity log |
+| `action` | What happened: snake_case, the object then a past-tense verb (`invoice_issued`, `backup_restored`, `ai_parse_failed`). Always a literal, so entries can be searched |
+| `details` | Optional. Text, or a dict that is stored as compact JSON. Cut to 2,000 characters |
+| `category` | The area the Logs page filters by, one of `LOG_CATEGORIES`: `auth`, `settings`, `system`, `invoice`, `expense`, `bank`, `tax`, `report`, `backup`, `documents`, `ai`, `messages`, `verifactu`. Default: the module id |
+| `level` | `info` (default) for something done; `warning` for something refused or worth a look (a rejected file, a restore that replaced data); `error` for something that failed. Warnings and errors also go to the server log as `module.<id>`, with the action only |
 
-Bad arguments raise `InvalidArguments` and nothing is written. The entry goes to the
-logger chosen in Settings → General Settings → System Logs (files or the database).
-`self.core.log_activity(action, category, details)` writes the same entry without the checks.
+Each entry also stores its source (`core` or the module id). The Logs page shows the
+level and the source and filters by level (*Warnings and errors*, *Errors*).
+`self.log()` never raises: a problem writing the entry is reported in the server log
+and your code goes on. Modules never call `core.log_activity()` or
+`core.set_activity_logger()` themselves; a test checks it, and that every call names a
+literal action, a category from the list and a known level.
 
-### Python Logger (console/file, for debugging)
+**What to log.** Every change the owner makes or the app makes for them (created,
+updated, deleted, issued, sent, imported, restored), everything sent out of the app
+(e-mail, AI provider, AEAT), security events (tokens, logins) and failures. Not page
+views or reads.
 
-Every module automatically gets `self.logger` — a Python `logging.Logger` named `module.<module_id>`:
+**What never to log.** Passwords, API keys, tokens, encryption keys, file contents or
+whole documents. Keep personal data to what identifies the record: an invoice number,
+not the customer's address. The log is kept for the retention days set in Settings.
+
+### Reacting to entries
+
+`self.core.add_activity_listener(callback)` calls `callback(entry)` after each entry
+is written (`entry`: `action`, `category`, `details`, `level`, `source`); remove it with
+`remove_activity_listener` in `on_disable`. A listener that raises is logged and
+skipped. Verifactu uses it to turn `backup_restored` into its own event record.
+
+### Server log (`self.logger`)
+
+Every module gets `self.logger`, a Python `logging.Logger` named `module.<module_id>`:
 
 ```python
 self.logger.debug('Processing item %d', item_id)
-self.logger.info('Invoice #%s PDF attached: %s', inv.invoice_number, path)
 self.logger.warning('Non-PDF file rejected: %s', filename)
-self.logger.error('Failed to save: %s', error)
+try:
+    ...
+except OSError:
+    self.logger.exception('Could not save the receipt for expense %d', exp.id)
 ```
 
-Output goes to console (and log files if configured). Use `self.logger` for developer-facing
-diagnostics and `log.write` for the user-facing audit trail.
+Pass values as arguments (`'%s', value`), never an f-string: the line is only built
+when it is written. In an `except` block use `.exception()`, which keeps the
+traceback. Lint enforces both (ruff `G`, `LOG`, `TRY400`). Lines carry the request id,
+so a server-log line can be matched with the request that wrote it.
 
 ---
 
@@ -1157,7 +1181,7 @@ def _upload_file(self):
 12. **No ORM relationships across modules**: models defined with `extend_existing=True` don't inherit relationships from core. Use explicit queries (e.g. `Contractor.query.get(expense.contractor_id)`) instead of `expense.contractor`.
 13. **Use `self.core.db` for DB session** — never import `db` from `app`. Use `self.core.db.session.commit()` in service code. Importing `db` from `app` can cause "Flask app not registered with this SQLAlchemy instance" errors.
 14. **Always `file.seek(0)` before reading** uploaded files — the stream position may be at the end if Flask or another handler already read it.
-15. **Use `self.logger`** for console/debug logging and the `log.write` function for the user-visible audit trail (System → Logs). Both are available automatically.
+15. **Use `self.log()`** for the activity log (System → Logs) and `self.logger` for the server log; see *Activity Logging* for actions, categories, levels and what never to log.
 16. **Pass invoice objects, not IDs** to `InvoiceService` methods when you already have the object — avoids unnecessary DB queries and SQLAlchemy context issues.
 17. **Module HTML must be safe** (sanitization contract). Hooks like `get_settings_html`, `get_invoice_view_panels`, `get_create_form_html` are injected into pages via `{{ html | safe }}`. Never concatenate raw user/DB values into that HTML — render via `render_template_string()` (Jinja auto-escapes) or escape with `markupsafe.escape()` first. New `| safe` usage in core templates should be flagged in review.
 18. **Validate uploaded file content, not just the extension** — use `file_validation.validate_filestorage(file, ext)` (magic-byte sniff) so a renamed file is rejected.
