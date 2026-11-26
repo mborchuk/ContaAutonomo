@@ -61,8 +61,9 @@ class InvoiceCommentsModule(BaseModule):
                 comment = module.InvoiceComment(invoice_id=invoice_id, text=text)
                 module._db.session.add(comment)
                 module._db.session.commit()
-                module.core.log_activity('invoice_comment_added', 'invoice',
-                                         f'Comment on invoice #{invoice_id}')
+                module.log('invoice_comment_added',
+                           f'Comment on invoice #{invoice_id}',
+                           category='invoice')
             return redirect(url_for('view_invoice', id=invoice_id))
 
         @bp.route('/delete/<int:comment_id>', methods=['POST'])

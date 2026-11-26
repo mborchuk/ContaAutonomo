@@ -89,7 +89,7 @@ class FiscalCalendarModule(BaseModule):
                 description='Fiscal calendar deadline reminders',
             )
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register reminder job: %s', e)
+            self.logger.exception('Failed to register reminder job: %s', e)
 
     # --- Config: which forms does the user file --------------------------- #
 
@@ -340,7 +340,7 @@ class FiscalCalendarModule(BaseModule):
                    f"closes in {days_left} day(s), on "
                    f"{entry['window_end'].strftime('%d/%m/%Y')}.")
         # Always write the user-visible activity log.
-        self.core.log_activity('fiscal_deadline_reminder', 'system', message)
+        self.log('fiscal_deadline_reminded', message, category='tax')
         # The reminder as a message in the bell.
         level = 'danger' if days_left <= 1 else 'warning' if days_left <= 7 else 'info'
         self._post_message(

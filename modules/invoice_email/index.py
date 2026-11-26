@@ -90,7 +90,7 @@ class InvoiceEmailModule(BaseModule):
                 timeout=120,
             )
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Failed to register reminder job: %s', e)
+            self.logger.exception('Failed to register reminder job: %s', e)
         self._encrypt_stored_password()
 
     def _encrypt_stored_password(self):
@@ -105,7 +105,7 @@ class InvoiceEmailModule(BaseModule):
                 self.logger.info('Encrypted the stored SMTP password')
         except Exception as e:  # pragma: no cover - defensive
             self._db.session.rollback()
-            self.logger.error('Encrypting the SMTP password failed: %s', e)
+            self.logger.exception('Encrypting the SMTP password failed: %s', e)
 
     # --- SMTP config ---------------------------------------------------------- #
 
@@ -203,12 +203,13 @@ class InvoiceEmailModule(BaseModule):
             self._send_email(recipient, subject, body,
                              attachment=attachment, filename=filename)
             self._log_email(invoice.id, kind, recipient, subject, 'sent')
-            self.core.log_activity('invoice_email_sent', 'invoice',
-                                   f'#{invoice.invoice_number} -> {recipient}')
+            self.log('invoice_email_sent',
+                     f'#{invoice.invoice_number} -> {recipient}',
+                     category='invoice')
             return True, None
         except Exception as e:
             self._log_email(invoice.id, kind, recipient, subject, 'failed', e)
-            self.logger.error('Email send failed for #%s: %s',
+            self.logger.exception('Email send failed for #%s: %s',
                               invoice.invoice_number, e)
             return False, str(e)
 

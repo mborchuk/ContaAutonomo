@@ -404,7 +404,7 @@ class GoogleDriveStorageBackend(FileStorageBackend):
             for f in found:
                 return f['id']
         except Exception as e:
-            logger.error('[GDrive._resolve_file_id] fallback failed: %s', e)
+            logger.exception('[GDrive._resolve_file_id] fallback failed: %s', e)
 
         return None
 

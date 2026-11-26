@@ -287,13 +287,14 @@ class ReportsModule(BaseModule):
                            message='Invalid report parameters'), 400
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('API report generation failed: %s', e, exc_info=True)
+            self.logger.exception('API report generation failed: %s', e)
             return jsonify(error='server_error',
                            message='Report generation failed. Check server logs.'), 500
 
-        self.core.log_activity('report_generated', 'system',
-                               {'sections': sections, 'year': year,
-                                'quarters': quarters, 'via': 'api'})
+        self.log('report_generated',
+                 {'sections': sections, 'year': year,
+                  'quarters': quarters, 'via': 'api'},
+                 category='report')
         return send_file(io.BytesIO(data), mimetype=mimetype,
                          as_attachment=True, download_name=filename)
 
@@ -372,7 +373,7 @@ class ReportsModule(BaseModule):
             flash(str(e), 'danger')
             return redirect(url_for('reports.reports_index'))
         except Exception as e:
-            self.logger.error('Error generating report: %s', e)
+            self.logger.exception('Error generating report: %s', e)
             flash('Error generating PDF. Check server logs.', 'danger')
             return redirect(url_for('reports.reports_index'))
 
@@ -562,14 +563,14 @@ class ReportsModule(BaseModule):
                         except TypeError:
                             files = files_fn(start_date, end_date)  # fallback for modules without doc_ids param
                     except Exception as e:
-                        self.logger.error('Error listing files for section %s: %s', sid, e)
+                        self.logger.exception('Error listing files for section %s: %s', sid, e)
                         continue
                     for f in files:
                         # One unreadable file must not drop the rest of the section.
                         try:
                             result = self.core.storage.get(f['storage_key'])
                         except Exception as e:
-                            self.logger.error('Error reading file for section %s: %s', sid, e)
+                            self.logger.exception('Error reading file for section %s: %s', sid, e)
                             continue
                         if not result:
                             continue

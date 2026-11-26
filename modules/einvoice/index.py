@@ -122,7 +122,7 @@ class EInvoiceModule(BaseModule):
             try:
                 xml, signed = module._export(invoice, seller, customer, unsigned=unsigned)
             except ValueError as e:   # unreadable certificate or wrong password
-                module.logger.error('Facturae signing failed for invoice %s: %s',
+                module.logger.exception('Facturae signing failed for invoice %s: %s',
                                     invoice.id, e)
                 flash('Facturae could not be signed — check the certificate and its '
                       'password in Settings → PDF Signature.', 'danger')
@@ -159,7 +159,7 @@ class EInvoiceModule(BaseModule):
             xml, signed = self._export(invoice, seller, customer,
                                        unsigned=request.args.get('unsigned') == '1')
         except ValueError as e:
-            self.logger.error('Facturae signing failed for invoice %s: %s', invoice.id, e)
+            self.logger.exception('Facturae signing failed for invoice %s: %s', invoice.id, e)
             raise ApiError(409, 'signing_failed',
                            'Facturae could not be signed: check the PDF Signature certificate')
         return {'invoice_id': invoice.id,

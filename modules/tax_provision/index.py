@@ -100,7 +100,8 @@ class TaxProvisionModule(BaseModule):
         return part
 
     def _failed(self, part, what):
-        self.logger.exception('Tax provision: %s failed', what)
+        """Called from an `except` block only, so the traceback is there."""
+        self.logger.exception('Tax provision: %s failed', what)  # noqa: LOG004
         part.update(amount=None, direction=None,
                     reason='could not be calculated — open its page for details')
         return part

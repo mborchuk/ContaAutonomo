@@ -213,8 +213,9 @@ class TaxDataModule(BaseModule):
                 what = (f'saved with {len(values)} changed value(s)' if values
                         else 'confirmed unchanged')
                 flash(f"{cap['name']} for {year}: {what}.", 'success')
-                module.core.log_activity('tax_data_confirmed', 'tax',
-                                         f'{table_id} {year}: {len(values)} changed value(s)')
+                module.log('tax_data_confirmed',
+                           f'{table_id} {year}: {len(values)} changed value(s)',
+                           category='tax')
             return redirect(url_for('tax_data.tax_data_index', year=year)
                             + '#' + _anchor(table_id))
 
@@ -226,7 +227,7 @@ class TaxDataModule(BaseModule):
                 module._db.session.delete(entry)
                 module._db.session.commit()
                 flash(f'The confirmation for {year} was removed.', 'success')
-                module.core.log_activity('tax_data_unconfirmed', 'tax', f'{table_id} {year}')
+                module.log('tax_data_unconfirmed', f'{table_id} {year}', category='tax')
             return redirect(url_for('tax_data.tax_data_index', year=year)
                             + '#' + _anchor(table_id))
 

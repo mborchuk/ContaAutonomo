@@ -125,7 +125,7 @@ class TaxPolandModule(BaseModule):
                 self.core.db.session.commit()
                 self.logger.info('Tax Poland: set VAT rate to %.1f%%', VAT_RATE_PL)
         except Exception as e:
-            self.logger.error('Tax Poland: failed to set VAT rate: %s', e)
+            self.logger.exception('Tax Poland: failed to set VAT rate: %s', e)
 
     # ── Tax Hooks ───────────────────────────────────────────────────
 

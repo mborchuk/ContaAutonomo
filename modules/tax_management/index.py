@@ -93,7 +93,7 @@ class TaxManagementModule(BaseModule):
                     "UPDATE tax_form SET status='filed' WHERE status IS NULL"))
                 conn.commit()
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Tax form workflow migration failed: %s', e)
+            self.logger.exception('Tax form workflow migration failed: %s', e)
 
     @property
     def settings_panels(self):
@@ -414,7 +414,7 @@ class TaxManagementModule(BaseModule):
 
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error uploading tax form: %s', e)
+            self.logger.exception('Error uploading tax form: %s', e)
             flash('Error processing form data. Please check your input.', 'danger')
 
         return redirect(url_for('tax_management.tax_forms_index'))
@@ -458,7 +458,7 @@ class TaxManagementModule(BaseModule):
             if stored and self._store_filed_boxes(tax_form, stored[0]):
                 read += 1
         self._db.session.commit()
-        self.core.log_activity('tax_forms_boxes_read', 'tax', f'{read} forms')
+        self.log('tax_forms_boxes_read', f'{read} forms', category='tax')
         flash(f'Read the filed boxes of {read} forms.', 'success')
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -523,7 +523,7 @@ class TaxManagementModule(BaseModule):
             flash('Tax form deleted successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error deleting tax form: %s', e)
+            self.logger.exception('Error deleting tax form: %s', e)
             flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -542,7 +542,7 @@ class TaxManagementModule(BaseModule):
             flash('SS payment added successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error adding SS payment: %s', e)
+            self.logger.exception('Error adding SS payment: %s', e)
             flash('Error creating record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -557,7 +557,7 @@ class TaxManagementModule(BaseModule):
             flash('SS payment updated!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error updating SS payment: %s', e)
+            self.logger.exception('Error updating SS payment: %s', e)
             flash('Error processing form data. Please check your input.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -573,10 +573,9 @@ class TaxManagementModule(BaseModule):
 
         csv_text = build_ss_payments_csv(payments)
         filename = f'ss_payments_{year}.csv' if year else 'ss_payments.csv'
-        self.core.log_activity(
-            'ss_payments_exported', 'tax',
-            f'{len(payments)} payments' + (f', year {year}' if year else '')
-        )
+        self.log('ss_payments_exported',
+                 f'{len(payments)} payments' + (f', year {year}' if year else ''),
+                 category='tax')
         return Response(
             csv_text,
             mimetype='text/csv; charset=utf-8',
@@ -592,7 +591,7 @@ class TaxManagementModule(BaseModule):
             flash('SS payment deleted!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error deleting SS payment: %s', e)
+            self.logger.exception('Error deleting SS payment: %s', e)
             flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('tax_management.tax_forms_index'))
 
@@ -730,16 +729,16 @@ class TaxManagementModule(BaseModule):
             if status == 'paid' and not tax_form.payment_date:
                 tax_form.payment_date = utcnow().date()
             self._db.session.commit()
-            self.core.log_activity(
-                'tax_filing_recorded', 'system',
-                f'{form_type} {year}' + (f' Q{quarter}' if quarter else '')
-                + f' -> {status}')
+            self.log('tax_filing_recorded',
+                     f'{form_type} {year}' + (f' Q{quarter}' if quarter else '')
+                     + f' -> {status}',
+                     category='tax')
             flash(f'Filing recorded: {form_type} {year}'
                   + (f' Q{quarter}' if quarter else '') + f' — {status}.',
                   'success')
         except (KeyError, TypeError, ValueError) as e:
             self._db.session.rollback()
-            self.logger.error('Record filing failed: %s', e)
+            self.logger.exception('Record filing failed: %s', e)
             flash('Could not record filing. Check the input.', 'danger')
         return redirect(url_for('tax_management.obligations_index',
                                 year=request.form.get('year')))

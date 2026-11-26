@@ -116,10 +116,11 @@ class BankImportModule(BaseModule):
             imported += 1
         batch.imported, batch.skipped = imported, skipped
         self._db.session.commit()
-        self.core.log_activity(
-            'bank_import', 'system',
-            f'{filename}: {imported} imported, {skipped} duplicates skipped, '
-            f'{len(errors)} bad lines')
+        self.log('bank_statement_imported',
+                 f'{filename}: {imported} imported, {skipped} duplicates skipped, '
+                 f'{len(errors)} bad lines',
+                 category='bank',
+                 level='warning' if errors else 'info')
         return batch
 
     def _csv_profiles(self):
@@ -252,7 +253,7 @@ class BankImportModule(BaseModule):
                 else:
                     movements, errors = parse_n43(data)
             except Exception as e:
-                module.logger.error('Bank import parse failed: %s', e)
+                module.logger.exception('Bank import parse failed: %s', e)
                 flash(f'Could not parse file: {e}', 'danger')
                 return redirect(url_for('bank_import.bank_index'))
 
@@ -282,10 +283,10 @@ class BankImportModule(BaseModule):
                 movement.matched_type = 'invoice'
                 movement.matched_id = invoice.id
                 module._db.session.commit()
-                module.core.log_activity(
-                    'bank_movement_matched', 'invoice',
-                    f'{movement.date} {movement.amount:.2f} -> '
-                    f'#{invoice.invoice_number} (paid)')
+                module.log('bank_movement_matched',
+                           f'{movement.date} {movement.amount:.2f} -> '
+                           f'#{invoice.invoice_number} (paid)',
+                           category='invoice')
                 flash(f'Matched — invoice {invoice.invoice_number} marked paid.',
                       'success')
             except ValueError as e:

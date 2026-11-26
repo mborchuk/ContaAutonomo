@@ -173,7 +173,16 @@ Key rules:
 Core provides two logger backends:
 
 - `FileActivityLogger` — JSON-lines files, one per day in `logs/` directory
-- `DbActivityLogger` — SQLite `activity_log` table
+  (`ts`, `action`, `cat`, `details`, `user`, `level`, `src`)
+- `DbActivityLogger` — SQLite `activity_log` table (`timestamp`, `action`, `category`,
+  `details`, `user`, `level`, `source`; a table made before levels existed gets the
+  last two columns at start-up)
+
+Every entry has a level (`info`, `warning`, `error`; `LOG_LEVELS`) and a source (`core`
+or the module id). Entries written before levels existed read as `info`. The Logs page
+(`/logs`) shows both and filters by level (`?level=warning` for warnings and errors,
+`?level=error`). `core.add_activity_listener(callback)` calls `callback(entry)` after
+each entry is written; Verifactu uses it for its event records.
 
 ### Currency Symbols (`contaautonomo/utils/currency_converter.py`)
 
@@ -189,14 +198,19 @@ sym = get_currency_symbol('XOF')   # → 'XOF' (fallback to code)
 
 Configurable in Settings → General Settings → System Logs. Modules have two logging mechanisms:
 
-- Activity log (user-visible, System → Logs): the registry function `log.write`, e.g.
-  `self.core.functions.call('log.write', source=self.module_id, action='record_created', details='Record #7')`.
-  `source` and `action` (and `category`, the Logs page filter, default the source) are lower case
-  letters, digits and `_`; `details` up to 2,000 characters; `level` `info` (default), `warning` or
-  `error`. A warning or error also goes to the server log as `module.<source>`, with the action only:
-  the details stay in the activity log. It writes through the logger chosen in Settings (file or
-  database); `self.core.log_activity(action, category, details)` is the same entry without the checks
-- Python logger (console): `self.logger.info(...)` — named `module.<module_id>`, for developer diagnostics
+- Activity log (user-visible, System → Logs): `self.log(action, details, category=..., level=...)`,
+  which calls the registry function `log.write` with the module as `source`. `action` is a
+  snake_case literal (object, then a past-tense verb); `category` one of `LOG_CATEGORIES` (`auth`,
+  `settings`, `system`, `invoice`, `expense`, `bank`, `tax`, `report`, `backup`, `documents`, `ai`,
+  `messages`, `verifactu`); `details` text or a dict (compact JSON), up to 2,000 characters;
+  `level` `info` (default), `warning` or `error`. A warning or error also goes to the server log
+  as `module.<source>`, with the action only. `self.log()` never raises. Never log passwords,
+  keys, tokens or file contents. Modules do not call `core.log_activity()`; a test checks every
+  module's calls (`tests/test_activity_log_levels.py`). Rules and examples: `modules/README.md` →
+  *Activity Logging*
+- Python logger (console): `self.logger.info(...)` — named `module.<module_id>`, for developer
+  diagnostics. Lazy `%s` arguments, `.exception()` in `except` blocks; ruff `G`, `LOG` and
+  `TRY400` enforce it
 
 ### Task Scheduler
 
@@ -276,8 +290,9 @@ Every module receives `self.core` — a `CoreServices` instance.
 | `send_file(storage_key, download_name)` | Send file as download response |
 | `file_exists(storage_key)` | Check if file exists |
 | `set_storage_backend(backend)` | Replace file storage (used by external_storage module) |
-| `log_activity(action, category, details, user)` | Log an activity entry |
-| `set_activity_logger(logger)` | Replace activity logger |
+| `log_activity(action, category, details, user, level, source)` | The core's own activity log entries (modules use `self.log()`) |
+| `add_activity_listener(callback)`, `remove_activity_listener(callback)` | Call `callback(entry)` after each entry is written |
+| `set_activity_logger(logger)` | Replace where entries are stored; a logger whose `log()` has no `level`/`source` still gets the first four arguments |
 | `get_activity_log(limit, category, offset)` | Retrieve log entries |
 
 ### InvoiceService (`core.invoice_service`)

@@ -153,7 +153,7 @@ class ExpensesModule(BaseModule):
                             f'ALTER TABLE expense ADD COLUMN {name} {coltype}'))
                 conn.commit()
         except Exception as e:  # pragma: no cover - defensive
-            self.logger.error('Expense VAT migration failed: %s', e)
+            self.logger.exception('Expense VAT migration failed: %s', e)
 
     def get_category_defaults(self):
         """Merged category defaults: seed values overlaid with user overrides."""
@@ -272,8 +272,9 @@ class ExpensesModule(BaseModule):
         if not exists:
             self._db.session.add(self.NoticeDismissal(expense_id=expense.id, rule_id=rule_id))
             self._db.session.commit()
-            self.core.log_activity('expense_notice_dismissed', 'expenses',
-                                   {'expense_id': expense.id, 'rule': rule_id})
+            self.log('expense_notice_dismissed',
+                     {'expense_id': expense.id, 'rule': rule_id},
+                     category='expense')
         flash('Notice dismissed for this expense.', 'success')
         return redirect(url_for('expenses.expenses_edit', id=expense.id))
 
@@ -473,9 +474,10 @@ class ExpensesModule(BaseModule):
                 reverse_charge=(body.get('reverse_charge')
                                 if body.get('reverse_charge') in ('eu', 'non_eu') else None),
             )
-            self.core.log_activity('expense_created', 'expense',
-                                   {'id': exp.id, 'amount': amount,
-                                    'currency': exp.currency, 'via': 'api'})
+            self.log('expense_created',
+                     {'id': exp.id, 'amount': amount,
+                      'currency': exp.currency, 'via': 'api'},
+                     category='expense')
             return self._api_serialize_expense(exp), 201
 
         # GET — paginated list with optional filters
@@ -650,7 +652,7 @@ class ExpensesModule(BaseModule):
                 return redirect(url_for('expenses.expenses_index'))
             except Exception as e:
                 self._db.session.rollback()
-                self.logger.error('Error creating expense: %s', e)
+                self.logger.exception('Error creating expense: %s', e)
                 flash('Error creating record. Please try again.', 'danger')
 
         contractors = repo.get_all_contractors()
@@ -699,7 +701,7 @@ class ExpensesModule(BaseModule):
                 return redirect(url_for('expenses.expenses_index'))
             except Exception as e:
                 self._db.session.rollback()
-                self.logger.error('Error updating expense: %s', e)
+                self.logger.exception('Error updating expense: %s', e)
                 flash('Error processing form data. Please check your input.', 'danger')
 
         contractors = repo.get_all_contractors()
@@ -727,7 +729,7 @@ class ExpensesModule(BaseModule):
             flash('Expense deleted successfully!', 'success')
         except Exception as e:
             self._db.session.rollback()
-            self.logger.error('Error deleting expense: %s', e)
+            self.logger.exception('Error deleting expense: %s', e)
             flash('Error deleting record. Please try again.', 'danger')
         return redirect(url_for('expenses.expenses_index'))
 

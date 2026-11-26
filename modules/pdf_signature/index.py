@@ -373,7 +373,7 @@ class PDFSignatureModule(BaseModule):
 
         except Exception as exc:
             import traceback
-            self.logger.error(
+            self.logger.exception(
                 'PDF Signature: failed to sign invoice #%s — %s\n%s',
                 invoice.invoice_number, exc, traceback.format_exc(),
             )
@@ -821,7 +821,7 @@ class PDFSignatureModule(BaseModule):
                                    upload_type, storage_key)
                 return jsonify({'storage_key': storage_key})
             except Exception as e:
-                module.logger.error('PDF Signature upload failed: %s', e)
+                module.logger.exception('PDF Signature upload failed: %s', e)
                 return jsonify({'error': 'Upload failed. Check server logs.'}), 500
 
         @bp.route('/preview-signature')

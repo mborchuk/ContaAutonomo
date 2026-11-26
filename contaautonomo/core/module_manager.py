@@ -7,6 +7,7 @@ Each module lives in modules/<name>/ with an index.py that defines a class
 inheriting from BaseModule.
 """
 
+import json
 import os
 
 from contaautonomo import paths
@@ -54,6 +55,29 @@ class BaseModule(ABC):
         """
         self.core = core
         self.logger = logging.getLogger(f'module.{self.module_id}')
+
+    def log(self, action, details=None, category=None, level='info'):
+        """Write an activity log entry (System → Logs) through the core
+        function `log.write`, with this module as the source.
+
+        `action` is what happened, snake_case and past tense
+        ('expense_created'); `category` the area the Logs page filters by
+        (LOG_CATEGORIES; default the module id); `level` info, warning or
+        error. A dict in `details` is stored as compact JSON. Never raises: a
+        logging problem is reported in the server log and the caller goes on.
+        """
+        if isinstance(details, (dict, list)):
+            details = json.dumps(details, ensure_ascii=False, separators=(', ', ': '),
+                                 default=str)
+        elif details is not None:
+            details = str(details)
+        if details and len(details) > core_functions.LOG_MAX_DETAILS:
+            details = details[:core_functions.LOG_MAX_DETAILS - 1] + '…'
+        try:
+            self.core.functions.call('log.write', source=self.module_id, action=action,
+                                     details=details, category=category, level=level)
+        except Exception:
+            self.logger.exception('Could not write the activity log entry %r', action)
 
     @property
     @abstractmethod
@@ -670,30 +694,59 @@ class LocalStorageBackend(FileStorageBackend):
         return os.path.exists(self._full_path(storage_key))
 
 
+LOG_LEVELS = core_functions.LOG_LEVELS     # 'info', 'warning', 'error'
+# The areas the Logs page filters by. A module may use its own id instead.
+LOG_CATEGORIES = ('auth', 'settings', 'system', 'invoice', 'expense', 'bank', 'tax',
+                  'report', 'backup', 'documents', 'ai', 'messages', 'verifactu')
+
+
+def levels_from(min_level):
+    """The levels at or above `min_level` ('warning' -> warning, error);
+    every level for None or an unknown name."""
+    if min_level not in LOG_LEVELS:
+        return LOG_LEVELS
+    return LOG_LEVELS[LOG_LEVELS.index(min_level):]
+
+
+def _takes_level(writer):
+    """Whether an activity logger's log() accepts level and source."""
+    import inspect
+    try:
+        params = inspect.signature(writer.log).parameters
+    except (TypeError, ValueError):
+        return False
+    return ('level' in params and 'source' in params) or any(
+        p.kind is p.VAR_KEYWORD for p in params.values())
+
+
 class ActivityLogger:
     """
     Base activity logger. Stores user/system activity entries.
     Modules can subclass or replace via CoreServices.set_activity_logger().
     """
 
-    def log(self, action, category='system', details=None, user=None):
+    def log(self, action, category='system', details=None, user=None,
+            level='info', source=None):
         """
         Log an activity entry.
 
         Args:
-            action: short description, e.g. 'login', 'invoice_created'
+            action: what happened, snake_case, e.g. 'login', 'invoice_created'
             category: 'auth', 'invoice', 'expense', 'backup', 'settings', 'system', etc.
             details: optional extra info (str or dict)
             user: optional user identifier
+            level: 'info', 'warning' or 'error'
+            source: who wrote it: 'core' or a module id
         """
         pass
 
-    def get_entries(self, limit=100, category=None, offset=0):
+    def get_entries(self, limit=100, category=None, offset=0, min_level=None):
         """
         Retrieve log entries.
 
         Returns:
-            list of dicts: [{'id', 'timestamp', 'action', 'category', 'details', 'user'}, ...]
+            list of dicts: [{'timestamp', 'action', 'category', 'details',
+            'user', 'level', 'source'}, ...]
         """
         return []
 
@@ -725,7 +778,8 @@ class FileActivityLogger(ActivityLogger):
         return os.path.join(self._log_dir,
                             f'{date.today().isoformat()}.log')
 
-    def log(self, action, category='system', details=None, user=None):
+    def log(self, action, category='system', details=None, user=None,
+            level='info', source=None):
         try:
             det = details if isinstance(details, str) else (
                 self._json.dumps(details, ensure_ascii=False)
@@ -736,15 +790,19 @@ class FileActivityLogger(ActivityLogger):
                 'cat': category,
                 'details': det,
                 'user': user,
+                'level': level or 'info',
+                'src': source,
             }
             with open(self._today_file(), 'a', encoding='utf-8') as fh:
                 fh.write(self._json.dumps(entry, ensure_ascii=False) + '\n')
         except Exception as e:
-            logger.error('FileLogger write error: %s', e)
+            logger.exception('FileLogger write error: %s', e)
 
     def get_entries(self, limit=100, category=None, offset=0,
-                    date_from=None, date_to=None, search=None):
-        """Read entries from log files, newest first."""
+                    date_from=None, date_to=None, search=None, min_level=None):
+        """Read entries from log files, newest first. Entries written before
+        levels existed are 'info'."""
+        levels = levels_from(min_level)
         files = sorted(
             [f for f in os.listdir(self._log_dir) if f.endswith('.log')],
             reverse=True)
@@ -772,6 +830,8 @@ class FileActivityLogger(ActivityLogger):
                     continue
                 if category and e.get('cat') != category:
                     continue
+                if (e.get('level') or 'info') not in levels:
+                    continue
                 if search and search.lower() not in line.lower():
                     continue
                 if skipped < offset:
@@ -783,6 +843,8 @@ class FileActivityLogger(ActivityLogger):
                     'category': e.get('cat', 'system'),
                     'details': e.get('details'),
                     'user': e.get('user'),
+                    'level': e.get('level') or 'info',
+                    'source': e.get('src'),
                 })
                 if len(entries) >= limit:
                     break
@@ -859,31 +921,47 @@ class DbActivityLogger(ActivityLogger):
                         action TEXT NOT NULL,
                         category TEXT DEFAULT 'system',
                         details TEXT,
-                        user TEXT
+                        user TEXT,
+                        level TEXT DEFAULT 'info',
+                        source TEXT
                     )
                 '''))
+                # Tables made before levels existed get the two columns.
+                from sqlalchemy import inspect as _inspect
+                have = {c['name'] for c in _inspect(conn).get_columns('activity_log')}
+                for column, kind in (('level', "TEXT DEFAULT 'info'"), ('source', 'TEXT')):
+                    if column not in have:
+                        conn.execute(text(f'ALTER TABLE activity_log ADD COLUMN {column} {kind}'))
                 conn.commit()
 
-    def log(self, action, category='system', details=None, user=None):
+    def log(self, action, category='system', details=None, user=None,
+            level='info', source=None):
         try:
             from sqlalchemy import text
             det = details if isinstance(details, str) else (
                 self._json.dumps(details, ensure_ascii=False) if details else None)
             with self._db.engine.connect() as conn:
                 conn.execute(text(
-                    'INSERT INTO activity_log (timestamp, action, category, details, user) '
-                    'VALUES (:ts, :action, :cat, :det, :usr)'),
+                    'INSERT INTO activity_log '
+                    '(timestamp, action, category, details, user, level, source) '
+                    'VALUES (:ts, :action, :cat, :det, :usr, :lvl, :src)'),
                     {'ts': utcnow().isoformat(), 'action': action,
-                     'cat': category, 'det': det, 'usr': user})
+                     'cat': category, 'det': det, 'usr': user,
+                     'lvl': level or 'info', 'src': source})
                 conn.commit()
         except Exception as e:
-            logger.error('DbLogger log error: %s', e)
+            logger.exception('DbLogger log error: %s', e)
 
     def get_entries(self, limit=100, category=None, offset=0,
-                    date_from=None, date_to=None, search=None):
+                    date_from=None, date_to=None, search=None, min_level=None):
         from sqlalchemy import text
         clauses = []
         params = {}
+        if min_level in LOG_LEVELS and min_level != 'info':
+            levels = levels_from(min_level)
+            clauses.append('COALESCE(level, \'info\') IN ('
+                           + ', '.join(f':lv{i}' for i in range(len(levels))) + ')')
+            params.update({f'lv{i}': lv for i, lv in enumerate(levels)})
         if category:
             clauses.append('category = :cat')
             params['cat'] = category
@@ -897,7 +975,8 @@ class DbActivityLogger(ActivityLogger):
             clauses.append("(action LIKE :s OR details LIKE :s)")
             params['s'] = f'%{search}%'
         where = (' WHERE ' + ' AND '.join(clauses)) if clauses else ''
-        sql = f'SELECT timestamp, action, category, details, user FROM activity_log{where} ORDER BY id DESC LIMIT :lim OFFSET :off'
+        sql = ('SELECT timestamp, action, category, details, user, level, source '
+               f'FROM activity_log{where} ORDER BY id DESC LIMIT :lim OFFSET :off')
         params['lim'] = limit
         params['off'] = offset
         entries = []
@@ -909,9 +988,10 @@ class DbActivityLogger(ActivityLogger):
                     'timestamp': r[0], 'action': r[1],
                     'category': r[2] or 'system',
                     'details': r[3], 'user': r[4],
+                    'level': r[5] or 'info', 'source': r[6],
                 })
         except Exception as e:
-            logger.error('DbLogger get_entries error: %s', e)
+            logger.exception('DbLogger get_entries error: %s', e)
         return entries
 
     def get_categories(self):
@@ -922,7 +1002,7 @@ class DbActivityLogger(ActivityLogger):
                     'SELECT DISTINCT category FROM activity_log ORDER BY category')).fetchall()
             return [r[0] for r in rows if r[0]]
         except Exception as e:
-            logger.error('DbLogger get_categories error: %s', e)
+            logger.exception('DbLogger get_categories error: %s', e)
             return []
 
     def cleanup(self, retention_days):
@@ -936,7 +1016,7 @@ class DbActivityLogger(ActivityLogger):
                 conn.execute(text('DELETE FROM activity_log WHERE timestamp < :c'), {'c': cutoff})
                 conn.commit()
         except Exception as e:
-            logger.error('DbLogger cleanup error: %s', e)
+            logger.exception('DbLogger cleanup error: %s', e)
 
     def clear(self, before=None):
         from sqlalchemy import text
@@ -949,7 +1029,7 @@ class DbActivityLogger(ActivityLogger):
                     conn.execute(text('DELETE FROM activity_log'))
                 conn.commit()
         except Exception as e:
-            logger.error('DbLogger clear error: %s', e)
+            logger.exception('DbLogger clear error: %s', e)
 
 
 class TaskScheduler:
@@ -1140,7 +1220,7 @@ class TaskScheduler:
                     j['func']()
             except Exception as e:
                 result['error'] = str(e)
-                logger.error('Scheduler job %s failed: %s', jid, e)
+                logger.exception('Scheduler job %s failed: %s', jid, e)
 
         timeout = j.get('timeout', 3600)
         worker = threading.Thread(target=_execute, name=f'job:{jid}', daemon=True)
@@ -1190,6 +1270,7 @@ class CoreServices:
         self.invoice_pdf = None
         self._storage_backend = LocalStorageBackend(paths.data_dir())
         self._activity_logger = FileActivityLogger(paths.data_dir())
+        self._activity_listeners = []
         self._scheduler = TaskScheduler(app)
 
     @property
@@ -1384,13 +1465,28 @@ class CoreServices:
         """
         Replace or wrap the activity logger.
         Called by modules that want to extend logging (e.g. remote logging).
+        A logger whose `log()` does not take `level` and `source` (written
+        before they existed) still works: it gets the first four arguments.
 
         Args:
             logger: ActivityLogger instance
         """
         self._activity_logger = logger
 
-    def log_activity(self, action, category='system', details=None, user=None):
+    def add_activity_listener(self, listener):
+        """Call `listener(entry)` after every activity entry is written;
+        `entry` is a dict with action, category, details, level, source.
+        A listener that raises is logged and skipped: it never stops the
+        entry or the other listeners."""
+        if listener not in self._activity_listeners:
+            self._activity_listeners.append(listener)
+
+    def remove_activity_listener(self, listener):
+        if listener in self._activity_listeners:
+            self._activity_listeners.remove(listener)
+
+    def log_activity(self, action, category='system', details=None, user=None,
+                     level='info', source='core'):
         """
         Log a user or system activity.
 
@@ -1399,12 +1495,27 @@ class CoreServices:
             category: 'auth', 'invoice', 'expense', 'backup', 'settings', 'system'
             details: optional str or dict with extra info
             user: optional user identifier
+            level: 'info' (default), 'warning' or 'error'
+            source: 'core' (default) or the module id that writes it
         """
-        self._activity_logger.log(action, category, details, user)
+        level = level if level in LOG_LEVELS else 'info'
+        writer = self._activity_logger
+        if _takes_level(writer):
+            writer.log(action, category, details, user, level=level, source=source)
+        else:
+            writer.log(action, category, details, user)
+        entry = {'action': action, 'category': category, 'details': details,
+                 'level': level, 'source': source}
+        for listener in list(self._activity_listeners):
+            try:
+                listener(entry)
+            except Exception:
+                logger.exception('Activity listener %r failed', listener)
 
     def get_activity_log(self, limit=100, category=None, offset=0):
         """Retrieve activity log entries"""
         return self._activity_logger.get_entries(limit, category, offset)
+
 
     # --- Task Scheduler ---
 
@@ -1565,7 +1676,7 @@ class CurrencyService:
                     'Provider %s returned None for %s->%s on %s, falling back to default',
                     self._active_provider, from_currency, to_currency, date_str)
             except Exception as e:
-                self._logger.error(
+                self._logger.exception(
                     'Provider %s failed for %s->%s on %s: %s — falling back to default',
                     self._active_provider, from_currency, to_currency, date_str, e)
 
@@ -1976,7 +2087,7 @@ class ModuleManager:
                             self.discovered[item] = attr
                             break
                 except Exception as e:
-                    logger.error("Error discovering module '%s': %s",
+                    logger.exception("Error discovering module '%s': %s",
                                  _sanitize_log(item), e)
 
     def init_db(self):
@@ -2264,8 +2375,8 @@ class ModuleManager:
             # Track the failure so it can be surfaced in Settings → Modules
             # instead of the module silently disappearing from the UI.
             self.failed_modules[module_id] = str(e)
-            logger.error("Error loading module '%s': %s",
-                         _sanitize_log(module_id), e, exc_info=True)
+            logger.exception("Error loading module '%s': %s",
+                         _sanitize_log(module_id), e)
 
     def get_nav_items(self):
         """Get navigation items from all active modules"""
@@ -2485,7 +2596,7 @@ class ModuleManager:
                     entry.setdefault('methods', ['GET'])
                     routes.append(entry)
             except Exception as e:
-                logger.error("Module '%s' get_api_routes error: %s",
+                logger.exception("Module '%s' get_api_routes error: %s",
                              _sanitize_log(mod_id), e)
         return routes
 
@@ -2554,7 +2665,7 @@ class ModuleManager:
                 if result is not None:
                     return result
             except Exception as e:
-                logger.error("Module '%s' calculate_income_tax error: %s",
+                logger.exception("Module '%s' calculate_income_tax error: %s",
                              _sanitize_log(mod.module_id), e)
         return None
 
@@ -2566,7 +2677,7 @@ class ModuleManager:
                 if result is not None:
                     return result
             except Exception as e:
-                logger.error("Module '%s' calculate_vat error: %s",
+                logger.exception("Module '%s' calculate_vat error: %s",
                              _sanitize_log(mod.module_id), e)
         return None
 
@@ -2602,7 +2713,7 @@ class ModuleManager:
             try:
                 mod.on_invoice_created(invoice, request)
             except Exception as e:
-                logger.error("Module '%s' on_invoice_created error: %s",
+                logger.exception("Module '%s' on_invoice_created error: %s",
                              _sanitize_log(mod.module_id), e)
 
     def get_edit_form_html(self, invoice):
@@ -2620,7 +2731,7 @@ class ModuleManager:
             try:
                 mod.on_invoice_updated(invoice, request)
             except Exception as e:
-                logger.error("Module '%s' on_invoice_updated error: %s",
+                logger.exception("Module '%s' on_invoice_updated error: %s",
                              _sanitize_log(mod.module_id), e)
 
     def on_invoice_issued(self, invoice, request):
@@ -2655,7 +2766,7 @@ class ModuleManager:
             try:
                 provided = mod.get_invoice_blocks() or []
             except Exception as e:
-                logger.error("Module '%s' get_invoice_blocks error: %s",
+                logger.exception("Module '%s' get_invoice_blocks error: %s",
                              _sanitize_log(mod.module_id), e)
                 continue
             for block in provided:
@@ -2701,7 +2812,7 @@ class ModuleManager:
                 for tpl in mod.get_invoice_templates():
                     templates.append(dict(tpl, module_id=mod.module_id))
             except Exception as e:
-                logger.error("Module '%s' get_invoice_templates error: %s",
+                logger.exception("Module '%s' get_invoice_templates error: %s",
                              _sanitize_log(mod.module_id), e)
         return templates
 
@@ -2713,6 +2824,6 @@ class ModuleManager:
             try:
                 labels.update(mod.get_field_labels())
             except Exception as e:
-                logger.error("Module '%s' get_field_labels error: %s",
+                logger.exception("Module '%s' get_field_labels error: %s",
                              _sanitize_log(mod.module_id), e)
         return labels
