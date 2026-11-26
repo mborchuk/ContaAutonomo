@@ -15,14 +15,18 @@ verify against current AEAT technical specs before real use (see chain.py and
 README.md). Compliance assist, not legal advice.
 """
 
+import io
 import json
+import zipfile
 from datetime import date
 
-from flask import Blueprint, render_template, Response, url_for
+from flask import Blueprint, flash, redirect, render_template, request, Response, url_for
 
 from contaautonomo.core.module_manager import BaseModule
 
+from . import events as ev
 from .aeat import VERIFACTU_PHRASE, qr_url
+from .event_log import EventLogMixin, SYSTEM_DEFAULTS
 from .obligations import CHECKED_ON, OBLIGATIONS_VERSION, obligations
 from .pdf_qr import MAX_SIZE_MM, MIN_SIZE_MM, QR_SIZE_MM, has_qr, qr_flowables, stamp_qr
 from .chain import (
@@ -38,8 +42,9 @@ from .chain import (
 from contaautonomo.utils.timeutil import utcnow
 
 
-class VerifactuModule(BaseModule):
-    """Hash-chained billing records + QR (Verifactu compliance assist)."""
+class VerifactuModule(EventLogMixin, BaseModule):
+    """Hash-chained billing records + QR (Verifactu compliance assist), and
+    the event log of a NO VERI*FACTU system (event_log.py)."""
 
     @property
     def module_id(self):
@@ -57,7 +62,11 @@ class VerifactuModule(BaseModule):
 
     @property
     def version(self):
-        return '0.1.0'
+        return '0.2.0'
+
+    @property
+    def settings_tab(self):
+        return {'id': 'verifactu', 'label': 'Verifactu'}
 
     @property
     def nav_items(self):
@@ -88,11 +97,59 @@ class VerifactuModule(BaseModule):
             created_at = db.Column(db.DateTime, default=utcnow)
             submitted_at = db.Column(db.DateTime)  # VERI*FACTU mode only
 
+        class VerifactuEvent(db.Model):
+            """Event record (registro de evento, Orden HAC/1177/2024 art. 9).
+            Append-only, chained like the billing records. `prev_huella` is
+            unique ('' for the first event), so the chain cannot fork."""
+            __tablename__ = 'verifactu_event'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            event_type = db.Column(db.String(2), nullable=False)        # L2E
+            generated_at = db.Column(db.String(32), nullable=False)     # as hashed, with offset
+            prev_event_type = db.Column(db.String(2))
+            prev_generated_at = db.Column(db.String(32))
+            prev_huella = db.Column(db.String(64), nullable=False, unique=True)
+            huella = db.Column(db.String(64), nullable=False, unique=True)
+            signature = db.Column(db.String(64), nullable=False)
+            key_id = db.Column(db.String(16))
+            issuer_nif = db.Column(db.String(20))
+            issuer_name = db.Column(db.String(120))
+            system_json = db.Column(db.Text, nullable=False)  # SistemaInformatico, as hashed
+            data_json = db.Column(db.Text)                     # DatosPropiosEvento / OtrosDatos
+            created_at = db.Column(db.DateTime, default=utcnow)  # UTC, for periods
+
+        class VerifactuConfig(db.Model):
+            __tablename__ = 'verifactu_config'
+            __table_args__ = {'extend_existing': True}
+            id = db.Column(db.Integer, primary_key=True)
+            key = db.Column(db.String(100), unique=True, nullable=False)
+            value = db.Column(db.Text)
+
         self.VerifactuRecord = VerifactuRecord
-        return {'VerifactuRecord': VerifactuRecord}
+        self.VerifactuEvent = VerifactuEvent
+        self.VerifactuConfig = VerifactuConfig
+        return {'VerifactuRecord': VerifactuRecord, 'VerifactuEvent': VerifactuEvent,
+                'VerifactuConfig': VerifactuConfig}
 
     def on_enable(self):
         self._migrate_signing_key()
+        self.core.add_activity_listener(self.on_activity)
+        try:
+            self.record_start_or_end()
+        except Exception:  # pragma: no cover - defensive: never block start-up
+            self._db.session.rollback()
+            self.logger.exception('Verifactu start-of-operation event failed')
+        self.core.scheduler.add_job(
+            job_id='verifactu.event_summary', func=self.summary_job, job_type='interval',
+            interval=1800, description='Verifactu event summary (every 6 hours of operation)',
+            timeout=300)
+        self.core.scheduler.add_job(
+            job_id='verifactu.anomaly_check', func=self.run_checks, job_type='daily',
+            time_str='03:30', description='Verifactu anomaly detection (billing and event records)',
+            timeout=900)
+        if not self.core.app.config.get('TESTING'):
+            import atexit
+            atexit.register(self.summary_on_exit)
         # VERI*FACTU submission job — no-op until an AEAT endpoint is
         # configured (F1-D6 is gated on test-environment access).
         try:
@@ -106,6 +163,39 @@ class VerifactuModule(BaseModule):
             )
         except Exception as e:  # pragma: no cover - defensive
             self.logger.exception('Failed to register submission job: %s', e)
+
+    def on_disable(self):
+        self.core.remove_activity_listener(self.on_activity)
+        for job in ('verifactu.event_summary', 'verifactu.anomaly_check', 'verifactu.submit'):
+            self.core.scheduler.remove_job(job)
+        try:
+            self.record_summary()
+            self.record_end('Verifactu module disabled')
+        except Exception:  # pragma: no cover - defensive
+            self._db.session.rollback()
+            self.logger.exception('Verifactu end-of-operation event failed')
+
+    # --- Settings → Verifactu: the system's identity in the event records ----- #
+
+    def get_settings_html(self, settings):
+        return self.render_settings_template(
+            'verifactu_settings_panel.html', config=self._config(), system=self.system_info(),
+            defaults=SYSTEM_DEFAULTS, mode=self._qr_mode())
+
+    def save_settings(self, settings, form):
+        if 'verifactu_submitted' not in form:
+            return  # another tab was saved
+        config = self._config()
+        limits = {'producer_name': 120, 'producer_nif': 9, 'system_name': 30, 'system_id': 2,
+                  'installation_number': 100}
+        for field, limit in limits.items():
+            value = (form.get(f'verifactu_{field}') or '').strip()
+            if field == 'producer_nif':
+                value = value.replace(' ', '').upper()
+            if field == 'installation_number' and not value:
+                continue   # never blank: it identifies this installation
+            config[field] = value[:limit]
+        self._save_config(config)
 
     # --- Record building ---------------------------------------------------- #
 
@@ -363,23 +453,79 @@ class VerifactuModule(BaseModule):
         @bp.route('/')
         @login_required
         def verifactu_index():
-            records, (ok, bad_idx, reason) = module._verify_all()
+            records, billing, events, event_problems = module.detect_on_view()
+            first = records[0].created_at.date() if records and records[0].created_at else None
             return render_template('verifactu_status.html',
                                    records=records[-20:],
                                    record_count=len(records),
-                                   chain_ok=ok, bad_index=bad_idx,
-                                   bad_reason=reason,
+                                   chain_ok=not billing, billing_anomalies=billing,
+                                   events=events[-20:][::-1], event_count=len(events),
+                                   event_anomalies=event_problems,
+                                   events_active=module.events_active(),
+                                   event_types=ev.EVENT_TYPES,
+                                   anomaly_types=ev.ANOMALY_TYPES,
+                                   today=date.today(), first_day=first or date.today(),
                                    spec_version=CHAIN_SPEC_VERSION,
                                    obligations=obligations(),
                                    obligations_version=OBLIGATIONS_VERSION,
                                    obligations_checked_on=CHECKED_ON)
 
+        @bp.route('/check', methods=['POST'])
+        @login_required
+        def verifactu_check():
+            """Run the anomaly detection now (events 03-06)."""
+            billing, found = module.run_checks()
+            if billing or found:
+                flash(f'Anomalies found: {len(billing)} in the billing records, '
+                      f'{len(found)} in the event records. They are in the event log.', 'danger')
+            else:
+                flash('Both chains checked: no anomaly found.', 'success')
+            return redirect(url_for('verifactu.verifactu_index'))
+
+        def _period_args():
+            """(date_from, date_to) from the query string; the whole log by
+            default. None when a date is not valid."""
+            try:
+                start = date.fromisoformat(request.args.get('date_from') or '2000-01-01')
+                end = date.fromisoformat(request.args.get('date_to')
+                                         or date.today().isoformat())
+            except ValueError:
+                return None
+            return (start, end) if start <= end else None
+
+        @bp.route('/events/export')
+        @login_required
+        def verifactu_events_export():
+            """The event records of a period, one XML file per event (anexo
+            apartado 5), in a ZIP. Records event 09."""
+            period = _period_args()
+            if period is None:
+                flash('Choose a valid period.', 'danger')
+                return redirect(url_for('verifactu.verifactu_index'))
+            start, end, *_ = module._period(*period)
+            rows = module.events_between(start, end)
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for row in rows:
+                    data = json.loads(row.data_json or '{}')
+                    archive.writestr(f'evento_{row.id:06d}_{row.event_type}.xml',
+                                     ev.event_xml(row, data))
+            module.record_event_export(*period, rows)
+            name = f'verifactu_events_{period[0]:%Y%m%d}_{period[1]:%Y%m%d}.zip'
+            return Response(buffer.getvalue(), mimetype='application/zip',
+                            headers={'Content-Disposition': f'attachment; filename={name}'})
+
         @bp.route('/export')
         @login_required
         def verifactu_export():
-            """F1-D5 — full record log export (JSON lines, spec draft)."""
-            records = module.VerifactuRecord.query.order_by(
-                module.VerifactuRecord.id).all()
+            """The billing records of a period (all by default), JSON lines.
+            Records event 08."""
+            period = _period_args()
+            if period is None:
+                flash('Choose a valid period.', 'danger')
+                return redirect(url_for('verifactu.verifactu_index'))
+            start, end, *_ = module._period(*period)
+            records = module.billing_records_between(start, end)
             lines = [json.dumps({
                 'id': r.id, 'record_type': r.record_type,
                 'invoice_number': r.invoice_number, 'payload': r.payload,
@@ -388,6 +534,7 @@ class VerifactuModule(BaseModule):
                 'spec_version': r.spec_version,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
             }, ensure_ascii=False) for r in records]
+            module.record_billing_export(*period, records)
             return Response('\n'.join(lines), mimetype='application/x-ndjson',
                             headers={'Content-Disposition':
                                      'attachment; filename=verifactu_records.ndjson'})

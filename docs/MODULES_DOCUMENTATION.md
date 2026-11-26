@@ -1011,8 +1011,17 @@ sequenceDiagram
 - Hooks: `on_invoice_issued` → *alta*, `on_invoice_annulled` → *anulación*;
   rectificative linkage is embedded in the alta payload. Hooks are
   issue-blocking by design.
-- Routes: `/verifactu/` (chain health, loud alarm on a broken chain),
-  `/verifactu/export` (NDJSON of the full log),
+- Model: `VerifactuEvent` (`verifactu_event`) — the event log of a NO VERI\*FACTU
+  system (Orden HAC/1177/2024 art. 9): events 01–10, chained by the AEAT event hash
+  (`events.py`), `prev_huella` unique; `VerifactuConfig` (`verifactu_config`): the
+  system's identity from Settings → Verifactu. Recorded at start-up (01/02), by the
+  daily check at 03:30 and **Check both chains now** (03–06), on a backup restore
+  (07, an activity listener on `backup_restored`), on each export (08, 09), every six
+  hours and at shutdown (10). Details: `modules/verifactu/README.md` → *Event log*
+- Routes: `/verifactu/` (both chains checked on every view, loud alarm on an
+  anomaly, the latest events), `POST /verifactu/check`,
+  `/verifactu/export?date_from=&date_to=` (NDJSON of the billing records of a period),
+  `/verifactu/events/export?date_from=&date_to=` (ZIP, one XML file per event),
   `/verifactu/qr/<invoice_id>.svg` (AEAT-style QR, rendered with ReportLab)
 - Invoice view panel: QR + record trail for issued/annulled invoices
 - **Status**: record format, QR payload and signature are a versioned draft

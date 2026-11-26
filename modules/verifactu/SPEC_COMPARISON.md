@@ -17,6 +17,8 @@
 | *Detalle de las especificaciones técnicas para generación de la huella o hash de los registros de facturación* (AEAT, web de desarrolladores) | 0.1.2, 27/08/2024 | Hash input, field order, output format, worked examples |
 | *Detalle de las especificaciones técnicas del código «QR» de la factura y de la «URL» del servicio de cotejo o remisión de información por parte del receptor de la factura* (AEAT) | 0.5.0, 10/12/2025 | QR content, URLs, encoding, size, position, texts |
 | Orden HAC/1177/2024, articles 20 and 21 (quoted in the QR document) | — | Legal requirements for the QR and the VERI\*FACTU phrase |
+| Orden HAC/1177/2024 (BOE-A-2024-22138), articles 9, 13.1.c and 14, annex section 5, lists L1E and L2E | consolidated text, read 26/11/2026 | Event log: which events, what the hash covers, signature, anomaly and event types |
+| `EventosSIF.xsd` (AEAT) | read 26/11/2026 | XML design of *RegistroEvento* |
 
 Comparison made on 12 November 2026 against `main@5b77078`.
 
@@ -37,6 +39,8 @@ Comparison made on 12 November 2026 against `main@5b77078`.
 | QR on the invoice | Page 1, top, centred, "QR tributario:" above | Invoice view only | ✅ Fixed — every generated PDF of an issued invoice |
 | VERI\*FACTU phrase | Only for systems that submit records | — | ✅ Not printed (mode `no_verifactu`) |
 | Submission | Real-time remission to AEAT (VERI\*FACTU mode) | Scaffold, no-op | ⛔ Not available — see below |
+| Event log (NO VERI\*FACTU, Orden HAC/1177/2024 art. 9) | Events 01–10, chained, official hash, XML per `EventosSIF.xsd`, summary every 6 hours | None | ✅ Implemented (`events.py`, `event_log.py`); signature is the app's HMAC, not XAdES |
+| Event record signature | XAdES enveloped, qualified certificate (art. 14) | — | ⚠️ HMAC-SHA256 with the Verifactu key, as for billing records |
 
 ## Record hash (huella)
 

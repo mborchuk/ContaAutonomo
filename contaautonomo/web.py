@@ -60,6 +60,7 @@ logger = logging.getLogger('contaautonomo.app')
 # otherwise. A relative sqlite:/// URL resolves under instance/ there.
 app = Flask(__name__, instance_path=paths.instance_dir())
 APP_VERSION = '2'
+app.config['APP_VERSION'] = APP_VERSION   # modules read it here, not from this file
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL', 'sqlite:///invoices.db')
 

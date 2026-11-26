@@ -6,6 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/).
 ## [Unreleased]
 
 ### Added
+- **Verifactu: the event log of a «NO VERI\*FACTU» system.** Orden
+  HAC/1177/2024, artículo 9 requires a system that does not send its records
+  to the AEAT to log events, chained and hashed like the billing records. The
+  Verifactu module now records them: start and end of operation, anomaly
+  checks and each anomaly found (daily, on demand and on the status page),
+  backup restores, exports of billing and event records for a period, and a
+  summary every six hours and when the app stops. The hash is the AEAT's
+  event hash; each event exports as XML in the AEAT design (without the
+  XAdES signature, which needs a qualified certificate: the app signs with
+  its Verifactu key). The status page shows the latest events, raises an
+  alarm when either chain is broken and has **Check both chains now** and
+  period exports. Settings → Verifactu names the system (producer, system
+  code, installation number).
 - **Log levels and sources on System → Logs.** Every activity log entry now
   has a level (info, warning, error) and says who wrote it (the core or a
   module). The Logs page shows both and filters by *Warnings and errors* or

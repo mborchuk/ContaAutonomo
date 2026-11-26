@@ -135,9 +135,10 @@ def test_listeners_get_every_entry_and_a_failing_one_is_skipped(file_log, loaded
     finally:
         core.remove_activity_listener(broken)
         core.remove_activity_listener(got.append)
-    assert got == [{'action': 'backup_restored', 'category': 'backup', 'details': 'x.json',
-                    'level': 'warning', 'source': 'backup'}]
-    assert file_log.get_entries()[0]['action'] == 'backup_restored'
+    # Other listeners (Verifactu records a restore as event 07) may write too.
+    assert {'action': 'backup_restored', 'category': 'backup', 'details': 'x.json',
+            'level': 'warning', 'source': 'backup'} in got
+    assert 'backup_restored' in [e['action'] for e in file_log.get_entries()]
 
 
 # --- The convention every bundled module follows ------------------------------
