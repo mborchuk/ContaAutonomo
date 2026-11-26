@@ -12,8 +12,9 @@ be written, the transition is rolled back.
 2. [What is implemented](#what-is-implemented)
 3. [When the obligation starts](#when-the-obligation-starts)
 4. [Signing key](#signing-key)
-5. [Official specifications](#official-specifications)
-6. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
+5. [Event log](#event-log)
+6. [Official specifications](#official-specifications)
+7. [Pending items (verify before real use)](#pending-items-verify-before-real-use)
 
 ## How the chain works
 
@@ -42,8 +43,9 @@ alarm when the chain is broken.
 |------|---------|
 | Record chain | `chain.py` — pure functions; SHA-256 linkage, HMAC-SHA256 signature with a dedicated key (see [Signing key](#signing-key)), full-chain verification |
 | Lifecycle hooks | `on_invoice_issued` → *alta*, `on_invoice_annulled` → *anulación*; rectificative linkage is embedded in the alta payload; hooks are issue-blocking |
-| Status page | `/verifactu/` — chain health, record count, latest records, obligation dates |
-| Export | `/verifactu/export` — NDJSON of the full record log; records live in the normal database and are therefore covered by the backup module |
+| Status page | `/verifactu/` — health of both chains (billing and event records), record count, latest records and events, obligation dates, **Check both chains now** |
+| Export | `/verifactu/export` — NDJSON of the billing records of a period (all by default); `/verifactu/events/export` — the event records of a period as XML files in a ZIP. Each export is an event. Records live in the normal database and are therefore covered by the backup module |
+| Event log | `events.py`, `event_log.py` — the registro de eventos of a NO VERI\*FACTU system; see [Event log](#event-log) |
 | QR code | AEAT-style payload (`nif`, `numserie`, `fecha`, `importe`) rendered as SVG with ReportLab (no extra dependency); shown on the invoice view panel |
 
 ## When the obligation starts
@@ -90,6 +92,46 @@ same. A record whose signature does not verify with the current `SECRET_KEY`
 is left untouched, so a real problem remains visible on the status page. Run
 the upgrade with the same `SECRET_KEY` the records were written with.
 
+## Event log
+
+A system that does not send its records to the AEAT («NO VERI\*FACTU», the
+default `VERIFACTU_MODE=no_verifactu`) must also keep a log of events
+(*registro de eventos*, Orden HAC/1177/2024, artículo 9). The module keeps it
+in the `verifactu_event` table, append-only, chained like the billing
+records: each event carries the type, time and hash of the one before it.
+
+| Code | Event | When the app records it |
+|------|-------|-------------------------|
+| 01 | Start of operation as NO VERI\*FACTU | Start-up, when the log is new or the last start/end event is 02 (once, whichever worker starts first) |
+| 02 | End of operation as NO VERI\*FACTU | Start-up with `VERIFACTU_MODE=verifactu`, or the module is disabled |
+| 03, 05 | Anomaly detection started (billing records, event records) | Every day at 03:30 and with **Check both chains now** on the status page; with the number of records checked |
+| 04, 06 | Anomaly detected | By those checks and by the status page, which checks both chains on every view; each anomaly is recorded once (until a check finds the chain clean again), with its type (list L1E) and the record it concerns |
+| 07 | Backup restored | The Backup module's `backup_restored` or `demo_data_loaded` activity entry (an activity listener) |
+| 08 | Billing records of a period exported | `/verifactu/export?date_from=&date_to=`; with the first and last record, counts and totals |
+| 09 | Event records of a period exported | `/verifactu/events/export?date_from=&date_to=`: a ZIP with one XML file per event |
+| 10 | Summary of events | Every six hours (checked every 30 minutes) and when the process that runs the scheduler stops; counts the events by type and the billing records made since the previous summary |
+
+- **Hash** (`events.huella_evento`): SHA-256 of
+  `NIF=…&ID=…&IdSistemaInformatico=…&Version=…&NumeroInstalacion=…&NIF=…&TipoEvento=…&HuellaEvento=…&FechaHoraHusoGenEvento=…`,
+  64 uppercase hexadecimal characters, as section 3.c of the AEAT hash
+  specification (v0.1.2) lists. The first event has an empty `HuellaEvento`.
+- **Time**: `FechaHoraHusoGenEvento` in Europe/Madrid with its offset
+  (`2026-11-26T10:00:00+01:00`); a time more than a minute ahead of the
+  clock is an anomaly (type 13).
+- **No fork**: `prev_huella` is unique, so two workers cannot both append
+  after the same event; the second builds its record again.
+- **XML** (`events.event_xml`): the *RegistroEvento* design of
+  `EventosSIF.xsd`, with *DatosPropiosEvento* for events 03–06, 08–10. The
+  `ds:Signature` (XAdES with a qualified certificate, artículo 14) is not
+  produced: each event is signed with the Verifactu key (HMAC-SHA256), as the
+  billing records are; the XML carries that signature in a comment.
+- **Settings → Verifactu** names the system in each event: producer (name and
+  NIF; default the owner), system name and two-character code (default
+  `ContaAutonomo`, `CA`), installation number (created once). Version:
+  `<APP_VERSION>+vf<module version>`. Each event stores the values it was
+  hashed with, so changing them later does not break earlier events.
+- In VERI\*FACTU mode no event is recorded (only the 02 that ends the log).
+
 ## Official specifications
 
 [SPEC_COMPARISON.md](SPEC_COMPARISON.md) compares the module with the AEAT
@@ -121,7 +163,7 @@ technical documents (hash v0.1.2, QR v0.5.0) and lists the remaining work.
 - **VERI*FACTU submission**: the scheduler job is scaffolded but does nothing
   until a `VERIFACTU_ENDPOINT` is configured; the real implementation requires
   access to the AEAT test environment.
-- **Signature**: HMAC is a placeholder. The final specification may require
+- **Signature**: HMAC is a placeholder, for billing records and event records alike. The final specification may require
   certificate-based signing; the PFX upload flow in `pdf_signature` is the
   natural reuse candidate.
 - **Record format**: the chain still uses the draft hash format; switching to

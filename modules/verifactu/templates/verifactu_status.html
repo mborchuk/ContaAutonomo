@@ -6,20 +6,31 @@
 <div class="page-header">
     <h1>Verifactu — Billing Record Chain</h1>
     <div class="page-actions">
-        <a href="{{ url_for('verifactu.verifactu_export') }}" class="btn btn-secondary">⬇ Export records</a>
+        <form method="post" action="{{ url_for('verifactu.verifactu_check') }}" style="display: inline;">
+            {% if csrf_token is defined %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endif %}
+            <button type="submit" class="btn btn-secondary">🔍 Check both chains now</button>
+        </form>
     </div>
 </div>
 
 {% if chain_ok %}
 <div class="note note-info">
-    ✅ <strong>Chain intact</strong> — {{ record_count }} record(s), every hash links and verifies.
+    ✅ <strong>Billing record chain intact</strong> — {{ record_count }} record(s), every hash links and verifies.
 </div>
 {% else %}
-<div class="note note-danger">
-    🚨 <strong>CHAIN BROKEN at record index {{ bad_index }}</strong>: {{ bad_reason }}.<br>
+<div class="note note-danger" role="alert">
+    🚨 <strong>BILLING RECORD CHAIN BROKEN</strong>:
+    {% for a in billing_anomalies %}record {{ a.index + 1 }}{% if a.record %} (invoice {{ a.record.number }}){% endif %}: {{ a.reason }} — {{ anomaly_types[a.type] }}{% if not loop.last %}; {% endif %}{% endfor %}.<br>
     This is a legal-integrity problem, not a cosmetic one. Records were modified
     or removed outside the app. Export the log now and investigate — do not
-    keep issuing invoices until resolved.
+    keep issuing invoices until resolved. The alarm stays until the chain verifies again.
+</div>
+{% endif %}
+{% if event_anomalies %}
+<div class="note note-danger" role="alert">
+    🚨 <strong>EVENT LOG BROKEN</strong>:
+    {% for a in event_anomalies %}event {{ a.index + 1 }}: {{ a.reason }} — {{ anomaly_types[a.type] }}{% if not loop.last %}; {% endif %}{% endfor %}.
+    Event records were changed or removed outside the app.
 </div>
 {% endif %}
 
@@ -55,6 +66,26 @@
     no longer applies: the norm named replaced it.
 </p>
 
+<h3>Export</h3>
+<form method="get" class="filter-form" aria-label="Export a period">
+    <div class="form-grid-4">
+        <div class="form-group">
+            <label for="vf-from">From</label>
+            <input type="date" id="vf-from" name="date_from" value="{{ first_day.isoformat() }}">
+        </div>
+        <div class="form-group">
+            <label for="vf-to">To</label>
+            <input type="date" id="vf-to" name="date_to" value="{{ today.isoformat() }}">
+        </div>
+    </div>
+    <div class="action-row">
+        <button type="submit" formaction="{{ url_for('verifactu.verifactu_export') }}" class="btn btn-secondary">⬇ Billing records (JSON lines)</button>
+        <button type="submit" formaction="{{ url_for('verifactu.verifactu_events_export') }}" class="btn btn-secondary">⬇ Event records (XML, ZIP)</button>
+    </div>
+</form>
+<p class="fine-print">Each export is itself recorded in the event log. Records are kept in the
+    app after an export.</p>
+
 <h3>Latest records</h3>
 {% if records %}
 <div class="table-wrap">
@@ -81,5 +112,35 @@
     No records yet. A record is appended automatically every time an invoice is
     issued or annulled.
 </p>
+{% endif %}
+
+<h3 id="events">Event log</h3>
+{% if events_active %}
+<p class="fine-print">Registro de eventos of a «NO VERI*FACTU» system (Orden HAC/1177/2024,
+    artículo 9): {{ event_count }} event(s), chained and hashed as the AEAT specifies. Checks
+    run every day at 03:30 and with the button above; a summary is recorded every six hours
+    and when the app stops. Settings → Verifactu names the system.</p>
+{% else %}
+<p class="fine-print">VERIFACTU_MODE is <code>verifactu</code>: a VERI*FACTU system sends its
+    records to the AEAT and keeps no event log. The events below are from before.</p>
+{% endif %}
+{% if events %}
+<div class="table-wrap">
+<table class="data-table">
+    <thead><tr><th>#</th><th>Event</th><th>Generated</th><th>Hash</th></tr></thead>
+    <tbody>
+        {% for e in events %}
+        <tr>
+            <td>{{ e.id }}</td>
+            <td>{% if e.event_type in ('04', '06') %}<span class="status-badge status-failed">{{ e.event_type }}</span>{% else %}{{ e.event_type }}{% endif %} {{ event_types.get(e.event_type, '') }}</td>
+            <td class="nowrap">{{ e.generated_at | replace('T', ' ') }}</td>
+            <td class="mono fine-print">{{ e.huella[:16] }}…</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<p class="empty-state">No events yet.</p>
 {% endif %}
 {% endblock %}

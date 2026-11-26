@@ -1,0 +1,42 @@
+<h3>Event log (registro de eventos)</h3>
+<p class="fine-print">While invoices are not sent to the AEAT (VERIFACTU_MODE
+    <code>no_verifactu</code>, now <strong>{{ mode }}</strong>), the app keeps a chained log of
+    events as Orden HAC/1177/2024, artículo 9 requires: start and end of operation, anomaly
+    checks, backup restores, exports and a summary every six hours. Each event names the
+    system below. Changing a value applies to the next events; earlier events keep the
+    values they were made with.</p>
+<div class="form-group">
+    <label for="verifactu_producer_name">Producer of the system (name)</label>
+    <input type="text" id="verifactu_producer_name" name="verifactu_producer_name" maxlength="120"
+           value="{{ config.producer_name }}" placeholder="{{ system.producer_name or 'Your business name (Settings → General)' }}">
+</div>
+<div class="form-group">
+    <label for="verifactu_producer_nif">Producer NIF</label>
+    <input type="text" id="verifactu_producer_nif" name="verifactu_producer_nif" maxlength="9"
+           value="{{ config.producer_nif }}" placeholder="{{ system.nif or 'Your NIF (Settings → General)' }}">
+</div>
+<p class="fine-print">Empty: you, the owner, as producer of the system you run for your own
+    invoices. Whoever produces the software signs the declaración responsable (artículo 15)
+    — check with your adviser who that is for your installation.</p>
+<div class="form-group">
+    <label for="verifactu_system_name">System name</label>
+    <input type="text" id="verifactu_system_name" name="verifactu_system_name" maxlength="30"
+           value="{{ config.system_name }}" placeholder="{{ defaults.system_name }}">
+</div>
+<div class="form-group">
+    <label for="verifactu_system_id">System code (IdSistemaInformatico, 2 characters)</label>
+    <input type="text" id="verifactu_system_id" name="verifactu_system_id" maxlength="2"
+           value="{{ config.system_id }}" placeholder="{{ defaults.system_id }}">
+</div>
+<div class="form-group">
+    <label for="verifactu_installation_number">Installation number</label>
+    <input type="text" id="verifactu_installation_number" name="verifactu_installation_number"
+           maxlength="100" value="{{ system.installation_number }}">
+</div>
+<p class="fine-print">Version recorded: {{ system.version }}. The installation number was made
+    when the log started; change it only to match a number you already declared.</p>
+{% if not system.nif %}
+<div class="note note-warning" role="note">⚠ No NIF yet: enter your NIF or VAT number in
+    Settings → General. Each event record names the NIF of whoever issues the invoices.</div>
+{% endif %}
+<input type="hidden" name="verifactu_submitted" value="1">
